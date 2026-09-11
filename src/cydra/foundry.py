@@ -125,7 +125,7 @@ import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} as Vulnerable }} from "{target_import}";
 import {{ {patched_type} as Patched }} from "{patched_import}";
 contract CydraArithmeticInvariantTest is Test {{
-    event CydraMeasurement(uint256 observed, uint256 reference, uint256 patched, int256 delta);
+    event CydraMeasurement(uint256 observed, uint256 referenceValue, uint256 patched, int256 delta);
 
     function testArithmeticBoundaryPreservesExactFloor() public {{
         Vulnerable vulnerable = new Vulnerable();
