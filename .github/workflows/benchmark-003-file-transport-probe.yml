@@ -43,3 +43,6 @@ jobs:
           PYTHONPATH=scripts:. python scripts/probe_evidence_schema_5b.py \
             benchmarks/003_arithmetic_rounding/foundry \
             benchmarks/003_arithmetic_rounding/foundry/test/CydraArithmeticInvariant.t.sol
+      - name: Probe numerical differential classification
+        run: |
+          PYTHONPATH=scripts:. python benchmarks/003_arithmetic_rounding/probe_5c.py
