@@ -143,3 +143,9 @@ For real target projects, availability is target-conditional because CYDRA canno
 The probe was repeated after the generated event parameter was changed from `reference` to the compiler-neutral `referenceValue`. All tested fields matched across both runs.
 
 No Evidence schema, classifier, or transport abstraction was changed during this observation.
+
+### forge-std fixture dependency limitation
+
+The Benchmark 003 fixture currently depends on `forge-std` being installed by the CI workflow rather than being vendored in the fixture. This is an environment dependency, not a fixture property. If the fixture is run outside this workflow, `forge-std` must be installed separately. This limitation is recorded so that the minimum-scope result is not attributed to a fully self-contained fixture.
+
+The minimum-scope transport experiment therefore tests file-mediated transport under the controlled workflow environment, with the fixture's `foundry.toml` providing the filesystem permission scope. It does not yet claim that the fixture is independently reproducible without an external `forge-std` installation.
