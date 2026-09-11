@@ -149,3 +149,67 @@ No Evidence schema, classifier, or transport abstraction was changed during this
 The Benchmark 003 fixture currently depends on `forge-std` being installed by the CI workflow rather than being vendored in the fixture. This is an environment dependency, not a fixture property. If the fixture is run outside this workflow, `forge-std` must be installed separately. This limitation is recorded so that the minimum-scope result is not attributed to a fully self-contained fixture.
 
 The minimum-scope transport experiment therefore tests file-mediated transport under the controlled workflow environment, with the fixture's `foundry.toml` providing the filesystem permission scope. It does not yet claim that the fixture is independently reproducible without an external `forge-std` installation.
+
+### CI result — minimum file scope
+
+Run `34659175431` (job `103457914009`) reached the file transport boundary successfully after the workflow supplied `forge-std` inside the benchmark Foundry project's `lib/` directory. Foundry was `1.8.1` (`982849d3140c01fd3b72905759581a132df7aa98`). The probe reported:
+
+```json
+{
+  "cheat_code_used": "vm.writeFile",
+  "invoked_successfully": true,
+  "error_if_failed": null,
+  "fs_permissions_required": false,
+  "fs_permissions_declared": true,
+  "fs_permissions_path": "./cydra_file_transport_probe.json",
+  "ffi_required": false,
+  "ffi_enabled": false,
+  "file_written": true,
+  "file_path": "cydra_file_transport_probe.json",
+  "file_content_readable_by_python": true,
+  "file_content_shape": "structured_json",
+  "fresh_write_confirmed": true,
+  "run_marker": "261a88b7400f457aa3aeffffee91e349",
+  "classification": "CONFIRMED"
+}
+```
+
+The pre-permission observation and the minimum-scope run form a clean configuration differential: the earlier probe could not invoke `vm.writeFile` with no filesystem permission, while the same mechanism succeeded after the single-file `read-write` permission was declared. The minimum file path was sufficient; no directory-wide permission was required.
+
+### Epistemic consequence
+
+Prediction 5A-Transport-A is **CONFIRMED under minimum scope**. This confirms the file-mediated transport channel and its minimum permission boundary only. It does **not** confirm that arithmetic measurement payloads can cross the channel. The confirmed channel currently transports a fresh run marker; **measurement payload transport remains untested** and is the separate Prediction 5A-Transport-B boundary below.
+
+## Prediction 5A-Transport-B — File-mediated measurement payload
+
+Prediction 5A-Transport-B is locked before implementation and CI observation.
+
+With the same minimum filesystem permission scope established by Prediction 5A-Transport-A, the generated arithmetic test will use `vm.writeFile` to write structured JSON containing runtime measurements produced by executed Solidity. The payload must contain at least `observed`, `referenceValue`, `patched`, and a fresh `run_marker`.
+
+The required source-of-truth path is explicit:
+
+- `observed` must come from the executed `vulnerable.quoteMint(assets)` call;
+- `patched` must come from the executed `patchedTarget.quoteMint(assets)` call;
+- `referenceValue` must come from the executed Solidity reference calculation `(assets * vulnerable.SCALE()) / 997` or an equivalent reference expression.
+
+Python may read and decode the JSON file only. It must not compute the arithmetic independently, parse generated Solidity source for values, or parse human-readable Foundry output to recover measurements.
+
+`run_marker` must match the current execution so stale artifacts cannot satisfy the prediction.
+
+### Payload falsification boundaries
+
+- Required measurement fields missing, leaving only the marker or unrelated fields → **FALSIFIED — transport channel works, measurement payload does not.**
+- Required fields present but values are hard-coded/predicted rather than values produced by executed Solidity → **FALSIFIED — reported/predicted values, not runtime measurements.**
+- Required values recovered through source parsing or human-readable Foundry output instead of the JSON file → **FALSIFIED — wrong transport/source of truth.**
+- Unstructured text instead of structured JSON → **FALSIFIED — text-coupled payload transport.**
+- Stale or mismatched `run_marker` → **FALSIFIED — stale artifact contamination.**
+- A non-permission harness/environment failure prevents reaching `vm.writeFile` → **UNMEASURABLE.**
+- The already-confirmed file-level permission is specifically rejected as insufficient → **FALSIFIED for minimum scope; do not infer directory scope without a separate prediction.**
+
+`delta` is not a required pass/fail field. If Solidity writes it, it must be treated as transported runtime data; Python must not derive it independently to satisfy this prediction.
+
+### Scope of claim
+
+A clean confirmation establishes only that the confirmed file-mediated channel can transport the tested arithmetic runtime measurement payload under the controlled Benchmark 003 configuration. It does not establish Evidence-schema generalization or numerical classifier generalization. Those remain separate predictions.
+
+The `forge-std` dependency remains a separate environment limitation: the current workflow installs `forge-std` into the benchmark's `foundry/lib/` at CI time. This prediction does not claim that the committed fixture is independently runnable without that external installation step.
