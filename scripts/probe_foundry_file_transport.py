@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 from typing import Any
@@ -113,6 +114,13 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
         )
         ffi_required = "ffi" in error_output.lower() and "--ffi" in error_output.lower()
 
+        if completed.returncode == 0:
+            classification = "CONFIRMED" if fresh_write_confirmed and _shape(file_content) == "structured_json" else "FALSIFIED"
+        elif fs_permission_error:
+            classification = "FALSIFIED"
+        else:
+            classification = "UNMEASURABLE"
+
         result = {
             "cheat_code_used": "vm.writeFile",
             "invoked_successfully": completed.returncode == 0,
@@ -128,6 +136,7 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
             "file_content_shape": _shape(file_content) if fresh_write_confirmed else "not_readable",
             "fresh_write_confirmed": fresh_write_confirmed,
             "run_marker": run_marker,
+            "classification": classification,
             "environment": {
                 "foundry_version": _foundry_version(project),
                 "ci_runner": "github-actions" if os.environ.get("GITHUB_ACTIONS") == "true" else "local",
@@ -149,4 +158,7 @@ if __name__ == "__main__":
     parser.add_argument("project_dir")
     parser.add_argument("test_path")
     args = parser.parse_args()
-    print(json.dumps(probe_file_transport(args.project_dir, args.test_path), indent=2))
+    result = probe_file_transport(args.project_dir, args.test_path)
+    print(json.dumps(result, indent=2))
+    if result["classification"] == "UNMEASURABLE":
+        sys.exit(1)
