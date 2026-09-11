@@ -4,13 +4,64 @@
 
 This protocol keeps development aligned with the Project Bible and prevents CYDRA from becoming an LLM wrapper, alert factory, or over-engineered audit platform.
 
+## Build-before-Bible rule
+
+Documentation is not progress unless it changes what can be executed or falsified.
+
+After the minimum doctrine is established, every major phase must produce a runnable capability against a real historical benchmark or authorized target before substantial architecture is added.
+
 ## Before changing code
 
 1. State the research capability being improved.
 2. Identify the exact Project Bible rule involved.
 3. Identify the smallest useful implementation.
-4. Define a test or benchmark that can falsify the change.
-5. Prefer existing mature tools over new replacements.
+4. Define a pre-registered acceptance test.
+5. Define what would falsify the implementation.
+6. Prefer existing mature tools over new replacements.
+
+## Strong-vs-weak acceptance tests
+
+For each reasoning capability, define the strong output before implementation.
+
+### System Model
+
+**Strong:** source-linked functions, state writes, modifiers, calls, and relevant relationships agree with the target code.
+
+**Weak:** an LLM produces a plausible prose summary.
+
+**Falsifier:** a human or deterministic comparison finds material model errors on the benchmark target.
+
+### Invariant → Hypothesis Binding
+
+**Strong:** a provenance-backed invariant identifies a concrete violating operation, execution path, and expected consequence.
+
+**Weak:** an LLM writes a generic statement such as "balances should be consistent."
+
+**Falsifier:** the hypothesis cannot identify the target operation or a testable violation path.
+
+### Competing Hypotheses
+
+**Strong:** at least two materially different explanations are preserved when the evidence permits ambiguity, and the planner identifies a test that distinguishes them.
+
+**Weak:** the engine produces multiple differently worded versions of the same conclusion.
+
+**Falsifier:** the selected experiment cannot change the relative plausibility of the alternatives.
+
+### Information-Gain Test Planning
+
+**Strong:** the next action is selected because it can materially reduce uncertainty within the available budget.
+
+**Weak:** every scanner is run in a fixed sequence.
+
+**Falsifier:** a cheaper or more discriminating available experiment is ignored without justification.
+
+### Causal Finding Gate
+
+**Strong:** a finding requires target-linked code, attacker capability, reachable path, violated invariant, causal state transition, demonstrated impact, and reproducibility.
+
+**Weak:** a static warning or LLM conclusion is promoted to a finding.
+
+**Falsifier:** the gate accepts a claim whose impact cannot be reproduced or whose referenced code does not exist.
 
 ## During implementation
 
@@ -21,6 +72,26 @@ This protocol keeps development aligned with the Project Bible and prevents CYDR
 - Do not add a detector unless its output can feed the reasoning/verification loop.
 - Do not add an LLM call unless its output has a structured role and validation boundary.
 - Fail closed on unknown authorization/scope for active execution.
+- Keep tool adapters thin: `run(input) -> structured_output` plus explicit failure state.
+
+## Human boundary
+
+The human researcher owns final judgment and external submission.
+
+CYDRA's job is to produce an auditable evidence package containing, where applicable:
+
+- target/version and scope;
+- invariant;
+- execution path;
+- state transition;
+- attacker capability;
+- tool results;
+- PoC/reproduction;
+- impact evidence;
+- contradictory evidence;
+- regression test.
+
+The human reviews this package, independently checks the important claims, and writes/owns the final submission narrative.
 
 ## Required validation
 
@@ -62,6 +133,26 @@ A reproducible exploit may establish causality.
 
 Contradictory results must be retained.
 
+## Tool adapter contract
+
+Each external security tool should have a thin adapter with:
+
+```text
+ToolAdapter.run(input) -> ToolResult
+```
+
+`ToolResult` must preserve:
+
+- tool name and version when available;
+- command/configuration;
+- exit status;
+- stdout/stderr or artifact references;
+- structured findings/results;
+- execution environment;
+- timeout/failure state.
+
+Adapters must not convert tool output directly into findings.
+
 ## Benchmark protocol
 
 Historical cases are divided into development and blind evaluation sets.
@@ -73,7 +164,10 @@ For every benchmark run record:
 - target/version;
 - scope/environment;
 - initial observations;
+- system model;
+- invariants;
 - hypotheses generated;
+- competing hypotheses;
 - tests selected;
 - tool runs;
 - evidence;
@@ -81,6 +175,19 @@ For every benchmark run record:
 - expected result after the blind run;
 - false positives and misses;
 - elapsed/runtime budget.
+
+Phase 5 must eventually report measurable reproduction rate and false-positive rate rather than qualitative claims that the engine is "getting better."
+
+## Self-falsification by phase
+
+Each phase needs a direct test of how CYDRA could be wrong:
+
+- **Phase 1:** model accuracy against a human/deterministic reference.
+- **Phase 2:** hypothesis usefulness and rejection of superficial lookalikes.
+- **Phase 3:** experiments actually distinguish competing hypotheses.
+- **Phase 4:** a fixed vulnerability causes the PoC/property test to fail.
+- **Phase 5:** historical findings reproduce through the same causal chain without answer leakage.
+- **Phase 6:** evidence packages survive human review and target-program triage rules.
 
 ## Research loop
 
