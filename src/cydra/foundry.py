@@ -106,9 +106,9 @@ def _parse_execution(stdout: str, stderr: str, exit_code: int) -> tuple[bool, in
     if "No tests found" in output:
         return False, 0, 0, "UNMEASURABLE"
 
-    ran_matches = re.findall(r"Ran\\s+(\\d+)\\s+tests?\\s+for\\s+", output)
+    ran_matches = re.findall(r"Ran\s+(\d+)\s+tests?\s+for\s+", output)
     tests_run = int(ran_matches[-1]) if ran_matches else 0
-    failed_matches = re.findall(r"Suite result:.*?(\\d+)\\s+passed;\\s+(\\d+)\\s+failed", output)
+    failed_matches = re.findall(r"Suite result:.*?(\d+)\s+passed;\s+(\d+)\s+failed", output)
     tests_failed = int(failed_matches[-1][1]) if failed_matches else (tests_run if exit_code != 0 and tests_run else 0)
 
     if tests_run == 0:
