@@ -68,8 +68,8 @@ contract CydraInitializationInvariantTest is Test {{
     address internal attacker = address(0xBEEF);
     function setUp() public {{ target = new {target_type}(); }}
     function testArbitraryCallerCannotClaimInitializationState() public {{
-        vm.prank(attacker); target.initialize(attacker);
-        assertTrue(target.guardian() != attacker, "attacker claimed privileged initialization state");
+        (bool ok,) = address(target).call(abi.encodeWithSelector(target.initialize.selector, attacker));
+        assertTrue(!ok || target.guardian() != attacker, "attacker claimed privileged initialization state");
     }}
 }}
 ''', output_path)
