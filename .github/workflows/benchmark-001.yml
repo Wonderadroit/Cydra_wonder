@@ -1,0 +1,27 @@
+name: CYDRA Benchmark 001
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  benchmark-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std
+        working-directory: benchmarks/alchemix_missing_access_control/foundry
+        run: forge install foundry-rs/forge-std --no-commit
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Python acceptance suite
+        run: pytest -q
+      - name: Execute hypothesis with negative control
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_001.py
