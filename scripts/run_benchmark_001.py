@@ -3,11 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cydra.foundry import (
-    classify_access_control_outcome,
-    generate_access_control_test,
-    run_foundry_test,
-)
+from cydra.foundry import classify_access_control_outcome, generate_access_control_test, run_foundry_test
 from cydra.pipeline import investigate
 
 
@@ -22,15 +18,15 @@ def main() -> int:
 
     vulnerable_test = generate_access_control_test(
         hypothesis,
-        "../../Target.sol",
+        "../../../Target.sol",
         "AlchemixAccessControlFixture",
-        FOUNDRY / "generated" / "H_AUTH_setWhitelist_vulnerable.t.sol",
+        FOUNDRY / "test" / "generated" / "H_AUTH_setWhitelist_vulnerable.t.sol",
     )
     patched_test = generate_access_control_test(
         hypothesis,
-        "../../PatchedTarget.sol",
+        "../../../PatchedTarget.sol",
         "AlchemixAccessControlPatchedFixture",
-        FOUNDRY / "generated" / "H_AUTH_setWhitelist_patched.t.sol",
+        FOUNDRY / "test" / "generated" / "H_AUTH_setWhitelist_patched.t.sol",
     )
 
     vulnerable = run_foundry_test(FOUNDRY, vulnerable_test, "X-H-AUTH-setWhitelist", "vulnerable")
