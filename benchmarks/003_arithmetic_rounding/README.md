@@ -65,3 +65,51 @@ When the run completes, inspect the artifacts rather than treating a green workf
 5. **Classifier:** Did classification use the existing differential causal rule, or did a Benchmark-003-specific classifier path silently appear?
 
 A green CI result is therefore necessary but not sufficient for calling the five predictions correct.
+
+## Prediction 5A — measurement production
+
+Prediction 5A was **FALSIFIED** at the transport boundary. The generated Solidity test computed the runtime values and emitted `CydraMeasurement(observed, reference, patched, delta)`, but the initial measurement-production decoder did not receive a structured execution payload. Evidence and classifier remained `NOT_REACHED`.
+
+## Prediction 5A-Probe — Foundry event transport
+
+The probe was locked before execution to distinguish four outcomes:
+
+- **State A — STRUCTURED_JSON:** `--json` exposes the event as structured data.
+- **State B — HUMAN_READABLE_ONLY:** the event is exposed by `-vv/-vvv/-vvvv`, but not as structured JSON.
+- **State C — NOT_EXPOSED:** none of the tested invocations exposes the event.
+- **State D — SEMI-STRUCTURED JSON:** `--json` contains the event, but only as an unparsed text/string blob rather than structured numeric fields.
+
+### CI result — Run 34
+
+GitHub Actions run `34655496942` executed the Benchmark 003 workflow with PR head SHA `089aa319de91d5e46a2bc01c7d48121ec3970ec5`. The PR workflow checked out merge commit `4115a76296ee44485868867abd8f1f43a0f01b22`, whose merge commit message explicitly records `089aa319de91d5e46a2bc01c7d48121ec3970ec5`; the benchmark job completed the acceptance suite and standalone arithmetic differential before reaching the intentional probe boundary.
+
+Foundry version was `1.8.1` (`982849d3140c01fd3b72905759581a132df7aa98`). The probe reported:
+
+```json
+{
+  "classification": "HUMAN_READABLE_ONLY",
+  "structured_json_event": false,
+  "human_readable_event_variants": ["vv", "vvv", "vvvv"]
+}
+```
+
+Per invocation, the machine-readable probe artifact reported:
+
+| Invocation | Exit code | Event visible | Structured JSON | Structured event |
+|---|---:|---|---|---|
+| `forge test --match-path test/CydraArithmeticInvariant.t.sol --json` | 1 | true | false | false |
+| `forge test --match-path test/CydraArithmeticInvariant.t.sol -vv` | 1 | true | false | false |
+| `forge test --match-path test/CydraArithmeticInvariant.t.sol -vvv` | 1 | true | false | false |
+| `forge test --match-path test/CydraArithmeticInvariant.t.sol -vvvv` | 1 | true | false | false |
+
+The probe therefore classifies the transport as **State B — HUMAN_READABLE_ONLY**: the event is exposed by the tested verbose human-readable interfaces, while the `--json` path does not expose it as a structured event. The artifact does not establish State A or State D because the probe explicitly reports `structured_json=false` and `structured_event=false` for `--json`.
+
+The workflow's red conclusion is an intentional harness boundary stop (`exit_code 1`), not a Foundry test failure. The downstream stages were explicitly `NOT_REACHED`:
+
+- measurement production: `NOT_REACHED`
+- evidence schema: `NOT_REACHED`
+- classifier: `NOT_REACHED`
+
+### Epistemic consequence
+
+Prediction 5A-Probe is **CONFIRMED** for State B. The current event transport is available through Foundry's verbose human-readable output, but not through the tested structured JSON interface. This does **not** yet justify changing CYDRA's transport or Solidity measurement mechanism. Any transport-mechanism change must be introduced under a separate prediction rather than bundled into the probe result.

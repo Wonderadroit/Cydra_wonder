@@ -25,6 +25,7 @@ class ExecutionResult:
     status: ExecutionStatus
     stdout: str
     stderr: str
+    measurements: dict[str, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,8 @@ import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} as Vulnerable }} from "{target_import}";
 import {{ {patched_type} as Patched }} from "{patched_import}";
 contract CydraArithmeticInvariantTest is Test {{
+    event CydraMeasurement(uint256 observed, uint256 reference, uint256 patched, int256 delta);
+
     function testArithmeticBoundaryPreservesExactFloor() public {{
         Vulnerable vulnerable = new Vulnerable();
         Patched patchedTarget = new Patched();
@@ -131,11 +134,31 @@ contract CydraArithmeticInvariantTest is Test {{
         uint256 exactFloor = (assets * vulnerable.SCALE()) / 997;
         uint256 vulnerableObserved = vulnerable.quoteMint(assets);
         uint256 patchedObserved = patchedTarget.quoteMint(assets);
+        int256 delta = int256(vulnerableObserved) - int256(exactFloor);
+        emit CydraMeasurement(vulnerableObserved, exactFloor, patchedObserved, delta);
         assertGt(vulnerableObserved, exactFloor);
         assertEq(patchedObserved, exactFloor);
     }}
 }}
 '''
+
+
+def _parse_measurements(stdout: str, stderr: str) -> dict[str, int] | None:
+    """Decode only the machine-readable CydraMeasurement emitted by executed Solidity."""
+    output = f"{stdout}\n{stderr}"
+    matches = re.findall(
+        r"CydraMeasurement\(([-]?\d+),\s*([-]?\d+),\s*([-]?\d+),\s*([-]?\d+)\)",
+        output,
+    )
+    if not matches:
+        return None
+    observed, reference, patched, delta = matches[-1]
+    return {
+        "observed": int(observed),
+        "reference": int(reference),
+        "patched": int(patched),
+        "delta": int(delta),
+    }
 
 
 def _parse_execution(stdout: str, stderr: str, exit_code: int) -> tuple[bool, int, int, ExecutionStatus]:
@@ -165,6 +188,7 @@ def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_
     executed, tests_run, tests_failed, status = _parse_execution(
         completed.stdout, completed.stderr, completed.returncode
     )
+    measurements = _parse_measurements(completed.stdout, completed.stderr)
     return ExecutionResult(
         experiment_id,
         target,
@@ -176,6 +200,7 @@ def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_
         status,
         completed.stdout,
         completed.stderr,
+        measurements,
     )
 
 
