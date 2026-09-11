@@ -1,0 +1,7 @@
+[profile.default]
+solc_version = "0.8.20"
+src = "src"
+test = "test"
+out = "out"
+libs = ["lib"]
+remappings = ["forge-std/=lib/forge-std/src/"]
