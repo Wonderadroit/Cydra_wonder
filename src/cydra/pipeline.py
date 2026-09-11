@@ -5,8 +5,10 @@ from pathlib import Path
 from .models import InvestigationResult
 from .reasoning import (
     access_control_invariant,
+    arithmetic_rounding_invariant,
     build_evidence,
     generate_access_control_hypotheses,
+    generate_arithmetic_hypotheses,
     generate_initialization_hypotheses,
     initialization_invariant,
     plan_access_control_experiment,
@@ -23,12 +25,16 @@ def investigate(path: str | Path, target: str | None = None) -> InvestigationRes
     for contract in contracts:
         auth = generate_access_control_hypotheses(contract)
         init = generate_initialization_hypotheses(contract)
+        arith = generate_arithmetic_hypotheses(contract)
         if auth:
             all_invariants.append(access_control_invariant(contract))
         if init:
             all_invariants.append(initialization_invariant(contract))
-        all_hypotheses.extend((*auth, *init))
+        arithmetic_invariant = arithmetic_rounding_invariant(contract)
+        if arith and arithmetic_invariant is not None:
+            all_invariants.append(arithmetic_invariant)
+        all_hypotheses.extend((*auth, *init, *arith))
         all_experiments.extend(plan_access_control_experiment(h) for h in auth)
         all_experiments.extend(plan_initialization_experiment(h) for h in init)
-        all_evidence.extend(build_evidence(contract, (*auth, *init)))
+        all_evidence.extend(build_evidence(contract, (*auth, *init, *arith)))
     return InvestigationResult(target=target or str(path), contracts=contracts, invariants=tuple(all_invariants), hypotheses=tuple(all_hypotheses), experiments=tuple(all_experiments), evidence=tuple(all_evidence))
