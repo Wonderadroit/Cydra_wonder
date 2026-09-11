@@ -1,0 +1,27 @@
+name: CYDRA Benchmark 002 Negative Control
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  benchmark-002-negative-control:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std
+        working-directory: benchmarks/wormhole_uninitialized/foundry
+        run: forge install foundry-rs/forge-std --no-commit
+      - name: Install CYDRA and pytest
+        run: python -m pip install -e . pytest
+      - name: Python acceptance suite
+        run: pytest -q
+      - name: Execute safe initialization negative control
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_002_negative_control.py
