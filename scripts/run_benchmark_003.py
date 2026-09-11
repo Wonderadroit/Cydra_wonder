@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 from cydra.foundry import generate_arithmetic_foundry_test, run_foundry_test
+from cydra.models import Evidence
 from cydra.pipeline import investigate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,7 +13,7 @@ BENCH = ROOT / "benchmarks" / "003_arithmetic_rounding"
 SOURCE = BENCH / "Target.sol"
 FOUNDRY = BENCH / "foundry"
 GENERATED_TEST = FOUNDRY / "test" / "CydraArithmeticInvariant.t.sol"
-BENCHMARK_003_HARNESS_BOUNDARY = "foundry-generator"
+BENCHMARK_003_HARNESS_BOUNDARY = "evidence"
 
 
 def _assertion_lines(source: str) -> list[str]:
@@ -59,6 +60,14 @@ def main() -> int:
         "benchmark-003-vulnerable+patched",
     )
 
+    execution_evidence = Evidence(
+        f"E-EXEC-{experiment.hypothesis_id}-ARITHMETIC",
+        "execution",
+        f"Foundry arithmetic test: status={execution.status}, executed={execution.executed}, tests_run={execution.tests_run}, tests_failed={execution.tests_failed}, exit={execution.exit_code}.",
+        " ".join(execution.command),
+        execution.target,
+    )
+
     payload = {
         "benchmark": "003",
         "class": "arithmetic-rounding",
@@ -72,16 +81,16 @@ def main() -> int:
             "status": execution.status,
             "exit_code": execution.exit_code,
         },
+        "evidence": execution_evidence.__dict__,
         "downstream": {
-            "evidence_schema": "NOT_REACHED",
             "classifier": "NOT_REACHED",
         },
     }
     print(json.dumps(payload, indent=2, default=list))
 
     raise SystemExit(
-        "Benchmark 003 harness boundary reached: arithmetic Foundry test generated and executed; "
-        "stop before evidence/classifier."
+        "Benchmark 003 harness boundary reached: arithmetic execution evidence recorded; "
+        "stop before classifier."
     )
 
 
