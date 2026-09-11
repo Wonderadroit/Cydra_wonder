@@ -1,0 +1,48 @@
+name: CYDRA Benchmark 003 File Transport Probe
+
+on:
+  push:
+    branches:
+      - bench003-transport-file-prediction
+
+jobs:
+  file-transport-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std in Benchmark 003 fixture
+        working-directory: benchmarks/003_arithmetic_rounding/foundry
+        run: forge install foundry-rs/forge-std --no-commit
+      - name: Install Python dependencies
+        run: pip install -e .
+      - name: Materialize existing arithmetic Foundry test
+        run: |
+          set +e
+          PYTHONPATH=. python scripts/run_benchmark_003.py > /tmp/benchmark003-generator.json 2> /tmp/benchmark003-generator.err
+          status=$?
+          cat /tmp/benchmark003-generator.json
+          cat /tmp/benchmark003-generator.err >&2
+          if [ ! -f benchmarks/003_arithmetic_rounding/foundry/test/CydraArithmeticInvariant.t.sol ]; then
+            echo "Generator did not materialize the existing arithmetic test" >&2
+            exit $status
+          fi
+          exit 0
+      - name: Probe cheat-code file transport
+        run: |
+          PYTHONPATH=scripts:. python scripts/probe_foundry_file_transport.py \
+            benchmarks/003_arithmetic_rounding/foundry \
+            benchmarks/003_arithmetic_rounding/foundry/test/CydraArithmeticInvariant.t.sol
+      - name: Probe Evidence schema generalization
+        run: |
+          PYTHONPATH=scripts:. python scripts/probe_evidence_schema_5b.py \
+            benchmarks/003_arithmetic_rounding/foundry \
+            benchmarks/003_arithmetic_rounding/foundry/test/CydraArithmeticInvariant.t.sol
+      - name: Probe numerical differential classification
+        run: |
+          PYTHONPATH=scripts:. python benchmarks/003_arithmetic_rounding/probe_5c.py
