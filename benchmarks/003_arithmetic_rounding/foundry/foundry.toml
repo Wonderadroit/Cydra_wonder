@@ -2,3 +2,7 @@
 src = "src"
 test = "test"
 solc_version = "0.8.20"
+
+[[profile.default.fs_permissions]]
+access = "read-write"
+path = "./cydra_file_transport_probe.json"
