@@ -16,7 +16,8 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
-      - name: Install forge-std
+      - name: Install forge-std in Benchmark 003 fixture
+        working-directory: benchmarks/003_arithmetic_rounding/foundry
         run: forge install foundry-rs/forge-std --no-commit
       - name: Install Python dependencies
         run: pip install -e .
