@@ -17,8 +17,8 @@ jobs:
       - name: Install forge-std
         working-directory: benchmarks/alchemix_missing_access_control/foundry
         run: forge install foundry-rs/forge-std --no-commit
-      - name: Install CYDRA
-        run: python -m pip install -e .
+      - name: Install CYDRA and pytest
+        run: python -m pip install -e . pytest
       - name: Python acceptance suite
         run: pytest -q
       - name: Execute hypothesis with negative control
