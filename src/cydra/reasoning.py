@@ -70,5 +70,17 @@ def plan_initialization_experiment(hypothesis: Hypothesis) -> Experiment:
     return Experiment(f"X-{hypothesis.hypothesis_id}", hypothesis.hypothesis_id, f"Deploy the target, call {hypothesis.target_function} as an arbitrary actor, and assert the actor cannot claim privileged initialization state; repeat against the patched version.", ("deployed lifecycle state is takeover-capable", "initializer is unavailable or safely initialized"), 1.0)
 
 
+def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
+    if hypothesis.invariant_id != "INV-ARITH-001":
+        raise ValueError(f"Unsupported invariant for arithmetic experiment: {hypothesis.invariant_id}")
+    return Experiment(
+        f"X-{hypothesis.hypothesis_id}",
+        hypothesis.hypothesis_id,
+        f"Execute {hypothesis.target_function} with an arithmetic boundary input and assert the observed output equals the exact floor reference value; repeat against the patched version.",
+        ("observed quote exceeds the exact floor", "observed quote equals the exact floor"),
+        1.0,
+    )
+
+
 def build_evidence(contract: ContractModel, hypotheses: tuple[Hypothesis, ...]) -> tuple[Evidence, ...]:
     return tuple(Evidence(f"E-MODEL-{fn.name}", "model", f"Function {fn.name} has modifiers={list(fn.modifiers)} and writes={list(fn.writes)}.", contract.source, f"line {fn.line}") for fn in contract.functions)
