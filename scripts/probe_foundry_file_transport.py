@@ -11,13 +11,7 @@ from typing import Any
 
 
 def _foundry_version(project: Path) -> str | None:
-    completed = subprocess.run(
-        ["forge", "--version"],
-        cwd=project,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = subprocess.run(["forge", "--version"], cwd=project, text=True, capture_output=True, check=False)
     output = (completed.stdout or completed.stderr).strip()
     return output or None
 
@@ -59,12 +53,14 @@ def _permissions_path(config: Path) -> str | None:
 
 
 def _runtime_payload_source_present(source: str) -> bool:
-    required_runtime_expressions = (
-        'vm.toString(vulnerableObserved)',
-        'vm.toString(exactFloor)',
-        'vm.toString(patchedObserved)',
+    return all(
+        expression in source
+        for expression in (
+            "vm.toString(vulnerableObserved)",
+            "vm.toString(exactFloor)",
+            "vm.toString(patchedObserved)",
+        )
     )
-    return all(expression in source for expression in required_runtime_expressions)
 
 
 def _measurement_payload_valid(payload: dict[str, Any] | None, run_marker: str) -> bool:
@@ -87,7 +83,6 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
     original = test.read_text(encoding="utf-8")
     run_marker = uuid.uuid4().hex
 
-    # Remove any previous artifact before execution so a stale file cannot satisfy the probe.
     if probe_path.exists():
         probe_path.unlink()
 
@@ -95,17 +90,13 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
     if marker not in original:
         raise RuntimeError("existing arithmetic test does not contain the expected assertion marker")
 
-    # The payload is assembled inside executed Solidity from runtime values already
-    # produced by the vulnerable/patched calls and the Solidity reference calculation.
-    # Python only reads the resulting JSON; it does not calculate these values.
-    write_call = (
-        'vm.writeFile("cydra_file_transport_probe.json", '
-        f"string.concat('{{\\\"observed\\\":', vm.toString(vulnerableObserved), "
-        "',\\\"referenceValue\\\":', vm.toString(exactFloor), "
-        "',\\\"patched\\\":', vm.toString(patchedObserved), "
-        f"',\\\"run_marker\\\":\\\"{run_marker}\\\"}}')"
-        ");"
-    )
+    # These values are runtime Solidity variables. Python never calculates them.
+    write_call = f'''vm.writeFile("cydra_file_transport_probe.json", string.concat(
+            "{{\\"observed\\":", vm.toString(vulnerableObserved),
+            ",\\"referenceValue\\":", vm.toString(exactFloor),
+            ",\\"patched\\":", vm.toString(patchedObserved),
+            ",\\"run_marker\\":\\"{run_marker}\\"}}"
+        ));'''
     modified = original.replace(marker, write_call + "\n        " + marker, 1)
     test.write_text(modified, encoding="utf-8")
 
@@ -118,10 +109,7 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
             check=False,
         )
 
-        file_content: str | None = None
-        if probe_path.exists():
-            file_content = probe_path.read_text(encoding="utf-8")
-
+        file_content = probe_path.read_text(encoding="utf-8") if probe_path.exists() else None
         parsed_content: dict[str, Any] | None = None
         if file_content:
             try:
@@ -131,16 +119,12 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
             except json.JSONDecodeError:
                 pass
 
-        fresh_write_confirmed = bool(
-            parsed_content is not None and parsed_content.get("run_marker") == run_marker
-        )
+        fresh_write_confirmed = bool(parsed_content is not None and parsed_content.get("run_marker") == run_marker)
         payload_valid = _measurement_payload_valid(parsed_content, run_marker)
         runtime_payload_source_present = _runtime_payload_source_present(modified)
 
         error_output = f"{completed.stdout}\n{completed.stderr}".strip()
-        fs_permission_error = bool(
-            re.search(r"fs_permissions|permission denied|access denied|not allowed", error_output, re.IGNORECASE)
-        )
+        fs_permission_error = bool(re.search(r"fs_permissions|permission denied|access denied|not allowed", error_output, re.IGNORECASE))
         ffi_required = "ffi" in error_output.lower() and "--ffi" in error_output.lower()
 
         if completed.returncode == 0:
