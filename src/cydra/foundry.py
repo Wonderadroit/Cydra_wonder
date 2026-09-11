@@ -7,7 +7,7 @@ import subprocess
 import tomllib
 from typing import Literal
 
-from .models import Evidence, Hypothesis
+from .models import Evidence, Experiment, Hypothesis
 
 
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
@@ -99,6 +99,43 @@ contract CydraInitializationInvariantTest is Test {{
     }}
 }}
 ''', output_path)
+
+
+def generate_arithmetic_foundry_test(experiment: Experiment, target: str, patched: str) -> str:
+    """Generate the arithmetic differential Foundry test without executing it."""
+    if not experiment.experiment_id.startswith("X-H-ARITH-"):
+        raise ValueError(f"Unsupported experiment for arithmetic Foundry generation: {experiment.experiment_id}")
+
+    def parse_target(spec: str) -> tuple[str, str]:
+        try:
+            import_path, contract_type = spec.rsplit(":", 1)
+        except ValueError as exc:
+            raise ValueError("Arithmetic target must be '<import-path>:<contract-type>'") from exc
+        if not import_path or not contract_type:
+            raise ValueError("Arithmetic target must include import path and contract type")
+        return import_path, contract_type
+
+    target_import, target_type = parse_target(target)
+    patched_import, patched_type = parse_target(patched)
+    return f'''// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+// Hypothesis: {experiment.hypothesis_id}
+import {{Test}} from "forge-std/Test.sol";
+import {{ {target_type} as Vulnerable }} from "{target_import}";
+import {{ {patched_type} as Patched }} from "{patched_import}";
+contract CydraArithmeticInvariantTest is Test {{
+    function testArithmeticBoundaryPreservesExactFloor() public {{
+        Vulnerable vulnerable = new Vulnerable();
+        Patched patchedTarget = new Patched();
+        uint256 assets = 1;
+        uint256 exactFloor = (assets * vulnerable.SCALE()) / 997;
+        uint256 vulnerableObserved = vulnerable.quoteMint(assets);
+        uint256 patchedObserved = patchedTarget.quoteMint(assets);
+        assertGt(vulnerableObserved, exactFloor);
+        assertEq(patchedObserved, exactFloor);
+    }}
+}}
+'''
 
 
 def _parse_execution(stdout: str, stderr: str, exit_code: int) -> tuple[bool, int, int, ExecutionStatus]:
