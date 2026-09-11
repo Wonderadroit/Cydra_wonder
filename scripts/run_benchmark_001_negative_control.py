@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cydra.foundry import generate_access_control_test, run_foundry_test
+from cydra.foundry import generate_access_control_test, require_executed, run_foundry_test, test_path_for
 from cydra.pipeline import investigate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,7 +11,6 @@ BENCHMARK = ROOT / "benchmarks" / "alchemix_missing_access_control"
 SOURCE = BENCHMARK / "SafeTarget.sol"
 FOUNDRY = BENCHMARK / "foundry"
 TARGET = FOUNDRY / "SafeAuthorizationTarget.sol"
-TEST = FOUNDRY / "SafeAuthorizationInvariant.t.sol"
 
 
 def main() -> int:
@@ -22,11 +21,12 @@ def main() -> int:
 
     hypothesis = hypotheses[0]
     TARGET.write_text(SOURCE.read_text(encoding="utf-8"), encoding="utf-8")
+    test_path = test_path_for(FOUNDRY, "SafeAuthorizationInvariant.t.sol")
     generated = generate_access_control_test(
         hypothesis,
-        "./SafeAuthorizationTarget.sol",
+        "../SafeAuthorizationTarget.sol",
         "AlchemixAccessControlSafeFixture",
-        TEST,
+        test_path,
     )
     execution = run_foundry_test(
         FOUNDRY,
@@ -35,18 +35,21 @@ def main() -> int:
         "safe",
     )
 
+    # A zero-test run is not evidence. Refuse to classify it.
+    require_executed(execution)
+
     output = {
         "benchmark": "001-negative-control",
         "protocol": "safe authorization must not be confirmed",
         "hypothesis": hypothesis.__dict__,
         "execution": execution.__dict__,
-        "result": "not_confirmed" if execution.passed else "FAILURE_RECORDED",
+        "result": "not_confirmed" if execution.status == "PASS" else "FAILURE_RECORDED",
     }
     print(json.dumps(output, indent=2, default=str))
 
     # Deliberately do not modify CYDRA if this fails. A failure is the result
     # to record and investigate after this run.
-    return 0 if execution.passed else 1
+    return 0 if execution.status == "PASS" else 1
 
 
 if __name__ == "__main__":
