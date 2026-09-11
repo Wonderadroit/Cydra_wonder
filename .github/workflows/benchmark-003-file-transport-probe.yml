@@ -38,3 +38,8 @@ jobs:
           PYTHONPATH=scripts:. python scripts/probe_foundry_file_transport.py \
             benchmarks/003_arithmetic_rounding/foundry \
             benchmarks/003_arithmetic_rounding/foundry/test/CydraArithmeticInvariant.t.sol
+      - name: Probe Evidence schema generalization
+        run: |
+          PYTHONPATH=scripts:. python scripts/probe_evidence_schema_5b.py \
+            benchmarks/003_arithmetic_rounding/foundry \
+            benchmarks/003_arithmetic_rounding/foundry/test/CydraArithmeticInvariant.t.sol
