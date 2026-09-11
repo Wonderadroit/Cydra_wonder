@@ -58,6 +58,26 @@ def _permissions_path(config: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _runtime_payload_source_present(source: str) -> bool:
+    required_runtime_expressions = (
+        'vm.toString(vulnerableObserved)',
+        'vm.toString(exactFloor)',
+        'vm.toString(patchedObserved)',
+    )
+    return all(expression in source for expression in required_runtime_expressions)
+
+
+def _measurement_payload_valid(payload: dict[str, Any] | None, run_marker: str) -> bool:
+    if payload is None:
+        return False
+    required = ("observed", "referenceValue", "patched", "run_marker")
+    if any(key not in payload for key in required):
+        return False
+    if payload.get("run_marker") != run_marker:
+        return False
+    return all(isinstance(payload[key], int) and not isinstance(payload[key], bool) for key in required[:3])
+
+
 def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict[str, Any]:
     project = Path(project_dir).resolve()
     test = Path(test_path).resolve()
@@ -75,9 +95,16 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
     if marker not in original:
         raise RuntimeError("existing arithmetic test does not contain the expected assertion marker")
 
+    # The payload is assembled inside executed Solidity from runtime values already
+    # produced by the vulnerable/patched calls and the Solidity reference calculation.
+    # Python only reads the resulting JSON; it does not calculate these values.
     write_call = (
         'vm.writeFile("cydra_file_transport_probe.json", '
-        f'\'{{"transport":"file","probe":"executed-solidity","run_marker":"{run_marker}"}}\');'
+        f"string.concat('{{\\\"observed\\\":', vm.toString(vulnerableObserved), "
+        "',\\\"referenceValue\\\":', vm.toString(exactFloor), "
+        "',\\\"patched\\\":', vm.toString(patchedObserved), "
+        f"',\\\"run_marker\\\":\\\"{run_marker}\\\"}}')"
+        ");"
     )
     modified = original.replace(marker, write_call + "\n        " + marker, 1)
     test.write_text(modified, encoding="utf-8")
@@ -107,6 +134,8 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
         fresh_write_confirmed = bool(
             parsed_content is not None and parsed_content.get("run_marker") == run_marker
         )
+        payload_valid = _measurement_payload_valid(parsed_content, run_marker)
+        runtime_payload_source_present = _runtime_payload_source_present(modified)
 
         error_output = f"{completed.stdout}\n{completed.stderr}".strip()
         fs_permission_error = bool(
@@ -115,7 +144,14 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
         ffi_required = "ffi" in error_output.lower() and "--ffi" in error_output.lower()
 
         if completed.returncode == 0:
-            classification = "CONFIRMED" if fresh_write_confirmed and _shape(file_content) == "structured_json" else "FALSIFIED"
+            classification = (
+                "CONFIRMED"
+                if fresh_write_confirmed
+                and _shape(file_content) == "structured_json"
+                and payload_valid
+                and runtime_payload_source_present
+                else "FALSIFIED"
+            )
         elif fs_permission_error:
             classification = "FALSIFIED"
         else:
@@ -135,6 +171,9 @@ def probe_file_transport(project_dir: str | Path, test_path: str | Path) -> dict
             "file_content_readable_by_python": file_content is not None and fresh_write_confirmed,
             "file_content_shape": _shape(file_content) if fresh_write_confirmed else "not_readable",
             "fresh_write_confirmed": fresh_write_confirmed,
+            "measurement_payload_present": payload_valid,
+            "runtime_measurement_source_present": runtime_payload_source_present,
+            "measurement_payload": parsed_content if payload_valid else None,
             "run_marker": run_marker,
             "classification": classification,
             "environment": {
