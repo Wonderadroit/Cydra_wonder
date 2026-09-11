@@ -38,6 +38,7 @@ def generate_access_control_test(hypothesis: Hypothesis, target_import: str, tar
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
     return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
+// Hypothesis: {hypothesis.hypothesis_id}
 import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
 contract CydraAuthInvariantTest is Test {{
@@ -59,6 +60,7 @@ def generate_initialization_test(hypothesis: Hypothesis, target_import: str, tar
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
     return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
+// Hypothesis: {hypothesis.hypothesis_id}
 import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
 contract CydraInitializationInvariantTest is Test {{
