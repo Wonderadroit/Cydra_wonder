@@ -12,6 +12,7 @@ from .reasoning import (
     generate_initialization_hypotheses,
     initialization_invariant,
     plan_access_control_experiment,
+    plan_arithmetic_experiment,
     plan_initialization_experiment,
 )
 from .solidity_model import parse_solidity
@@ -36,5 +37,6 @@ def investigate(path: str | Path, target: str | None = None) -> InvestigationRes
         all_hypotheses.extend((*auth, *init, *arith))
         all_experiments.extend(plan_access_control_experiment(h) for h in auth)
         all_experiments.extend(plan_initialization_experiment(h) for h in init)
+        all_experiments.extend(plan_arithmetic_experiment(h) for h in arith)
         all_evidence.extend(build_evidence(contract, (*auth, *init, *arith)))
-    return InvestigationResult(target=target or str(path), contracts=contracts, invariants=tuple(all_invariants), hypotheses=tuple(all_hypotheses), experiments=tuple(all_experiments), evidence=tuple(all_evidence))
+    return InvestigationResult(target=target or str(path), contracts=tuple(contracts), invariants=tuple(all_invariants), hypotheses=tuple(all_hypotheses), experiments=tuple(all_experiments), evidence=tuple(all_evidence))
