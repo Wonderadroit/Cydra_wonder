@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from .models import Evidence, Experiment, Hypothesis, Invariant, ContractModel
 
 
@@ -26,6 +28,38 @@ def generate_initialization_hypotheses(contract: ContractModel) -> tuple[Hypothe
         return ()
     invariant = initialization_invariant(contract)
     return tuple(Hypothesis(f"H-INIT-{fn.name}", f"{fn.name} may be callable in the deployed uninitialized state by an arbitrary caller, allowing privileged initialization state to be claimed.", invariant.invariant_id, fn.name, "arbitrary external caller", "attacker-controlled initialization or privileged state", evidence_ids=(f"E-MODEL-{fn.name}",)) for fn in initializers)
+
+
+def arithmetic_rounding_invariant(contract: ContractModel) -> Invariant | None:
+    """Detect the Benchmark 003 rounding boundary without changing shared schemas."""
+    source = Path(contract.source).read_text(encoding="utf-8")
+    if "(assets * SCALE + 996) / 997" not in source:
+        return None
+    return Invariant(
+        "INV-ARITH-001",
+        "The quote calculation must not round an exact floor upward; observed output must equal the floor of the reference division.",
+        "arithmetic rule; integer division with upward rounding offset",
+        0.90,
+    )
+
+
+def generate_arithmetic_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
+    invariant = arithmetic_rounding_invariant(contract)
+    if invariant is None:
+        return ()
+    targets = [f for f in contract.functions if f.name == "quoteMint"]
+    return tuple(
+        Hypothesis(
+            f"H-ARITH-{fn.name}",
+            f"{fn.name} may return a value above the exact floor because the arithmetic path rounds upward.",
+            invariant.invariant_id,
+            fn.name,
+            "arithmetic boundary input that exposes rounding drift",
+            "quoted value exceeds the exact floor by at least one unit",
+            evidence_ids=(f"E-MODEL-{fn.name}",),
+        )
+        for fn in targets
+    )
 
 
 def plan_access_control_experiment(hypothesis: Hypothesis) -> Experiment:
