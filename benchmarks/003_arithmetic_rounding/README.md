@@ -113,3 +113,33 @@ The workflow's red conclusion is an intentional harness boundary stop (`exit_cod
 ### Epistemic consequence
 
 Prediction 5A-Probe is **CONFIRMED** for State B. The current event transport is available through Foundry's verbose human-readable output, but not through the tested structured JSON interface. This does **not** yet justify changing CYDRA's transport or Solidity measurement mechanism. Any transport-mechanism change must be introduced under a separate prediction rather than bundled into the probe result.
+
+## Prediction 5A-Transport-A — File-mediated transport constraint
+
+Before locking Prediction 5A-Transport-A, the file-mediated transport mechanism was probed against the existing generated arithmetic test without modifying the fixture's `foundry.toml`.
+
+The mechanism under test was `vm.writeFile`.
+
+Two consecutive post-generator-fix probes produced identical results:
+
+- `cheat_code_used`: `vm.writeFile`
+- `invoked_successfully`: `false`
+- `fs_permissions_required`: `true`
+- `fs_permissions_declared`: `false`
+- `file_written`: `false`
+- `file_content_readable_by_python`: `false`
+- `file_content_shape`: `not_readable`
+- `ffi_required`: `false`
+- `ffi_enabled`: `false`
+
+The failure was caused by Foundry filesystem permission enforcement: the write path was not authorized by `foundry.toml`.
+
+This establishes a configuration constraint, not fundamental unavailability of `vm.writeFile`.
+
+For the controlled Benchmark 003 fixture, the constraint is satisfiable by modifying its `foundry.toml`.
+
+For real target projects, availability is target-conditional because CYDRA cannot assume that the target's Foundry configuration grants filesystem write permission.
+
+The probe was repeated after the generated event parameter was changed from `reference` to the compiler-neutral `referenceValue`. All tested fields matched across both runs.
+
+No Evidence schema, classifier, or transport abstraction was changed during this observation.
