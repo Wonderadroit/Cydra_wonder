@@ -4,7 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
-from cydra.foundry import classify_initialization_outcome, generate_initialization_test, run_foundry_test
+from cydra.foundry import classify_initialization_outcome, generate_initialization_test, require_executed, run_foundry_test, test_path_for
 from cydra.pipeline import investigate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,8 +28,8 @@ def main() -> int:
 
     prepare(vulnerable_source, FOUNDRY / "Target.sol")
     prepare(patched_source, FOUNDRY / "PatchedTarget.sol")
-    vuln_test = FOUNDRY / "test" / "generated" / "H_INIT_initialize_vulnerable.t.sol"
-    patched_test = FOUNDRY / "test" / "generated" / "H_INIT_initialize_patched.t.sol"
+    vuln_test = test_path_for(FOUNDRY, "generated/H_INIT_initialize_vulnerable.t.sol")
+    patched_test = test_path_for(FOUNDRY, "generated/H_INIT_initialize_patched.t.sol")
     generate_initialization_test(hypothesis, "../../Target.sol", "WormholeInitializationFixture", vuln_test)
     generate_initialization_test(hypothesis, "../../PatchedTarget.sol", "WormholeInitializationFixture", patched_test)
     vuln_test.write_text(vuln_test.read_text().replace("CydraInitializationInvariantTest", "CydraInitializationInvariantTestVulnerable"), encoding="utf-8")
@@ -37,14 +37,16 @@ def main() -> int:
 
     vulnerable = run_foundry_test(FOUNDRY, vuln_test, "X-H-INIT-initialize", "vulnerable")
     patched = run_foundry_test(FOUNDRY, patched_test, "X-H-INIT-initialize", "patched")
+    require_executed(vulnerable)
+    require_executed(patched)
     outcome = classify_initialization_outcome(hypothesis, vulnerable, patched)
     payload = {
         "benchmark": "002",
         "prediction": "require a new rule but no structural change",
         "invariants": [i.__dict__ for i in result.invariants],
         "hypothesis": outcome.hypothesis.__dict__,
-        "vulnerable": {"exit_code": vulnerable.exit_code, "passed": vulnerable.passed, "stdout": vulnerable.stdout, "stderr": vulnerable.stderr},
-        "patched": {"exit_code": patched.exit_code, "passed": patched.passed, "stdout": patched.stdout, "stderr": patched.stderr},
+        "vulnerable": vulnerable.__dict__,
+        "patched": patched.__dict__,
         "evidence": [e.__dict__ for e in outcome.evidence],
     }
     print(json.dumps(payload, indent=2))
