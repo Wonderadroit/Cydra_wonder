@@ -18,13 +18,13 @@ def main() -> int:
 
     vulnerable_test = generate_access_control_test(
         hypothesis,
-        "../../../Target.sol",
+        "../../src/Target.sol",
         "AlchemixAccessControlFixture",
         FOUNDRY / "test" / "generated" / "H_AUTH_setWhitelist_vulnerable.t.sol",
     )
     patched_test = generate_access_control_test(
         hypothesis,
-        "../../../PatchedTarget.sol",
+        "../../src/PatchedTarget.sol",
         "AlchemixAccessControlPatchedFixture",
         FOUNDRY / "test" / "generated" / "H_AUTH_setWhitelist_patched.t.sol",
     )
