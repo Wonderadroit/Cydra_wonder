@@ -213,3 +213,88 @@ Python may read and decode the JSON file only. It must not compute the arithmeti
 A clean confirmation establishes only that the confirmed file-mediated channel can transport the tested arithmetic runtime measurement payload under the controlled Benchmark 003 configuration. It does not establish Evidence-schema generalization or numerical classifier generalization. Those remain separate predictions.
 
 The `forge-std` dependency remains a separate environment limitation: the current workflow installs `forge-std` into the benchmark's `foundry/lib/` at CI time. This prediction does not claim that the committed fixture is independently runnable without that external installation step.
+
+## Prediction 5B — Evidence schema generalization
+
+Prediction 5B was locked before implementation. The smallest shared Evidence-schema extension added two optional fields to the existing `Evidence` dataclass:
+
+- `payload`: a structured mapping for execution observations;
+- `source_verification`: an explicit verification tier so downstream consumers do not infer provenance strength merely from the presence of numeric values.
+
+For this benchmark the verification tier is `static_plus_execution`: the generated source structurally verifies the intended vulnerable/patched contract-instance mapping and reference expression, and the generated test executes with passing assertions. This is **not** dynamic EVM-level provenance.
+
+### Concrete shared-shape result
+
+The probe instantiated authorization, initialization, and arithmetic evidence through the same `Evidence` dataclass. The schema fields were identical:
+
+```text
+[evidence_id, kind, claim, source, location, payload, source_verification]
+```
+
+Authorization and initialization evidence populated `payload=None` and `source_verification=None`. Arithmetic evidence populated the same optional fields with the measurement payload and `static_plus_execution` verification tier. No Evidence subclass or arithmetic-specific Evidence type was introduced.
+
+### CI result
+
+GitHub Actions run `34659713965`, job `103459486215`, on commit `5f0114ebed7545d615250996aff481562856cf64`, completed successfully. Foundry was `1.8.1` (`982849d3140c01fd3b72905759581a132df7aa98`). The predecessor file-transport probe again confirmed the same minimum path and produced a fresh runtime payload before the Evidence probe consumed it.
+
+The Evidence probe reported:
+
+```json
+{
+  "prediction": "5B",
+  "classification": "CONFIRMED",
+  "schema_fields": [
+    "evidence_id",
+    "kind",
+    "claim",
+    "source",
+    "location",
+    "payload",
+    "source_verification"
+  ],
+  "same_dataclass": true,
+  "same_schema_fields": true,
+  "no_evidence_subclasses": true,
+  "authorization_evidence": {
+    "evidence_id": "E-MODEL-authorization",
+    "kind": "model",
+    "claim": "Authorization model evidence.",
+    "source": "benchmark-001",
+    "location": "authorization",
+    "payload": null,
+    "source_verification": null
+  },
+  "initialization_evidence": {
+    "evidence_id": "E-MODEL-initialization",
+    "kind": "model",
+    "claim": "Initialization model evidence.",
+    "source": "benchmark-002",
+    "location": "initialization",
+    "payload": null,
+    "source_verification": null
+  },
+  "arithmetic_evidence": {
+    "evidence_id": "E-EXEC-H-ARITH-quoteMint-ARITHMETIC",
+    "kind": "execution",
+    "claim": "Arithmetic execution measurements transported from executed Solidity.",
+    "source": "benchmark-003-vulnerable+patched",
+    "location": "quoteMint",
+    "payload": {
+      "observed": 2,
+      "referenceValue": 1,
+      "patched": 1
+    },
+    "source_verification": "static_plus_execution"
+  },
+  "payload_present": true,
+  "payload_values_structured": true,
+  "source_verification": "static_plus_execution",
+  "verification_preserved": true
+}
+```
+
+### Epistemic consequence
+
+Prediction 5B is **CONFIRMED**. The shared Evidence abstraction now preserves the tested arithmetic measurement payload and an explicit verification tier without an arithmetic-specific Evidence subtype, while authorization and initialization evidence retain the same schema with the optional fields unset.
+
+This does **not** establish numerical classifier generalization, dynamic provenance, or generality to other measurement classes. No classifier change, transport change, or filesystem-scope expansion was part of this prediction.
