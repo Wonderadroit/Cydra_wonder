@@ -6,7 +6,7 @@ import re
 
 from cydra.foundry import generate_arithmetic_foundry_test
 from cydra.pipeline import investigate
-from scripts.probe_foundry_event_transport import probe_event_transport
+from probe_foundry_event_transport import probe_event_transport
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "benchmarks" / "003_arithmetic_rounding"
