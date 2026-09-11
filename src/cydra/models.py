@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 EvidenceKind = Literal["source", "model", "analysis", "execution", "benchmark"]
+EvidenceVerification = Literal["static_plus_execution", "dynamic_provenance"]
 HypothesisStatus = Literal["proposed", "supported", "rejected", "confirmed"]
 
 
@@ -14,6 +15,8 @@ class Evidence:
     claim: str
     source: str
     location: str | None = None
+    payload: dict[str, object] | None = None
+    source_verification: EvidenceVerification | None = None
 
 
 @dataclass(frozen=True)
