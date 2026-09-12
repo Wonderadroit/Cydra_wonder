@@ -58,13 +58,18 @@ def test_unresolved_declared_import_raises_instead_of_searching(tmp_path: Path) 
     root = tmp_path / "target"
     _write(
         root / "contracts" / "Pool.sol",
-        'import "./interfaces/Missing.sol";\ncontract Pool {}\n',
+        'import {IVotingEscrow} from "./interfaces/IVotingEscrow.sol";\n'
+        "contract Pool {}\n",
     )
+    # The declared interface path is intentionally absent.
     # A matching interface exists elsewhere, but it is not the file declared by the target.
     _write(
         root / "unrelated" / "IVotingEscrow.sol",
         "interface IVotingEscrow { function token() external view returns (address); }\n",
     )
 
-    with pytest.raises(FileNotFoundError, match="Missing.sol"):
+    with pytest.raises(
+        FileNotFoundError,
+        match="declared import ./interfaces/IVotingEscrow\\.sol.*has no remapping or relative target",
+    ):
         resolve_interface(root, root / "contracts" / "Pool.sol", "IVotingEscrow")
