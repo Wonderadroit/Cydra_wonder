@@ -3,7 +3,7 @@
   "target_repo": "https://github.com/Wonderadroit/Cydra_wonder",
   "target_ref": "df812ce749489b1ee792274277c0c53b90d280eb",
   "target_project": "benchmarks/check_7_multi_hypothesis",
-  "target_path": "src/MultiAuthorizationFixture.sol",
+  "target_path": "benchmarks/check_7_multi_hypothesis/src/MultiAuthorizationFixture.sol",
   "target_contract": "MultiAuthorizationFixture",
   "patched_path": null,
   "patched_contract": null,
