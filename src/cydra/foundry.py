@@ -14,6 +14,16 @@ from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothes
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
 
 
+# Prediction 5H — target-derived pragma emission:
+# ContractModel.pragma will default to None. parse_solidity() will extract the
+# target's Solidity pragma verbatim from comment-stripped source, and the
+# model-aware initialization generator will emit that exact constraint when
+# present, otherwise retaining the legacy ^0.8.20 fallback. Confirmation:
+# Forge passes Solidity version resolution. Falsification: generated tests
+# retain ^0.8.20 for a parsed target pragma, emit the wrong constraint, or
+# Forge still stops at pragma/version resolution. Scope: models.py,
+# solidity_model.py, foundry.py only; no reasoning/classifier/fixtures/workflow.
+
 @dataclass(frozen=True)
 class ExecutionResult:
     experiment_id: str
@@ -177,8 +187,9 @@ def _model_initialization_source(
     declarations_text = "\n        ".join(declarations)
     if declarations_text:
         declarations_text += "\n        "
+    pragma = contract_model.pragma or "^0.8.20"
     return f'''// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.20;
+pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Interface-aware generation only: constructor and initializer parameter shapes
 // come from ContractModel/FunctionModel. Postcondition semantics are deferred.
