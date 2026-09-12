@@ -27,6 +27,7 @@ def test_enrichment_is_additive_and_extracts_constructor_parameters_and_auth(tmp
         ("_owner", "address", None),
         ("_limit", "uint256", None),
     ]
+    assert contract.constructor.interface_casts == ()
     assert [(p.name, p.type, p.data_location) for p in function.parameters] == [
         ("token0", "address", None),
         ("token1", "address", None),
@@ -46,7 +47,9 @@ def test_enrichment_is_additive_and_extracts_constructor_parameters_and_auth(tmp
 def test_parameter_locations_and_custom_types_are_preserved(tmp_path: Path) -> None:
     source = """
     contract Sample {
-        constructor(address _voter, address _ve, address _registry) {}
+        constructor(address _voter, address _ve, address _registry) {
+            IVotingEscrow(_ve).token();
+        }
 
         function initialize(AirdropParams memory params) external {
             require(msg.sender != team, "NotTeam");
@@ -69,6 +72,7 @@ def test_parameter_locations_and_custom_types_are_preserved(tmp_path: Path) -> N
         ("_ve", "address", None),
         ("_registry", "address", None),
     ]
+    assert contract.constructor.interface_casts == (("_ve", "IVotingEscrow"),)
     assert [(p.name, p.type, p.data_location) for p in initialize.parameters] == [
         ("params", "AirdropParams", "memory"),
     ]
@@ -78,5 +82,27 @@ def test_parameter_locations_and_custom_types_are_preserved(tmp_path: Path) -> N
         ("_minter", "address", None),
     ]
     assert set_tokens.authorization_predicates == ("_msgSender() != _minter",)
+
+
+def test_constructor_interface_casts_are_deduplicated_and_filtered_to_parameters(tmp_path: Path) -> None:
+    source = """
+    contract Sample {
+        constructor(address _ve, address _other) {
+            IVotingEscrow(_ve).token();
+            IVotingEscrow(_ve).token();
+            IOther(_other).value();
+            INotAParameter(other).value();
+        }
+    }
+    """
+    path = tmp_path / "Sample.sol"
+    path.write_text(source, encoding="utf-8")
+
+    contract = parse_solidity(path)[0]
+    assert contract.constructor is not None
+    assert contract.constructor.interface_casts == (
+        ("_ve", "IVotingEscrow"),
+        ("_other", "IOther"),
+    )
 
 # Keep the focused extraction assertions adjacent to the additive regression gate.
