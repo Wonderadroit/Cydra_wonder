@@ -7,7 +7,7 @@
     "experiment_planned": true,
     "foundry_generated": true,
     "blind_executed": true,
-    "execution_status": "PASS",
+    "execution_status": "FAIL",
     "classification": "NOT_REACHED",
     "classification_blocked_reason": "authorization classifier requires patched counterpart; blind target has none"
   }
