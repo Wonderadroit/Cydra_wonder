@@ -152,7 +152,7 @@ def generate_cached_accounting_foundry_test(experiment: Experiment, target: str,
 pragma solidity ^0.8.20;
 // Hypothesis: {experiment.hypothesis_id}
 import {{Test}} from "forge-std/Test.sol";
-import {{MockPoolToken}} from "../Pool.sol";
+import {{MockPoolToken}} from "src/Pool.sol";
 import {{ {target_type} as Vulnerable }} from "{target_import}";
 import {{ {patched_type} as Patched }} from "{patched_import}";
 contract CydraAccountingInvariantTest is Test {{
