@@ -82,6 +82,8 @@ jobs:
 
               print("PROBE: regex pattern =", sm._FUNCTION_RE.pattern)
               print("PROBE: regex flags =", sm._FUNCTION_RE.flags)
+              print("PROBE: interface cast regex pattern =", sm._INTERFACE_CAST_RE.pattern)
+              print("PROBE: interface cast regex flags =", sm._INTERFACE_CAST_RE.flags)
 
               if name == "Voter":
                   source = p.read_text(encoding="utf-8")
@@ -119,7 +121,7 @@ jobs:
                               "line =", source.count("\n", 0, global_start) + 1,
                           )
 
-              contracts = list(sm.parse_solidity(p))
+              contracts = list(parse_solidity(p))
               print("PROBE: contract names =", [c.name for c in contracts])
 
               for c in contracts:
@@ -133,6 +135,34 @@ jobs:
                   "PROBE: generator would find initialize =",
                   any(f.name == "initialize" for f in model.functions) if model else None,
               )
+
+              constructor = model.constructor if model else None
+              legacy = constructor.interface_casts if constructor else ()
+              resolved = constructor.resolved_interface_casts if constructor else ()
+              legacy_hash = hashlib.sha256(repr(legacy).encode("utf-8")).hexdigest()
+              print("PROBE: constructor.interface_casts =", legacy)
+              print("PROBE: constructor.resolved_interface_casts =", resolved)
+              print("PROBE: resolved count =", len(resolved))
+              print("PROBE: legacy count =", len(legacy))
+              print("PROBE: legacy field repr sha256 =", legacy_hash)
+              print(
+                  "PROBE: any tree_search in resolved methods =",
+                  any("tree_search" in repr(item).lower() for _, item in resolved),
+              )
+
+              for parameter_name, interface in resolved:
+                  print("PROBE: resolved interface parameter =", parameter_name)
+                  print("PROBE: resolved interface name =", interface.name)
+                  print("PROBE: resolved interface source =", interface.source_path)
+                  print("PROBE: resolved interface method =", interface.resolution_method)
+                  print("PROBE: resolved interface method count =", len(interface.methods))
+                  print(
+                      "PROBE: resolved interface methods =",
+                      [
+                          (method.name, method.parameters, method.returns)
+                          for method in interface.methods
+                      ],
+                  )
 
               hypothesis = Hypothesis(
                   hypothesis_id=f"H-INIT-{name}",
