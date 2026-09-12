@@ -1,0 +1,12 @@
+{
+  "name": "check-1-initialization",
+  "target_repo": "https://github.com/Wonderadroit/Cydra_wonder",
+  "target_ref": "8adf1ca1c8fd49fb7e04ca6d635b1e644e84bdcf",
+  "target_path": "benchmarks/wormhole_uninitialized/Target.sol",
+  "target_contract": "WormholeInitializationFixture",
+  "target_project": ".",
+  "patched_path": null,
+  "patched_contract": null,
+  "classes": ["initialization"],
+  "freeze": "runner-validation/check-1-initialization/freeze"
+}
