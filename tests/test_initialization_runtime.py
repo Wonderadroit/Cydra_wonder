@@ -1,5 +1,5 @@
 from cydra.foundry import ExecutionResult
-from cydra.initialization_runtime import classify_initialization_execution, parse_forge_human_summary, parse_forge_json
+from cydra.initialization_runtime import _json_execution_results, classify_initialization_execution, parse_forge_human_summary, parse_forge_json
 from cydra.models import Hypothesis
 
 
@@ -52,6 +52,17 @@ Ran 3 test suites in 9.23ms (2.61ms CPU time): 3 tests passed, 0 failed, 0 skipp
 def test_parse_json_requires_object():
     parsed = parse_forge_json('{"suite:test":{"test_results":{"x()":{"status":"Success"}}}}')
     assert parsed["suite:test"]["test_results"]["x()"]["status"] == "Success"
+
+
+def test_json_target_derivation_strips_t_sol_suffix():
+    suites = {
+        f"test/cydra_generated/{target}.t.sol:CydraInitializationInvariantTest": {
+            "test_results": {"testInitializationInterfaceIsCallable()": {"status": "Success"}}
+        }
+        for target in ("Minter", "Voter", "Pool")
+    }
+    results = _json_execution_results(suites, "{}", "", 0)
+    assert [result.target for result in results] == ["Minter", "Voter", "Pool"]
 
 
 def test_initialization_pass_rejects_and_maps_to_not_confirmed():
