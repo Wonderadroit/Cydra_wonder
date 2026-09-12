@@ -24,6 +24,9 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Install pytest for 5K-2 unit tests
+        run: python -m pip install pytest
+
       - name: Test 5K-2 parser and classifier
         env:
           PYTHONPATH: src
