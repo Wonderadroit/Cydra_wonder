@@ -8,7 +8,6 @@ import ast
 from typing import Callable, Iterable
 
 from .scope import ScopeState
-from .system_model import Edge, Node
 
 
 class NodeKind(str, Enum):
@@ -79,7 +78,7 @@ class RepositoryRecon:
         return model
 
     def to_canonical(self, recon_model: SystemReconSnapshot, canonical=None):
-        from .system_model import SystemModel as CanonicalSystemModel
+        from .system_model import Edge, Node, SystemModel as CanonicalSystemModel
         canonical = canonical or CanonicalSystemModel()
         for recon_node in recon_model.nodes:
             canonical.add_node(Node(recon_node.node_id, recon_node.kind.value, recon_node.name, {
@@ -87,7 +86,7 @@ class RepositoryRecon:
                 "scope_state": recon_node.scope.value, "metadata": dict(recon_node.metadata),
             }))
         for recon_edge in recon_model.edges:
-            canonical.connect(recon_edge.source, recon_edge.relation, recon_edge.target, provenance="repository_recon")
+            canonical.add_edge(Edge(recon_edge.source, recon_edge.relation, recon_edge.target, {"provenance": "repository_recon"}))
         return canonical
 
     def scan_canonical(self, paths: Iterable[str], sources: dict[str, str], canonical=None):
@@ -102,12 +101,23 @@ class RepositoryRecon:
         module_id = f"module:{path}"
         model.add_node(ReconNode(module_id, NodeKind.MODULE, path, PurePosixPath(path).stem, state))
         model.add_edge(ReconEdge(f"file:{path}", "contains", module_id))
+
+        parent_map: dict[ast.AST, ast.AST] = {}
+        for parent in ast.walk(tree):
+            for child in ast.iter_child_nodes(parent):
+                parent_map[child] = parent
+
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 function_id = f"function:{path}:{node.lineno}:{node.name}"
-                model.add_node(ReconNode(function_id, NodeKind.FUNCTION, path, node.name, state,
-                    {"line": str(node.lineno), "async": str(isinstance(node, ast.AsyncFunctionDef)).lower()}))
-                model.add_edge(ReconEdge(module_id, "contains", function_id))
+                metadata = {"line": str(node.lineno), "async": str(isinstance(node, ast.AsyncFunctionDef)).lower()}
+                model.add_node(ReconNode(function_id, NodeKind.FUNCTION, path, node.name, state, metadata))
+                parent = parent_map.get(node)
+                if isinstance(parent, ast.ClassDef):
+                    class_id = f"class:{path}:{parent.lineno}:{parent.name}"
+                    model.add_edge(ReconEdge(class_id, "contains", function_id))
+                else:
+                    model.add_edge(ReconEdge(module_id, "contains", function_id))
                 if node.name.startswith(("handle_", "route_", "api_")) or node.name in {"main", "run"}:
                     entry_id = f"entry:{path}:{node.lineno}:{node.name}"
                     model.add_node(ReconNode(entry_id, NodeKind.ENTRY_POINT, path, node.name, state))
