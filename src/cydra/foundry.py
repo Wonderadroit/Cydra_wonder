@@ -196,7 +196,24 @@ def _semantic_override(interface_name: str, method_name: str) -> str | None:
     return None
 
 
-def _return_declaration_with_name(return_declaration: str, index: int) -> tuple[str, str]:
+def _qualify_type(type_declaration: str, interface_name: str, known_interfaces: set[str]) -> str:
+    tokens = type_declaration.strip().split()
+    if not tokens:
+        return type_declaration
+    type_token = tokens[0]
+    base = type_token.rstrip("[]")
+    builtins = {
+        "address", "bool", "string", "bytes", "byte", "uint", "int",
+        *{f"uint{i}" for i in range(8, 257, 8)},
+        *{f"int{i}" for i in range(8, 257, 8)},
+        *{f"bytes{i}" for i in range(1, 33)},
+    }
+    if base not in builtins and base not in known_interfaces and "." not in base:
+        tokens[0] = f"{interface_name}.{type_token}"
+    return " ".join(tokens)
+
+
+def _return_declaration_with_name(return_declaration: str, index: int, interface_name: str, known_interfaces: set[str]) -> tuple[str, str]:
     tokens = return_declaration.strip().split()
     if not tokens:
         raise ValueError("Cannot generate a named return from an empty declaration")
@@ -205,13 +222,14 @@ def _return_declaration_with_name(return_declaration: str, index: int) -> tuple[
         type_tokens = tokens[:-1]
     else:
         type_tokens = tokens
+    type_declaration = _qualify_type(" ".join(type_tokens), interface_name, known_interfaces)
     name = f"cydraReturn{index}"
-    return " ".join(type_tokens) + f" {name}", name
+    return f"{type_declaration} {name}", name
 
 
-def _stub_method_source(interface_name: str, method, derived_returns: dict[str, str]) -> str:
+def _stub_method_source(interface_name: str, method, derived_returns: dict[str, str], known_interfaces: set[str]) -> str:
     parameters = ", ".join(method.parameters)
-    named_returns = [_return_declaration_with_name(item, index) for index, item in enumerate(method.returns)]
+    named_returns = [_return_declaration_with_name(item, index, interface_name, known_interfaces) for index, item in enumerate(method.returns)]
     returns = ", ".join(declaration for declaration, _ in named_returns)
     signature = f"function {method.name}({parameters}) external view"
     if returns:
@@ -246,6 +264,7 @@ def _runtime_stub_source(
     derived_targets: dict[str, object] = {interface.name: interface for _, _, interface in derived_interface_casts}
     interfaces: dict[str, object] = dict(resolved)
     interfaces.update(derived_targets)
+    known_interfaces = set(interfaces)
 
     derived_by_source: dict[str, list[tuple[str, object]]] = {}
     for source_interface, source_method, target_interface in derived_interface_casts:
@@ -271,7 +290,7 @@ def _runtime_stub_source(
             assignments = " ".join(f"_cydraDerived_{method} = {method}Target;" for method, _ in relations)
             constructor = f"    constructor({parameters}) {{ {assignments} }}\n"
         derived_returns = {method: f"_cydraDerived_{method}" for method, _ in relations}
-        methods = "\n".join(_stub_method_source(interface_name, method, derived_returns) for method in interface.methods)
+        methods = "\n".join(_stub_method_source(interface_name, method, derived_returns, known_interfaces) for method in interface.methods)
         declarations.append(
             f'''contract Cydra{interface_name}Stub {{
 {fields}{constructor}{methods}
