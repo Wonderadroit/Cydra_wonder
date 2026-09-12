@@ -867,6 +867,19 @@ def main() -> int:
             checkout,
         )
 
+        dependency_install = _command_capture(
+            checkout,
+            "forge",
+            "install",
+            "foundry-rs/forge-std",
+            "--no-commit",
+        )
+        if not dependency_install["ok"]:
+            raise RuntimeError(
+                "forge-std bootstrap failed: "
+                f"{dependency_install['stderr'].strip()}"
+            )
+
         project = checkout / args.target_project
         source = checkout / args.target_path
 
