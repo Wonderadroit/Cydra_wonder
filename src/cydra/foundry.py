@@ -9,6 +9,7 @@ import tomllib
 from typing import Literal
 
 from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothesis, ParameterModel
+from .initialization_shapes import render_initialization_test_body
 
 
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
@@ -359,10 +360,15 @@ def _model_initialization_source(
         arguments.append(argument)
         if declaration:
             declarations.append(declaration)
-    initialize_call = f"target.{function.name}({', '.join(arguments)});"
-    declarations_text = "\n        ".join(declarations)
-    if declarations_text:
-        declarations_text += "\n        "
+    initialize_args_str = ", ".join(arguments)
+    test_body = render_initialization_test_body(
+        function,
+        target_var="target",
+        unauthorized_addr="0xA11CE",
+        initialize_args_str=initialize_args_str,
+    )
+    if declarations_text := "\n        ".join(declarations):
+        test_body = declarations_text + "\n        " + test_body
     pragma = contract_model.pragma or "^0.8.20"
 
     factory_method = "\n    function voter() external view returns (address) { return address(this); }" if factory_context else ""
@@ -422,9 +428,7 @@ contract CydraInitializationInvariantTest is Test {{
         {token_deployment}
         target = new {target_type}({constructor_arguments});
     }}
-    function testInitializationInterfaceIsCallable() public {{
-        {declarations_text}{initialize_call}
-    }}
+    {test_body}
 }}
 '''
 
