@@ -135,6 +135,16 @@ jobs:
                   "PROBE: generator would find initialize =",
                   any(f.name == "initialize" for f in model.functions) if model else None,
               )
+              print(
+                  "PROBE: inherited_resolved_interfaces =",
+                  getattr(model, "inherited_resolved_interfaces", ()) if model else (),
+              )
+              if model:
+                  for interface in getattr(model, "inherited_resolved_interfaces", ()):
+                      print("PROBE: inherited interface name =", interface.name)
+                      print("PROBE: inherited interface source =", interface.source_path)
+                      print("PROBE: inherited interface method =", interface.resolution_method)
+                      print("PROBE: inherited interface declared_types =", interface.declared_types)
 
               constructor = model.constructor if model else None
               legacy = constructor.interface_casts if constructor else ()
@@ -190,13 +200,27 @@ jobs:
                   attacker_capability="external caller",
                   expected_impact="initialization",
               )
+              generated_path = output / f"{name}.t.sol"
               generate_initialization_test(
                   hypothesis,
                   import_path,
                   name,
-                  output / f"{name}.t.sol",
+                  generated_path,
                   contract_model=model,
               )
+
+              if name == "Minter":
+                  generated_lines = generated_path.read_text(encoding="utf-8").splitlines()
+                  print("PROBE: generated Minter.t.sol header (lines 1-20)")
+                  for line_number, line in enumerate(generated_lines[:20], 1):
+                      print(f"PROBE: Minter.t.sol:{line_number}: {line}")
+                  print("PROBE: generated Minter.t.sol around declaration (lines 130-145)")
+                  for line_number in range(130, min(145, len(generated_lines)) + 1):
+                      print(f"PROBE: Minter.t.sol:{line_number}: {generated_lines[line_number - 1]}")
+                  print("PROBE: all Minter.t.sol occurrences of IMinter")
+                  for line_number, line in enumerate(generated_lines, 1):
+                      if "IMinter" in line:
+                          print(f"PROBE: Minter.t.sol:{line_number}: {line}")
           PY
 
       # Foundry compiles tests by default; this invocation intentionally does not use the unsupported --no-run flag.
