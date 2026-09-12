@@ -78,3 +78,5 @@ def test_parameter_locations_and_custom_types_are_preserved(tmp_path: Path) -> N
         ("_minter", "address", None),
     ]
     assert set_tokens.authorization_predicates == ("_msgSender() != _minter",)
+
+# Keep the focused extraction assertions adjacent to the additive regression gate.
