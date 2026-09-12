@@ -1,0 +1,1 @@
+5K-1c-fix-3 implementation prepared: move initializer declarations inside generated test function before shape body; add placement regression. Temporary marker.
