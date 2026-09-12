@@ -60,8 +60,8 @@ def main() -> int:
 
     generated = generate_cached_accounting_foundry_test(
         experiment,
-        "../../Target.sol:StrategyVulnerable",
-        "../../PatchedTarget.sol:StrategyPatched",
+        "../Target.sol:StrategyVulnerable",
+        "../PatchedTarget.sol:StrategyPatched",
         TEST_PATH,
     )
 
