@@ -24,6 +24,9 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Pre-install Solidity compiler 0.8.36
+        run: svm install 0.8.36
+
       - name: Generate interface-aware initialization tests
         env:
           PYTHONPATH: src
