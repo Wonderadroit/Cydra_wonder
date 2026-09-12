@@ -52,9 +52,9 @@ Exactly these eight contracts are in scope:
 
 Interfaces, libraries, deployment scripts, tests, and all other contracts are excluded from the CYDRA model input.
 
-The eight paths exist at the frozen commit. The target repository's Foundry configuration declares `contracts` as the Solidity source directory and uses Solidity 0.8.19-compatible source. Local environment parsing/build tooling is not available in this preparation environment; therefore build/parse success must be observed by the blind run and recorded as execution evidence rather than assumed here.
+All eight declared paths exist at the frozen commit. The target repository's Foundry configuration declares `contracts` as the Solidity source directory and the frozen Solidity sources use pragma 0.8.19. A local `forge` executable and outbound GitHub access are unavailable in this preparation environment, so a local compile could not be performed here. The frozen commit contains the target's own CI workflow, but no workflow run is attached to this initial commit. Therefore compile/model-parse success must be observed by the blind run and recorded as execution evidence rather than assumed here.
 
-## Pre-run extraction prediction
+## Source-derived extraction prediction
 
 The current CYDRA extraction rules are read-only and unchanged for this benchmark.
 
@@ -62,18 +62,26 @@ The current CYDRA extraction rules are read-only and unchanged for this benchmar
 
 The initialization extractor matches public/external functions named exactly `initialize` or `init`.
 
-Source-derived prediction:
+Mechanical source inspection of the eight frozen contracts found exactly three matching entry points:
 
-- `Pool.sol`: 1 initialization hypothesis (`initialize`)
-- `Minter.sol`: 1 initialization hypothesis (`initialize`)
-- `Router.sol`: 0
-- `FactoryRegistry.sol`: 0
-- `VotingEscrow.sol`: 0
-- `RewardsDistributor.sol`: 0
-- `Voter.sol`: 0
-- `ProtocolGovernor.sol`: 0
+- `Pool.sol`: `initialize`
+- `Minter.sol`: `initialize`
+- `Voter.sol`: `initialize`
 
-Predicted initialization hypotheses: **2**.
+The other five in-scope contracts contain no matching public/external initializer.
+
+Predicted initialization hypotheses: **3**.
+
+### Authorization
+
+The current authorization extractor requires both:
+
+1. at least one administrative function named with the existing `set/add/remove/update/accept` prefix family carrying a Solidity modifier; and
+2. at least one administrative sibling in that contract with no modifier.
+
+Mechanical inspection of the eight frozen contracts predicts this condition is not met in any of them. The source contains inline `msg.sender` authorization checks, but those are not the modifier signal used by the current extractor. `FactoryRegistry` has modifier-protected administrative functions but no unmodified administrative sibling.
+
+Predicted authorization hypotheses: **0**.
 
 ### Arithmetic
 
@@ -87,24 +95,17 @@ The current accounting extractor is the exact Benchmark 004 predicate requiring 
 
 Prediction: **0 cached-accounting hypotheses** for the frozen target.
 
-### Authorization
+### Total predicted hypotheses
 
-The current authorization extractor requires both:
-
-1. at least one administrative function named with the existing `set/add/remove/update/accept` prefix family carrying a modifier; and
-2. at least one administrative sibling in that contract with no modifier.
-
-Because this depends on the complete modifier inventory of every function in each contract, no numeric authorization-hypothesis count is pre-committed without converting a source-wide inventory into a security interpretation. Authorization extraction is therefore **unpredictable/count-open**, and the exact emitted hypotheses will be recorded verbatim as extractor output rather than treated as a prior security expectation.
-
-This is a deliberate prediction downgrade, not permission to guide the extractor after the run.
+**3** hypotheses across the four currently supported extraction classes, all predicted to be initialization hypotheses.
 
 ## Mechanical scope check
 
-Before execution, the benchmark runner must ensure that only the eight declared paths are converted into `ContractModel` inputs.
+The blind runner must convert only the eight declared paths into `ContractModel` inputs.
 
 Any CYDRA hypothesis whose source path is outside the eight-path manifest is a **scope violation** and invalidates the blind run before oracle comparison.
 
-The benchmark must also record, for each of the eight contracts, whether parsing/model construction succeeded or failed.
+The run must record, for each of the eight contracts, whether parsing/model construction succeeded or failed.
 
 ## Verification methods — pre-committed
 
@@ -146,7 +147,7 @@ After the CYDRA output is frozen:
 
 **Extraction Gap** is a distinct Benchmark 005 outcome.
 
-If no initialization hypotheses are generated despite the source-derived expectation of two, the run must record which of the eight contracts produced no extraction and whether the failure is:
+If fewer than three initialization hypotheses are generated despite the source-derived expectation of three, the run must record which of the eight contracts produced no extraction and whether the failure is:
 
 - extractor predicate mismatch;
 - parser/model construction failure;
