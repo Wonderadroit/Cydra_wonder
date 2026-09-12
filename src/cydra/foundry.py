@@ -9,9 +9,7 @@ from typing import Literal
 
 from .models import Evidence, Experiment, Hypothesis
 
-
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
-
 
 @dataclass(frozen=True)
 class ExecutionResult:
@@ -25,7 +23,7 @@ class ExecutionResult:
     status: ExecutionStatus
     stdout: str
     stderr: str
-
+    measurements: dict[str, int] | None = None
 
 @dataclass(frozen=True)
 class ExperimentOutcome:
@@ -43,7 +41,6 @@ def _write_test(source: str, output_path: str | Path) -> Path:
 
 
 def configured_test_dir(project_dir: str | Path) -> Path:
-    """Return the Foundry test directory declared by the project's config."""
     project = Path(project_dir)
     config_path = project / "foundry.toml"
     test_dir = "test"
@@ -55,7 +52,6 @@ def configured_test_dir(project_dir: str | Path) -> Path:
 
 
 def test_path_for(project_dir: str | Path, filename: str) -> Path:
-    """Build a generated-test path from Foundry's configured test directory."""
     return configured_test_dir(project_dir) / filename
 
 
@@ -102,10 +98,8 @@ contract CydraInitializationInvariantTest is Test {{
 
 
 def generate_arithmetic_foundry_test(experiment: Experiment, target: str, patched: str) -> str:
-    """Generate the arithmetic differential Foundry test without executing it."""
     if not experiment.experiment_id.startswith("X-H-ARITH-"):
         raise ValueError(f"Unsupported experiment for arithmetic Foundry generation: {experiment.experiment_id}")
-
     def parse_target(spec: str) -> tuple[str, str]:
         try:
             import_path, contract_type = spec.rsplit(":", 1)
@@ -114,7 +108,6 @@ def generate_arithmetic_foundry_test(experiment: Experiment, target: str, patche
         if not import_path or not contract_type:
             raise ValueError("Arithmetic target must include import path and contract type")
         return import_path, contract_type
-
     target_import, target_type = parse_target(target)
     patched_import, patched_type = parse_target(patched)
     return f'''// SPDX-License-Identifier: UNLICENSED
@@ -124,6 +117,7 @@ import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} as Vulnerable }} from "{target_import}";
 import {{ {patched_type} as Patched }} from "{patched_import}";
 contract CydraArithmeticInvariantTest is Test {{
+    event CydraMeasurement(uint256 observed, uint256 referenceValue, uint256 patched, int256 delta);
     function testArithmeticBoundaryPreservesExactFloor() public {{
         Vulnerable vulnerable = new Vulnerable();
         Patched patchedTarget = new Patched();
@@ -131,6 +125,8 @@ contract CydraArithmeticInvariantTest is Test {{
         uint256 exactFloor = (assets * vulnerable.SCALE()) / 997;
         uint256 vulnerableObserved = vulnerable.quoteMint(assets);
         uint256 patchedObserved = patchedTarget.quoteMint(assets);
+        int256 delta = int256(vulnerableObserved) - int256(exactFloor);
+        emit CydraMeasurement(vulnerableObserved, exactFloor, patchedObserved, delta);
         assertGt(vulnerableObserved, exactFloor);
         assertEq(patchedObserved, exactFloor);
     }}
@@ -138,16 +134,96 @@ contract CydraArithmeticInvariantTest is Test {{
 '''
 
 
+def generate_cached_accounting_foundry_test(experiment: Experiment, target: str, patched: str, output_path: str | Path) -> Path:
+    """Generate a protocol-level donation/redemption experiment with runtime file evidence."""
+    if not experiment.experiment_id.startswith("X-H-ACCOUNT-"):
+        raise ValueError(f"Unsupported experiment for accounting Foundry generation: {experiment.experiment_id}")
+    def parse_target(spec: str) -> tuple[str, str]:
+        try:
+            import_path, contract_type = spec.rsplit(":", 1)
+        except ValueError as exc:
+            raise ValueError("Accounting target must be '<import-path>:<contract-type>'") from exc
+        if not import_path or not contract_type:
+            raise ValueError("Accounting target must include import path and contract type")
+        return import_path, contract_type
+    target_import, target_type = parse_target(target)
+    patched_import, patched_type = parse_target(patched)
+    source = f'''// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+// Hypothesis: {experiment.hypothesis_id}
+import {{Test}} from "forge-std/Test.sol";
+import {{MockPoolToken}} from "src/Pool.sol";
+import {{ {target_type} as Vulnerable }} from "{target_import}";
+import {{ {patched_type} as Patched }} from "{patched_import}";
+contract CydraAccountingInvariantTest is Test {{
+    address internal holder = address(0xCAFE);
+    address internal attacker = address(0xBEEF);
+
+    function testDonationCannotInflateCachedRedemption() public {{
+        MockPoolToken pool = new MockPoolToken();
+        Vulnerable vulnerable = new Vulnerable(pool);
+        Patched patchedTarget = new Patched(pool);
+
+        vulnerable.seed(holder, 200, 200);
+        patchedTarget.seed(holder, 200, 200);
+
+        vm.prank(holder);
+        vulnerable.transferShares(address(vulnerable), 100);
+        vm.prank(holder);
+        patchedTarget.transferShares(address(patchedTarget), 100);
+
+        pool.mint(attacker, 200);
+        vm.prank(attacker);
+        pool.transfer(address(vulnerable), 100);
+        vm.prank(attacker);
+        pool.transfer(address(patchedTarget), 100);
+
+        uint256 vulnerableCachedBefore = vulnerable.poolCached();
+        uint256 patchedCachedBefore = patchedTarget.poolCached();
+        uint256 vulnerableLiveAfterDonation = pool.balanceOf(address(vulnerable));
+        uint256 patchedLiveAfterDonation = pool.balanceOf(address(patchedTarget));
+        uint256 referencePayout = vulnerableCachedBefore * 100 / vulnerable.totalSupply();
+
+        uint256 vulnerablePayout = vulnerable.burn(holder);
+        uint256 patchedPayout = patchedTarget.burn(holder);
+
+        string memory objectKey = "cydraAccounting";
+        vm.serializeUint(objectKey, "vulnerableCachedBefore", vulnerableCachedBefore);
+        vm.serializeUint(objectKey, "patchedCachedBefore", patchedCachedBefore);
+        vm.serializeUint(objectKey, "vulnerableLiveAfterDonation", vulnerableLiveAfterDonation);
+        vm.serializeUint(objectKey, "patchedLiveAfterDonation", patchedLiveAfterDonation);
+        vm.serializeUint(objectKey, "referencePayout", referencePayout);
+        vm.serializeUint(objectKey, "vulnerablePayout", vulnerablePayout);
+        vm.serializeUint(objectKey, "patchedPayout", patchedPayout);
+        string memory json = vm.serializeUint(objectKey, "donation", 100);
+        vm.writeJson(json, "cydra_accounting_measurements.json");
+
+        assertGt(vulnerableLiveAfterDonation, vulnerableCachedBefore);
+        assertGt(vulnerablePayout, referencePayout);
+        assertEq(patchedPayout, referencePayout);
+    }}
+}}
+'''
+    return _write_test(source, output_path)
+
+
+def _parse_measurements(stdout: str, stderr: str) -> dict[str, int] | None:
+    output = f"{stdout}\n{stderr}"
+    matches = re.findall(r"CydraMeasurement\(([-]?\d+),\s*([-]?\d+),\s*([-]?\d+),\s*([-]?\d+)\)", output)
+    if not matches:
+        return None
+    observed, reference, patched, delta = matches[-1]
+    return {"observed": int(observed), "reference": int(reference), "patched": int(patched), "delta": int(delta)}
+
+
 def _parse_execution(stdout: str, stderr: str, exit_code: int) -> tuple[bool, int, int, ExecutionStatus]:
     output = f"{stdout}\n{stderr}"
     if "No tests found" in output:
         return False, 0, 0, "UNMEASURABLE"
-
     ran_matches = re.findall(r"Ran\s+(\d+)\s+tests?\s+for\s+", output)
     tests_run = int(ran_matches[-1]) if ran_matches else 0
     failed_matches = re.findall(r"Suite result:.*?(\d+)\s+passed;\s+(\d+)\s+failed", output)
     tests_failed = int(failed_matches[-1][1]) if failed_matches else (tests_run if exit_code != 0 and tests_run else 0)
-
     if tests_run == 0:
         return False, 0, tests_failed, "UNMEASURABLE"
     if exit_code == 0 and tests_failed == 0:
@@ -162,31 +238,14 @@ def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_
         relative_test = relative_test.relative_to(project)
     command = ("forge", "test", "--match-path", str(relative_test), "-vv")
     completed = subprocess.run(command, cwd=project, text=True, capture_output=True, check=False)
-    executed, tests_run, tests_failed, status = _parse_execution(
-        completed.stdout, completed.stderr, completed.returncode
-    )
-    return ExecutionResult(
-        experiment_id,
-        target,
-        command,
-        completed.returncode,
-        executed,
-        tests_run,
-        tests_failed,
-        status,
-        completed.stdout,
-        completed.stderr,
-    )
+    executed, tests_run, tests_failed, status = _parse_execution(completed.stdout, completed.stderr, completed.returncode)
+    measurements = _parse_measurements(completed.stdout, completed.stderr)
+    return ExecutionResult(experiment_id, target, command, completed.returncode, executed, tests_run, tests_failed, status, completed.stdout, completed.stderr, measurements)
 
 
 def require_executed(result: ExecutionResult) -> ExecutionResult:
-    """Hard causal gate: zero-test execution cannot reach classification."""
     if not result.executed or result.tests_run == 0 or result.status == "UNMEASURABLE":
-        raise RuntimeError(
-            f"Foundry experiment {result.experiment_id} is UNMEASURABLE: "
-            f"executed={result.executed}, tests_run={result.tests_run}, "
-            f"exit_code={result.exit_code}"
-        )
+        raise RuntimeError(f"Foundry experiment {result.experiment_id} is UNMEASURABLE: executed={result.executed}, tests_run={result.tests_run}, exit_code={result.exit_code}")
     return result
 
 
@@ -198,8 +257,72 @@ def classify_initialization_outcome(hypothesis: Hypothesis, vulnerable: Executio
     return _classify(hypothesis, vulnerable, patched)
 
 
-def _classify(hypothesis: Hypothesis, vulnerable: ExecutionResult, patched: ExecutionResult) -> ExperimentOutcome:
-    if vulnerable.status == "UNMEASURABLE" or patched.status == "UNMEASURABLE":
+def classify_arithmetic_outcome(hypothesis: Hypothesis, evidence: Evidence, vulnerable: ExecutionResult, patched: ExecutionResult) -> ExperimentOutcome:
+    return _classify(hypothesis, vulnerable, patched, (evidence,))
+
+
+def classify_accounting_outcome(hypothesis: Hypothesis, evidence: Evidence, vulnerable: ExecutionResult, patched: ExecutionResult) -> ExperimentOutcome:
+    return _classify(hypothesis, vulnerable, patched, (evidence,))
+
+
+def _measurement_classification(evidence: Evidence) -> str:
+    payload = evidence.payload
+    if evidence.source_verification is None or not isinstance(payload, dict):
+        return "proposed"
+    required = ("observed", "referenceValue", "patched")
+    if any(key not in payload for key in required):
+        return "proposed"
+    if any(not isinstance(payload[key], int) or isinstance(payload[key], bool) for key in required):
+        return "proposed"
+    observed = payload["observed"]
+    reference = payload["referenceValue"]
+    patched = payload["patched"]
+    if observed > reference and patched == reference:
+        return "confirmed"
+    return "proposed"
+
+
+def _accounting_classification(evidence: Evidence) -> str:
+    payload = evidence.payload
+    if evidence.source_verification is None or not isinstance(payload, dict):
+        return "proposed"
+    required = (
+        "vulnerableCachedBefore",
+        "patchedCachedBefore",
+        "vulnerableLiveAfterDonation",
+        "patchedLiveAfterDonation",
+        "referencePayout",
+        "vulnerablePayout",
+        "patchedPayout",
+        "donation",
+    )
+    if any(key not in payload for key in required):
+        return "proposed"
+    if any(not isinstance(payload[key], int) or isinstance(payload[key], bool) for key in required):
+        return "proposed"
+    cached = payload["vulnerableCachedBefore"]
+    live = payload["vulnerableLiveAfterDonation"]
+    reference = payload["referencePayout"]
+    vulnerable = payload["vulnerablePayout"]
+    patched = payload["patchedPayout"]
+    donation = payload["donation"]
+    if donation > 0 and live > cached and vulnerable > reference and patched == reference:
+        return "confirmed"
+    return "proposed"
+
+
+def _classify(hypothesis: Hypothesis, vulnerable: ExecutionResult, patched: ExecutionResult, evidence_override: tuple[Evidence, ...] | None = None) -> ExperimentOutcome:
+    evidence = evidence_override
+    measurement_evidence = next((item for item in evidence or () if item.payload is not None), None)
+    if measurement_evidence is not None:
+        payload_keys = set(measurement_evidence.payload or {})
+        if {"observed", "referenceValue", "patched"}.issubset(payload_keys):
+            status = _measurement_classification(measurement_evidence)
+        elif {"vulnerablePayout", "patchedPayout", "referencePayout"}.issubset(payload_keys):
+            status = _accounting_classification(measurement_evidence)
+        else:
+            status = "proposed"
+    elif vulnerable.status == "UNMEASURABLE" or patched.status == "UNMEASURABLE":
         status = "proposed"
     elif vulnerable.status == "FAIL" and patched.status == "PASS":
         status = "confirmed"
@@ -207,33 +330,10 @@ def _classify(hypothesis: Hypothesis, vulnerable: ExecutionResult, patched: Exec
         status = "rejected"
     else:
         status = "proposed"
-    updated = Hypothesis(
-        hypothesis.hypothesis_id,
-        hypothesis.claim,
-        hypothesis.invariant_id,
-        hypothesis.target_function,
-        hypothesis.attacker_capability,
-        hypothesis.expected_impact,
-        status,
-        hypothesis.evidence_ids + (
-            f"E-EXEC-{hypothesis.hypothesis_id}-VULNERABLE",
-            f"E-EXEC-{hypothesis.hypothesis_id}-PATCHED",
-        ),
-    )
-    evidence = (
-        Evidence(
-            f"E-EXEC-{hypothesis.hypothesis_id}-VULNERABLE",
-            "execution",
-            f"Foundry security test against vulnerable target: status={vulnerable.status}, executed={vulnerable.executed}, tests_run={vulnerable.tests_run}, tests_failed={vulnerable.tests_failed}, exit={vulnerable.exit_code}.",
-            " ".join(vulnerable.command),
-            vulnerable.target,
-        ),
-        Evidence(
-            f"E-EXEC-{hypothesis.hypothesis_id}-PATCHED",
-            "execution",
-            f"Foundry security test against patched target: status={patched.status}, executed={patched.executed}, tests_run={patched.tests_run}, tests_failed={patched.tests_failed}, exit={patched.exit_code}.",
-            " ".join(patched.command),
-            patched.target,
-        ),
-    )
+    if evidence is None:
+        evidence = (
+            Evidence(f"E-EXEC-{hypothesis.hypothesis_id}-VULNERABLE", "execution", f"Foundry security test against vulnerable target: status={vulnerable.status}, executed={vulnerable.executed}, tests_run={vulnerable.tests_run}, tests_failed={vulnerable.tests_failed}, exit={vulnerable.exit_code}.", " ".join(vulnerable.command), vulnerable.target),
+            Evidence(f"E-EXEC-{hypothesis.hypothesis_id}-PATCHED", "execution", f"Foundry security test against patched target: status={patched.status}, executed={patched.executed}, tests_run={patched.tests_run}, tests_failed={patched.tests_failed}, exit={patched.exit_code}.", " ".join(patched.command), patched.target),
+        )
+    updated = Hypothesis(hypothesis.hypothesis_id, hypothesis.claim, hypothesis.invariant_id, hypothesis.target_function, hypothesis.attacker_capability, hypothesis.expected_impact, status, hypothesis.evidence_ids + tuple(item.evidence_id for item in evidence))
     return ExperimentOutcome(updated, vulnerable, patched, evidence)

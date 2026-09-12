@@ -1,0 +1,67 @@
+name: CYDRA Benchmark 005 — LiquidClaw blind discovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "benchmarks/005_liquidclaw_blind_discovery/**"
+      - "scripts/run_benchmark_005_liquidclaw.py"
+      - "src/cydra/**"
+      - "pyproject.toml"
+      - ".github/workflows/benchmark-005-liquidclaw.yml"
+  pull_request:
+    paths:
+      - "benchmarks/005_liquidclaw_blind_discovery/**"
+      - "scripts/run_benchmark_005_liquidclaw.py"
+      - "src/cydra/**"
+      - "pyproject.toml"
+      - ".github/workflows/benchmark-005-liquidclaw.yml"
+
+jobs:
+  blind-liquidclaw:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact CYDRA benchmark head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install CYDRA
+        run: python -m pip install -e .
+
+      - name: Install pytest
+        run: python -m pip install pytest
+
+      - name: Run existing CYDRA acceptance suite
+        run: pytest -q
+
+      - name: Checkout frozen LiquidClaw target
+        run: |
+          git clone --no-checkout https://github.com/Jc-asastu/liquidclaw-bsc.git /tmp/liquidclaw
+          cd /tmp/liquidclaw
+          git fetch --depth 1 origin 58bed220236e8cdd8d279ef7259b3298a71aac0b
+          git checkout --detach 58bed220236e8cdd8d279ef7259b3298a71aac0b
+          test "$(git rev-parse HEAD)" = "58bed220236e8cdd8d279ef7259b3298a71aac0b"
+
+      - name: Execute blind CYDRA run
+        run: |
+          mkdir -p artifacts/benchmark-005
+          python scripts/run_benchmark_005_liquidclaw.py /tmp/liquidclaw \
+            | tee artifacts/benchmark-005/cydra_output.json
+          sha256sum artifacts/benchmark-005/cydra_output.json \
+            | tee artifacts/benchmark-005/cydra_output.sha256
+          date -u +%Y-%m-%dT%H:%M:%SZ \
+            | tee artifacts/benchmark-005/cydra_output.timestamp
+          git rev-parse HEAD | tee artifacts/benchmark-005/cydra_commit.txt
+
+      - name: Upload frozen blind output
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-005-liquidclaw-blind-output
+          path: artifacts/benchmark-005/
+          if-no-files-found: error

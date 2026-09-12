@@ -62,6 +62,43 @@ def generate_arithmetic_hypotheses(contract: ContractModel) -> tuple[Hypothesis,
     )
 
 
+def cached_accounting_invariant(contract: ContractModel) -> Invariant | None:
+    """Detect a cache-vs-live-balance redemption mismatch in a protocol model."""
+    source = Path(contract.source).read_text(encoding="utf-8")
+    required = ("poolCached", "balanceOf(address(this))", "totalSupply", "burn")
+    if not all(token in source for token in required):
+        return None
+    if "poolCached_ * burnt / totalSupply_" in source:
+        return None
+    if "pool.balanceOf(address(this)) * burnt / totalSupply_" not in source:
+        return None
+    return Invariant(
+        "INV-ACCOUNT-001",
+        "Share redemption must use the cached accounted balance rather than an externally inflatable live token balance.",
+        "accounting consistency rule; cached book value versus transferable token balance",
+        0.90,
+    )
+
+
+def generate_cached_accounting_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
+    invariant = cached_accounting_invariant(contract)
+    if invariant is None:
+        return ()
+    targets = [f for f in contract.functions if f.name == "burn"]
+    return tuple(
+        Hypothesis(
+            f"H-ACCOUNT-{fn.name}",
+            f"{fn.name} may let an unsolicited token donation inflate redemption because payout uses live balance instead of cached accounting.",
+            invariant.invariant_id,
+            fn.name,
+            "transfer pool tokens directly to the strategy before redemption",
+            "redeemer receives more than the cached pro-rata amount because the live balance was inflated",
+            evidence_ids=(f"E-MODEL-{fn.name}",),
+        )
+        for fn in targets
+    )
+
+
 def plan_access_control_experiment(hypothesis: Hypothesis) -> Experiment:
     return Experiment(f"X-{hypothesis.hypothesis_id}", hypothesis.hypothesis_id, f"Execute {hypothesis.target_function} from an unprivileged actor and assert that the privileged state does not change; then repeat against the patched version.", ("missing authorization is exploitable", "authorization is enforced elsewhere"), 1.0)
 
@@ -78,6 +115,18 @@ def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
         hypothesis.hypothesis_id,
         f"Execute {hypothesis.target_function} with an arithmetic boundary input and assert the observed output equals the exact floor reference value; repeat against the patched version.",
         ("observed quote exceeds the exact floor", "observed quote equals the exact floor"),
+        1.0,
+    )
+
+
+def plan_cached_accounting_experiment(hypothesis: Hypothesis) -> Experiment:
+    if hypothesis.invariant_id != "INV-ACCOUNT-001":
+        raise ValueError(f"Unsupported invariant for accounting experiment: {hypothesis.invariant_id}")
+    return Experiment(
+        f"X-{hypothesis.hypothesis_id}",
+        hypothesis.hypothesis_id,
+        f"Create a strategy position, transfer pool tokens directly to the strategy without changing cached accounting, then execute {hypothesis.target_function}; repeat against the patched version and compare the redemption payout to the cached pro-rata reference.",
+        ("donation inflates redemption beyond cached accounting", "donation does not change the cached redemption price"),
         1.0,
     )
 

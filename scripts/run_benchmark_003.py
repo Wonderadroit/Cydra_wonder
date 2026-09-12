@@ -4,16 +4,16 @@ import json
 from pathlib import Path
 import re
 
-from cydra.foundry import generate_arithmetic_foundry_test, run_foundry_test
-from cydra.models import Evidence
+from cydra.foundry import generate_arithmetic_foundry_test
 from cydra.pipeline import investigate
+from probe_foundry_event_transport import probe_event_transport
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "benchmarks" / "003_arithmetic_rounding"
 SOURCE = BENCH / "Target.sol"
 FOUNDRY = BENCH / "foundry"
 GENERATED_TEST = FOUNDRY / "test" / "CydraArithmeticInvariant.t.sol"
-BENCHMARK_003_HARNESS_BOUNDARY = "evidence"
+BENCHMARK_003_HARNESS_BOUNDARY = "foundry-event-transport-probe"
 
 
 def _assertion_lines(source: str) -> list[str]:
@@ -53,20 +53,7 @@ def main() -> int:
     )
     GENERATED_TEST.write_text(generated_source, encoding="utf-8")
     assertion_lines = _assertion_lines(generated_source)
-    execution = run_foundry_test(
-        FOUNDRY,
-        GENERATED_TEST,
-        experiment.experiment_id,
-        "benchmark-003-vulnerable+patched",
-    )
-
-    execution_evidence = Evidence(
-        f"E-EXEC-{experiment.hypothesis_id}-ARITHMETIC",
-        "execution",
-        f"Foundry arithmetic test: status={execution.status}, executed={execution.executed}, tests_run={execution.tests_run}, tests_failed={execution.tests_failed}, exit={execution.exit_code}.",
-        " ".join(execution.command),
-        execution.target,
-    )
+    probe = probe_event_transport(FOUNDRY, GENERATED_TEST)
 
     payload = {
         "benchmark": "003",
@@ -75,22 +62,18 @@ def main() -> int:
         "experiment": experiment.__dict__,
         "generated_foundry_test": generated_source,
         "assertion_lines": assertion_lines,
-        "execution": {
-            "tests_run": execution.tests_run,
-            "tests_failed": execution.tests_failed,
-            "status": execution.status,
-            "exit_code": execution.exit_code,
-        },
-        "evidence": execution_evidence.__dict__,
+        "probe": probe,
         "downstream": {
+            "measurement_production": "NOT_REACHED",
+            "evidence_schema": "NOT_REACHED",
             "classifier": "NOT_REACHED",
         },
     }
     print(json.dumps(payload, indent=2, default=list))
 
     raise SystemExit(
-        "Benchmark 003 harness boundary reached: arithmetic execution evidence recorded; "
-        "stop before classifier."
+        "Benchmark 003 harness boundary reached: Foundry event transport probe recorded; "
+        "stop before measurement production."
     )
 
 
