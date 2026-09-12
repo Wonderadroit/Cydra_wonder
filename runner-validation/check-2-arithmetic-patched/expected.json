@@ -1,0 +1,13 @@
+{
+  "name": "check-2-arithmetic-patched",
+  "expected": {
+    "has_patched_target": true,
+    "extraction": true,
+    "hypothesis_generated": true,
+    "experiment_planned": true,
+    "foundry_generated": true,
+    "blind_executed": true,
+    "execution_status": "PASS",
+    "classification": "NOT_REACHED"
+  }
+}

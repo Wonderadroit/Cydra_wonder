@@ -1,0 +1,14 @@
+{
+  "name": "check-4-authorization-blind",
+  "expected": {
+    "has_patched_target": false,
+    "extraction": true,
+    "hypothesis_generated": true,
+    "experiment_planned": true,
+    "foundry_generated": true,
+    "blind_executed": true,
+    "execution_status": "PASS",
+    "classification": "NOT_REACHED",
+    "classification_blocked_reason": "authorization classifier requires patched counterpart; blind target has none"
+  }
+}

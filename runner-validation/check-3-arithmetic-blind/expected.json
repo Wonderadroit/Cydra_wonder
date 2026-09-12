@@ -1,0 +1,13 @@
+{
+  "name": "check-3-arithmetic-blind",
+  "expected": {
+    "has_patched_target": false,
+    "extraction": true,
+    "hypothesis_generated": true,
+    "experiment_planned": true,
+    "foundry_generated": false,
+    "blind_executed": false,
+    "classification": "NOT_REACHED",
+    "foundry_generation_blocked_reason": "arithmetic generator requires patched counterpart"
+  }
+}
