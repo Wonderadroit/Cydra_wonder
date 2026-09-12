@@ -97,6 +97,27 @@ def _balanced_parenthesized(source: str, opening: int) -> str:
     return source[opening + 1 :]
 
 
+def _first_argument(expression: str) -> str:
+    """Return the first top-level argument from a call expression."""
+    paren = bracket = angle = 0
+    for index, char in enumerate(expression):
+        if char == "(":
+            paren += 1
+        elif char == ")":
+            paren = max(0, paren - 1)
+        elif char == "[":
+            bracket += 1
+        elif char == "]":
+            bracket = max(0, bracket - 1)
+        elif char == "<":
+            angle += 1
+        elif char == ">":
+            angle = max(0, angle - 1)
+        elif char == "," and paren == bracket == angle == 0:
+            return expression[:index].strip()
+    return expression.strip()
+
+
 def _authorization_predicates(body: str) -> tuple[str, ...]:
     """Extract caller-identity predicates without interpreting their meaning."""
     predicates: list[str] = []
@@ -109,7 +130,7 @@ def _authorization_predicates(body: str) -> tuple[str, ...]:
 
     for match in re.finditer(r"\brequire\s*\(", body):
         opening = body.find("(", match.start())
-        predicate = _balanced_parenthesized(body, opening).strip()
+        predicate = _first_argument(_balanced_parenthesized(body, opening))
         if any(token in predicate for token in _CALLER_TOKENS):
             predicates.append(predicate)
 
