@@ -50,7 +50,9 @@ class ScopePolicy:
 
         if rule and state is ScopeState.CONDITIONAL:
             unresolved = tuple(c for c in rule.conditions if c not in satisfied)
-            allowed = not unresolved
+            # A conditional rule with no declared conditions does not establish
+            # authorization. Only explicit IN_SCOPE is unconditionally active.
+            allowed = bool(rule.conditions) and not unresolved
             if not allowed:
                 reason = reason or "Conditional scope requirements are not satisfied"
         else:
