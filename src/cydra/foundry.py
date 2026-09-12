@@ -127,9 +127,9 @@ def _resolve_custom_type(parameter_type: str, target_type: str, contract_model: 
     else:
         inherited_match = next(
             (
-                inherited_name
-                for inherited_name, inherited_type in contract_model.inherited_declared_types
-                if inherited_type == base
+                interface.name
+                for interface in contract_model.inherited_resolved_interfaces
+                if base in interface.declared_types
             ),
             None,
         )
@@ -231,7 +231,7 @@ def _initializer_runtime_requirements(contract_model: ContractModel, function_na
         if receiver == "ERC20" and method == "symbol"
     }
     factory_context = bool(re.search(r"\b\w+\s*=\s*_msgSender\s*\(\s*\)\s*;", body)) and bool(
-        re.search(r"\bIPoolFactory\s*\(\s*\w+\s*\)\s*\.\s*voter\s*\(", body)
+        re.search(r"\bIPoolFactory\s*\(\s*\w+\s*\)\s*\.\s*voter\s*\(", body
     )
     return token_parameters, factory_context
 
@@ -308,6 +308,7 @@ def _stub_method_source(interface_name: str, method, derived_returns: dict[str, 
 def _runtime_stub_source(
     resolved_interface_casts: tuple[tuple[str, object], ...],
     derived_interface_casts: tuple[tuple[str, str, object], ...],
+    inherited_resolved_interfaces: tuple[object, ...],
     need_erc20: bool,
     output_path: str | Path,
 ) -> tuple[str, dict[str, str]]:
@@ -328,11 +329,9 @@ def _runtime_stub_source(
         variables[interface_name] = f"{interface_name[1:]}Stub"
 
     declarations: list[str] = []
-    interface_imports: list[str] = []
-    for interface_name in sorted(interfaces):
-        interface = interfaces[interface_name]
-        import_path = _layout_aware_import_path(interface.source_path, output_path)
-        interface_imports.append(f'import {{ {interface_name} }} from "{import_path}";')
+    imported_interfaces: dict[str, object] = {}
+    for interface_name, interface in sorted(interfaces.items()):
+        imported_interfaces.setdefault(interface_name, interface)
         relations = derived_by_source.get(interface_name, ())
         fields = "".join(f"    address internal _cydraDerived_{method};\n" for method, _ in relations)
         constructor = ""
@@ -350,6 +349,14 @@ def _runtime_stub_source(
 }}'''
         )
 
+    for interface in inherited_resolved_interfaces:
+        imported_interfaces.setdefault(interface.name, interface)
+
+    interface_imports = [
+        f'import {{ {interface_name} }} from "{_layout_aware_import_path(interface.source_path, output_path)}";'
+        for interface_name, interface in imported_interfaces.items()
+    ]
+
     if need_erc20:
         declarations.append('''contract CydraERC20Stub {
     function symbol() external pure returns (string memory) { return "CYDRA"; }
@@ -364,7 +371,7 @@ def _runtime_stub_source(
     receive() external payable {}
 }''')
 
-    prefix = "\n".join(dict.fromkeys(interface_imports))
+    prefix = "\n".join(interface_imports)
     source = (prefix + "\n\n" if prefix else "") + "\n\n".join(declarations)
     return source, variables
 
@@ -386,10 +393,12 @@ def _model_initialization_source(
 
     resolved_interface_casts = constructor.resolved_interface_casts if constructor else ()
     derived_interface_casts = constructor.derived_interface_casts if constructor else ()
+    inherited_resolved_interfaces = contract_model.inherited_resolved_interfaces
     token_parameters, factory_context = _initializer_runtime_requirements(contract_model, function.name)
     stub_source, stub_variables = _runtime_stub_source(
         resolved_interface_casts,
         derived_interface_casts,
+        inherited_resolved_interfaces,
         bool(token_parameters),
         output_path or "generated.t.sol",
     )
