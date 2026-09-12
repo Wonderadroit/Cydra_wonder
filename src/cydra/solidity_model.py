@@ -335,7 +335,7 @@ def _inheritance_names(clause: str | None) -> tuple[str, ...]:
     if not clause:
         return ()
     names: list[str] = []
-    for item in clause.split(","):
+    for item in _split_parameters(clause):
         item = item.strip()
         if not item:
             continue
@@ -438,16 +438,14 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
         contract_body = _body(contract_source, contract_opening) if contract_opening >= 0 else contract_source
         state_variables = _state_variables(contract_body)
         declared_types = _declared_types(contract_body)
-        inherited_declared_types: list[tuple[str, str]] = []
+        inherited_resolved_interfaces: list[ResolvedInterface] = []
         for inherited_name in inherits:
             try:
                 inherited = resolve_interface(root, path, inherited_name)
             except (FileNotFoundError, ValueError):
                 continue
-            for declared_type in inherited.declared_types:
-                entry = (inherited_name, declared_type)
-                if entry not in inherited_declared_types:
-                    inherited_declared_types.append(entry)
+            if inherited.name not in {item.name for item in inherited_resolved_interfaces}:
+                inherited_resolved_interfaces.append(inherited)
 
         constructor = None
         constructor_match = _CONSTRUCTOR_RE.search(contract_source)
@@ -507,7 +505,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                 state_variables=state_variables,
                 inherits=inherits,
                 declared_types=declared_types,
-                inherited_declared_types=tuple(inherited_declared_types),
+                inherited_resolved_interfaces=tuple(inherited_resolved_interfaces),
             )
         )
 
