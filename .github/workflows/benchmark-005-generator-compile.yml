@@ -63,6 +63,7 @@ jobs:
               )
           PY
 
+      # Compile-only gate: --no-run means no generated test executes.
       - name: Compile generated tests only (no execution)
         working-directory: liquidclaw
         run: forge test --no-run --match-path 'test/cydra_generated/*.t.sol'
