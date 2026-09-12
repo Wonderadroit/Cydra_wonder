@@ -7,6 +7,7 @@ from .models import ConstructorModel, ContractModel, FunctionModel, ParameterMod
 
 
 _CONTRACT_RE = re.compile(r"\bcontract\s+(\w+)")
+_PRAGMA_SOLIDITY_RE = re.compile(r"pragma\s+solidity\s+([^;]+);", re.MULTILINE)
 _FUNCTION_RE = re.compile(
     r"\bfunction\s+(\w+)\s*\(([^)]*)\)\s*([^\{;]*)\{", re.MULTILINE
 )
@@ -199,6 +200,8 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
     path = Path(path)
     source = path.read_text(encoding="utf-8")
     parse_source = _strip_comments(source)
+    pragma_match = _PRAGMA_SOLIDITY_RE.search(parse_source)
+    pragma = pragma_match.group(1).strip() if pragma_match else None
     contracts: list[ContractModel] = []
 
     for contract_match in _CONTRACT_RE.finditer(parse_source):
@@ -250,6 +253,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                 source=str(path),
                 functions=tuple(functions),
                 constructor=constructor,
+                pragma=pragma,
             )
         )
 
