@@ -152,7 +152,7 @@ def generate_cached_accounting_foundry_test(experiment: Experiment, target: str,
 pragma solidity ^0.8.20;
 // Hypothesis: {experiment.hypothesis_id}
 import {{Test}} from "forge-std/Test.sol";
-import {{MockPoolToken}} from "../../Pool.sol";
+import {{MockPoolToken}} from "../Pool.sol";
 import {{ {target_type} as Vulnerable }} from "{target_import}";
 import {{ {patched_type} as Patched }} from "{patched_import}";
 contract CydraAccountingInvariantTest is Test {{
@@ -194,9 +194,8 @@ contract CydraAccountingInvariantTest is Test {{
         vm.serializeUint(objectKey, "patchedLiveAfterDonation", patchedLiveAfterDonation);
         vm.serializeUint(objectKey, "referencePayout", referencePayout);
         vm.serializeUint(objectKey, "vulnerablePayout", vulnerablePayout);
-        string memory json = vm.serializeUint(objectKey, "patchedPayout", patchedPayout);
-        vm.serializeUint(objectKey, "donation", 100);
-        json = vm.serializeUint(objectKey, "donation", 100);
+        vm.serializeUint(objectKey, "patchedPayout", patchedPayout);
+        string memory json = vm.serializeUint(objectKey, "donation", 100);
         vm.writeJson(json, "cydra_accounting_measurements.json");
 
         assertGt(vulnerableLiveAfterDonation, vulnerableCachedBefore);
