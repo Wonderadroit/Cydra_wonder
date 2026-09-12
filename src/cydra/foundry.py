@@ -14,16 +14,6 @@ from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothes
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
 
 
-# Prediction 5H — target-derived pragma emission:
-# ContractModel.pragma will default to None. parse_solidity() will extract the
-# target's Solidity pragma verbatim from comment-stripped source, and the
-# model-aware initialization generator will emit that exact constraint when
-# present, otherwise retaining the legacy ^0.8.20 fallback. Confirmation:
-# Forge passes Solidity version resolution. Falsification: generated tests
-# retain ^0.8.20 for a parsed target pragma, emit the wrong constraint, or
-# Forge still stops at pragma/version resolution. Scope: models.py,
-# solidity_model.py, foundry.py only; no reasoning/classifier/fixtures/workflow.
-
 @dataclass(frozen=True)
 class ExecutionResult:
     experiment_id: str
@@ -66,7 +56,6 @@ def configured_test_dir(project_dir: str | Path) -> Path:
 
 
 def test_path_for(project_dir: str | Path, filename: str) -> Path:
-    """Build a generated-test path from Foundry's configured test directory."""
     return configured_test_dir(project_dir) / filename
 
 
@@ -92,7 +81,10 @@ contract CydraAuthInvariantTest is Test {{
 ''', output_path)
 
 
-def _constructor_argument(parameter: ParameterModel) -> str:
+def _constructor_argument(parameter: ParameterModel, runtime_arguments: dict[str, str] | None = None) -> str:
+    runtime_arguments = runtime_arguments or {}
+    if parameter.name in runtime_arguments:
+        return runtime_arguments[parameter.name]
     parameter_type = parameter.type.strip()
     if parameter_type.startswith("address"):
         return "payable(address(0))" if parameter_type == "address payable" else "address(0)"
@@ -111,7 +103,15 @@ def _constructor_argument(parameter: ParameterModel) -> str:
     return "address(0)"
 
 
-def _initializer_argument(parameter: ParameterModel, target_type: str, index: int) -> tuple[str, str | None]:
+def _initializer_argument(
+    parameter: ParameterModel,
+    target_type: str,
+    index: int,
+    runtime_arguments: dict[str, str] | None = None,
+) -> tuple[str, str | None]:
+    runtime_arguments = runtime_arguments or {}
+    if parameter.name in runtime_arguments:
+        return runtime_arguments[parameter.name], None
     parameter_type = parameter.type.strip()
     if parameter_type.endswith("[]"):
         return f"new {parameter_type[:-2]}[](0)", None
@@ -133,7 +133,6 @@ def _initializer_argument(parameter: ParameterModel, target_type: str, index: in
 
 
 def _layout_aware_import_path(target_import: str, output_path: str | Path) -> str:
-    """Resolve a project-relative target and rebase it on the generated test directory."""
     output = Path(output_path)
     for ancestor in (output.parent, *output.parents):
         if (ancestor / "foundry.toml").exists():
@@ -151,6 +150,73 @@ def _layout_aware_import_path(target_import: str, output_path: str | Path) -> st
     return target_import
 
 
+def _source_text(contract_model: ContractModel) -> str:
+    try:
+        return Path(contract_model.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ""
+
+
+def _initializer_runtime_requirements(contract_model: ContractModel, function_name: str) -> tuple[set[str], bool]:
+    """Find address parameters used as ERC20 symbol receivers and caller-factory voter context."""
+    source = _source_text(contract_model)
+    if not source:
+        return set(), False
+    function_match = re.search(
+        rf"\bfunction\s+{re.escape(function_name)}\s*\([^)]*\)[^{{;]*\{{",
+        source,
+        re.MULTILINE,
+    )
+    if not function_match:
+        return set(), False
+    body = source[function_match.end() :]
+    depth = 1
+    end = len(body)
+    for index, char in enumerate(body):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                end = index
+                break
+    body = body[:end]
+    token_parameters = {
+        parameter
+        for receiver, parameter, method in re.findall(r"\b([A-Za-z_]\w*)\s*\(\s*(\w+)\s*\)\.(\w+)\s*\(", body)
+        if receiver == "ERC20" and method == "symbol"
+    }
+    factory_context = bool(re.search(r"\b\w+\s*=\s*_msgSender\s*\(\s*\)\s*;", body)) and bool(
+        re.search(r"\bIPoolFactory\s*\(\s*\w+\s*\)\s*\.\s*voter\s*\(", body)
+    )
+    return token_parameters, factory_context
+
+
+def _runtime_stub_source(interface_names: tuple[str, ...], need_erc20: bool) -> tuple[str, dict[str, str]]:
+    declarations: list[str] = []
+    variables: dict[str, str] = {}
+    for interface_name in interface_names:
+        variable = f"{interface_name[1:]}Stub"
+        variables[interface_name] = variable
+        declarations.append(f'''contract Cydra{interface_name}Stub {{
+    function token() external view returns (address) {{ return address(this); }}
+    fallback() external payable {{
+        if (msg.sig == bytes4(keccak256("approve(address,uint256)"))) {{
+            assembly {{ mstore(0, 1) return(0, 32) }}
+        }}
+    }}
+    receive() external payable {{}}
+}}''')
+    if need_erc20:
+        declarations.append('''contract CydraERC20Stub {
+    function symbol() external pure returns (string memory) { return "CYDRA"; }
+    function approve(address, uint256) external pure returns (bool) { return true; }
+    fallback() external payable {}
+    receive() external payable {}
+}''')
+    return "\n\n".join(declarations), variables
+
+
 def _model_initialization_source(
     hypothesis: Hypothesis,
     target_import: str,
@@ -158,28 +224,31 @@ def _model_initialization_source(
     contract_model: ContractModel,
     output_path: str | Path | None = None,
 ) -> str:
-    print("PROBE2: contract_model id =", id(contract_model))
-    print("PROBE2: function names =", [f.name for f in contract_model.functions])
-    print("PROBE2: hypothesis id =", id(hypothesis))
-    print("PROBE2: hypothesis repr =", repr(hypothesis))
-    print("PROBE2: target_function repr =", repr(hypothesis.target_function))
-    print("PROBE2: target_function bytes =", hypothesis.target_function.encode())
-    print("PROBE2: any name == target_function =", any(f.name == hypothesis.target_function for f in contract_model.functions))
-    print("PROBE2: any name == 'initialize' =", any(f.name == "initialize" for f in contract_model.functions))
     if output_path is not None:
         target_import = _layout_aware_import_path(target_import, output_path)
         print("PROBE5G: emitted target import =", target_import)
     constructor = contract_model.constructor
-    constructor_arguments = ""
-    if constructor is not None and constructor.parameters:
-        constructor_arguments = ", ".join(_constructor_argument(p) for p in constructor.parameters)
     function = next((candidate for candidate in contract_model.functions if candidate.name == hypothesis.target_function), None)
     if function is None:
         raise ValueError(f"Model has no target function: {hypothesis.target_function}")
+
+    interface_names = tuple(sorted({interface for _, interface in constructor.interface_casts})) if constructor else ()
+    token_parameters, factory_context = _initializer_runtime_requirements(contract_model, function.name)
+    stub_source, stub_variables = _runtime_stub_source(interface_names, bool(token_parameters))
+
+    constructor_runtime_arguments = {
+        parameter: f"address({stub_variables[interface]})"
+        for parameter, interface in (constructor.interface_casts if constructor else ())
+    }
+    constructor_arguments = ""
+    if constructor is not None and constructor.parameters:
+        constructor_arguments = ", ".join(_constructor_argument(p, constructor_runtime_arguments) for p in constructor.parameters)
+
+    initializer_runtime_arguments = {parameter: "address(tokenStub)" for parameter in token_parameters}
     arguments: list[str] = []
     declarations: list[str] = []
     for index, parameter in enumerate(function.parameters):
-        argument, declaration = _initializer_argument(parameter, target_type, index)
+        argument, declaration = _initializer_argument(parameter, target_type, index, initializer_runtime_arguments)
         arguments.append(argument)
         if declaration:
             declarations.append(declaration)
@@ -188,16 +257,34 @@ def _model_initialization_source(
     if declarations_text:
         declarations_text += "\n        "
     pragma = contract_model.pragma or "^0.8.20"
+
+    factory_method = "\n    function voter() external view returns (address) { return address(this); }" if factory_context else ""
+    stub_deployments = "\n        ".join(
+        f"{variable} = new Cydra{interface_name}Stub();" for interface_name, variable in stub_variables.items()
+    )
+    if token_parameters:
+        token_deployment = "tokenStub = new CydraERC20Stub();"
+        token_declaration = "    CydraERC20Stub internal tokenStub;"
+    else:
+        token_deployment = ""
+        token_declaration = ""
+
     return f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Interface-aware generation only: constructor and initializer parameter shapes
-// come from ContractModel/FunctionModel. Postcondition semantics are deferred.
+// come from ContractModel/FunctionModel. Runtime dependencies are real local stubs.
 import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
+{stub_source}
 contract CydraInitializationInvariantTest is Test {{
     {target_type} internal target;
-    function setUp() public {{ target = new {target_type}({constructor_arguments}); }}
+{''.join(f"    Cydra{interface_name}Stub internal {variable};\\n" for interface_name, variable in stub_variables.items())}{token_declaration}
+{factory_method}
+    function setUp() public {{
+        {stub_deployments}{token_deployment}
+        target = new {target_type}({constructor_arguments});
+    }}
     function testInitializationInterfaceIsCallable() public {{
         {declarations_text}{initialize_call}
     }}
@@ -230,14 +317,10 @@ contract CydraInitializationInvariantTest is Test {{
     }}
 }}
 ''', output_path)
-    return _write_test(
-        _model_initialization_source(hypothesis, target_import, target_type, contract_model, output_path),
-        output_path,
-    )
+    return _write_test(_model_initialization_source(hypothesis, target_import, target_type, contract_model, output_path), output_path)
 
 
 def generate_arithmetic_foundry_test(experiment: Experiment, target: str, patched: str) -> str:
-    """Generate the arithmetic differential Foundry test without executing it."""
     if not experiment.experiment_id.startswith("X-H-ARITH-"):
         raise ValueError(f"Unsupported experiment for arithmetic Foundry generation: {experiment.experiment_id}")
     def parse_target(spec: str) -> tuple[str, str]:
@@ -298,7 +381,6 @@ def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_
 
 
 def require_executed(result: ExecutionResult) -> ExecutionResult:
-    """Hard causal gate: zero-test execution cannot reach classification."""
     if not result.executed or result.tests_run == 0 or result.status == "UNMEASURABLE":
         raise RuntimeError(f"Foundry experiment {result.experiment_id} is UNMEASURABLE: executed={result.executed}, tests_run={result.tests_run}, exit_code={result.exit_code}")
     return result
