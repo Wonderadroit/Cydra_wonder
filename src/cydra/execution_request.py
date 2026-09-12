@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 import math
+from types import MappingProxyType
 from typing import Mapping, Optional, Sequence
 
 _MAPPING_TAG = "__cydra_mapping__"
@@ -31,7 +32,6 @@ def _thaw(value):
     if isinstance(value, tuple) and len(value) == 2 and value[0] == _SEQUENCE_TAG:
         return [_thaw(item) for item in value[1]]
     return value
-
 
 def _argv(value: Sequence[str], field_name: str) -> tuple[str, ...]:
     if isinstance(value, str):
@@ -66,7 +66,7 @@ class ExecutionRequest:
         if not isinstance(parameters, Mapping):
             raise TypeError("execution request parameters must be a mapping")
         frozen = _freeze(parameters)
-        object.__setattr__(self, "parameters", dict(parameters))
+        object.__setattr__(self, "parameters", MappingProxyType(dict(parameters)))
         object.__setattr__(self, "_parameters_frozen", frozen)
 
     def canonical_payload(self) -> dict:
