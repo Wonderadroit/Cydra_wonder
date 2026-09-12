@@ -1,72 +1,72 @@
-# Benchmark 005 — Prediction 5C: System-Model Enrichment
+# Benchmark 005 — Prediction 5D: Generator Interface Consumption
 
 ## Locked prediction
 
-**Prediction 5C-SystemModel-Enrichment:** Extending the Solidity system model to extract constructor signatures, function parameter types (names and declared ABI-facing types), and inline authorization predicates from function bodies will enable the initialization generator to produce Foundry tests that compile against the three LiquidClaw initializers.
+**Prediction 5D-Generator-Interface-Consumption:** Modifying the initialization generator to consume `ContractModel.constructor` and `FunctionModel.parameters` will produce Foundry test files that compile for all three LiquidClaw initializers. The postcondition assertion may remain fixture-shaped or be parameterized by a field Group A does not populate; this prediction does not require semantic correctness of the postcondition.
 
-This prediction is scoped to **Group A — syntactic extraction** only. It does not predict execution, test success, vulnerability confirmation, or semantic correctness of initialization arguments/post-conditions.
+This prediction is scoped to the **model → generator interface boundary** only. It does not predict execution, vulnerability confirmation, deployment-topology correctness, initialization-state semantics, or postcondition correctness.
 
 ## Regression precondition
 
-The enrichment is additive. It adds new fields to `FunctionModel` and `ContractModel` without removing or renaming existing fields. Existing extraction behavior for `name`, `visibility`, `modifiers`, `writes`, `external_calls`, and `line` must remain unchanged. If any existing field's behavior changes, that is a regression, not an enrichment.
+The generator change must preserve existing generator behavior for Benchmarks 001–002 and their negative controls.
 
-Benchmarks 001–004 are the precondition gate. If any fixture produces a different hypothesis, experiment plan, or classification after enrichment, the run stops before LiquidClaw and the enrichment is treated as regressed.
+Specifically:
 
-## Regression result
+- A fixture with a no-argument constructor must still generate `new Target()` when its model is consumed.
+- A fixture with a no-argument initializer must still generate `initialize()` when its model is consumed.
+- Existing access-control and initialization benchmark hypotheses, experiment plans, and classifications must remain unchanged.
+- Any divergence in Benchmark 001/002 or their negative controls is a regression, not an improvement.
 
-The available regression fixtures on the authoritative `main` baseline were compared with the enriched branch.
+## Fields consumed
 
-| Benchmark | Hypothesis output | Experiment output | Classification / boundary | Baseline comparison |
+The generator may consume only the following newly enriched model fields in this prediction:
+
+- `ContractModel.constructor` — constructor parameter declarations used to form a compiling constructor invocation.
+- `FunctionModel.parameters` — initializer parameter declarations used to form a compiling initializer invocation.
+- `FunctionModel.authorization_predicates` — available to the generator as model data, but not interpreted for this prediction and not used to derive semantic postconditions.
+
+No new semantic state model is introduced.
+
+## LiquidClaw compilation gate
+
+For Pool, Minter, and Voter, record:
+
+| Contract | Constructor consumed | Parameters consumed | Generator output | Foundry compile |
 |---|---|---|---|---|
-| 001 | `H-AUTH-setWhitelist` | `X-H-AUTH-setWhitelist` | confirmed (`FAIL` vulnerable / `PASS` patched) | unchanged |
-| 002 | single `INV-INIT-001` initialization hypothesis | `X-H-INIT-initialize` | confirmed (`FAIL` vulnerable / `PASS` patched) | unchanged |
-| 003 | arithmetic hypothesis present | arithmetic Foundry experiment | harness boundary; classifier not reached | unchanged expected boundary failure |
-| 004 | not present in `Wonderadroit/Cydra_wonder` baseline | not present | no executable 004 fixture exists in this authoritative repository | unavailable; not treated as a regression |
+| Pool | pending | pending | pending | pending |
+| Minter | pending | pending | pending | pending |
+| Voter | pending | pending | pending | pending |
 
-Benchmark 001, Benchmark 002, and their negative controls completed successfully on the enriched branch. Benchmark 003 reached the same intentional harness boundary used by the baseline rather than representing a new enrichment regression.
+Compilation is the only LiquidClaw gate. Do not execute the generated tests in this session.
 
-The existing extraction statements for `name`, `visibility`, `modifiers`, `writes`, `external_calls`, and `line` were left unchanged; the new fields are appended to the models. The regression suite therefore preserves the pre-existing reasoning/generator interface.
+## Falsification conditions
 
-## LiquidClaw Group A extraction result
+1. Generator still emits `new Target()` for Minter or Voter → **constructor consumption failed**.
+2. Generator still emits `initialize(attacker)` for Pool or Voter → **parameter consumption failed**.
+3. Generator emits `initialize(...)` with structurally invalid argument shape/arity → **parameter extraction/interface consumption failed**.
+4. Benchmark 001, 002, or either negative control changes output → **additive/regression property broken**.
 
-The relevant LiquidClaw source is the Aerodrome-derived Pool/Minter/Voter implementation family. The extractor was exercised against the three established initialization signatures and authorization predicates.
+## Confirmation condition
 
-| Contract | Constructor captured | Parameters captured | Inline predicate captured | Generator output | Foundry compile |
-|---|---|---|---|---|---|
-| Pool | `()` | `address _token0, address _token1, bool _stable` | none | `new Pool()`; `initialize(attacker)`; `target.guardian() != attacker` | not run — generator falsification already decisive |
-| Minter | `(address _voter, address _ve, address _rewardsDistributor)` | `AirdropParams memory params` | `msg.sender != team` | `new Minter()`; `initialize(attacker)`; `target.guardian() != attacker` | not run — generator falsification already decisive |
-| Voter | `(address _forwarder, address _ve, address _factoryRegistry)` | `address[] calldata _tokens, address _minter` | `_msgSender() != minter` | `new Voter()`; `initialize(attacker)`; `target.guardian() != attacker` | not run — generator falsification already decisive |
+All three LiquidClaw generated tests compile, and Benchmark 001/002 plus their negative controls remain unchanged.
 
-The extractor therefore captured all three requested Group A constructs for all three targets. The current generator does not consume those enriched model fields; it remains hard-coded to a no-argument constructor, a one-argument `initialize(attacker)` call, and the `guardian()` postcondition.
+The guardian postcondition is **not** a falsification condition for 5D. Postcondition semantics are explicitly deferred to Prediction 5E.
 
-The frozen LiquidClaw commit is not present as a fixture inside the authoritative CYDRA repository, and Foundry is not installed in the execution environment used for this run. Therefore no fabricated compile result is recorded. The generator output itself is sufficient to hit the locked falsification conditions before any execution gate.
+## Boundary interpretation
 
-## Classification
-
-**Prediction 5C: FALSIFIED.**
-
-Falsification conditions reached:
-
-1. **Condition 1 — `target.guardian()` emitted:** reached for Pool, Minter, and Voter.
-2. **Condition 2 — `new Minter()` with no constructor arguments:** reached for Minter.
-3. **Condition 3 — `initialize(attacker)` wrong arity:** reached for Pool and Voter; Minter also receives the wrong argument type/shape for `AirdropParams`.
-4. **Condition 4 — all three generated tests compile:** not reached; the generator boundary is already falsified.
-
-### Interpretation
-
-**Group A extraction succeeded. The prediction that extraction alone would enable the existing generator to compile against LiquidClaw is falsified at the model-to-generator boundary.**
-
-The next boundary is the generator interface/postcondition mapping. That is a separate prediction and change. **Do not implement it in this session.**
-
-## Execution boundary
-
-No generated LiquidClaw test was executed. This session ends at the Group A classification boundary.
+- **Regression:** fix the generator change within this scope and rerun the regression gate.
+- **Constructor not consumed:** remain at the generator interface boundary.
+- **Parameters not consumed:** remain at the generator interface boundary.
+- **Struct/custom argument cannot be emitted without semantic information:** record the exact model-to-generator limitation; do not add Group B semantics.
+- **All three compile:** Prediction 5D confirmed; next boundary is postcondition semantics (5E).
 
 ## Explicitly untouched
 
 - `src/cydra/reasoning.py`
-- `src/cydra/foundry.py`
+- Evidence schema and provenance model
+- Transport/execution machinery
+- Classifier logic
+- Foundry test execution
+- Postcondition semantic modeling
+- Initialization lifecycle/deployment-topology modeling
 - Benchmark 005 reasoning
-- Group B implementation-vs-clone lifecycle/deployment modeling
-- Initialization post-condition semantic modeling
-- Semantic interpretation of extracted authorization predicates
