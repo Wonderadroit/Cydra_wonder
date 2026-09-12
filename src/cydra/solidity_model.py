@@ -16,6 +16,59 @@ _CONSTRUCTOR_RE = re.compile(
 _CALLER_TOKENS = ("msg.sender", "_msgSender()", "tx.origin")
 
 
+def _strip_comments(source: str) -> str:
+    """Blank Solidity comments while preserving source length and line offsets."""
+    result = list(source)
+    index = 0
+    length = len(source)
+    quote = None
+
+    while index < length:
+        char = source[index]
+
+        if quote is not None:
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+
+        if char in {"'", '"'}:
+            quote = char
+            index += 1
+            continue
+
+        if char == "/" and index + 1 < length and source[index + 1] == "/":
+            result[index] = " "
+            result[index + 1] = " "
+            index += 2
+            while index < length and source[index] != "\n":
+                result[index] = " "
+                index += 1
+            continue
+
+        if char == "/" and index + 1 < length and source[index + 1] == "*":
+            result[index] = " "
+            result[index + 1] = " "
+            index += 2
+            while index < length:
+                if index + 1 < length and source[index] == "*" and source[index + 1] == "/":
+                    result[index] = " "
+                    result[index + 1] = " "
+                    index += 2
+                    break
+                if source[index] != "\n":
+                    result[index] = " "
+                index += 1
+            continue
+
+        index += 1
+
+    return "".join(result)
+
+
 def _line_number(source: str, offset: int) -> int:
     return source.count("\n", 0, offset) + 1
 
@@ -145,13 +198,14 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
     """
     path = Path(path)
     source = path.read_text(encoding="utf-8")
+    parse_source = _strip_comments(source)
     contracts: list[ContractModel] = []
 
-    for contract_match in _CONTRACT_RE.finditer(source):
+    for contract_match in _CONTRACT_RE.finditer(parse_source):
         contract_name = contract_match.group(1)
         contract_start = contract_match.end()
-        next_contract = _CONTRACT_RE.search(source, contract_start)
-        contract_source = source[contract_start : next_contract.start() if next_contract else len(source)]
+        next_contract = _CONTRACT_RE.search(parse_source, contract_start)
+        contract_source = parse_source[contract_start : next_contract.start() if next_contract else len(parse_source)]
         functions: list[FunctionModel] = []
 
         constructor = None
