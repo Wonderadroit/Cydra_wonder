@@ -102,11 +102,19 @@ def test_model_aware_generator_qualifies_and_imports_inherited_custom_type(tmp_p
     assert 'import { IMinter } from "interfaces/IMinter.sol";' in source
     assert source.count('import { IMinter } from "interfaces/IMinter.sol";') == 1
     assert "IMinter.AirdropParams memory parameter0;" in source
+
+    function_start = source.index("function testInitializationInterfaceIsCallable()")
+    function_body_start = source.index("{", function_start) + 1
+    function_body_end = source.index("}", function_body_start)
+    declaration_pos = source.index("IMinter.AirdropParams memory parameter0;")
+
+    assert function_body_start < declaration_pos < function_body_end
     assert "Minter.AirdropParams memory parameter0;" not in source.replace(
         "IMinter.AirdropParams memory parameter0;", ""
     )
     assert "target.initialize(parameter0);" in source
     assert "target.guardian()" not in source
+
 
 
 def test_target_declared_custom_type_precedes_inherited_type(tmp_path):

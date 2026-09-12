@@ -433,7 +433,15 @@ def _model_initialization_source(
         initialize_args_str=initialize_args_str,
     )
     if declarations_text := "\n        ".join(declarations):
-        test_body = declarations_text + "\n        " + test_body
+        # render_initialization_test_body() returns the complete test function.
+        opening_brace = test_body.index("{") + 1
+        test_body = (
+            test_body[:opening_brace]
+            + "\n        "
+            + declarations_text
+            + "\n        "
+            + test_body[opening_brace:]
+        )
     pragma = contract_model.pragma or "^0.8.20"
 
     factory_method = "\n    function voter() external view returns (address) { return address(this); }" if factory_context else ""
