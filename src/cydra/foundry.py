@@ -131,6 +131,21 @@ def _model_initialization_source(
     target_type: str,
     contract_model: ContractModel,
 ) -> str:
+    print("PROBE2: contract_model id =", id(contract_model))
+    print("PROBE2: function names =", [f.name for f in contract_model.functions])
+    print("PROBE2: hypothesis id =", id(hypothesis))
+    print("PROBE2: hypothesis repr =", repr(hypothesis))
+    print("PROBE2: target_function repr =", repr(hypothesis.target_function))
+    print("PROBE2: target_function bytes =", hypothesis.target_function.encode())
+    print(
+        "PROBE2: any name == target_function =",
+        any(f.name == hypothesis.target_function for f in contract_model.functions),
+    )
+    print(
+        "PROBE2: any name == 'initialize' =",
+        any(f.name == "initialize" for f in contract_model.functions),
+    )
+
     constructor = contract_model.constructor
     constructor_arguments = ""
     if constructor is not None and constructor.parameters:
