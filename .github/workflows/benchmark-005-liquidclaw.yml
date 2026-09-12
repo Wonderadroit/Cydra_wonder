@@ -21,8 +21,10 @@ jobs:
   blind-liquidclaw:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout CYDRA benchmark snapshot
+      - name: Checkout exact CYDRA benchmark head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -52,6 +54,7 @@ jobs:
             | tee artifacts/benchmark-005/cydra_output.sha256
           date -u +%Y-%m-%dT%H:%M:%SZ \
             | tee artifacts/benchmark-005/cydra_output.timestamp
+          git rev-parse HEAD | tee artifacts/benchmark-005/cydra_commit.txt
 
       - name: Upload frozen blind output
         uses: actions/upload-artifact@v4
