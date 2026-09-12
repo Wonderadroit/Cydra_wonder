@@ -142,14 +142,16 @@ def resolve_interface(root: str | Path, importer: str | Path, name: str) -> Reso
                 f"from {importer} has no remapping or relative target"
             )
         path, method = resolved
-        return _extract_interface(name, path, method)
+        return _extract_interface(name, path, method, root)
 
     raise FileNotFoundError(
         f"Unable to resolve interface {name}: no declared import matching {name}.sol in {importer}"
     )
 
 
-def _extract_interface(name: str, path: Path, resolution_method: str) -> ResolvedInterface:
+def _extract_interface(
+    name: str, path: Path, resolution_method: str, root: Path
+) -> ResolvedInterface:
     source = _strip_comments(path.read_text(encoding="utf-8"))
     match = re.search(rf"\binterface\s+{re.escape(name)}\b", source)
     if not match:
@@ -179,12 +181,7 @@ def _extract_interface(name: str, path: Path, resolution_method: str) -> Resolve
         )
     return ResolvedInterface(
         name=name,
-        source_path=str(path.relative_to(root_for_path(path))) if path.is_absolute() else str(path),
+        source_path=path.relative_to(root).as_posix(),
         resolution_method=resolution_method,
         methods=tuple(methods),
     )
-
-
-def root_for_path(path: Path) -> Path:
-    """Return the filesystem root for absolute paths without inventing a project root."""
-    return Path(path.anchor) if path.is_absolute() else Path(".")
