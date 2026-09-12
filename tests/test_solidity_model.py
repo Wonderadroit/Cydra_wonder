@@ -329,7 +329,7 @@ def test_contract_inheritance_and_declared_types_are_extracted_without_usages(tm
     assert sample.declared_types == ("LocalStruct", "LocalEnum", "LocalValue")
     assert function.parameters[0].type == "LocalStruct"
     assert "LocalStruct" not in sample.inherits
-    assert sample.inherited_declared_types == ()
+    assert sample.inherited_resolved_interfaces == ()
 
 
 def test_contract_inheritance_strips_sparse_base_constructor_arguments(tmp_path: Path) -> None:
@@ -349,7 +349,7 @@ def test_contract_inheritance_strips_sparse_base_constructor_arguments(tmp_path:
     assert sample.inherits == ("A", "B", "C", "D")
 
 
-def test_inherited_interface_declared_types_are_carried_into_contract_model(tmp_path: Path) -> None:
+def test_inherited_interface_resolved_types_are_preserved_in_contract_model(tmp_path: Path) -> None:
     (tmp_path / "interfaces").mkdir()
     (tmp_path / "interfaces" / "IMinter.sol").write_text(
         "interface IMinter {\n"
@@ -372,8 +372,10 @@ def test_inherited_interface_declared_types_are_carried_into_contract_model(tmp_
 
     assert minter.inherits == ("IMinter",)
     assert minter.declared_types == ()
-    assert minter.inherited_declared_types == (
-        ("IMinter", "AirdropParams"),
-        ("IMinter", "Mode"),
-        ("IMinter", "Amount"),
-    )
+    assert len(minter.inherited_resolved_interfaces) == 1
+    inherited = minter.inherited_resolved_interfaces[0]
+    assert isinstance(inherited, ResolvedInterface)
+    assert inherited.name == "IMinter"
+    assert inherited.source_path == "interfaces/IMinter.sol"
+    assert inherited.resolution_method == "relative_import"
+    assert inherited.declared_types == ("AirdropParams", "Mode", "Amount")
