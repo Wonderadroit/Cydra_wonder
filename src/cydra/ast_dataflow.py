@@ -67,7 +67,17 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
         if node.get("nodeType") != "FunctionDefinition" or not isinstance(node.get("id"), int):
             continue
         function_id = node["id"]
-        function_name = node.get("name") or ("constructor" if node.get("kind") == "constructor" else "fallback")
+        kind = node.get("kind")
+        if isinstance(node.get("name"), str) and node.get("name"):
+            function_name = node["name"]
+        elif kind == "constructor":
+            function_name = "constructor"
+        elif kind == "receive":
+            function_name = "receive"
+        elif kind == "fallback":
+            function_name = "fallback"
+        else:
+            function_name = "anonymous"
         scope = node.get("scope")
         contract = declarations.get(scope, {}).get("name", "unknown") if isinstance(scope, int) else "unknown"
         body = node.get("body")
@@ -85,5 +95,6 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
                 ast_node_id=item.get("id") if isinstance(item.get("id"), int) else None,
                 source_location=_location(item), function_ast_node_id=function_id,
                 target_ast_node_id=ref,
+                metadata={"function_kind": kind},
             ))
     return evidence
