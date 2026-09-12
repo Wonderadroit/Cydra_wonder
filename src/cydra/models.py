@@ -64,7 +64,7 @@ class ContractModel:
     state_variables: tuple[str, ...] = field(default_factory=tuple)
     inherits: tuple[str, ...] = field(default_factory=tuple)
     declared_types: tuple[str, ...] = field(default_factory=tuple)
-    inherited_declared_types: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    inherited_resolved_interfaces: tuple[ResolvedInterface, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
