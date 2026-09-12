@@ -67,7 +67,8 @@ def _json_execution_results(json_output: dict[str, Any], raw_json: str, stderr: 
         if ":" not in suite_key:
             continue
         file_path, _contract_name = suite_key.split(":", 1)
-        target = Path(file_path).stem
+        filename = Path(file_path).name
+        target = filename.removesuffix(".t.sol")
         if target not in EXPECTED_TARGETS:
             continue
         if target in seen_targets:
