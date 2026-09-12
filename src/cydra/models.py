@@ -17,6 +17,26 @@ class Evidence:
 
 
 @dataclass(frozen=True)
+class ParameterModel:
+    """Syntactically extracted Solidity parameter metadata.
+
+    ``type`` preserves the declared Solidity type spelling. No semantic ABI
+    resolution is performed at this layer; custom types therefore remain
+    unresolved declarations rather than guessed ABI layouts.
+    """
+
+    name: str
+    type: str
+    data_location: str | None = None
+
+
+@dataclass(frozen=True)
+class ConstructorModel:
+    parameters: tuple[ParameterModel, ...]
+    line: int
+
+
+@dataclass(frozen=True)
 class FunctionModel:
     name: str
     visibility: str
@@ -24,6 +44,8 @@ class FunctionModel:
     writes: tuple[str, ...]
     external_calls: tuple[str, ...]
     line: int
+    parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
+    authorization_predicates: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -31,6 +53,7 @@ class ContractModel:
     name: str
     source: str
     functions: tuple[FunctionModel, ...]
+    constructor: ConstructorModel | None = None
 
 
 @dataclass(frozen=True)
