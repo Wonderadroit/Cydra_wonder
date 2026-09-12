@@ -15,6 +15,7 @@ from typing import Any
 
 from cydra.foundry import (
     ExecutionResult,
+    _write_test,
     generate_access_control_test,
     generate_arithmetic_foundry_test,
     generate_initialization_test,
@@ -424,11 +425,20 @@ def _run_arithmetic(
     patched_spec: str,
     attempts: dict[str, bool],
 ) -> dict[str, Any]:
+    output = test_path_for(
+        project,
+        f"generated/{hypothesis.hypothesis_id}.t.sol",
+    )
+
     attempts["generation_attempted"] = True
-    generated = generate_arithmetic_foundry_test(
+    generated_source = generate_arithmetic_foundry_test(
         experiment,
         target_spec,
         patched_spec,
+    )
+    generated = _write_test(
+        generated_source,
+        output,
     )
 
     attempts["execution_attempted"] = True
@@ -439,6 +449,7 @@ def _run_arithmetic(
         "blind",
     )
     require_executed(execution)
+
     return {
         "generated_path": str(generated),
         "execution": execution,
