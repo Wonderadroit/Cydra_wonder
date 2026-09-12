@@ -152,3 +152,5 @@ jobs:
             fi
           done
           exit 1
+
+      # 5I CI trigger: runtime dependency-stub implementation is exercised below this generation boundary.
