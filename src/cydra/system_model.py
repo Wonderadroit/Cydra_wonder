@@ -66,20 +66,23 @@ class SystemModel:
         self.add_edge(Edge(source, relation, target, attributes))
 
     @staticmethod
-    def _ast_node_identity(kind: str, contract: str, label: str, ast_node_id: int | None) -> str:
-        return f"{kind}:{contract}:ast:{ast_node_id}" if ast_node_id is not None else f"{kind}:{contract}:{label}"
+    def _ast_node_identity(kind: str, contract: str, label: str, ast_node_id: int | None, source: str | None = None) -> str:
+        namespace = source or "unknown-source"
+        if ast_node_id is not None:
+            return f"{kind}:{namespace}:{contract}:ast:{ast_node_id}"
+        return f"{kind}:{namespace}:{contract}:{label}"
 
     def add_ast_evidence(self, evidence: SemanticRelationshipEvidence) -> Edge:
-        function_id = self._ast_node_identity("function", evidence.contract, evidence.function, evidence.function_ast_node_id)
+        function_id = self._ast_node_identity("function", evidence.contract, evidence.function, evidence.function_ast_node_id, evidence.source)
         target_kind = "state_variable" if evidence.relation in {"reads", "writes", "transition_expression", "reference"} else "data_flow"
-        target_id = self._ast_node_identity(target_kind, evidence.contract, evidence.target, evidence.target_ast_node_id)
+        target_id = self._ast_node_identity(target_kind, evidence.contract, evidence.target, evidence.target_ast_node_id, evidence.source)
         function_attributes = {"ast_node_id": evidence.function_ast_node_id, "identity_status": "compiler_declaration" if evidence.function_ast_node_id is not None else "unknown", "provenance": evidence.source}
         target_attributes = {"ast_node_id": evidence.target_ast_node_id, "identity_status": "compiler_declaration" if evidence.target_ast_node_id is not None else "unknown", "provenance": evidence.source}
         if function_id not in self.nodes:
             self.add_node(Node(function_id, "function", evidence.function, function_attributes))
         if target_id not in self.nodes:
             self.add_node(Node(target_id, target_kind, evidence.target, target_attributes))
-        attributes = {"confidence": evidence.confidence, "provenance": evidence.source, "ast_node_id": evidence.ast_node_id, "source_location": list(evidence.source_location) if evidence.source_location is not None else None, "function_ast_node_id": evidence.function_ast_node_id, "target_ast_node_id": evidence.target_ast_node_id, "evidence_backed": True, "candidate": True, **(evidence.metadata or {})}
+        attributes = {**(evidence.metadata or {}), "confidence": evidence.confidence, "provenance": evidence.source, "ast_node_id": evidence.ast_node_id, "source_location": list(evidence.source_location) if evidence.source_location is not None else None, "function_ast_node_id": evidence.function_ast_node_id, "target_ast_node_id": evidence.target_ast_node_id, "evidence_backed": True, "candidate": True}
         edge = Edge(function_id, evidence.relation, target_id, attributes)
         self.add_edge(edge)
         return edge
@@ -146,8 +149,13 @@ class SystemModel:
                 errors.append(f"missing target: {edge.target}")
         return errors
 
+    @staticmethod
+    def _edge_sort_key(edge: Edge):
+        attributes = json.dumps(edge.attributes, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+        return edge.source, edge.relation, edge.target, attributes
+
     def export(self) -> dict:
-        return {"schema_version": self.SCHEMA_VERSION, "nodes": [{"id": n.node_id, "kind": n.kind, "label": n.label, "attributes": n.attributes} for n in sorted(self.nodes.values(), key=lambda x: x.node_id)], "edges": [{"source": e.source, "relation": e.relation, "target": e.target, "attributes": e.attributes} for e in sorted(self.edges, key=lambda x: (x.source, x.relation, x.target))]}
+        return {"schema_version": self.SCHEMA_VERSION, "nodes": [{"id": n.node_id, "kind": n.kind, "label": n.label, "attributes": n.attributes} for n in sorted(self.nodes.values(), key=lambda x: x.node_id)], "edges": [{"source": e.source, "relation": e.relation, "target": e.target, "attributes": e.attributes} for e in sorted(self.edges, key=self._edge_sort_key)]}
 
     @classmethod
     def from_dict(cls, payload: dict):
