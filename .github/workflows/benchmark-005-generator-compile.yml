@@ -21,6 +21,11 @@ jobs:
           path: liquidclaw
           submodules: recursive
 
+      - name: Verify resolver against frozen LiquidClaw imports
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_resolver_liquidclaw.py liquidclaw
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
