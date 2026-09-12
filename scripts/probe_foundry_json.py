@@ -69,29 +69,37 @@ def main() -> int:
         return 0
 
     print("PROBE: json_parse = PASS")
-    if isinstance(document, dict):
-        print("PROBE: top_level_keys =", sorted(document.keys()))
-    else:
+    if not isinstance(document, dict):
         print("PROBE: top_level_type =", type(document).__name__)
+        print("PROBE: required_structure = INSUFFICIENT")
+        return 0
 
-    def show(label: str, value: object) -> None:
-        print(f"PROBE: {label} =")
-        print(json.dumps(value, indent=2, sort_keys=True)[:12000])
+    print("PROBE: top_level_keys =", sorted(document.keys()))
 
-    if isinstance(document, dict):
-        for key, value in document.items():
-            if isinstance(value, dict):
-                entries = list(value.items())
-                if entries:
-                    show(f"map_entry_structure[{key}]", entries[0])
-                    break
-            if isinstance(value, list) and value:
-                show(f"list_entry_structure[{key}]", value[0])
-                break
+    suite_path, suite = next(iter(document.items()))
+    print("PROBE: first_suite_path =", suite_path)
+    print("PROBE: first_suite_keys =", sorted(suite.keys()))
 
-        for key in ("summary", "results", "suites", "tests"):
-            if key in document:
-                show(f"summary_or_results[{key}]", document[key])
+    test_results = suite.get("test_results")
+    if isinstance(test_results, dict) and test_results:
+        test_name, test_result = next(iter(test_results.items()))
+        print("PROBE: first_test_name =", test_name)
+        print("PROBE: first_test_entry_keys =", sorted(test_result.keys()))
+        print("PROBE: first_test_entry =")
+        print(json.dumps(test_result, indent=2, sort_keys=True)[:12000])
+    else:
+        print("PROBE: per_test_results = ABSENT")
+
+    summary_candidates = {
+        key: document[key]
+        for key in ("summary", "results", "suites", "tests")
+        if key in document
+    }
+    if summary_candidates:
+        print("PROBE: summary_block =")
+        print(json.dumps(summary_candidates, indent=2, sort_keys=True)[:12000])
+    else:
+        print("PROBE: summary_block = ABSENT")
 
     print("PROBE: raw_json_prefix =", repr(raw[:4000]))
     return 0
