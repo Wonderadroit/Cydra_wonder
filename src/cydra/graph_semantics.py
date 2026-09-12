@@ -16,6 +16,7 @@ RELATION_RULES: Dict[str, Tuple[FrozenSet[str], FrozenSet[str]]] = {
     "verified_by": (frozenset({"invariant"}), frozenset({"evidence"})),
     "contradicted_by": (frozenset({"invariant"}), frozenset({"evidence"})),
     "updates": (frozenset({"observation", "evidence", "invariant", "causal_chain"}), frozenset({"belief"})),
+    "updated_by": (frozenset({"evidence"}), frozenset({"evidence"})),
     "updated_to": (frozenset({"hypothesis"}), frozenset({"belief"})),
     "motivates": (frozenset({"hypothesis"}), frozenset({"causal_chain"})),
     "plans": (frozenset({"causal_chain"}), frozenset({"observation"})),
