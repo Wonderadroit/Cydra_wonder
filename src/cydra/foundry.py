@@ -92,9 +92,9 @@ def _constructor_argument(parameter: ParameterModel, runtime_arguments: dict[str
     if parameter_type == "bool":
         return "false"
     if parameter_type == "string":
-        return '""'
+        return '\"\"'
     if parameter_type == "bytes":
-        return "bytes(\"\")"
+        return "bytes(\\\"\\\")"
     if parameter_type.startswith("bytes"):
         return "0"
     if parameter_type.endswith("[]"):
@@ -116,9 +116,9 @@ def _initializer_argument(parameter: ParameterModel, target_type: str, index: in
     if parameter_type == "bool":
         return "false", None
     if parameter_type == "string":
-        return '""', None
+        return '\"\"', None
     if parameter_type == "bytes":
-        return "bytes(\"\")", None
+        return "bytes(\\\"\\\")", None
     if parameter_type.startswith("bytes"):
         return "0", None
     variable = f"parameter{index}"
@@ -181,28 +181,127 @@ def _initializer_runtime_requirements(contract_model: ContractModel, function_na
     return token_parameters, factory_context
 
 
-def _runtime_stub_source(interface_names: tuple[str, ...], need_erc20: bool) -> tuple[str, dict[str, str]]:
-    declarations: list[str] = []
+def _solidity_default_value(return_declaration: str) -> str:
+    declaration = return_declaration.strip()
+    if not declaration:
+        raise ValueError("Cannot generate a default value for an empty return declaration")
+    tokens = declaration.replace("\t", " ").split()
+    parameter_type = tokens[0]
+    if parameter_type.startswith("address"):
+        return "address(0)"
+    if parameter_type.startswith(("uint", "int")) or parameter_type.startswith("bytes") and parameter_type != "bytes":
+        return "0"
+    if parameter_type == "bool":
+        return "false"
+    if parameter_type == "string":
+        return '\"\"'
+    if parameter_type == "bytes":
+        return "bytes(\"\")"
+    if parameter_type.endswith("[]"):
+        return f"new {parameter_type[:-2]}[](0)"
+    if parameter_type.startswith("tuple"):
+        raise ValueError(f"Unsupported tuple return in generated stub: {return_declaration}")
+    return "0"
+
+
+def _semantic_override(interface_name: str, method_name: str) -> str | None:
+    if interface_name == "IERC20":
+        return {
+            "symbol": '\"CYDRA\"',
+            "decimals": "18",
+            "approve": "true",
+            "transfer": "true",
+            "transferFrom": "true",
+            "totalSupply": "0",
+            "balanceOf": "0",
+            "allowance": "0",
+        }.get(method_name)
+    return None
+
+
+def _stub_method_source(interface_name: str, method, derived_returns: dict[str, str]) -> str:
+    parameters = ", ".join(method.parameters)
+    returns = ", ".join(method.returns)
+    signature = f"function {method.name}({parameters}) external view"
+    if returns:
+        signature += f" returns ({returns})"
+    signature += " {"
+
+    if method.name in derived_returns:
+        value = derived_returns[method.name]
+        if len(method.returns) != 1:
+            raise ValueError(f"Derived interface method {interface_name}.{method.name} must have exactly one return value")
+        return f"    {signature} return {value}; }}"
+
+    if not method.returns:
+        return f"    {signature} }}"
+
+    override = _semantic_override(interface_name, method.name)
+    values = [override if override is not None else _solidity_default_value(item) for item in method.returns]
+    expression = values[0] if len(values) == 1 else f"({', '.join(values)})"
+    return f"    {signature} return {expression}; }}"
+
+
+def _runtime_stub_source(
+    resolved_interface_casts: tuple[tuple[str, object], ...],
+    derived_interface_casts: tuple[tuple[str, str, object], ...],
+) -> tuple[str, dict[str, str]]:
+    resolved: dict[str, object] = {interface.name: interface for _, interface in resolved_interface_casts}
+    derived_targets: dict[str, object] = {interface.name: interface for _, _, interface in derived_interface_casts}
+    interfaces: dict[str, object] = dict(resolved)
+    interfaces.update(derived_targets)
+
+    derived_by_source: dict[str, list[tuple[str, object]]] = {}
+    for source_interface, source_method, target_interface in derived_interface_casts:
+        derived_by_source.setdefault(source_interface, []).append((source_method, target_interface))
+        if source_interface not in resolved:
+            raise ValueError(f"Derived source interface {source_interface} is not present in resolved_interface_casts")
+
     variables: dict[str, str] = {}
-    for interface_name in interface_names:
-        variable = f"{interface_name[1:]}Stub"
-        variables[interface_name] = variable
-        declarations.append(f'''contract Cydra{interface_name}Stub {{
-    function token() external view returns (address) {{ return address(this); }}
-    fallback() external payable {{
-        if (msg.sig == bytes4(keccak256("approve(address,uint256)"))) {{
-            assembly {{ mstore(0, 1) return(0, 32) }}
-        }}
-    }}
+    for interface_name in sorted(interfaces):
+        variables[interface_name] = f"{interface_name[1:]}Stub"
+
+    def deployment_order() -> tuple[str, ...]:
+        visiting: set[str] = set()
+        visited: set[str] = set()
+        order: list[str] = []
+
+        def visit(interface_name: str) -> None:
+            if interface_name in visited:
+                return
+            if interface_name in visiting:
+                raise ValueError(f"Cyclic derived interface dependency: {interface_name}")
+            visiting.add(interface_name)
+            for _, target in derived_by_source.get(interface_name, ()):
+                visit(target.name)
+            visiting.remove(interface_name)
+            visited.add(interface_name)
+            order.append(interface_name)
+
+        for interface_name in sorted(interfaces):
+            visit(interface_name)
+        return tuple(order)
+
+    declarations: list[str] = []
+    for interface_name in sorted(interfaces):
+        interface = interfaces[interface_name]
+        relations = derived_by_source.get(interface_name, ())
+        fields = "".join(f"    address internal _cydraDerived_{method};\n" for method, _ in relations)
+        constructor = ""
+        if relations:
+            parameters = ", ".join(f"address {method}Target" for method, _ in relations)
+            assignments = " ".join(f"_cydraDerived_{method} = {method}Target;" for method, _ in relations)
+            constructor = f"    constructor({parameters}) {{ {assignments} }}\n"
+        derived_returns = {method: f"_cydraDerived_{method}" for method, _ in relations}
+        methods = "\n".join(_stub_method_source(interface_name, method, derived_returns) for method in interface.methods)
+        declarations.append(
+            f'''contract Cydra{interface_name}Stub {{
+{fields}{constructor}{methods}
+    fallback() external payable {{}}
     receive() external payable {{}}
-}}''')
-    if need_erc20:
-        declarations.append('''contract CydraERC20Stub {
-    function symbol() external pure returns (string memory) { return "CYDRA"; }
-    function approve(address, uint256) external pure returns (bool) { return true; }
-    fallback() external payable {}
-    receive() external payable {}
-}''')
+}}'''
+        )
+
     return "\n\n".join(declarations), variables
 
 
@@ -221,9 +320,10 @@ def _model_initialization_source(
     if function is None:
         raise ValueError(f"Model has no target function: {hypothesis.target_function}")
 
-    interface_names = tuple(sorted({interface for _, interface in constructor.interface_casts})) if constructor else ()
+    resolved_interface_casts = constructor.resolved_interface_casts if constructor else ()
+    derived_interface_casts = constructor.derived_interface_casts if constructor else ()
     token_parameters, factory_context = _initializer_runtime_requirements(contract_model, function.name)
-    stub_source, stub_variables = _runtime_stub_source(interface_names, bool(token_parameters))
+    stub_source, stub_variables = _runtime_stub_source(resolved_interface_casts, derived_interface_casts)
 
     constructor_runtime_arguments = {
         parameter: f"address({stub_variables[interface]})"
@@ -248,10 +348,45 @@ def _model_initialization_source(
     pragma = contract_model.pragma or "^0.8.20"
 
     factory_method = "\n    function voter() external view returns (address) { return address(this); }" if factory_context else ""
-    stub_deployments = "\n        ".join(f"{variable} = new Cydra{interface_name}Stub();" for interface_name, variable in stub_variables.items())
+    derived_by_source: dict[str, list[tuple[str, object]]] = {}
+    for source_interface, source_method, target_interface in derived_interface_casts:
+        derived_by_source.setdefault(source_interface, []).append((source_method, target_interface))
+
+    deployment_names: list[str] = []
+    deployed: set[str] = set()
+    visiting: set[str] = set()
+    resolved_names = {interface.name for _, interface in resolved_interface_casts}
+    derived_targets = {interface.name for _, _, interface in derived_interface_casts}
+    all_interface_names = sorted(resolved_names | derived_targets)
+
+    def schedule(interface_name: str) -> None:
+        if interface_name in deployed:
+            return
+        if interface_name in visiting:
+            raise ValueError(f"Cyclic derived interface dependency: {interface_name}")
+        visiting.add(interface_name)
+        for _, target_interface in derived_by_source.get(interface_name, ()):
+            schedule(target_interface.name)
+        visiting.remove(interface_name)
+        deployed.add(interface_name)
+        deployment_names.append(interface_name)
+
+    for interface_name in all_interface_names:
+        schedule(interface_name)
+
+    stub_deployments = "\n        ".join(
+        (
+            f"{stub_variables[interface_name]} = new Cydra{interface_name}Stub();"
+            if not derived_by_source.get(interface_name)
+            else f"{stub_variables[interface_name]} = new Cydra{interface_name}Stub("
+            + ", ".join(f"address({stub_variables[target_interface.name]})" for _, target_interface in derived_by_source[interface_name])
+            + ");"
+        )
+        for interface_name in deployment_names
+    )
     token_deployment = "tokenStub = new CydraERC20Stub();" if token_parameters else ""
     token_declaration = "    CydraERC20Stub internal tokenStub;\n" if token_parameters else ""
-    interface_declarations = "".join(f"    Cydra{interface_name}Stub internal {variable};\n" for interface_name, variable in stub_variables.items())
+    interface_declarations = "".join(f"    Cydra{interface_name}Stub internal {stub_variables[interface_name]};\n" for interface_name in all_interface_names)
 
     return f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
@@ -265,7 +400,8 @@ contract CydraInitializationInvariantTest is Test {{
     {target_type} internal target;
 {interface_declarations}{token_declaration}{factory_method}
     function setUp() public {{
-        {stub_deployments}{token_deployment}
+        {stub_deployments}
+        {token_deployment}
         target = new {target_type}({constructor_arguments});
     }}
     function testInitializationInterfaceIsCallable() public {{
