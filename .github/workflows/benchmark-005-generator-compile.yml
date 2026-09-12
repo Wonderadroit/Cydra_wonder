@@ -130,7 +130,7 @@ jobs:
               )
           PY
 
-      # Compile-only gate: --no-run means no generated test executes.
-      - name: Compile generated tests only (no execution)
+      # Foundry compiles tests by default; this invocation intentionally does not use the unsupported --no-run flag.
+      - name: Compile generated tests with Foundry
         working-directory: liquidclaw
-        run: forge test --no-run --match-path 'test/cydra_generated/*.t.sol'
+        run: forge test --match-path 'test/cydra_generated/*.t.sol'
