@@ -872,7 +872,6 @@ def main() -> int:
             "forge",
             "install",
             "foundry-rs/forge-std",
-            "--no-commit",
         )
         if not dependency_install["ok"]:
             raise RuntimeError(
