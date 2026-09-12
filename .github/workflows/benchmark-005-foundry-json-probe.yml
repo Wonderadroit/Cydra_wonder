@@ -1,0 +1,30 @@
+name: CYDRA Benchmark 005 Foundry JSON Probe
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  foundry-json-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+
+      - name: Check out frozen LiquidClaw target
+        uses: actions/checkout@v4
+        with:
+          repository: Jc-asastu/liquidclaw-bsc
+          ref: 58bed220236e8cdd8d279ef7259b3298a71aac0b
+          path: liquidclaw
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Probe Foundry --json structure
+        env:
+          PYTHONPATH: src
+        run: python scripts/probe_foundry_json.py liquidclaw
