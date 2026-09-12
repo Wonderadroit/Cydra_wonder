@@ -152,7 +152,7 @@ def generate_cached_accounting_foundry_test(experiment: Experiment, target: str,
 pragma solidity ^0.8.20;
 // Hypothesis: {experiment.hypothesis_id}
 import {{Test}} from "forge-std/Test.sol";
-import {{MockPoolToken}} from "../Pool.sol";
+import {{MockPoolToken}} from "../../Pool.sol";
 import {{ {target_type} as Vulnerable }} from "{target_import}";
 import {{ {patched_type} as Patched }} from "{patched_import}";
 contract CydraAccountingInvariantTest is Test {{
@@ -187,16 +187,17 @@ contract CydraAccountingInvariantTest is Test {{
         uint256 vulnerablePayout = vulnerable.burn(holder);
         uint256 patchedPayout = patchedTarget.burn(holder);
 
-        vm.writeFile("cydra_accounting_measurements.json", string.concat(
-            "{{\"vulnerableCachedBefore\":", vm.toString(vulnerableCachedBefore),
-            ",\"patchedCachedBefore\":", vm.toString(patchedCachedBefore),
-            ",\"vulnerableLiveAfterDonation\":", vm.toString(vulnerableLiveAfterDonation),
-            ",\"patchedLiveAfterDonation\":", vm.toString(patchedLiveAfterDonation),
-            ",\"referencePayout\":", vm.toString(referencePayout),
-            ",\"vulnerablePayout\":", vm.toString(vulnerablePayout),
-            ",\"patchedPayout\":", vm.toString(patchedPayout),
-            ",\"donation\":100}}"
-        ));
+        string memory objectKey = "cydraAccounting";
+        vm.serializeUint(objectKey, "vulnerableCachedBefore", vulnerableCachedBefore);
+        vm.serializeUint(objectKey, "patchedCachedBefore", patchedCachedBefore);
+        vm.serializeUint(objectKey, "vulnerableLiveAfterDonation", vulnerableLiveAfterDonation);
+        vm.serializeUint(objectKey, "patchedLiveAfterDonation", patchedLiveAfterDonation);
+        vm.serializeUint(objectKey, "referencePayout", referencePayout);
+        vm.serializeUint(objectKey, "vulnerablePayout", vulnerablePayout);
+        string memory json = vm.serializeUint(objectKey, "patchedPayout", patchedPayout);
+        vm.serializeUint(objectKey, "donation", 100);
+        json = vm.serializeUint(objectKey, "donation", 100);
+        vm.writeJson(json, "cydra_accounting_measurements.json");
 
         assertGt(vulnerableLiveAfterDonation, vulnerableCachedBefore);
         assertGt(vulnerablePayout, referencePayout);
