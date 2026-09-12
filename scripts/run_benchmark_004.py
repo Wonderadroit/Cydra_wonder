@@ -9,7 +9,7 @@ from cydra.foundry import (
     generate_cached_accounting_foundry_test,
     run_foundry_test,
 )
-from cydra.models import Evidence, Hypothesis
+from cydra.models import Evidence
 from cydra.pipeline import investigate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +18,6 @@ FOUNDRY = BENCHMARK / "foundry"
 TEST_PATH = FOUNDRY / "test" / "CydraAccountingInvariant.t.sol"
 MEASUREMENT_PATH = FOUNDRY / "cydra_accounting_measurements.json"
 SOURCE = BENCHMARK / "Target.sol"
-PATCHED = BENCHMARK / "PatchedTarget.sol"
 
 
 def _status_result(status: str, target: str) -> ExecutionResult:
@@ -61,8 +60,8 @@ def main() -> int:
 
     generated = generate_cached_accounting_foundry_test(
         experiment,
-        "../Target.sol:StrategyVulnerable",
-        "../PatchedTarget.sol:StrategyPatched",
+        "../../Target.sol:StrategyVulnerable",
+        "../../PatchedTarget.sol:StrategyPatched",
         TEST_PATH,
     )
 
@@ -88,7 +87,13 @@ def main() -> int:
     if execution.status == "UNMEASURABLE":
         print(json.dumps({
             "classification": "UNMEASURABLE",
-            "execution": {"status": execution.status, "tests_run": execution.tests_run, "exit_code": execution.exit_code},
+            "execution": {
+                "status": execution.status,
+                "tests_run": execution.tests_run,
+                "exit_code": execution.exit_code,
+                "stdout": execution.stdout,
+                "stderr": execution.stderr,
+            },
         }, indent=2))
         return 1
 
