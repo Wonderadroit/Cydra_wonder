@@ -139,10 +139,13 @@ jobs:
               constructor = model.constructor if model else None
               legacy = constructor.interface_casts if constructor else ()
               resolved = constructor.resolved_interface_casts if constructor else ()
+              derived = constructor.derived_interface_casts if constructor else ()
               legacy_hash = hashlib.sha256(repr(legacy).encode("utf-8")).hexdigest()
               print("PROBE: constructor.interface_casts =", legacy)
               print("PROBE: constructor.resolved_interface_casts =", resolved)
+              print("PROBE: constructor.derived_interface_casts =", derived)
               print("PROBE: resolved count =", len(resolved))
+              print("PROBE: derived count =", len(derived))
               print("PROBE: legacy count =", len(legacy))
               print("PROBE: legacy field repr sha256 =", legacy_hash)
               print(
@@ -161,6 +164,21 @@ jobs:
                       [
                           (method.name, method.parameters, method.returns)
                           for method in interface.methods
+                      ],
+                  )
+
+              for source_interface, source_method, target_interface in derived:
+                  print("PROBE: derived source interface =", source_interface)
+                  print("PROBE: derived source method =", source_method)
+                  print("PROBE: derived target interface =", target_interface.name)
+                  print("PROBE: derived target source =", target_interface.source_path)
+                  print("PROBE: derived target resolution method =", target_interface.resolution_method)
+                  print("PROBE: derived target method count =", len(target_interface.methods))
+                  print(
+                      "PROBE: derived target methods =",
+                      [
+                          (method.name, method.parameters, method.returns)
+                          for method in target_interface.methods
                       ],
                   )
 

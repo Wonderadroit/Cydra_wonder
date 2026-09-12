@@ -38,6 +38,7 @@ class ConstructorModel:
     line: int
     interface_casts: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     resolved_interface_casts: tuple[tuple[str, ResolvedInterface], ...] = field(default_factory=tuple)
+    derived_interface_casts: tuple[tuple[str, str, ResolvedInterface], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

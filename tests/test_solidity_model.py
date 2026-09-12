@@ -30,6 +30,7 @@ def test_enrichment_is_additive_and_extracts_constructor_parameters_and_auth(tmp
     ]
     assert contract.constructor.interface_casts == ()
     assert contract.constructor.resolved_interface_casts == ()
+    assert contract.constructor.derived_interface_casts == ()
     assert [(p.name, p.type, p.data_location) for p in function.parameters] == [
         ("token0", "address", None),
         ("token1", "address", None),
@@ -151,4 +152,57 @@ def test_constructor_interface_casts_are_deduplicated_and_filtered_to_parameters
     assert [resolved.name for _, resolved in contract.constructor.resolved_interface_casts] == [
         "IVotingEscrow",
         "IOther",
+    ]
+
+
+def test_constructor_nested_cast_derives_and_resolves_target_interface(tmp_path: Path) -> None:
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "IVotingEscrow.sol").write_text(
+        "interface IVotingEscrow {\n"
+        "    function token() external view returns (address);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "interfaces" / "IAero.sol").write_text(
+        "interface IAero {\n"
+        "    function mint(address to, uint256 amount) external returns (bool);\n"
+        "    function minter() external view returns (address);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    path = tmp_path / "Minter.sol"
+    path.write_text(
+        "import {IVotingEscrow} from \"./interfaces/IVotingEscrow.sol\";\n"
+        "import {IAero} from \"./interfaces/IAero.sol\";\n"
+        "contract Minter {\n"
+        "    constructor(address _ve) {\n"
+        "        IAero(IVotingEscrow(_ve).token());\n"
+        "        IVotingEscrow(_ve);\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    assert contract.constructor is not None
+
+    # The inner cast remains a constructor-argument dependency.
+    assert contract.constructor.interface_casts == (("_ve", "IVotingEscrow"),)
+    resolved_constructor = contract.constructor.resolved_interface_casts
+    assert len(resolved_constructor) == 1
+    assert resolved_constructor[0][0] == "_ve"
+    assert resolved_constructor[0][1].name == "IVotingEscrow"
+
+    # The outer cast is represented as a resolved derived relationship.
+    derived = contract.constructor.derived_interface_casts
+    assert len(derived) == 1
+    source_interface, source_method, target = derived[0]
+    assert (source_interface, source_method) == ("IVotingEscrow", "token")
+    assert isinstance(target, ResolvedInterface)
+    assert target.name == "IAero"
+    assert target.source_path == "interfaces/IAero.sol"
+    assert target.resolution_method == "relative_import"
+    assert [(m.name, m.parameters, m.returns) for m in target.methods] == [
+        ("mint", ("address to", "uint256 amount"), ("bool",)),
+        ("minter", (), ("address",)),
     ]

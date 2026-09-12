@@ -15,7 +15,7 @@ _FUNCTION_RE = re.compile(
 _CONSTRUCTOR_RE = re.compile(
     r"\bconstructor\s*\(([^)]*)\)\s*([^\{;]*)\{", re.MULTILINE
 )
-_INTERFACE_CAST_RE = re.compile(r"\b(I[A-Z]\w*)\s*\(\s*(\w+)\s*\)")
+_INTERFACE_CAST_RE = re.compile(r"\b(I[A-Z]\w*)\s*\(")
 _CALLER_TOKENS = ("msg.sender", "_msgSender()", "tx.origin")
 
 
@@ -153,6 +153,45 @@ def _balanced_parenthesized(source: str, opening: int) -> str:
     return source[opening + 1 :]
 
 
+def _balanced_parenthesized_span(source: str, opening: int) -> tuple[str, int] | None:
+    """Return an argument and matching close index for an opening parenthesis."""
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "(":
+            depth += 1
+        elif source[index] == ")":
+            depth -= 1
+            if depth == 0:
+                return source[opening + 1 : index], index
+    return None
+
+
+def _interface_casts(source: str) -> tuple[tuple[str, str, int, int], ...]:
+    """Find every interface cast using balanced parentheses, including nesting."""
+    casts: list[tuple[str, str, int, int]] = []
+    for match in _INTERFACE_CAST_RE.finditer(source):
+        span = _balanced_parenthesized_span(source, match.end() - 1)
+        if span is None:
+            continue
+        argument, closing = span
+        casts.append((match.group(1), argument.strip(), match.start(), closing))
+    return tuple(casts)
+
+
+def _derived_dependency(
+    argument: str,
+    target_interface: str,
+) -> tuple[str, str, str] | None:
+    """Extract source-interface/method/target from a cast-return expression."""
+    nested = _interface_casts(argument)
+    for source_interface, _inner_argument, _start, closing in reversed(nested):
+        suffix = argument[closing + 1 :].strip()
+        method_match = re.match(r"^\.\s*([A-Za-z_]\w*)\s*\(", suffix)
+        if method_match:
+            return source_interface, method_match.group(1), target_interface
+    return None
+
+
 def _first_argument(expression: str) -> str:
     """Return the first top-level argument from a call expression."""
     paren = bracket = angle = 0
@@ -213,22 +252,49 @@ def _constructor_interface_casts(
     *,
     importer: Path,
     root: Path,
-) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[str, ResolvedInterface], ...]]:
-    """Extract casts while preserving the legacy name-only field and adding resolved data."""
+) -> tuple[
+    tuple[tuple[str, str], ...],
+    tuple[tuple[str, ResolvedInterface], ...],
+    tuple[tuple[str, str, ResolvedInterface], ...],
+]:
+    """Extract simple dependencies and resolved derived dependencies.
+
+    The legacy ``interface_casts`` field intentionally remains limited to
+    simple constructor-parameter casts so existing Foundry behavior is
+    unchanged. ``resolved_interface_casts`` carries those same constructor
+    dependencies with resolver metadata. Compound casts are represented as
+    derived relationships and carry the resolved target interface.
+    """
     parameter_names = {parameter.name for parameter in parameters if parameter.name}
     casts: list[tuple[str, str]] = []
     resolved_casts: list[tuple[str, ResolvedInterface]] = []
-    seen: set[tuple[str, str]] = set()
-    for match in _INTERFACE_CAST_RE.finditer(body):
-        interface_name, parameter_name = match.groups()
-        key = (parameter_name, interface_name)
-        if parameter_name not in parameter_names or key in seen:
+    derived_casts: list[tuple[str, str, ResolvedInterface]] = []
+    seen_simple: set[tuple[str, str]] = set()
+    seen_derived: set[tuple[str, str, str]] = set()
+
+    for interface_name, argument, _start, _closing in _interface_casts(body):
+        if re.fullmatch(r"\w+", argument):
+            parameter_name = argument
+            key = (parameter_name, interface_name)
+            if parameter_name not in parameter_names or key in seen_simple:
+                continue
+            seen_simple.add(key)
+            resolved = resolve_interface(root, importer, interface_name)
+            casts.append(key)
+            resolved_casts.append((parameter_name, resolved))
             continue
-        seen.add(key)
+
+        derived = _derived_dependency(argument, interface_name)
+        if derived is None:
+            continue
+        key = derived
+        if key in seen_derived:
+            continue
+        seen_derived.add(key)
         resolved = resolve_interface(root, importer, interface_name)
-        casts.append(key)
-        resolved_casts.append((parameter_name, resolved))
-    return tuple(casts), tuple(resolved_casts)
+        derived_casts.append((derived[0], derived[1], resolved))
+
+    return tuple(casts), tuple(resolved_casts), tuple(derived_casts)
 
 
 def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
@@ -259,7 +325,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
         if constructor_match:
             parameters = _parameters(constructor_match.group(1))
             body = _body(contract_source, constructor_match.end() - 1)
-            interface_casts, resolved_interface_casts = _constructor_interface_casts(
+            interface_casts, resolved_interface_casts, derived_interface_casts = _constructor_interface_casts(
                 body,
                 parameters,
                 importer=path,
@@ -270,6 +336,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                 line=_line_number(source, contract_start + constructor_match.start()),
                 interface_casts=interface_casts,
                 resolved_interface_casts=resolved_interface_casts,
+                derived_interface_casts=derived_interface_casts,
             )
 
         for match in _FUNCTION_RE.finditer(contract_source):
