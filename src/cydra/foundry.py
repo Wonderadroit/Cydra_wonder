@@ -7,7 +7,7 @@ import subprocess
 import tomllib
 from typing import Literal
 
-from .models import Evidence, Experiment, Hypothesis
+from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothesis, ParameterModel
 
 
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
@@ -81,10 +81,111 @@ contract CydraAuthInvariantTest is Test {{
 ''', output_path)
 
 
-def generate_initialization_test(hypothesis: Hypothesis, target_import: str, target_type: str, output_path: str | Path) -> Path:
+def _constructor_argument(parameter: ParameterModel) -> str:
+    parameter_type = parameter.type.strip()
+    if parameter_type.startswith("address"):
+        return "payable(address(0))" if parameter_type == "address payable" else "address(0)"
+    if parameter_type.startswith(("uint", "int")):
+        return "0"
+    if parameter_type == "bool":
+        return "false"
+    if parameter_type == "string":
+        return '""'
+    if parameter_type == "bytes":
+        return "bytes(\"\")"
+    if parameter_type.startswith("bytes"):
+        return "0"
+    if parameter_type.endswith("[]"):
+        return f"new {parameter_type[:-2]}[](0)"
+    return "address(0)"
+
+
+def _initializer_argument(parameter: ParameterModel, target_type: str, index: int) -> tuple[str, str | None]:
+    parameter_type = parameter.type.strip()
+    if parameter_type.endswith("[]"):
+        return f"new {parameter_type[:-2]}[](0)", None
+    if parameter_type.startswith("address"):
+        return ("payable(address(0))" if parameter_type == "address payable" else "address(0)"), None
+    if parameter_type.startswith(("uint", "int")):
+        return "0", None
+    if parameter_type == "bool":
+        return "false", None
+    if parameter_type == "string":
+        return '""', None
+    if parameter_type == "bytes":
+        return "bytes(\"\")", None
+    if parameter_type.startswith("bytes"):
+        return "0", None
+
+    # Group A deliberately does not resolve custom types semantically. For a
+    # contract-owned/inherited struct, a zero-value memory variable is enough
+    # to produce a type-correct call without asserting anything about its data.
+    variable = f"parameter{index}"
+    declaration = f"{target_type}.{parameter_type} memory {variable};"
+    return variable, declaration
+
+
+def _model_initialization_source(
+    hypothesis: Hypothesis,
+    target_import: str,
+    target_type: str,
+    contract_model: ContractModel,
+) -> str:
+    constructor = contract_model.constructor
+    constructor_arguments = ""
+    if constructor is not None and constructor.parameters:
+        constructor_arguments = ", ".join(_constructor_argument(p) for p in constructor.parameters)
+
+    function = next(
+        (candidate for candidate in contract_model.functions if candidate.name == hypothesis.target_function),
+        None,
+    )
+    if function is None:
+        raise ValueError(f"Model has no target function: {hypothesis.target_function}")
+
+    arguments: list[str] = []
+    declarations: list[str] = []
+    for index, parameter in enumerate(function.parameters):
+        argument, declaration = _initializer_argument(parameter, target_type, index)
+        arguments.append(argument)
+        if declaration:
+            declarations.append(declaration)
+
+    initialize_call = f"target.{function.name}({', '.join(arguments)});"
+    declarations_text = "\n        ".join(declarations)
+    if declarations_text:
+        declarations_text += "\n        "
+
+    return f'''// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+// Hypothesis: {hypothesis.hypothesis_id}
+// Interface-aware generation only: constructor and initializer parameter shapes
+// come from ContractModel/FunctionModel. Postcondition semantics are deferred.
+import {{Test}} from "forge-std/Test.sol";
+import {{ {target_type} }} from "{target_import}";
+contract CydraInitializationInvariantTest is Test {{
+    {target_type} internal target;
+    function setUp() public {{ target = new {target_type}({constructor_arguments}); }}
+    function testInitializationInterfaceIsCallable() public {{
+        {declarations_text}{initialize_call}
+    }}
+}}
+'''
+
+
+def generate_initialization_test(
+    hypothesis: Hypothesis,
+    target_import: str,
+    target_type: str,
+    output_path: str | Path,
+    contract_model: ContractModel | None = None,
+) -> Path:
     if hypothesis.invariant_id != "INV-INIT-001":
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
-    return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
+
+    if contract_model is None:
+        # Preserve the pre-5D fixture path exactly for existing benchmarks.
+        return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 // Hypothesis: {hypothesis.hypothesis_id}
 import {{Test}} from "forge-std/Test.sol";
@@ -99,6 +200,11 @@ contract CydraInitializationInvariantTest is Test {{
     }}
 }}
 ''', output_path)
+
+    return _write_test(
+        _model_initialization_source(hypothesis, target_import, target_type, contract_model),
+        output_path,
+    )
 
 
 def generate_arithmetic_foundry_test(experiment: Experiment, target: str, patched: str) -> str:
