@@ -39,6 +39,8 @@ For Pool, Minter, and Voter, record:
 
 Compilation is the only LiquidClaw gate. Do not execute the generated tests in this session.
 
+The compile gate is implemented as a dedicated GitHub Actions job that checks out the frozen LiquidClaw commit `58bed220236e8cdd8d279ef7259b3298a71aac0b`, generates the three model-aware tests, and invokes Foundry with `--no-run`. This is a compilation gate only; no generated test is executed.
+
 ## Falsification conditions
 
 1. Generator still emits `new Target()` for Minter or Voter → **constructor consumption failed**.
