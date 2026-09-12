@@ -187,8 +187,9 @@ def _model_initialization_source(
     declarations_text = "\n        ".join(declarations)
     if declarations_text:
         declarations_text += "\n        "
+    pragma = contract_model.pragma or "^0.8.20"
     return f'''// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.20;
+pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Interface-aware generation only: constructor and initializer parameter shapes
 // come from ContractModel/FunctionModel. Postcondition semantics are deferred.
