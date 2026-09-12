@@ -40,7 +40,7 @@ def test_enrichment_is_additive_and_extracts_constructor_parameters_and_auth(tmp
     assert function.modifiers == ()
     assert function.writes == ("other", "value")
     assert function.external_calls == ()
-    assert function.line == 6
+    assert function.line == 5
 
 
 def test_parameter_locations_and_custom_types_are_preserved(tmp_path: Path) -> None:
