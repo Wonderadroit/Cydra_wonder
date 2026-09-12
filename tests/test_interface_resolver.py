@@ -89,7 +89,7 @@ def test_declared_types_are_scoped_to_resolved_interface_body(tmp_path: Path) ->
         "    struct AirdropParams { address[] wallets; }\n"
         "    enum Mode { A, B }\n"
         "    type Amount is uint256;\n"
-        "    function initialize(AirdropParams memory params) external;\n"
+        "    function initialize(AirdropParams memory params) external returns (bool);\n"
         "}\n"
         "interface IOther {\n"
         "    struct OtherType { uint256 value; }\n"

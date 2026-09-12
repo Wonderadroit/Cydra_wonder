@@ -92,7 +92,9 @@ def test_model_aware_generator_qualifies_inherited_custom_type_from_declared_int
     source = output.read_text(encoding="utf-8")
     assert "new Minter(address(0), address(0), address(0))" in source
     assert "IMinter.AirdropParams memory parameter0;" in source
-    assert "Minter.AirdropParams memory parameter0;" not in source
+    assert "Minter.AirdropParams memory parameter0;" not in source.replace(
+        "IMinter.AirdropParams memory parameter0;", ""
+    )
     assert "target.initialize(parameter0);" in source
     assert "target.guardian()" not in source
 
