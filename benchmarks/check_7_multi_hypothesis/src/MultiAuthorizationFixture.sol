@@ -5,6 +5,18 @@ contract MultiAuthorizationFixture {
     address public oracle;
     uint256 public fee;
 
+    // Compatibility surface required by the frozen authorization generator.
+    // This is not part of the Check 7 hypotheses.
+    mapping(address => bool) private _whiteList;
+
+    function whiteList(address account) external view returns (bool) {
+        return _whiteList[account];
+    }
+
+    function setWhitelist(address account, bool state) external onlyOwner {
+        _whiteList[account] = state;
+    }
+
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
         _;
