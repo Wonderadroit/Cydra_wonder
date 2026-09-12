@@ -47,10 +47,18 @@ Source-derived prediction:
 | VotingEscrow.sol | 0 |
 | Minter.sol | 1 |
 | RewardsDistributor.sol | 0 |
-| Voter.sol | 0 |
+| Voter.sol | 1 |
 | ProtocolGovernor.sol | 0 |
 
-Expected initialization total: **2**.
+Expected initialization total: **3**.
+
+### Authorization
+
+The existing authorization extractor requires at least one modifier-bearing administrative function and at least one unmodified administrative sibling in the same contract. Source inspection of the frozen eight-contract scope predicts that this condition is not met in any of the eight contracts.
+
+Expected authorization hypotheses: **0**.
+
+This is a structural extractor prediction, not a claim that the target has no access-controlled operations. Inline `msg.sender` checks are not the modifier signal used by the current extractor.
 
 ### Arithmetic
 
@@ -64,13 +72,15 @@ The existing cached-accounting rule only recognizes the Benchmark 004 `poolCache
 
 Expected cached-accounting hypotheses: **0**.
 
-### Authorization
+### Total predicted hypotheses
 
-Authorization count is deliberately **unpredictable/count-open** before execution because the existing extractor's output depends on the complete modifier inventory of administrative sibling functions. The run must record the extractor's actual output without manually converting that output into a pre-run security expectation.
+**3** total hypotheses from the four currently supported extraction classes, all predicted to be initialization hypotheses.
 
 ## Experiment prediction
 
-For every initialization or authorization hypothesis actually emitted by the existing extractor, the existing planner should produce the corresponding existing experiment type if that planner supports the invariant.
+For each of the three initialization hypotheses actually emitted, the existing initialization planner should produce one existing initialization experiment.
+
+Expected initialization experiment count: **3**.
 
 No new planner or target-specific adapter may be added before the blind result.
 
@@ -90,7 +100,7 @@ Status-only execution is insufficient for a measurement-outcome claim.
 - False Negative: independently verified vulnerability within current supported rule coverage, but CYDRA did not confirm it.
 - Rule Gap: vulnerability exists but its invariant is outside current rule coverage.
 - Pipeline Gap: meaningful hypothesis cannot be represented/executed/classified by an existing pipeline layer.
-- Extraction Gap: a pre-registered extractor expectation is not met, including the expected two initialization hypotheses.
+- Extraction Gap: a pre-registered extractor expectation is not met, including the expected three initialization hypotheses.
 - Scope Violation: CYDRA reasons over a contract outside the eight-path manifest.
 
 ## Independent verification pre-commitment
