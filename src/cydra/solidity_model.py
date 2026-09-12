@@ -14,6 +14,7 @@ _FUNCTION_RE = re.compile(
 _CONSTRUCTOR_RE = re.compile(
     r"\bconstructor\s*\(([^)]*)\)\s*([^\{;]*)\{", re.MULTILINE
 )
+_INTERFACE_CAST_RE = re.compile(r"\b(I[A-Z]\w*)\s*\(\s*(\w+)\s*\)")
 _CALLER_TOKENS = ("msg.sender", "_msgSender()", "tx.origin")
 
 
@@ -191,6 +192,19 @@ def _authorization_predicates(body: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(predicates))
 
 
+def _constructor_interface_casts(
+    body: str, parameters: tuple[ParameterModel, ...]
+) -> tuple[tuple[str, str], ...]:
+    """Extract interface casts whose operand is a named constructor parameter."""
+    parameter_names = {parameter.name for parameter in parameters if parameter.name}
+    casts: list[tuple[str, str]] = []
+    for match in _INTERFACE_CAST_RE.finditer(body):
+        interface_name, parameter_name = match.groups()
+        if parameter_name in parameter_names:
+            casts.append((parameter_name, interface_name))
+    return tuple(dict.fromkeys(casts))
+
+
 def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
     """Minimal deterministic model extractor used before compiler integration.
 
@@ -214,9 +228,12 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
         constructor = None
         constructor_match = _CONSTRUCTOR_RE.search(contract_source)
         if constructor_match:
+            parameters = _parameters(constructor_match.group(1))
+            body = _body(contract_source, constructor_match.end() - 1)
             constructor = ConstructorModel(
-                parameters=_parameters(constructor_match.group(1)),
+                parameters=parameters,
                 line=_line_number(source, contract_start + constructor_match.start()),
+                interface_casts=_constructor_interface_casts(body, parameters),
             )
 
         for match in _FUNCTION_RE.finditer(contract_source):
