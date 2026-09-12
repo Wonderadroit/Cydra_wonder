@@ -5,8 +5,7 @@
 Repository:
 https://github.com/Wonderadroit/Cydra_wonder
 
-Target ref:
-9709dcd
+Target ref: `5786669ec73f44aa008b1706efd6677e43035bb8`
 
 Target project:
 benchmarks/check_7_multi_hypothesis
