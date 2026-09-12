@@ -71,9 +71,9 @@ def main() -> int:
         "pool.balanceOf(address(vulnerable))",
         "vulnerable.burn(holder)",
         "patchedTarget.burn(holder)",
-        "vm.writeFile(\"cydra_accounting_measurements.json\"",
-        "vm.toString(vulnerablePayout)",
-        "vm.toString(patchedPayout)",
+        "vm.writeJson(json, \"cydra_accounting_measurements.json\")",
+        "vm.serializeUint(objectKey, \"vulnerablePayout\", vulnerablePayout)",
+        "vm.serializeUint(objectKey, \"patchedPayout\", patchedPayout)",
     )
     static_plus_execution = all(token in source_text for token in required_runtime_bindings)
 
