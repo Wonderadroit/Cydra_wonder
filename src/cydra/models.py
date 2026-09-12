@@ -34,6 +34,7 @@ class ParameterModel:
 class ConstructorModel:
     parameters: tuple[ParameterModel, ...]
     line: int
+    interface_casts: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
