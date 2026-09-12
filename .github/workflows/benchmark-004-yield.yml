@@ -1,0 +1,27 @@
+name: CYDRA Benchmark 004 Yield Accounting
+
+on:
+  push:
+    branches:
+      - bench004-yield-live-balance
+
+jobs:
+  benchmark-004:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std in Benchmark 004 fixture
+        working-directory: benchmarks/004_yield_live_balance/foundry
+        run: forge install foundry-rs/forge-std --no-commit
+      - name: Install Python dependencies
+        run: pip install -e .
+      - name: Python acceptance suite
+        run: pytest -q
+      - name: Run Benchmark 004
+        run: PYTHONPATH=. python scripts/run_benchmark_004.py
