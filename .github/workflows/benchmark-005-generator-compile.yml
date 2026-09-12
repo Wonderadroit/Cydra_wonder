@@ -24,8 +24,12 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Pre-install Solidity compiler 0.8.36
-        run: svm install 0.8.36
+      # Prediction 5F-b: bounded retry of Forge's own compiler auto-resolution will allow
+      # solc 0.8.36 to be downloaded/cached after a transient network failure. If retries
+      # exhaust on download/network errors, 5F-c will use a direct compiler download.
+      # Confirmation: forge test reaches Solidity compiler output, success or errors.
+      # Falsification: all retries fail on compiler download/network errors, or Forge
+      # resolves a different compiler version than 0.8.36.
 
       - name: Generate interface-aware initialization tests
         env:
