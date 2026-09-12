@@ -665,7 +665,9 @@ def create_freeze(
         missing = [
             name
             for name in FREEZE_FILES
-            if name not in files and name not in text_files
+            if name != "manifest.sha256"
+            and name not in files
+            and name not in text_files
         ]
         if missing:
             raise RuntimeError(
