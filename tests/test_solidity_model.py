@@ -298,3 +298,82 @@ def test_state_predicates_both_regression(tmp_path: Path) -> None:
     assert contract.state_variables == ("owner", "factory")
     assert function.authorization_predicates == ("msg.sender == owner",)
     assert function.state_predicates == ("factory != address(0)",)
+
+
+def test_contract_inheritance_and_declared_types_are_extracted_without_usages(tmp_path: Path) -> None:
+    path = tmp_path / "Sample.sol"
+    path.write_text(
+        """
+        contract Base {}
+        contract Other {}
+        contract Sample is Base, Other(0x1234) {
+            struct LocalStruct { uint256 value; }
+            enum LocalEnum { A, B }
+            type LocalValue is uint256;
+
+            function initialize(LocalStruct memory value) external {
+                LocalStruct memory localValue = value;
+                uint256 other = 1;
+                localValue.value = other;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contracts = parse_solidity(path)
+    sample = next(contract for contract in contracts if contract.name == "Sample")
+    function = sample.functions[0]
+
+    assert sample.inherits == ("Base", "Other")
+    assert sample.declared_types == ("LocalStruct", "LocalEnum", "LocalValue")
+    assert function.parameters[0].type == "LocalStruct"
+    assert "LocalStruct" not in sample.inherits
+    assert sample.inherited_declared_types == ()
+
+
+def test_contract_inheritance_strips_sparse_base_constructor_arguments(tmp_path: Path) -> None:
+    path = tmp_path / "Sample.sol"
+    path.write_text(
+        """
+        contract Sample is A, B(1), C, D(address(0x1234)) {}
+        contract A {}
+        contract B {}
+        contract C {}
+        contract D {}
+        """,
+        encoding="utf-8",
+    )
+
+    sample = next(contract for contract in parse_solidity(path) if contract.name == "Sample")
+    assert sample.inherits == ("A", "B", "C", "D")
+
+
+def test_inherited_interface_declared_types_are_carried_into_contract_model(tmp_path: Path) -> None:
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "IMinter.sol").write_text(
+        "interface IMinter {\n"
+        "    struct AirdropParams { address[] wallets; }\n"
+        "    enum Mode { A, B }\n"
+        "    type Amount is uint256;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    path = tmp_path / "Minter.sol"
+    path.write_text(
+        "import {IMinter} from \"./interfaces/IMinter.sol\";\n"
+        "contract Minter is IMinter {\n"
+        "    function initialize(AirdropParams memory params) external {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    minter = parse_solidity(path)[0]
+
+    assert minter.inherits == ("IMinter",)
+    assert minter.declared_types == ()
+    assert minter.inherited_declared_types == (
+        ("IMinter", "AirdropParams"),
+        ("IMinter", "Mode"),
+        ("IMinter", "Amount"),
+    )

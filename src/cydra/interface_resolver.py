@@ -18,6 +18,7 @@ class ResolvedInterface:
     source_path: str
     resolution_method: str
     methods: tuple[InterfaceMethod, ...]
+    declared_types: tuple[str, ...] = ()
 
 
 _INTERFACE_RE = re.compile(r"\binterface\s+(\w+)")
@@ -27,6 +28,12 @@ _FUNCTION_RE = re.compile(
 )
 _IMPORT_RE = re.compile(r"\bimport\s+(?:[^\"]*from\s+)?\"([^\"]+)\"\s*;", re.MULTILINE)
 _REMAP_RE = re.compile(r"^\s*([^=\s]+)\s*=\s*(\S+)\s*$")
+_DECLARED_TYPE_RE = re.compile(
+    r"^\s*(?:struct\s+(?P<struct>[A-Za-z_]\w*)\s*\{|"
+    r"enum\s+(?P<enum>[A-Za-z_]\w*)\s*\{|"
+    r"type\s+(?P<type>[A-Za-z_]\w*)\s+is\b)",
+    re.MULTILINE,
+)
 
 
 def _strip_comments(source: str) -> str:
@@ -179,9 +186,15 @@ def _extract_interface(
                 returns=_split_parameters(function.group(4)),
             )
         )
+    declared_types: list[str] = []
+    for declaration in _DECLARED_TYPE_RE.finditer(body):
+        declared_type = declaration.group("struct") or declaration.group("enum") or declaration.group("type")
+        if declared_type and declared_type not in declared_types:
+            declared_types.append(declared_type)
     return ResolvedInterface(
         name=name,
         source_path=path.relative_to(root).as_posix(),
         resolution_method=resolution_method,
         methods=tuple(methods),
+        declared_types=tuple(declared_types),
     )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import logging
 import os
 import re
 import subprocess
@@ -103,7 +104,56 @@ def _constructor_argument(parameter: ParameterModel, runtime_arguments: dict[str
     return "address(0)"
 
 
-def _initializer_argument(parameter: ParameterModel, target_type: str, index: int, runtime_arguments: dict[str, str] | None = None) -> tuple[str, str | None]:
+def _builtin_type(base: str) -> bool:
+    return base in {
+        "address", "bool", "string", "bytes", "byte", "uint", "int",
+        *{f"uint{i}" for i in range(8, 257, 8)},
+        *{f"int{i}" for i in range(8, 257, 8)},
+        *{f"bytes{i}" for i in range(1, 33)},
+    }
+
+
+def _resolve_custom_type(parameter_type: str, target_type: str, contract_model: ContractModel) -> str:
+    tokens = parameter_type.strip().split()
+    if not tokens:
+        return parameter_type
+    type_token = tokens[0]
+    base = type_token.rstrip("[]")
+    if _builtin_type(base) or "." in base:
+        return parameter_type
+
+    if base in contract_model.declared_types:
+        qualifier = target_type
+    else:
+        inherited_match = next(
+            (
+                inherited_name
+                for inherited_name, inherited_type in contract_model.inherited_declared_types
+                if inherited_type == base
+            ),
+            None,
+        )
+        if inherited_match is None:
+            logging.getLogger(__name__).warning(
+                "unresolved custom initializer type %s on %s; emitting bare type",
+                parameter_type,
+                target_type,
+            )
+            return parameter_type
+        qualifier = inherited_match
+
+    suffix = type_token[len(base):]
+    tokens[0] = f"{qualifier}.{base}{suffix}"
+    return " ".join(tokens)
+
+
+def _initializer_argument(
+    parameter: ParameterModel,
+    target_type: str,
+    index: int,
+    runtime_arguments: dict[str, str] | None = None,
+    contract_model: ContractModel | None = None,
+) -> tuple[str, str | None]:
     runtime_arguments = runtime_arguments or {}
     if parameter.name in runtime_arguments:
         return runtime_arguments[parameter.name], None
@@ -123,7 +173,11 @@ def _initializer_argument(parameter: ParameterModel, target_type: str, index: in
     if parameter_type.startswith("bytes"):
         return "0", None
     variable = f"parameter{index}"
-    declaration = f"{target_type}.{parameter_type} memory {variable};"
+    if contract_model is None:
+        declaration = f"{target_type}.{parameter_type} memory {variable};"
+    else:
+        qualified_type = _resolve_custom_type(parameter_type, target_type, contract_model)
+        declaration = f"{qualified_type} memory {variable};"
     return variable, declaration
 
 
@@ -203,13 +257,9 @@ def _qualify_type(type_declaration: str, interface_name: str, known_interfaces: 
         return type_declaration
     type_token = tokens[0]
     base = type_token.rstrip("[]")
-    builtins = {
-        "address", "bool", "string", "bytes", "byte", "uint", "int",
-        *{f"uint{i}" for i in range(8, 257, 8)},
-        *{f"int{i}" for i in range(8, 257, 8)},
-        *{f"bytes{i}" for i in range(1, 33)},
-    }
-    if base not in builtins and base not in known_interfaces and "." not in base:
+    if _builtin_type(base):
+        return type_declaration
+    if base not in known_interfaces and "." not in base:
         tokens[0] = f"{interface_name}.{type_token}"
     return " ".join(tokens)
 
@@ -356,7 +406,13 @@ def _model_initialization_source(
     arguments: list[str] = []
     declarations: list[str] = []
     for index, parameter in enumerate(function.parameters):
-        argument, declaration = _initializer_argument(parameter, target_type, index, initializer_runtime_arguments)
+        argument, declaration = _initializer_argument(
+            parameter,
+            target_type,
+            index,
+            initializer_runtime_arguments,
+            contract_model,
+        )
         arguments.append(argument)
         if declaration:
             declarations.append(declaration)

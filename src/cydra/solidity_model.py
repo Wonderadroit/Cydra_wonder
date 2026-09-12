@@ -7,7 +7,7 @@ from .interface_resolver import ResolvedInterface, resolve_interface
 from .models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
 
 
-_CONTRACT_RE = re.compile(r"\bcontract\s+(\w+)")
+_CONTRACT_RE = re.compile(r"\bcontract\s+(?P<name>\w+)(?:\s+is\s+(?P<inherits>[^\{]+))?")
 _PRAGMA_SOLIDITY_RE = re.compile(r"pragma\s+solidity\s+([^;]+);", re.MULTILINE)
 _FUNCTION_RE = re.compile(
     r"\bfunction\s+(\w+)\s*\(([^)]*)\)\s*([^\{;]*)\{", re.MULTILINE
@@ -16,6 +16,12 @@ _CONSTRUCTOR_RE = re.compile(
     r"\bconstructor\s*\(([^)]*)\)\s*([^\{;]*)\{", re.MULTILINE
 )
 _INTERFACE_CAST_RE = re.compile(r"\b(I[A-Z]\w*)\s*\(")
+_DECLARED_TYPE_RE = re.compile(
+    r"^\s*(?:struct\s+(?P<struct>[A-Za-z_]\w*)\s*\{|"
+    r"enum\s+(?P<enum>[A-Za-z_]\w*)\s*\{|"
+    r"type\s+(?P<type>[A-Za-z_]\w*)\s+is\b)",
+    re.MULTILINE,
+)
 _CALLER_TOKENS = ("msg.sender", "_msgSender()", "tx.origin")
 _STATE_COMPARISON_RE = re.compile(
     r"\b(?P<name>[A-Za-z_]\w*)\s*(?P<op>==|!=|>=|<=|>|<)\s*(?P<rhs>"
@@ -314,6 +320,31 @@ def _state_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[str,
     return tuple(predicates)
 
 
+def _declared_types(body: str) -> tuple[str, ...]:
+    """Extract only contract-scope struct, enum, and value-type declarations."""
+    declared: list[str] = []
+    for match in _DECLARED_TYPE_RE.finditer(body):
+        name = match.group("struct") or match.group("enum") or match.group("type")
+        if name and name not in declared:
+            declared.append(name)
+    return tuple(declared)
+
+
+def _inheritance_names(clause: str | None) -> tuple[str, ...]:
+    """Extract base type names, dropping optional Solidity constructor arguments."""
+    if not clause:
+        return ()
+    names: list[str] = []
+    for item in clause.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        base = item.split("(", 1)[0].strip()
+        if base and re.fullmatch(r"[A-Za-z_]\w*", base) and base not in names:
+            names.append(base)
+    return tuple(names)
+
+
 def _project_root(path: Path) -> Path:
     """Find the project root used by interface resolution.
 
@@ -396,7 +427,8 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
     contracts: list[ContractModel] = []
 
     for contract_match in _CONTRACT_RE.finditer(parse_source):
-        contract_name = contract_match.group(1)
+        contract_name = contract_match.group("name")
+        inherits = _inheritance_names(contract_match.group("inherits"))
         contract_start = contract_match.end()
         next_contract = _CONTRACT_RE.search(parse_source, contract_start)
         contract_source = parse_source[contract_start : next_contract.start() if next_contract else len(parse_source)]
@@ -405,6 +437,17 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
         contract_opening = contract_source.find("{")
         contract_body = _body(contract_source, contract_opening) if contract_opening >= 0 else contract_source
         state_variables = _state_variables(contract_body)
+        declared_types = _declared_types(contract_body)
+        inherited_declared_types: list[tuple[str, str]] = []
+        for inherited_name in inherits:
+            try:
+                inherited = resolve_interface(root, path, inherited_name)
+            except (FileNotFoundError, ValueError):
+                continue
+            for declared_type in inherited.declared_types:
+                entry = (inherited_name, declared_type)
+                if entry not in inherited_declared_types:
+                    inherited_declared_types.append(entry)
 
         constructor = None
         constructor_match = _CONSTRUCTOR_RE.search(contract_source)
@@ -462,6 +505,9 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                 constructor=constructor,
                 pragma=pragma,
                 state_variables=state_variables,
+                inherits=inherits,
+                declared_types=declared_types,
+                inherited_declared_types=tuple(inherited_declared_types),
             )
         )
 

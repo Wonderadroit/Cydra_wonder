@@ -31,6 +31,7 @@ def test_resolves_interface_through_remapping(tmp_path: Path) -> None:
     assert resolved.source_path == "lib/openzeppelin/token/ERC20/IERC20.sol"
     assert resolved.resolution_method == "remapping"
     assert [method.name for method in resolved.methods] == ["decimals", "symbol"]
+    assert resolved.declared_types == ()
 
 
 def test_resolves_interface_through_relative_import(tmp_path: Path) -> None:
@@ -52,6 +53,7 @@ def test_resolves_interface_through_relative_import(tmp_path: Path) -> None:
     assert resolved.source_path == "contracts/interfaces/IVotingEscrow.sol"
     assert resolved.resolution_method == "relative_import"
     assert [method.name for method in resolved.methods] == ["token"]
+    assert resolved.declared_types == ()
 
 
 def test_unresolved_declared_import_raises_instead_of_searching(tmp_path: Path) -> None:
@@ -73,3 +75,29 @@ def test_unresolved_declared_import_raises_instead_of_searching(tmp_path: Path) 
         match="declared import ./interfaces/IVotingEscrow\\.sol.*has no remapping or relative target",
     ):
         resolve_interface(root, root / "contracts" / "Pool.sol", "IVotingEscrow")
+
+
+def test_declared_types_are_scoped_to_resolved_interface_body(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "Target.sol",
+        'import {IMinter} from "./interfaces/IMinter.sol";\ncontract Target {}\n',
+    )
+    _write(
+        root / "contracts" / "interfaces" / "IMinter.sol",
+        "interface IMinter {\n"
+        "    struct AirdropParams { address[] wallets; }\n"
+        "    enum Mode { A, B }\n"
+        "    type Amount is uint256;\n"
+        "    function initialize(AirdropParams memory params) external;\n"
+        "}\n"
+        "interface IOther {\n"
+        "    struct OtherType { uint256 value; }\n"
+        "}\n",
+    )
+
+    resolved = resolve_interface(root, root / "contracts" / "Target.sol", "IMinter")
+
+    assert resolved.declared_types == ("AirdropParams", "Mode", "Amount")
+    assert "OtherType" not in resolved.declared_types
+    assert [method.name for method in resolved.methods] == ["initialize"]

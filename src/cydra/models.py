@@ -62,6 +62,9 @@ class ContractModel:
     constructor: ConstructorModel | None = None
     pragma: str | None = None
     state_variables: tuple[str, ...] = field(default_factory=tuple)
+    inherits: tuple[str, ...] = field(default_factory=tuple)
+    declared_types: tuple[str, ...] = field(default_factory=tuple)
+    inherited_declared_types: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
