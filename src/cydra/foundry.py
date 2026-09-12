@@ -44,7 +44,6 @@ def _write_test(source: str, output_path: str | Path) -> Path:
 
 
 def configured_test_dir(project_dir: str | Path) -> Path:
-    """Return the Foundry test directory declared by the project's config."""
     project = Path(project_dir)
     config_path = project / "foundry.toml"
     test_dir = "test"
@@ -103,12 +102,7 @@ def _constructor_argument(parameter: ParameterModel, runtime_arguments: dict[str
     return "address(0)"
 
 
-def _initializer_argument(
-    parameter: ParameterModel,
-    target_type: str,
-    index: int,
-    runtime_arguments: dict[str, str] | None = None,
-) -> tuple[str, str | None]:
+def _initializer_argument(parameter: ParameterModel, target_type: str, index: int, runtime_arguments: dict[str, str] | None = None) -> tuple[str, str | None]:
     runtime_arguments = runtime_arguments or {}
     if parameter.name in runtime_arguments:
         return runtime_arguments[parameter.name], None
@@ -158,18 +152,13 @@ def _source_text(contract_model: ContractModel) -> str:
 
 
 def _initializer_runtime_requirements(contract_model: ContractModel, function_name: str) -> tuple[set[str], bool]:
-    """Find address parameters used as ERC20 symbol receivers and caller-factory voter context."""
     source = _source_text(contract_model)
     if not source:
         return set(), False
-    function_match = re.search(
-        rf"\bfunction\s+{re.escape(function_name)}\s*\([^)]*\)[^{{;]*\{{",
-        source,
-        re.MULTILINE,
-    )
+    function_match = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\([^)]*\)[^{{;]*\{{", source, re.MULTILINE)
     if not function_match:
         return set(), False
-    body = source[function_match.end() :]
+    body = source[function_match.end():]
     depth = 1
     end = len(body)
     for index, char in enumerate(body):
@@ -259,15 +248,10 @@ def _model_initialization_source(
     pragma = contract_model.pragma or "^0.8.20"
 
     factory_method = "\n    function voter() external view returns (address) { return address(this); }" if factory_context else ""
-    stub_deployments = "\n        ".join(
-        f"{variable} = new Cydra{interface_name}Stub();" for interface_name, variable in stub_variables.items()
-    )
-    if token_parameters:
-        token_deployment = "tokenStub = new CydraERC20Stub();"
-        token_declaration = "    CydraERC20Stub internal tokenStub;"
-    else:
-        token_deployment = ""
-        token_declaration = ""
+    stub_deployments = "\n        ".join(f"{variable} = new Cydra{interface_name}Stub();" for interface_name, variable in stub_variables.items())
+    token_deployment = "tokenStub = new CydraERC20Stub();" if token_parameters else ""
+    token_declaration = "    CydraERC20Stub internal tokenStub;\n" if token_parameters else ""
+    interface_declarations = "".join(f"    Cydra{interface_name}Stub internal {variable};\n" for interface_name, variable in stub_variables.items())
 
     return f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
@@ -279,8 +263,7 @@ import {{ {target_type} }} from "{target_import}";
 {stub_source}
 contract CydraInitializationInvariantTest is Test {{
     {target_type} internal target;
-{''.join(f"    Cydra{interface_name}Stub internal {variable};\\n" for interface_name, variable in stub_variables.items())}{token_declaration}
-{factory_method}
+{interface_declarations}{token_declaration}{factory_method}
     function setUp() public {{
         {stub_deployments}{token_deployment}
         target = new {target_type}({constructor_arguments});
@@ -292,13 +275,7 @@ contract CydraInitializationInvariantTest is Test {{
 '''
 
 
-def generate_initialization_test(
-    hypothesis: Hypothesis,
-    target_import: str,
-    target_type: str,
-    output_path: str | Path,
-    contract_model: ContractModel | None = None,
-) -> Path:
+def generate_initialization_test(hypothesis: Hypothesis, target_import: str, target_type: str, output_path: str | Path, contract_model: ContractModel | None = None) -> Path:
     if hypothesis.invariant_id != "INV-INIT-001":
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
     if contract_model is None:
