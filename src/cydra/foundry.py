@@ -10,6 +10,7 @@ from typing import Literal
 
 from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothesis, ParameterModel
 
+# Benchmark 005 / Prediction 5I CI verification trigger.
 
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
 
