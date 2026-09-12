@@ -21,9 +21,10 @@ def test_caller_only_uses_unauthorized_caller_shape():
     body = render_initialization_test_body(
         _function(authorization=("msg.sender != owner",)),
         "target",
-        "address(0xA11CE)",
+        "0xA11CE",
         "tokenStub, false",
     )
+    assert "address unauthorized = address(0xA11CE);" in body
     assert "vm.prank(unauthorized);" in body
     assert "vm.expectRevert();" in body
     assert "target.initialize(tokenStub, false);" in body
