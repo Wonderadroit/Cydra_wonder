@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from .interface_resolver import ResolvedInterface
+
 EvidenceKind = Literal["source", "model", "analysis", "execution", "benchmark"]
 HypothesisStatus = Literal["proposed", "supported", "rejected", "confirmed"]
 
@@ -35,6 +37,7 @@ class ConstructorModel:
     parameters: tuple[ParameterModel, ...]
     line: int
     interface_casts: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    resolved_interface_casts: tuple[tuple[str, ResolvedInterface], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .interface_resolver import ResolvedInterface, resolve_interface
 from .models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
 
 
@@ -192,17 +193,42 @@ def _authorization_predicates(body: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(predicates))
 
 
+def _project_root(path: Path) -> Path:
+    """Find the project root used by interface resolution.
+
+    A repository remappings file is authoritative when present. Small
+    standalone fixtures without remappings use the directory containing the
+    Solidity file, preserving the existing parser call shape.
+    """
+    resolved = path.resolve()
+    for parent in (resolved.parent, *resolved.parents):
+        if (parent / "remappings.txt").is_file():
+            return parent
+    return resolved.parent
+
+
 def _constructor_interface_casts(
-    body: str, parameters: tuple[ParameterModel, ...]
-) -> tuple[tuple[str, str], ...]:
-    """Extract interface casts whose operand is a named constructor parameter."""
+    body: str,
+    parameters: tuple[ParameterModel, ...],
+    *,
+    importer: Path,
+    root: Path,
+) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[str, ResolvedInterface], ...]]:
+    """Extract casts while preserving the legacy name-only field and adding resolved data."""
     parameter_names = {parameter.name for parameter in parameters if parameter.name}
     casts: list[tuple[str, str]] = []
+    resolved_casts: list[tuple[str, ResolvedInterface]] = []
+    seen: set[tuple[str, str]] = set()
     for match in _INTERFACE_CAST_RE.finditer(body):
         interface_name, parameter_name = match.groups()
-        if parameter_name in parameter_names:
-            casts.append((parameter_name, interface_name))
-    return tuple(dict.fromkeys(casts))
+        key = (parameter_name, interface_name)
+        if parameter_name not in parameter_names or key in seen:
+            continue
+        seen.add(key)
+        resolved = resolve_interface(root, importer, interface_name)
+        casts.append(key)
+        resolved_casts.append((parameter_name, resolved))
+    return tuple(casts), tuple(resolved_casts)
 
 
 def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
@@ -210,8 +236,11 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
 
     It intentionally extracts only syntactic facts needed by the current
     milestone. It is not a Solidity parser and must not be treated as one.
+    Constructor interface casts are enriched through the declared-import
+    resolver; no repository-wide interface search is performed here.
     """
     path = Path(path)
+    root = _project_root(path)
     source = path.read_text(encoding="utf-8")
     parse_source = _strip_comments(source)
     pragma_match = _PRAGMA_SOLIDITY_RE.search(parse_source)
@@ -230,10 +259,17 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
         if constructor_match:
             parameters = _parameters(constructor_match.group(1))
             body = _body(contract_source, constructor_match.end() - 1)
+            interface_casts, resolved_interface_casts = _constructor_interface_casts(
+                body,
+                parameters,
+                importer=path,
+                root=root,
+            )
             constructor = ConstructorModel(
                 parameters=parameters,
                 line=_line_number(source, contract_start + constructor_match.start()),
-                interface_casts=_constructor_interface_casts(body, parameters),
+                interface_casts=interface_casts,
+                resolved_interface_casts=resolved_interface_casts,
             )
 
         for match in _FUNCTION_RE.finditer(contract_source):
