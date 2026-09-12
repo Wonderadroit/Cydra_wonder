@@ -4,10 +4,12 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import subprocess
 import sys
 import tempfile
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +114,19 @@ def _git_output(cwd: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
+def _command_capture(cwd: Path, *command: str) -> dict[str, Any]:
+    completed = subprocess.run(
+        command, cwd=cwd, text=True, capture_output=True, check=False
+    )
+    return {
+        "command": list(command),
+        "exit_code": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "ok": completed.returncode == 0,
+    }
+
+
 def require_frozen_source() -> None:
     root = Path(__file__).resolve().parents[1]
     source_diff = subprocess.run(
@@ -121,15 +136,25 @@ def require_frozen_source() -> None:
     )
     if source_diff.returncode != 0:
         raise RuntimeError(f"CYDRA source/tests differ from frozen commit {CYDRA_COMMIT}")
-    tracked = subprocess.run(
-        ("git", "ls-files", "--error-unmatch", "scripts/run_benchmark_blind.py"),
+
+    runner_path = Path(__file__).resolve()
+    runner_diff = subprocess.run(
+        ("git", "diff", "--quiet", "HEAD", "--", str(runner_path.relative_to(root))),
+        cwd=root,
+        check=False,
+    )
+    if runner_diff.returncode != 0:
+        raise RuntimeError("run_benchmark_blind.py has uncommitted changes")
+
+    untracked = subprocess.run(
+        ("git", "status", "--porcelain", "--", str(runner_path.relative_to(root))),
         cwd=root,
         text=True,
         capture_output=True,
-        check=False,
+        check=True,
     )
-    if tracked.returncode != 0:
-        raise RuntimeError("run_benchmark_blind.py must be committed before execution")
+    if untracked.stdout.strip():
+        raise RuntimeError("run_benchmark_blind.py is not clean in git status")
 
 
 def clone_target(repo: str, ref: str, destination: Path) -> None:
@@ -149,6 +174,27 @@ def _contract_for_hypothesis(result, hypothesis):
 
 def _target_import(contract, project: Path) -> str:
     return os.path.relpath(Path(contract.source), project).replace(os.sep, "/")
+
+
+def _failure_status(hypothesis, class_name: str, stage: str, error: Exception) -> dict[str, Any]:
+    capability = CLASS_CAPABILITIES[class_name]
+    status: dict[str, Any] = {
+        "hypothesis_id": hypothesis.hypothesis_id,
+        "class": class_name,
+        "extracted": capability["extract"],
+        "hypothesis_generated": capability["generate_hypothesis"],
+        "experiment_planned": capability["plan_experiment"],
+        "foundry_generated": stage not in {"generation"},
+        "blind_executed": False,
+        "classification": "NOT_REACHED",
+        "failure_stage": stage,
+        "blocked_reason": f"{type(error).__name__}: {error}",
+    }
+    if stage == "generation":
+        status["foundry_generated"] = False
+    elif stage == "execution":
+        status["foundry_generated"] = True
+    return status
 
 
 def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
@@ -217,12 +263,19 @@ def run_layers(result, project: Path, classes: tuple[str, ...]):
             statuses.append(status)
             continue
 
-        if class_name == "authorization":
-            run = _run_authorization(project, hypothesis, experiment, contract)
-        elif class_name == "initialization":
-            run = _run_initialization(project, hypothesis, experiment, contract)
-        else:
-            raise AssertionError(f"Unhandled supported class: {class_name}")
+        try:
+            if class_name == "authorization":
+                run = _run_authorization(project, hypothesis, experiment, contract)
+            elif class_name == "initialization":
+                run = _run_initialization(project, hypothesis, experiment, contract)
+            else:
+                raise AssertionError(f"Unhandled supported class: {class_name}")
+        except Exception as error:
+            stage = "generation" if not any(
+                project.joinpath("test").rglob(f"{hypothesis.hypothesis_id}.t.sol")
+            ) else "execution"
+            statuses.append({**status, **_failure_status(hypothesis, class_name, stage, error)})
+            continue
 
         status.update(
             {
@@ -273,6 +326,36 @@ def create_freeze(files: dict[str, Any], text_files: dict[str, str], destination
         os.replace(freeze, destination)
 
 
+def _environment_provenance(root: Path, project: Path) -> tuple[dict[str, Any], str, str]:
+    forge_version = _command_capture(project, "forge", "--version")
+    forge_config = _command_capture(project, "forge", "config", "--json")
+    pip_freeze = _command_capture(root, sys.executable, "-m", "pip", "freeze")
+    dependency_text = pip_freeze["stdout"] if pip_freeze["ok"] else pip_freeze["stderr"]
+    dependency_hash = hashlib.sha256(dependency_text.encode()).hexdigest()
+    solc = None
+    if forge_config["ok"]:
+        try:
+            config = json.loads(forge_config["stdout"])
+            solc = config.get("solc") or config.get("solc_version")
+        except json.JSONDecodeError:
+            solc = None
+    provenance = {
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "dependencies": {
+            "pip_freeze_sha256": dependency_hash,
+            "pip_freeze_capture_ok": pip_freeze["ok"],
+        },
+        "foundry": {
+            "version": forge_version["stdout"].strip() if forge_version["ok"] else None,
+            "version_capture_ok": forge_version["ok"],
+            "solidity_version": solc,
+            "config_capture_ok": forge_config["ok"],
+        },
+    }
+    return provenance, dependency_text, json.dumps(forge_config, indent=2, sort_keys=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run frozen CYDRA capability layers against a blind target."
@@ -297,6 +380,8 @@ def main() -> int:
         source = checkout / args.target_path
         result = investigate(source, target=f"{args.target_repo}@{args.target_ref}")
         statuses, executions, evidence = run_layers(result, project, classes)
+        build_capture = _command_capture(project, "forge", "build")
+        provenance_env, _, forge_config_text = _environment_provenance(root, project)
 
         classification = {
             "surface": "initialization-only",
@@ -309,14 +394,38 @@ def main() -> int:
                 "other": "rule gap",
             },
         }
+        runner_commit = _git_output(root, "rev-parse", "HEAD")
+        runner_blob = _git_output(root, "rev-parse", "HEAD:scripts/run_benchmark_blind.py")
         provenance = {
             "cydra_commit": CYDRA_COMMIT,
-            "runner_commit": _git_output(root, "rev-parse", "HEAD"),
+            "runner_commit": runner_commit,
+            "runner_file_blob": runner_blob,
             "target_repo": args.target_repo,
             "target_ref": args.target_ref,
             "target_checkout_commit": _git_output(checkout, "rev-parse", "HEAD"),
-            "python_version": sys.version,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "ci_run_id": args.ci_run_id,
+            **provenance_env,
+        }
+        execution_human = []
+        for item in executions:
+            execution_human.append(
+                f"=== {item.experiment_id} / {item.target} ===\n"
+                f"command: {' '.join(item.command)}\n"
+                f"exit_code: {item.exit_code}\n"
+                f"status: {item.status}\n"
+                f"tests_run: {item.tests_run}\n"
+                f"tests_failed: {item.tests_failed}\n"
+                f"--- stdout ---\n{item.stdout}\n"
+                f"--- stderr ---\n{item.stderr}\n"
+            )
+        integrity = {
+            "runner_source_frozen": True,
+            "runner_commit": runner_commit,
+            "runner_file_blob": runner_blob,
+            "cydra_commit": CYDRA_COMMIT,
+            "forge_build_exit_code": build_capture["exit_code"],
+            "forge_build_ok": build_capture["ok"],
         }
         create_freeze(
             {
@@ -329,14 +438,17 @@ def main() -> int:
                 "invariants.json": result.invariants,
                 "hypotheses.json": result.hypotheses,
                 "experiments.json": result.experiments,
-                "execution.json": {"results": executions},
-                "integrity-check.json": {"runner_source_frozen": True},
+                "execution.json": {"results": executions, "evidence": evidence},
+                "integrity-check.json": integrity,
                 "classification.json": classification,
             },
             {
                 "target-checkout.txt": _git_output(checkout, "rev-parse", "HEAD") + "\n",
-                "compilation.log": "Compilation/execution evidence is retained in execution.json.\n",
-                "execution-human.txt": "Human-readable Foundry stdout/stderr is retained in execution.json.\n",
+                "compilation.log": (
+                    f"$ forge build\n{build_capture['stdout']}\n{build_capture['stderr']}"
+                    f"\n\n=== forge config --json ===\n{forge_config_text}\n"
+                ),
+                "execution-human.txt": "\n".join(execution_human),
                 "README.md": "B006-A blind-target freeze. Frozen blind classification surface: initialization only.\n",
             },
             args.freeze,
