@@ -9,6 +9,13 @@ on:
       - "src/cydra/**"
       - "pyproject.toml"
       - ".github/workflows/benchmark-005-liquidclaw.yml"
+  pull_request:
+    paths:
+      - "benchmarks/005_liquidclaw_blind_discovery/**"
+      - "scripts/run_benchmark_005_liquidclaw.py"
+      - "src/cydra/**"
+      - "pyproject.toml"
+      - ".github/workflows/benchmark-005-liquidclaw.yml"
 
 jobs:
   blind-liquidclaw:
