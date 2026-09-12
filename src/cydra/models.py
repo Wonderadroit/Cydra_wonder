@@ -54,6 +54,7 @@ class ContractModel:
     source: str
     functions: tuple[FunctionModel, ...]
     constructor: ConstructorModel | None = None
+    pragma: str | None = None
 
 
 @dataclass(frozen=True)
