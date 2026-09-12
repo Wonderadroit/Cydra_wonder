@@ -31,12 +31,14 @@ def test_enrichment_is_additive_and_extracts_constructor_parameters_and_auth(tmp
     assert contract.constructor.interface_casts == ()
     assert contract.constructor.resolved_interface_casts == ()
     assert contract.constructor.derived_interface_casts == ()
+    assert contract.state_variables == ("value", "other")
     assert [(p.name, p.type, p.data_location) for p in function.parameters] == [
         ("token0", "address", None),
         ("token1", "address", None),
         ("stable", "bool", None),
     ]
     assert function.authorization_predicates == ("msg.sender != _owner",)
+    assert function.state_predicates == ()
 
     # Existing fields remain populated exactly as before; enrichment is additive.
     assert function.name == "initialize"
@@ -206,3 +208,92 @@ def test_constructor_nested_cast_derives_and_resolves_target_interface(tmp_path:
         ("mint", ("address to", "uint256 amount"), ("bool",)),
         ("minter", (), ("address",)),
     ]
+
+
+def test_state_predicates_caller_only_regression(tmp_path: Path) -> None:
+    path = tmp_path / "CallerOnly.sol"
+    path.write_text(
+        """
+        contract CallerOnly {
+            address public owner;
+            function initialize() external {
+                require(msg.sender == owner);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    function = contract.functions[0]
+    assert contract.state_variables == ("owner",)
+    assert function.authorization_predicates == ("msg.sender == owner",)
+    assert function.state_predicates == ()
+
+
+def test_state_predicates_state_only_regression(tmp_path: Path) -> None:
+    path = tmp_path / "StateOnly.sol"
+    path.write_text(
+        """
+        contract StateOnly {
+            address public factory;
+            function initialize() external {
+                require(factory == address(0));
+                factory = msg.sender;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    function = contract.functions[0]
+    assert contract.state_variables == ("factory",)
+    assert function.authorization_predicates == ()
+    assert function.state_predicates == ("factory == address(0)",)
+
+
+def test_state_predicates_neither_regression(tmp_path: Path) -> None:
+    path = tmp_path / "Neither.sol"
+    path.write_text(
+        """
+        contract Neither {
+            address public owner;
+            function initialize(address token) external {
+                require(token != address(0));
+                uint256 localValue = 1;
+                localValue = 2;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    function = contract.functions[0]
+    assert contract.state_variables == ("owner",)
+    assert function.authorization_predicates == ()
+    assert function.state_predicates == ()
+
+
+def test_state_predicates_both_regression(tmp_path: Path) -> None:
+    path = tmp_path / "Both.sol"
+    path.write_text(
+        """
+        contract Both {
+            address public owner;
+            address public factory;
+            function initialize() external {
+                require(msg.sender == owner);
+                require(factory != address(0));
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    function = contract.functions[0]
+    assert contract.state_variables == ("owner", "factory")
+    assert function.authorization_predicates == ("msg.sender == owner",)
+    assert function.state_predicates == ("factory != address(0)",)

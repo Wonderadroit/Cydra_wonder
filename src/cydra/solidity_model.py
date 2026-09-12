@@ -17,6 +17,19 @@ _CONSTRUCTOR_RE = re.compile(
 )
 _INTERFACE_CAST_RE = re.compile(r"\b(I[A-Z]\w*)\s*\(")
 _CALLER_TOKENS = ("msg.sender", "_msgSender()", "tx.origin")
+_STATE_COMPARISON_RE = re.compile(
+    r"\b(?P<name>[A-Za-z_]\w*)\s*(?P<op>==|!=|>=|<=|>|<)\s*(?P<rhs>"
+    r"(?:address|bytes\d+|uint\d*|int\d*)\s*\(\s*(?:0x[0-9A-Fa-f]+|\d+|true|false)\s*\)"
+    r"|0x[0-9A-Fa-f]+|\d+|true|false)"
+)
+_STATE_DECLARATION_RE = re.compile(
+    r"^\s*(?P<type>mapping\s*\([^;]+\)|[A-Za-z_]\w*(?:\s*\[[^\]]*\])*)\s+"
+    r"(?:(?:public|private|internal|external|constant|immutable|transient|override|virtual)\s+)*"
+    r"(?P<name>[A-Za-z_]\w*)\s*(?:=.*)?$"
+)
+_STATE_DECLARATION_KEYWORDS = {
+    "event", "error", "using", "struct", "enum", "function", "modifier", "constructor", "fallback", "receive",
+}
 
 
 def _strip_comments(source: str) -> str:
@@ -232,6 +245,75 @@ def _authorization_predicates(body: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(predicates))
 
 
+def _top_level_statements(body: str) -> tuple[str, ...]:
+    """Return semicolon-terminated contract-body statements at brace depth zero."""
+    statements: list[str] = []
+    start = 0
+    depth = 0
+    for index, char in enumerate(body):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+        elif char == ";" and depth == 0:
+            statement = body[start:index].strip()
+            if statement:
+                statements.append(statement)
+            start = index + 1
+    return tuple(statements)
+
+
+def _state_variables(contract_body: str) -> tuple[str, ...]:
+    """Inventory explicit state-variable names from one contract body.
+
+    Only top-level declarations are considered. Function/local variables,
+    struct members, events, errors, and other nested declarations are outside
+    this inventory by construction.
+    """
+    variables: list[str] = []
+    for statement in _top_level_statements(contract_body):
+        match = _STATE_DECLARATION_RE.match(statement)
+        if not match:
+            continue
+        type_token = match.group("type").split()[0]
+        if type_token in _STATE_DECLARATION_KEYWORDS:
+            continue
+        name = match.group("name")
+        if name not in variables:
+            variables.append(name)
+    return tuple(variables)
+
+
+def _state_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[str, ...]:
+    """Extract comparison predicates whose LHS is an explicit state variable.
+
+    This milestone deliberately accepts only literal/constant RHS forms:
+    address/bytes/int/uint casts of literals, integer/hex literals, and
+    booleans. Parameters, locals, state-to-state comparisons, caller tokens,
+    computed expressions, and named constants are not inferred here.
+    """
+    state_names = set(state_variables)
+    predicates: list[str] = []
+
+    candidates: list[str] = []
+    for match in re.finditer(r"\bif\s*\(", body):
+        opening = body.find("(", match.start())
+        candidates.append(_balanced_parenthesized(body, opening).strip())
+    for match in re.finditer(r"\brequire\s*\(", body):
+        opening = body.find("(", match.start())
+        candidates.append(_first_argument(_balanced_parenthesized(body, opening)))
+
+    for candidate in candidates:
+        for match in _STATE_COMPARISON_RE.finditer(candidate):
+            if match.group("name") not in state_names:
+                continue
+            predicate = match.group(0).strip()
+            if predicate not in predicates:
+                predicates.append(predicate)
+
+    return tuple(predicates)
+
+
 def _project_root(path: Path) -> Path:
     """Find the project root used by interface resolution.
 
@@ -320,6 +402,10 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
         contract_source = parse_source[contract_start : next_contract.start() if next_contract else len(parse_source)]
         functions: list[FunctionModel] = []
 
+        contract_opening = contract_source.find("{")
+        contract_body = _body(contract_source, contract_opening) if contract_opening >= 0 else contract_source
+        state_variables = _state_variables(contract_body)
+
         constructor = None
         constructor_match = _CONSTRUCTOR_RE.search(contract_source)
         if constructor_match:
@@ -364,6 +450,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                     line=_line_number(source, contract_start + match.start()),
                     parameters=_parameters(parameter_text),
                     authorization_predicates=_authorization_predicates(body),
+                    state_predicates=_state_predicates(body, state_variables),
                 )
             )
 
@@ -374,6 +461,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                 functions=tuple(functions),
                 constructor=constructor,
                 pragma=pragma,
+                state_variables=state_variables,
             )
         )
 

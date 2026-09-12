@@ -51,6 +51,7 @@ class FunctionModel:
     line: int
     parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
     authorization_predicates: tuple[str, ...] = field(default_factory=tuple)
+    state_predicates: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class ContractModel:
     functions: tuple[FunctionModel, ...]
     constructor: ConstructorModel | None = None
     pragma: str | None = None
+    state_variables: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
