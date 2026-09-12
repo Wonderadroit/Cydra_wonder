@@ -23,7 +23,7 @@ def _unauthorized_caller_shape(
 ) -> str:
     return (
         "function testInitializationInterfaceIsCallable() public {\n"
-        f"    address unauthorized = {unauthorized_addr};\n"
+        f"    address unauthorized = address({unauthorized_addr});\n"
         "    vm.prank(unauthorized);\n"
         "    vm.expectRevert();\n"
         f"    {target_var}.initialize({initialize_args_str});\n"
