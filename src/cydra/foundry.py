@@ -116,10 +116,6 @@ def _initializer_argument(parameter: ParameterModel, target_type: str, index: in
         return "bytes(\"\")", None
     if parameter_type.startswith("bytes"):
         return "0", None
-
-    # Group A deliberately does not resolve custom types semantically. For a
-    # contract-owned/inherited struct, a zero-value memory variable is enough
-    # to produce a type-correct call without asserting anything about its data.
     variable = f"parameter{index}"
     declaration = f"{target_type}.{parameter_type} memory {variable};"
     return variable, declaration
@@ -137,27 +133,15 @@ def _model_initialization_source(
     print("PROBE2: hypothesis repr =", repr(hypothesis))
     print("PROBE2: target_function repr =", repr(hypothesis.target_function))
     print("PROBE2: target_function bytes =", hypothesis.target_function.encode())
-    print(
-        "PROBE2: any name == target_function =",
-        any(f.name == hypothesis.target_function for f in contract_model.functions),
-    )
-    print(
-        "PROBE2: any name == 'initialize' =",
-        any(f.name == "initialize" for f in contract_model.functions),
-    )
-
+    print("PROBE2: any name == target_function =", any(f.name == hypothesis.target_function for f in contract_model.functions))
+    print("PROBE2: any name == 'initialize' =", any(f.name == "initialize" for f in contract_model.functions))
     constructor = contract_model.constructor
     constructor_arguments = ""
     if constructor is not None and constructor.parameters:
         constructor_arguments = ", ".join(_constructor_argument(p) for p in constructor.parameters)
-
-    function = next(
-        (candidate for candidate in contract_model.functions if candidate.name == hypothesis.target_function),
-        None,
-    )
+    function = next((candidate for candidate in contract_model.functions if candidate.name == hypothesis.target_function), None)
     if function is None:
         raise ValueError(f"Model has no target function: {hypothesis.target_function}")
-
     arguments: list[str] = []
     declarations: list[str] = []
     for index, parameter in enumerate(function.parameters):
@@ -165,12 +149,10 @@ def _model_initialization_source(
         arguments.append(argument)
         if declaration:
             declarations.append(declaration)
-
     initialize_call = f"target.{function.name}({', '.join(arguments)});"
     declarations_text = "\n        ".join(declarations)
     if declarations_text:
         declarations_text += "\n        "
-
     return f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -198,8 +180,13 @@ def generate_initialization_test(
     if hypothesis.invariant_id != "INV-INIT-001":
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
 
+    # Prediction 5G — Layout-aware import path emission:
+    # compute the import relative to the generated test's actual directory and
+    # the target source path under the containing Foundry project. Confirmation
+    # requires Forge to compile past import resolution; downstream compiler
+    # errors open 5H. Falsification is an unresolved/wrong target import.
+
     if contract_model is None:
-        # Preserve the pre-5D fixture path exactly for existing benchmarks.
         return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -226,7 +213,6 @@ def generate_arithmetic_foundry_test(experiment: Experiment, target: str, patche
     """Generate the arithmetic differential Foundry test without executing it."""
     if not experiment.experiment_id.startswith("X-H-ARITH-"):
         raise ValueError(f"Unsupported experiment for arithmetic Foundry generation: {experiment.experiment_id}")
-
     def parse_target(spec: str) -> tuple[str, str]:
         try:
             import_path, contract_type = spec.rsplit(":", 1)
@@ -235,7 +221,6 @@ def generate_arithmetic_foundry_test(experiment: Experiment, target: str, patche
         if not import_path or not contract_type:
             raise ValueError("Arithmetic target must include import path and contract type")
         return import_path, contract_type
-
     target_import, target_type = parse_target(target)
     patched_import, patched_type = parse_target(patched)
     return f'''// SPDX-License-Identifier: UNLICENSED
@@ -263,12 +248,10 @@ def _parse_execution(stdout: str, stderr: str, exit_code: int) -> tuple[bool, in
     output = f"{stdout}\n{stderr}"
     if "No tests found" in output:
         return False, 0, 0, "UNMEASURABLE"
-
     ran_matches = re.findall(r"Ran\s+(\d+)\s+tests?\s+for\s+", output)
     tests_run = int(ran_matches[-1]) if ran_matches else 0
     failed_matches = re.findall(r"Suite result:.*?(\d+)\s+passed;\s+(\d+)\s+failed", output)
     tests_failed = int(failed_matches[-1][1]) if failed_matches else (tests_run if exit_code != 0 and tests_run else 0)
-
     if tests_run == 0:
         return False, 0, tests_failed, "UNMEASURABLE"
     if exit_code == 0 and tests_failed == 0:
@@ -283,31 +266,14 @@ def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_
         relative_test = relative_test.relative_to(project)
     command = ("forge", "test", "--match-path", str(relative_test), "-vv")
     completed = subprocess.run(command, cwd=project, text=True, capture_output=True, check=False)
-    executed, tests_run, tests_failed, status = _parse_execution(
-        completed.stdout, completed.stderr, completed.returncode
-    )
-    return ExecutionResult(
-        experiment_id,
-        target,
-        command,
-        completed.returncode,
-        executed,
-        tests_run,
-        tests_failed,
-        status,
-        completed.stdout,
-        completed.stderr,
-    )
+    executed, tests_run, tests_failed, status = _parse_execution(completed.stdout, completed.stderr, completed.returncode)
+    return ExecutionResult(experiment_id, target, command, completed.returncode, executed, tests_run, tests_failed, status, completed.stdout, completed.stderr)
 
 
 def require_executed(result: ExecutionResult) -> ExecutionResult:
     """Hard causal gate: zero-test execution cannot reach classification."""
     if not result.executed or result.tests_run == 0 or result.status == "UNMEASURABLE":
-        raise RuntimeError(
-            f"Foundry experiment {result.experiment_id} is UNMEASURABLE: "
-            f"executed={result.executed}, tests_run={result.tests_run}, "
-            f"exit_code={result.exit_code}"
-        )
+        raise RuntimeError(f"Foundry experiment {result.experiment_id} is UNMEASURABLE: executed={result.executed}, tests_run={result.tests_run}, exit_code={result.exit_code}")
     return result
 
 
@@ -328,33 +294,6 @@ def _classify(hypothesis: Hypothesis, vulnerable: ExecutionResult, patched: Exec
         status = "rejected"
     else:
         status = "proposed"
-    updated = Hypothesis(
-        hypothesis.hypothesis_id,
-        hypothesis.claim,
-        hypothesis.invariant_id,
-        hypothesis.target_function,
-        hypothesis.attacker_capability,
-        hypothesis.expected_impact,
-        status,
-        hypothesis.evidence_ids + (
-            f"E-EXEC-{hypothesis.hypothesis_id}-VULNERABLE",
-            f"E-EXEC-{hypothesis.hypothesis_id}-PATCHED",
-        ),
-    )
-    evidence = (
-        Evidence(
-            f"E-EXEC-{hypothesis.hypothesis_id}-VULNERABLE",
-            "execution",
-            f"Foundry security test against vulnerable target: status={vulnerable.status}, executed={vulnerable.executed}, tests_run={vulnerable.tests_run}, tests_failed={vulnerable.tests_failed}, exit={vulnerable.exit_code}.",
-            " ".join(vulnerable.command),
-            vulnerable.target,
-        ),
-        Evidence(
-            f"E-EXEC-{hypothesis.hypothesis_id}-PATCHED",
-            "execution",
-            f"Foundry security test against patched target: status={patched.status}, executed={patched.executed}, tests_run={patched.tests_run}, tests_failed={patched.tests_failed}, exit={patched.exit_code}.",
-            " ".join(patched.command),
-            patched.target,
-        ),
-    )
+    updated = Hypothesis(hypothesis.hypothesis_id, hypothesis.claim, hypothesis.invariant_id, hypothesis.target_function, hypothesis.attacker_capability, hypothesis.expected_impact, status, hypothesis.evidence_ids + (f"E-EXEC-{hypothesis.hypothesis_id}-VULNERABLE", f"E-EXEC-{hypothesis.hypothesis_id}-PATCHED"))
+    evidence = (Evidence(f"E-EXEC-{hypothesis.hypothesis_id}-VULNERABLE", "execution", f"Foundry security test against vulnerable target: status={vulnerable.status}, executed={vulnerable.executed}, tests_run={vulnerable.tests_run}, tests_failed={vulnerable.tests_failed}, exit={vulnerable.exit_code}.", " ".join(vulnerable.command), vulnerable.target), Evidence(f"E-EXEC-{hypothesis.hypothesis_id}-PATCHED", "execution", f"Foundry security test against patched target: status={patched.status}, executed={patched.executed}, tests_run={patched.tests_run}, tests_failed={patched.tests_failed}, exit={patched.exit_code}.", " ".join(patched.command), patched.target))
     return ExperimentOutcome(updated, vulnerable, patched, evidence)
