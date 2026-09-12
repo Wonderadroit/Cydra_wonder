@@ -1,0 +1,74 @@
+name: CYDRA Benchmark 005 Initialization Classification
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  liquidclaw-initialization:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+
+      - name: Check out frozen LiquidClaw target
+        uses: actions/checkout@v4
+        with:
+          repository: Jc-asastu/liquidclaw-bsc
+          ref: 58bed220236e8cdd8d279ef7259b3298a71aac0b
+          path: liquidclaw
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Generate interface-aware initialization tests
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from cydra.foundry import generate_initialization_test
+          from cydra.models import Hypothesis
+          from cydra.solidity_model import parse_solidity
+
+          root = Path("liquidclaw")
+          output = root / "test" / "cydra_generated"
+          output.mkdir(parents=True, exist_ok=True)
+          targets = (
+              ("Minter", "contracts/Minter.sol"),
+              ("Voter", "contracts/Voter.sol"),
+              ("Pool", "contracts/Pool.sol"),
+          )
+          for name, source_path in targets:
+              model = next(c for c in parse_solidity(root / source_path) if c.name == name)
+              hypothesis = Hypothesis(
+                  hypothesis_id=f"H-INIT-{name}",
+                  claim="unauthorized caller can initialize target state",
+                  invariant_id="INV-INIT-001",
+                  target_function="initialize",
+                  attacker_capability="external caller",
+                  expected_impact="initialization",
+              )
+              generated = output / f"{name}.t.sol"
+              generate_initialization_test(
+                  hypothesis,
+                  f"../{source_path}",
+                  name,
+                  generated,
+                  contract_model=model,
+              )
+              print(f"GENERATED: {generated}")
+          PY
+
+      - name: Compile generated initialization tests
+        working-directory: liquidclaw
+        run: forge test --match-path 'test/cydra_generated/*.t.sol'
+
+      - name: Run independent Forge JSON and human-readable executions
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_benchmark_005_initialization.py
