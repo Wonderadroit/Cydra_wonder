@@ -2,7 +2,7 @@
 
 This benchmark is a minimal protocol-level reconstruction of the historical Yield Protocol logic error described by Immunefi. It is not production Yield source and is not a copied PoC.
 
-The historical issue was that an invested Strategy `burn()` calculated redemption from the live pool-token balance, which an attacker could inflate by direct donation, instead of the cached accounting value. Immunefi reports that the fix changed the formula to use `poolCached_`. The public bugfix review states that approximately $950k was at risk and that Yield Protocol paid a $95,000 USDC bounty. citeturn2view0
+The historical issue was that an invested Strategy `burn()` calculated redemption from the live pool-token balance, which an attacker could inflate by direct donation, instead of the cached accounting value. Immunefi reports that the fix changed the formula to use `poolCached_`. The public bugfix review states that approximately $950k was at risk and that Yield Protocol paid a $95,000 USDC bounty.
 
 ## What CYDRA must discover
 
