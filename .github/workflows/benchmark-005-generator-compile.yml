@@ -138,6 +138,17 @@ jobs:
           PY
 
       # Foundry compiles tests by default; this invocation intentionally does not use the unsupported --no-run flag.
-      - name: Compile generated tests with Foundry
+      - name: Compile generated tests with Foundry (retry)
         working-directory: liquidclaw
-        run: forge test --match-path 'test/cydra_generated/*.t.sol'
+        run: |
+          for attempt in 1 2 3; do
+            echo "=== Forge compile attempt ${attempt}/3 ==="
+            if forge test --match-path 'test/cydra_generated/*.t.sol'; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Forge failed; retrying compiler resolution in 10 seconds..."
+              sleep 10
+            fi
+          done
+          exit 1
