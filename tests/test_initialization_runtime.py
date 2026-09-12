@@ -31,9 +31,17 @@ def _execution(status, failed=0, exit_code=0):
 
 def test_parse_human_format_a():
     output = """
+Ran 1 test for test/cydra_generated/Voter.t.sol:CydraInitializationInvariantTest
+[PASS] testInitializationInterfaceIsCallable() (gas: 32968)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 814.58µs (100.36µs CPU time)
+
 Ran 1 test for test/cydra_generated/Minter.t.sol:CydraInitializationInvariantTest
 [PASS] testInitializationInterfaceIsCallable() (gas: 38056)
 Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 841.65µs (120.02µs CPU time)
+
+Ran 1 test for test/cydra_generated/Pool.t.sol:CydraInitializationInvariantTest
+[PASS] testInitializationInterfaceIsCallable() (gas: 591244)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 951.23µs (177.74µs CPU time)
 
 Ran 3 test suites in 9.23ms (2.61ms CPU time): 3 tests passed, 0 failed, 0 skipped (3 total tests)
 """
