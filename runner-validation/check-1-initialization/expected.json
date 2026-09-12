@@ -1,0 +1,12 @@
+{
+  "name": "check-1-initialization",
+  "expected": {
+    "has_patched_target": false,
+    "extraction": true,
+    "hypothesis_generated": true,
+    "experiment_planned": true,
+    "foundry_generated": true,
+    "blind_executed": true,
+    "classification": "confirmed|rejected|not_confirmed"
+  }
+}
