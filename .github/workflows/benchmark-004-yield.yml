@@ -19,8 +19,8 @@ jobs:
       - name: Install forge-std in Benchmark 004 fixture
         working-directory: benchmarks/004_yield_live_balance/foundry
         run: forge install foundry-rs/forge-std --no-commit
-      - name: Install Python dependencies
-        run: pip install -e .
+      - name: Install CYDRA and pytest
+        run: python -m pip install -e . pytest
       - name: Python acceptance suite
         run: pytest -q
       - name: Run Benchmark 004
