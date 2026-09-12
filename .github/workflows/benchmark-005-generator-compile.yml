@@ -30,6 +30,8 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import hashlib
+          import cydra.solidity_model as sm
           from cydra.foundry import generate_initialization_test
           from cydra.models import Hypothesis
           from cydra.solidity_model import parse_solidity
@@ -45,7 +47,43 @@ jobs:
           )
 
           for name, source_path, import_path in targets:
-              model = next(c for c in parse_solidity(root / source_path) if c.name == name)
+              print("PROBE: target =", name)
+
+              p = root / source_path
+              print("PROBE: sm.__file__ =", sm.__file__)
+              print("PROBE: resolved path =", p.resolve())
+              print("PROBE: exists =", p.exists())
+
+              if p.exists():
+                  data = p.read_bytes()
+                  print("PROBE: sha256 =", hashlib.sha256(data).hexdigest())
+                  print(
+                      "PROBE: has_function_initialize =",
+                      b"function initialize(" in data,
+                  )
+
+              print("PROBE: regex pattern =", sm._FUNCTION_RE.pattern)
+              print("PROBE: regex flags =", sm._FUNCTION_RE.flags)
+
+              contracts = list(sm.parse_solidity(p))
+              print("PROBE: contract names =", [c.name for c in contracts])
+
+              for c in contracts:
+                  print(f"PROBE: {c.name} functions =", [f.name for f in c.functions])
+
+              model = next((c for c in contracts if c.name == name), None)
+              print("PROBE: model selected =", model.name if model else None)
+              print("PROBE: model id =", id(model) if model else None)
+              print(
+                  "PROBE: model functions =",
+                  [f.name for f in model.functions] if model else None,
+              )
+              print(
+                  "PROBE: generator would find initialize =",
+                  any(f.name == "initialize" for f in model.functions)
+                  if model else None,
+              )
+
               hypothesis = Hypothesis(
                   hypothesis_id=f"H-INIT-{name}",
                   claim="interface-aware initialization generation",
