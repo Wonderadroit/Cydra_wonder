@@ -24,7 +24,16 @@ jobs:
       - name: Verify resolver against frozen LiquidClaw imports
         env:
           PYTHONPATH: src
-        run: python scripts/verify_resolver_liquidclaw.py liquidclaw
+        run: |
+          python scripts/verify_resolver_liquidclaw.py liquidclaw 2>&1 | tee resolver_output.txt
+
+      - name: Upload resolver verification output
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolver-verification-output
+          path: resolver_output.txt
+          if-no-files-found: error
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
