@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import re
 import subprocess
 import tomllib
@@ -121,11 +122,31 @@ def _initializer_argument(parameter: ParameterModel, target_type: str, index: in
     return variable, declaration
 
 
+def _layout_aware_import_path(target_import: str, output_path: str | Path) -> str:
+    """Resolve a project-relative target and rebase it on the generated test directory."""
+    output = Path(output_path)
+    for ancestor in (output.parent, *output.parents):
+        if (ancestor / "foundry.toml").exists():
+            raw = Path(target_import)
+            if raw.is_absolute():
+                candidate = raw
+            else:
+                parts = list(raw.parts)
+                while parts and parts[0] == "..":
+                    parts.pop(0)
+                candidate = ancestor.joinpath(*parts)
+            if candidate.exists():
+                return Path(os.path.relpath(candidate, output.parent)).as_posix()
+            break
+    return target_import
+
+
 def _model_initialization_source(
     hypothesis: Hypothesis,
     target_import: str,
     target_type: str,
     contract_model: ContractModel,
+    output_path: str | Path | None = None,
 ) -> str:
     print("PROBE2: contract_model id =", id(contract_model))
     print("PROBE2: function names =", [f.name for f in contract_model.functions])
@@ -135,6 +156,9 @@ def _model_initialization_source(
     print("PROBE2: target_function bytes =", hypothesis.target_function.encode())
     print("PROBE2: any name == target_function =", any(f.name == hypothesis.target_function for f in contract_model.functions))
     print("PROBE2: any name == 'initialize' =", any(f.name == "initialize" for f in contract_model.functions))
+    if output_path is not None:
+        target_import = _layout_aware_import_path(target_import, output_path)
+        print("PROBE5G: emitted target import =", target_import)
     constructor = contract_model.constructor
     constructor_arguments = ""
     if constructor is not None and constructor.parameters:
@@ -179,13 +203,6 @@ def generate_initialization_test(
 ) -> Path:
     if hypothesis.invariant_id != "INV-INIT-001":
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
-
-    # Prediction 5G — Layout-aware import path emission:
-    # compute the import relative to the generated test's actual directory and
-    # the target source path under the containing Foundry project. Confirmation
-    # requires Forge to compile past import resolution; downstream compiler
-    # errors open 5H. Falsification is an unresolved/wrong target import.
-
     if contract_model is None:
         return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
@@ -202,9 +219,8 @@ contract CydraInitializationInvariantTest is Test {{
     }}
 }}
 ''', output_path)
-
     return _write_test(
-        _model_initialization_source(hypothesis, target_import, target_type, contract_model),
+        _model_initialization_source(hypothesis, target_import, target_type, contract_model, output_path),
         output_path,
     )
 
