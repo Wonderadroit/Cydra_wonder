@@ -1,4 +1,5 @@
 from cydra.foundry import generate_initialization_test
+from cydra.interface_resolver import ResolvedInterface
 from cydra.models import ConstructorModel, ContractModel, FunctionModel, Hypothesis, ParameterModel
 
 
@@ -20,7 +21,7 @@ def _model(
     *,
     inherits: tuple[str, ...] = (),
     declared_types: tuple[str, ...] = (),
-    inherited_declared_types: tuple[tuple[str, str], ...] = (),
+    inherited_resolved_interfaces: tuple[ResolvedInterface, ...] = (),
 ) -> ContractModel:
     return ContractModel(
         name=name,
@@ -40,7 +41,7 @@ def _model(
         ),
         inherits=inherits,
         declared_types=declared_types,
-        inherited_declared_types=inherited_declared_types,
+        inherited_resolved_interfaces=inherited_resolved_interfaces,
     )
 
 
@@ -70,7 +71,14 @@ def test_model_aware_generator_consumes_constructor_and_parameters(tmp_path):
     assert "guardian()" not in source
 
 
-def test_model_aware_generator_qualifies_inherited_custom_type_from_declared_interface(tmp_path):
+def test_model_aware_generator_qualifies_and_imports_inherited_custom_type(tmp_path):
+    inherited = ResolvedInterface(
+        name="IMinter",
+        source_path="interfaces/IMinter.sol",
+        resolution_method="relative_import",
+        methods=(),
+        declared_types=("AirdropParams",),
+    )
     model = _model(
         "Minter",
         (
@@ -80,7 +88,7 @@ def test_model_aware_generator_qualifies_inherited_custom_type_from_declared_int
         ),
         (ParameterModel("params", "AirdropParams", "memory"),),
         inherits=("IMinter",),
-        inherited_declared_types=(("IMinter", "AirdropParams"),),
+        inherited_resolved_interfaces=(inherited,),
     )
     output = generate_initialization_test(
         _hypothesis(),
@@ -91,6 +99,8 @@ def test_model_aware_generator_qualifies_inherited_custom_type_from_declared_int
     )
     source = output.read_text(encoding="utf-8")
     assert "new Minter(address(0), address(0), address(0))" in source
+    assert 'import { IMinter } from "interfaces/IMinter.sol";' in source
+    assert source.count('import { IMinter } from "interfaces/IMinter.sol";') == 1
     assert "IMinter.AirdropParams memory parameter0;" in source
     assert "Minter.AirdropParams memory parameter0;" not in source.replace(
         "IMinter.AirdropParams memory parameter0;", ""
@@ -100,13 +110,20 @@ def test_model_aware_generator_qualifies_inherited_custom_type_from_declared_int
 
 
 def test_target_declared_custom_type_precedes_inherited_type(tmp_path):
+    inherited = ResolvedInterface(
+        name="IMinter",
+        source_path="interfaces/IMinter.sol",
+        resolution_method="relative_import",
+        methods=(),
+        declared_types=("AirdropParams",),
+    )
     model = _model(
         "Minter",
         (),
         (ParameterModel("params", "AirdropParams", "memory"),),
         inherits=("IMinter",),
         declared_types=("AirdropParams",),
-        inherited_declared_types=(("IMinter", "AirdropParams"),),
+        inherited_resolved_interfaces=(inherited,),
     )
     output = generate_initialization_test(
         _hypothesis(),
