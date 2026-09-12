@@ -1,6 +1,6 @@
 """Canonical external-execution request identity and digesting."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 import math
@@ -32,6 +32,15 @@ def _thaw(value):
         return [_thaw(item) for item in value[1]]
     return value
 
+
+def _argv(value: Sequence[str], field_name: str) -> tuple[str, ...]:
+    if isinstance(value, str):
+        raise TypeError(f"{field_name} must be a sequence of argv strings, not a scalar string")
+    items = tuple(value)
+    if not items or any(not isinstance(item, str) or not item for item in items):
+        raise TypeError(f"{field_name} must contain only non-empty strings")
+    return items
+
 @dataclass(frozen=True)
 class ExecutionRequest:
     execution_id: str
@@ -42,24 +51,29 @@ class ExecutionRequest:
     authorization_id: str
     scope_status: str = "AUTHORIZED_EXECUTION"
     parameters: Mapping[str, object] = None
+    _parameters_frozen: object = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in ("execution_id", "adapter", "target", "authorization_id"):
-            if not getattr(self, name).strip():
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty")
-        if not self.command:
-            raise ValueError("command must not be empty")
+        object.__setattr__(self, "command", _argv(self.command, "command"))
+        if self.project_fingerprint is not None and not isinstance(self.project_fingerprint, str):
+            raise TypeError("project_fingerprint must be a string or None")
         if self.scope_status != "AUTHORIZED_EXECUTION":
             raise ValueError("execution request requires AUTHORIZED_EXECUTION scope status")
-        if self.parameters is None:
-            object.__setattr__(self, "parameters", {})
-        object.__setattr__(self, "parameters", _freeze(self.parameters))
+        parameters = {} if self.parameters is None else self.parameters
+        if not isinstance(parameters, Mapping):
+            raise TypeError("execution request parameters must be a mapping")
+        frozen = _freeze(parameters)
+        object.__setattr__(self, "parameters", dict(parameters))
+        object.__setattr__(self, "_parameters_frozen", frozen)
 
     def canonical_payload(self) -> dict:
         return {"execution_id": self.execution_id, "adapter": self.adapter, "target": self.target,
                 "command": list(self.command), "project_fingerprint": self.project_fingerprint,
                 "authorization_id": self.authorization_id, "scope_status": self.scope_status,
-                "parameters": _thaw(self.parameters)}
+                "parameters": _thaw(self._parameters_frozen)}
 
     @property
     def digest(self) -> str:
@@ -68,10 +82,28 @@ class ExecutionRequest:
 
     @classmethod
     def from_canonical_payload(cls, payload: Mapping[str, object], expected_digest: Optional[str] = None):
-        request = cls(str(payload["execution_id"]), str(payload["adapter"]), str(payload["target"]),
-                      tuple(str(x) for x in payload["command"]), payload.get("project_fingerprint"),
-                      str(payload["authorization_id"]), str(payload.get("scope_status", "AUTHORIZED_EXECUTION")),
-                      dict(payload.get("parameters", {})))
+        if not isinstance(payload, Mapping):
+            raise TypeError("canonical execution request payload must be a mapping")
+        required_strings = ("execution_id", "adapter", "target", "authorization_id")
+        for name in required_strings:
+            if not isinstance(payload.get(name), str):
+                raise TypeError(f"canonical execution request field {name} must be a string")
+        command = payload.get("command")
+        if not isinstance(command, (list, tuple)) or isinstance(command, str):
+            raise TypeError("canonical execution request command must be an argv sequence")
+        if any(not isinstance(item, str) or not item for item in command):
+            raise TypeError("canonical execution request command entries must be non-empty strings")
+        parameters = payload.get("parameters", {})
+        if not isinstance(parameters, Mapping):
+            raise TypeError("canonical execution request parameters must be a mapping")
+        scope_status = payload.get("scope_status", "AUTHORIZED_EXECUTION")
+        if not isinstance(scope_status, str):
+            raise TypeError("canonical execution request scope_status must be a string")
+        fingerprint = payload.get("project_fingerprint")
+        if fingerprint is not None and not isinstance(fingerprint, str):
+            raise TypeError("canonical execution request project_fingerprint must be a string or None")
+        request = cls(payload["execution_id"], payload["adapter"], payload["target"], tuple(command), fingerprint,
+                      payload["authorization_id"], scope_status, parameters)
         if expected_digest is not None and request.digest != expected_digest:
             raise ValueError("persisted execution request digest does not match canonical request")
         return request
@@ -81,6 +113,6 @@ def foundry_request(*, execution_id: str, project_dir: str, command: Sequence[st
                     scope_status: str = "AUTHORIZED_EXECUTION", test_filter: Optional[str] = None,
                     extra_args: Sequence[str] = ()) -> ExecutionRequest:
     return ExecutionRequest(execution_id=execution_id, adapter="foundry", target=project_dir,
-                            command=tuple(command), project_fingerprint=project_fingerprint,
+                            command=_argv(command, "command"), project_fingerprint=project_fingerprint,
                             authorization_id=authorization_id, scope_status=scope_status,
-                            parameters={"test_filter": test_filter, "extra_args": list(extra_args)})
+                            parameters={"test_filter": test_filter, "extra_args": list(_argv(extra_args, "extra_args")) if extra_args else []})
