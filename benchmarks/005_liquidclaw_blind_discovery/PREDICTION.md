@@ -119,6 +119,13 @@ Null: manual review of every emitted invariant/hypothesis against the frozen sou
 
 The complete CYDRA output will be frozen verbatim, timestamped in UTC, hashed with SHA-256, and preserved with the exact target and CYDRA commit identifiers before any external security oracle is consulted.
 
+## Correction history
+
+- Initial estimate: 2 initialization hypotheses (Pool, Minter), derived from architectural structure of ve(3,3) protocols.
+- Correction to 3: source inspection of the frozen commit `58bed220236e8cdd8d279ef7259b3298a71aac0b` revealed `Voter.sol` also exposes a public `initialize(...)`.
+- The corrected prediction (3: Pool, Minter, Voter) is the prediction that was locked before execution.
+- No corrections were made after CYDRA execution.
+
 ## Claim boundary
 
 This benchmark tests one real LiquidClaw source snapshot. It does not establish general DeFi discovery capability.
