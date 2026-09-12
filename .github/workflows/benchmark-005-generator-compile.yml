@@ -57,13 +57,46 @@ jobs:
               if p.exists():
                   data = p.read_bytes()
                   print("PROBE: sha256 =", hashlib.sha256(data).hexdigest())
-                  print(
-                      "PROBE: has_function_initialize =",
-                      b"function initialize(" in data,
-                  )
+                  print("PROBE: has_function_initialize =", b"function initialize(" in data)
 
               print("PROBE: regex pattern =", sm._FUNCTION_RE.pattern)
               print("PROBE: regex flags =", sm._FUNCTION_RE.flags)
+
+              if name == "Voter":
+                  source = p.read_text(encoding="utf-8")
+                  print("PROBE3: contract regex pattern =", sm._CONTRACT_RE.pattern)
+                  print("PROBE3: contract regex flags =", sm._CONTRACT_RE.flags)
+                  contract_matches = list(sm._CONTRACT_RE.finditer(source))
+                  print("PROBE3: contract matches =", [
+                      (m.group(0), m.span(), m.groups()) for m in contract_matches
+                  ])
+                  voter_match = next((m for m in contract_matches if m.group(1) == "Voter"), None)
+                  if voter_match:
+                      print("PROBE3: Voter declaration span =", voter_match.span())
+                      print("PROBE3: Voter declaration context =", repr(
+                          source[voter_match.start():voter_match.start() + 500]
+                      ))
+                  for m in contract_matches:
+                      if m.group(1) == "address":
+                          center = m.start()
+                          print("PROBE3: address match span =", m.span())
+                          print("PROBE3: address match context =", repr(
+                              source[max(0, center - 200):center + 200]
+                          ))
+                  for index, m in enumerate(contract_matches):
+                      contract_start = m.end()
+                      next_contract = contract_matches[index + 1] if index + 1 < len(contract_matches) else None
+                      contract_end = next_contract.start() if next_contract else len(source)
+                      contract_source = source[contract_start:contract_end]
+                      for fm in sm._FUNCTION_RE.finditer(contract_source):
+                          global_start = contract_start + fm.start()
+                          print(
+                              "PROBE3: function attribution =",
+                              fm.group(1),
+                              "contract =", m.group(1),
+                              "function_span =", (global_start, contract_start + fm.end()),
+                              "line =", source.count("\n", 0, global_start) + 1,
+                          )
 
               contracts = list(sm.parse_solidity(p))
               print("PROBE: contract names =", [c.name for c in contracts])
@@ -74,14 +107,10 @@ jobs:
               model = next((c for c in contracts if c.name == name), None)
               print("PROBE: model selected =", model.name if model else None)
               print("PROBE: model id =", id(model) if model else None)
-              print(
-                  "PROBE: model functions =",
-                  [f.name for f in model.functions] if model else None,
-              )
+              print("PROBE: model functions =", [f.name for f in model.functions] if model else None)
               print(
                   "PROBE: generator would find initialize =",
-                  any(f.name == "initialize" for f in model.functions)
-                  if model else None,
+                  any(f.name == "initialize" for f in model.functions) if model else None,
               )
 
               hypothesis = Hypothesis(
