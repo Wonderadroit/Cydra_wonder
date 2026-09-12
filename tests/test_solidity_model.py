@@ -6,7 +6,8 @@ from cydra.solidity_model import parse_solidity
 
 def test_enrichment_is_additive_and_extracts_constructor_parameters_and_auth(tmp_path: Path) -> None:
     source = """
-    contract Sample {
+    contract Sample { uint256 value; uint256 other;
+
         constructor(address _owner, uint256 _limit) {}
 
         function initialize(address token0, address token1, bool stable) external {
@@ -46,7 +47,7 @@ def test_enrichment_is_additive_and_extracts_constructor_parameters_and_auth(tmp
     assert function.modifiers == ()
     assert function.writes == ("other", "value")
     assert function.external_calls == ()
-    assert function.line == 5
+    assert function.line == 6
 
 
 def test_constructor_interface_cast_relative_import_is_resolved(tmp_path: Path) -> None:
