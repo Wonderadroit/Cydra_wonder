@@ -1,0 +1,16 @@
+{
+  "name": "b006-a-generalized-lending-protocol",
+  "target_repo": "https://github.com/JetJadeja/generalized-lending-protocol",
+  "target_ref": "e76f46b5adb9b2c6fd9752ecf79e4e06f9f4d4a4",
+  "target_project": ".",
+  "target_path": "src/LendingPool.sol",
+  "target_contract": "LendingPool",
+  "patched_path": null,
+  "patched_contract": null,
+  "classes": [
+    "authorization",
+    "initialization",
+    "arithmetic"
+  ],
+  "freeze": "runner-validation/b006-a/freeze"
+}
