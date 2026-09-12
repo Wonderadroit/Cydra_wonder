@@ -116,33 +116,17 @@ def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> 
             if candidate.is_file():
                 return candidate, "remapping"
 
-    relative = (importer.parent / import_path).resolve()
-    if relative.is_file():
-        return relative, "relative_import"
+    if import_path.startswith(("./", "../")):
+        relative = (importer.parent / import_path).resolve()
+        if relative.is_file():
+            return relative, "relative_import"
 
-    project_relative = (root / import_path).resolve()
-    if project_relative.is_file():
-        return project_relative, "relative_import"
     return None
 
 
 def _imports_for(path: Path) -> tuple[str, ...]:
     source = _strip_comments(path.read_text(encoding="utf-8"))
     return tuple(match.group(1) for match in _IMPORT_RE.finditer(source))
-
-
-def _find_interface(root: Path, name: str, preferred: Path | None = None) -> tuple[Path, str] | None:
-    candidates: list[tuple[Path, str]] = []
-    if preferred is not None and preferred.is_file():
-        candidates.append((preferred, "relative_import"))
-    for path in sorted(root.rglob("*.sol")):
-        if path not in {item[0] for item in candidates}:
-            candidates.append((path, "relative_import"))
-    for path, method in candidates:
-        source = _strip_comments(path.read_text(encoding="utf-8"))
-        if re.search(rf"\binterface\s+{re.escape(name)}\b", source):
-            return path, method
-    return None
 
 
 def resolve_interface(root: str | Path, importer: str | Path, name: str) -> ResolvedInterface:
@@ -152,30 +136,37 @@ def resolve_interface(root: str | Path, importer: str | Path, name: str) -> Reso
         if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
             continue
         resolved = resolve_import(root, importer, import_path)
-        if resolved:
-            path, method = resolved
-            found = _find_interface(root, name, path)
-            if found:
-                path, _ = found
-                return _extract_interface(name, path, method)
-
-    found = _find_interface(root, name)
-    if found:
-        path, method = found
+        if resolved is None:
+            raise FileNotFoundError(
+                f"Unable to resolve interface {name}: declared import {import_path} "
+                f"from {importer} has no remapping or relative target"
+            )
+        path, method = resolved
         return _extract_interface(name, path, method)
-    raise FileNotFoundError(f"Unable to resolve interface {name} from {importer}")
+
+    raise FileNotFoundError(
+        f"Unable to resolve interface {name}: no declared import matching {name}.sol in {importer}"
+    )
 
 
 def _extract_interface(name: str, path: Path, resolution_method: str) -> ResolvedInterface:
     source = _strip_comments(path.read_text(encoding="utf-8"))
     match = re.search(rf"\binterface\s+{re.escape(name)}\b", source)
     if not match:
-        raise ValueError(f"Interface {name} not found in {path}")
-    next_interface = _INTERFACE_RE.search(source, match.end())
+        raise ValueError(f"Interface {name} not found at resolved path {path}")
     body_start = source.find("{", match.end())
     if body_start < 0:
-        raise ValueError(f"Interface {name} has no body in {path}")
-    body_end = next_interface.start() if next_interface else len(source)
+        raise ValueError(f"Interface {name} has no body at resolved path {path}")
+    depth = 0
+    body_end = len(source)
+    for index in range(body_start, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                body_end = index
+                break
     body = source[body_start + 1:body_end]
     methods: list[InterfaceMethod] = []
     for function in _FUNCTION_RE.finditer(body):
@@ -188,7 +179,12 @@ def _extract_interface(name: str, path: Path, resolution_method: str) -> Resolve
         )
     return ResolvedInterface(
         name=name,
-        source_path=str(path.relative_to(Path(path).anchor) if Path(path).anchor else path),
+        source_path=str(path.relative_to(root_for_path(path))) if path.is_absolute() else str(path),
         resolution_method=resolution_method,
         methods=tuple(methods),
     )
+
+
+def root_for_path(path: Path) -> Path:
+    """Return the filesystem root for absolute paths without inventing a project root."""
+    return Path(path.anchor) if path.is_absolute() else Path(".")
