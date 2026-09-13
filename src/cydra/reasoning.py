@@ -83,7 +83,22 @@ def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) ->
     return False
 
 
-def access_control_invariant(contract: ContractModel, privileged_modifier: str = "onlyGov") -> Invariant:
+def access_control_invariant(contract: ContractModel, privileged_modifier: str | None = None) -> Invariant:
+    """Build the authorization invariant from observed protected siblings.
+
+    `onlyGov` remains the historical default only when no protected modifier can
+    be recovered. This prevents the invariant from claiming a governance model
+    that the target does not actually use.
+    """
+    if privileged_modifier is None:
+        admin_functions = [f for f in contract.functions if f.name.startswith(("set", "add", "remove", "update", "accept"))]
+        observed = sorted({modifier for fn in admin_functions for modifier in _declared_modifiers(contract, fn)})
+        if len(observed) == 1:
+            privileged_modifier = observed[0]
+        elif len(observed) > 1:
+            privileged_modifier = "observed privileged authorization"
+        else:
+            privileged_modifier = "onlyGov"
     return Invariant("INV-AUTH-001", f"Administrative state-changing operations must enforce {privileged_modifier} authorization.", "structural sibling-function rule; modifier-bearing administrative functions", 0.90)
 
 
