@@ -5,7 +5,7 @@ from cydra.impact import ImpactAssessment, ImpactLevel
 from cydra.system_model import Edge, Node, SystemModel
 
 
-def build(support=True, hypothesis_state="supported"):
+def build(support=True, hypothesis_state="causally_established"):
     model = SystemModel()
     for node_id, kind in (("hypothesis:h1", "hypothesis"), ("observation:o1", "observation"), ("evidence:e1", "evidence"), ("verification:v1", "evidence"), ("belief:b1", "belief")):
         attributes = {}
@@ -21,7 +21,7 @@ def build(support=True, hypothesis_state="supported"):
 
 
 def test_finding_gate_reaches_ready_only_after_causal_verification():
-    model = build(True, "supported")
+    model = build(True, "causally_established")
     candidate = FindingCandidate(True, False, True, True, True, True)
     result = evaluate_finding_graph(model, candidate=candidate, finding_id="finding:1", hypothesis_id="hypothesis:h1", evidence_ids=("evidence:e1",), causal_chain_id="causal:c1")
     assert result.decision is GateDecision.READY
@@ -29,7 +29,7 @@ def test_finding_gate_reaches_ready_only_after_causal_verification():
 
 
 def test_finding_gate_blocks_without_explicit_hypothesis_support():
-    model = build(False, "supported")
+    model = build(False, "causally_established")
     candidate = FindingCandidate(True, False, True, True, True, True)
     result = evaluate_finding_graph(model, candidate=candidate, finding_id="finding:1", hypothesis_id="hypothesis:h1", evidence_ids=("evidence:e1",), causal_chain_id="causal:c1")
     assert result.decision is GateDecision.BLOCKED
@@ -42,6 +42,14 @@ def test_finding_gate_preserves_unresolved_hypothesis_boundary():
     result = evaluate_finding_graph(model, candidate=candidate, finding_id="finding:1", hypothesis_id="hypothesis:h1", evidence_ids=("evidence:e1",), causal_chain_id="causal:c1")
     assert result.decision is GateDecision.UNRESOLVED
     assert "hypothesis state remains unresolved" in result.reasons[0]
+
+
+def test_finding_gate_blocks_plain_supported_hypothesis():
+    model = build(True, "supported")
+    candidate = FindingCandidate(True, False, True, True, True, True)
+    result = evaluate_finding_graph(model, candidate=candidate, finding_id="finding:1", hypothesis_id="hypothesis:h1", evidence_ids=("evidence:e1",), causal_chain_id="causal:c1")
+    assert result.decision is GateDecision.UNRESOLVED
+    assert "causally established" in result.reasons[0]
 
 
 def test_impact_assessment_unknown_is_not_assessed():
