@@ -6,6 +6,7 @@ from typing import Dict, Iterable
 from .invariants import CandidateVerification, VerificationEvidence, VerificationState
 class HypothesisState(str, Enum):
     SUPPORTED = "supported"
+    CAUSALLY_ESTABLISHED = "causally_established"
     CONTRADICTED = "contradicted"
     UNRESOLVED = "unresolved"
 @dataclass(frozen=True)
