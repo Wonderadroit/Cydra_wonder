@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from .models import FunctionModel
 
@@ -16,11 +17,25 @@ def _select_shape(function_model: FunctionModel) -> str:
     return "fallback"
 
 
+def _normalize_initializer_arguments(initialize_args_str: str) -> str:
+    """Avoid invalid zero-address defaults in generated initializer calls.
+
+    The argument builder uses ``address(0)`` as its generic placeholder. A
+    blind initialization experiment must not turn a target's ordinary
+    zero-address validation into apparent security evidence, so replace only
+    those generic placeholders with a deterministic nonzero test address.
+    Runtime dependency stubs already use nonzero addresses and are unaffected.
+    """
+    normalized = initialize_args_str.replace("payable(address(0))", "payable(address(0xCAFE))")
+    return re.sub(r"(?<![A-Za-z0-9_])address\(0\)(?![A-Za-z0-9_])", "address(0xCAFE)", normalized)
+
+
 def _unauthorized_caller_shape(
     target_var: str,
     unauthorized_addr: str,
     initialize_args_str: str,
 ) -> str:
+    initialize_args_str = _normalize_initializer_arguments(initialize_args_str)
     return (
         "function testInitializationInterfaceIsCallable() public {\n"
         f"    address unauthorized = address({unauthorized_addr});\n"
@@ -38,6 +53,7 @@ def _lifecycle_shape(target_var: str, unauthorized_addr: str, initialize_args_st
     attacker-controlled first initialization. A first call by an arbitrary
     caller is therefore the security-relevant experiment for this shape.
     """
+    initialize_args_str = _normalize_initializer_arguments(initialize_args_str)
     return (
         "function testInitializationInterfaceIsCallable() public {\n"
         f"    address unauthorized = address({unauthorized_addr});\n"
@@ -50,6 +66,7 @@ def _lifecycle_shape(target_var: str, unauthorized_addr: str, initialize_args_st
 
 def _fallback_shape(target_var: str, initialize_args_str: str) -> str:
     LOGGER.warning("shape undetermined")
+    initialize_args_str = _normalize_initializer_arguments(initialize_args_str)
     return (
         "function testInitializationInterfaceIsCallable() public {\n"
         f"    {target_var}.initialize({initialize_args_str});\n"
