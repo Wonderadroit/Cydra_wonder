@@ -58,6 +58,23 @@ def test_protected_unrelated_sibling_establishes_authorization_mechanism(tmp_pat
     assert [item.hypothesis_id for item in hypotheses] == ["H-AUTH-updateGlobalApproval"]
 
 
+def test_protected_sibling_without_direct_write_still_establishes_mechanism(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20;\n"
+        "contract Target {\n"
+        "    bool config;\n"
+        "    function pause() external onlyGov { _pause(); }\n"
+        "    function setGlobalApproval(bool value) external { config = value; }\n"
+        "    function _pause() internal { config = true; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    contract = parse_solidity(source)[0]
+    hypotheses = generate_access_control_hypotheses(contract)
+    assert [item.hypothesis_id for item in hypotheses] == ["H-AUTH-setGlobalApproval"]
+
+
 def test_caller_authorization_predicate_is_not_mistaken_for_missing_admin_guard(tmp_path):
     contract = _parse(
         tmp_path,
