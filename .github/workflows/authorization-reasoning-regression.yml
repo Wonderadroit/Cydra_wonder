@@ -45,3 +45,5 @@ jobs:
                   assert f"H-AUTH-setOperatorApproval" not in ids, (name, ids)
                   print(name, "authorization hypotheses:", ids)
           PY
+
+# Push-triggered regression gate; no benchmark oracle is fed into CYDRA.
