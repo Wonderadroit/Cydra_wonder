@@ -100,18 +100,17 @@ def run_initialization_harness(project_dir: str | Path) -> tuple[ExecutionResult
     if json_total != human_total:
         raise RuntimeError(f"integrity assertion 1 failed: total mismatch: JSON {json_total} vs human {human_total}")
     if json_failed != human_failed:
-        raise RuntimeError(f"integrity assertion 2 failed: failed mismatch: JSON {json_failed} vs human {human_failed}")
+        raise RuntimeError(f"integrity assertion 2 failed: per-suite failures {json_failed} vs aggregate {human_failed}")
     if (json_failed == 0) != exit_ok:
-        raise RuntimeError(f"integrity assertion 3 failed: exit code mismatch: {json_failed} JSON failures vs human exit {human_completed.returncode}")
+        raise RuntimeError(f"integrity assertion 3 failed: {json_failed} JSON failures vs human exit {human_completed.returncode}")
     return results
 
 def classify_initialization_execution(hypothesis: Hypothesis, execution: ExecutionResult) -> InitializationOutcome:
+    """Classify one execution as evidence, never as causal confirmation."""
     evidence_id = f"E-EXEC-{hypothesis.hypothesis_id}-INITIALIZATION"
     evidence = Evidence(evidence_id, "execution", f"Foundry initialization test: status={execution.status}, executed={execution.executed}, tests_run={execution.tests_run}, tests_failed={execution.tests_failed}, exit={execution.exit_code}.", " ".join(execution.command), execution.target + ".t.sol")
     if execution.status == "PASS":
         internal_status, benchmark_status = "rejected", "not_confirmed"
-    elif execution.status == "FAIL":
-        internal_status, benchmark_status = "confirmed", "confirmed"
     else:
         internal_status, benchmark_status = "proposed", "proposed"
     updated = Hypothesis(hypothesis.hypothesis_id, hypothesis.claim, hypothesis.invariant_id, hypothesis.target_function, hypothesis.attacker_capability, hypothesis.expected_impact, internal_status, hypothesis.evidence_ids + (evidence_id,))
