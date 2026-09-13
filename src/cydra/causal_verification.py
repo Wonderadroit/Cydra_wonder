@@ -45,8 +45,9 @@ def verify_persisted_causal_chain(model: SystemModel, chain_id: str) -> CausalVe
             return CausalVerificationResult(CausalVerificationState.REJECTED, chain_id, trace, evidence_ids, ("experiment-bound target function conflicts with observation target",))
 
     supporting = [e for e in model.edges if e.source in evidence_ids and e.target == trace.hypothesis_id and e.relation == "supports"]
-    if not supporting:
-        return CausalVerificationResult(CausalVerificationState.UNRESOLVED, chain_id, trace, evidence_ids, ("causal evidence does not explicitly support the chain hypothesis",))
+    contradicting = [e for e in model.edges if e.source in evidence_ids and e.target == trace.hypothesis_id and e.relation == "contradicts"]
+    if not supporting and not contradicting:
+        return CausalVerificationResult(CausalVerificationState.UNRESOLVED, chain_id, trace, evidence_ids, ("causal evidence does not explicitly support or contradict the chain hypothesis",))
     belief = model.nodes.get(trace.belief_update_id)
     if belief is None or belief.kind != "belief":
         return CausalVerificationResult(CausalVerificationState.REJECTED, chain_id, trace, evidence_ids, ("causal chain belief-transition anchor is missing",))
