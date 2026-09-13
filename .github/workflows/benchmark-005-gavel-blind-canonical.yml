@@ -1,0 +1,54 @@
+name: CYDRA Benchmark 005 — Gavel blind canonical
+
+on:
+  workflow_dispatch:
+
+jobs:
+  blind:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target_path:
+          - contracts/LoanProtocol.sol
+          - contracts/PositionNFT.sol
+          - contracts/ListingService.sol
+          - contracts/NFTLoanProtocol.sol
+          - contracts/NFTPositionNFT.sol
+          - contracts/NFTListingService.sol
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+
+      - name: Check out frozen Gavel target
+        uses: actions/checkout@v4
+        with:
+          repository: JamieFrame/The-Gavel-Protocol
+          ref: bfb5086eb7915d2dc90f52fd761d54bc2806847d
+          path: gavel
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install CYDRA
+        run: python -m pip install -e .
+
+      - name: Run blind canonical capability
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p blind-artifacts
+          python scripts/run_benchmark_005_blind.py \
+            --target-repo https://github.com/JamieFrame/The-Gavel-Protocol.git \
+            --target-ref bfb5086eb7915d2dc90f52fd761d54bc2806847d \
+            --target-path '${{ matrix.target_path }}' \
+            --target-project . \
+            --classes initialization authorization arithmetic \
+            --freeze "blind-artifacts/${{ matrix.target_path }}"
+
+      - name: Upload frozen blind artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-005-${{ matrix.target_path }}
+          path: blind-artifacts/
