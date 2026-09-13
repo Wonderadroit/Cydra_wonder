@@ -18,6 +18,7 @@ class ObservationFeedback:
 
 def apply_observation_feedback(outcome: ObservationOutcome, verification: CandidateVerification, hypotheses: Iterable[Hypothesis], evidence: Iterable[VerificationEvidence]) -> tuple[Hypothesis, ...]:
     items = tuple(evidence)
-    if outcome.outcome_id not in set(verification.evidence_ids):
+    verification_ids = set(verification.evidence_ids)
+    if outcome.evidence_id not in verification_ids and outcome.outcome_id not in verification_ids:
         raise ValueError("observation outcome evidence is not part of verification")
     return tuple(update_hypothesis(hypothesis, verification, items)[0] for hypothesis in hypotheses)
