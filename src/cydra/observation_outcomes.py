@@ -16,6 +16,10 @@ class ObservationOutcome:
         for value, name in ((self.observation_id,"observation_id"),(self.outcome_id,"outcome_id"),(self.result,"result"),(self.source,"source")):
             if not value.strip(): raise ValueError(f"{name} must not be empty")
         if not 0.0 <= self.confidence <= 1.0: raise ValueError("confidence must be between 0 and 1")
+    @property
+    def evidence_id(self) -> str:
+        """Canonical graph node ID for this externally produced evidence."""
+        return f"observation_outcome:{self.outcome_id}"
 
 def record_observation_outcome(model: SystemModel, *, observation_id: str, outcome_id: str, result: str, source: str, confidence: float = 1.0, metadata: Mapping[str, object] | None = None) -> ObservationOutcome:
     node_id=f"observation:{observation_id}"
