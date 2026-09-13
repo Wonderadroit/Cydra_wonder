@@ -75,11 +75,11 @@ def test_initialization_pass_rejects_and_maps_to_not_confirmed():
     assert "tests_run=1" in outcome.evidence.claim
 
 
-def test_initialization_fail_confirms():
+def test_initialization_fail_is_proposed_not_confirmed():
     outcome = classify_initialization_execution(_hypothesis(), _execution("FAIL", failed=1, exit_code=1))
-    assert outcome.internal_status == "confirmed"
-    assert outcome.benchmark_status == "confirmed"
-    assert outcome.hypothesis.status == "confirmed"
+    assert outcome.internal_status == "proposed"
+    assert outcome.benchmark_status == "proposed"
+    assert outcome.hypothesis.status == "proposed"
 
 
 def test_initialization_unmeasurable_stays_proposed():
