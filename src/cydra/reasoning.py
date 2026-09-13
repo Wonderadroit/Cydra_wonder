@@ -115,6 +115,14 @@ def _state_changing_functions(contract: ContractModel) -> tuple[FunctionModel, .
     )
 
 
+def _externally_callable_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
+    return tuple(
+        function
+        for function in contract.functions
+        if function.visibility in _STATE_CHANGING_VISIBILITIES
+    )
+
+
 def _admin_named_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
     return tuple(
         function
@@ -127,14 +135,15 @@ def access_control_invariant(contract: ContractModel, privileged_modifier: str |
     """Build the authorization invariant from observed protected siblings.
 
     The candidate naming heuristic remains narrow, but the privileged mechanism
-    is learned from every protected, state-changing external/public sibling.
-    This prevents unrelated function names such as ``pause`` from hiding the
-    authorization mechanism used by the target.
+    is learned from every externally callable function carrying a modifier.
+    This includes lifecycle guards such as ``pause`` whose state mutation may
+    occur in an inherited/internal call and therefore may not appear in the
+    minimal function write list.
     """
     if privileged_modifier is None:
         protected_functions = [
             function
-            for function in _state_changing_functions(contract)
+            for function in _externally_callable_functions(contract)
             if _declared_modifiers(contract, function)
         ]
         observed = sorted({
@@ -151,7 +160,7 @@ def access_control_invariant(contract: ContractModel, privileged_modifier: str |
     return Invariant(
         "INV-AUTH-001",
         f"Administrative state-changing operations must enforce {privileged_modifier} authorization.",
-        "structural sibling-function rule; modifier-bearing state-changing functions",
+        "structural sibling-function rule; modifier-bearing externally callable functions",
         0.90,
     )
 
@@ -164,7 +173,7 @@ def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothe
     # functions themselves. Protected siblings can have unrelated names.
     protected_functions = [
         function
-        for function in _state_changing_functions(contract)
+        for function in _externally_callable_functions(contract)
         if _declared_modifiers(contract, function)
     ]
     if not protected_functions:
