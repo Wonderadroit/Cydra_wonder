@@ -10,6 +10,12 @@ on:
       - '.github/workflows/benchmark-005-gavel-blind-canonical.yml'
   workflow_dispatch:
 
+# Only the latest commit is meaningful for this frozen blind benchmark.
+# Prevent superseded matrix runs from accumulating in the queue.
+concurrency:
+  group: benchmark-005-gavel-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   blind:
     runs-on: ubuntu-latest
