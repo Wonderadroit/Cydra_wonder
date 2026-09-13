@@ -3,7 +3,7 @@ from pathlib import Path
 from cydra.graph_semantics import validate_graph
 from cydra.solidity_model import parse_solidity
 from cydra.solidity_system_model import project_contracts
-from cydra.system_model_reasoning import derive_authorization_reasoning, materialize_authorization_reasoning
+from cydra.system_model_reasoning import derive_authorization_reasoning, materialize_authorization_reasoning, plan_authorization_observations
 
 
 def test_system_model_derives_competing_authorization_explanations_without_function_name_rules():
@@ -29,6 +29,27 @@ def test_system_model_derives_competing_authorization_explanations_without_funct
     assert derived[0].hypotheses[0].hypothesis_id.startswith("H-SYS-AUTH-Fixture-")
     assert derived[0].hypotheses[1].hypothesis_id.startswith("H-SYS-PUBLIC-Fixture-")
     assert {h.belief for h in derived[0].hypotheses} == {0.5}
+
+
+def test_system_model_reasoning_selects_an_information_gain_observation():
+    from cydra.models import ContractModel, FunctionModel
+
+    contract = ContractModel(
+        "Fixture",
+        "Fixture.sol",
+        (
+            FunctionModel("rotate", "external", ("onlyAdmin",), ("admin",), (), 10),
+            FunctionModel("changeRoute", "external", (), ("route",), (), 20),
+        ),
+    )
+    reasoning = derive_authorization_reasoning(project_contracts((contract,)))[0]
+    plans = plan_authorization_observations(reasoning)
+
+    assert len(plans) == 1
+    assert plans[0].observation_id.startswith("OBS-AUTH-")
+    assert plans[0].information_gain > 0.0
+    assert plans[0].utility > 0.0
+    assert "no execution performed" in plans[0].rationale
 
 
 def test_safe_system_model_does_not_emit_boundary_candidate():
