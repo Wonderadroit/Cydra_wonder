@@ -35,15 +35,7 @@ def _observation_id(function_id: str) -> str:
 
 
 def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
-    """Infer competing authorization explanations from graph relationships.
-
-    A candidate is emitted only when the same contract contains both an
-    externally callable state-changing function that enforces an observed
-    authorization mechanism and another externally callable state-changing
-    function that does not. The alternatives are deliberately falsifiable:
-    either the boundary is violated or an enforcement path is missing from
-    the current model.
-    """
+    """Infer competing authorization explanations from graph relationships."""
     functions = {node_id: node for node_id, node in model.nodes.items() if node.kind == "function" and _is_externally_callable(node)}
     writing_functions = {edge.source for edge in model.edges if edge.relation == "writes" and edge.source in functions}
     enforced = {edge.source: edge.target for edge in model.edges if edge.relation == "enforces" and edge.source in functions}
@@ -94,11 +86,7 @@ def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthoriza
 
 
 def plan_authorization_observations(reasoning: DerivedAuthorizationReasoning) -> tuple[TestPlan, ...]:
-    """Rank observations using hypothesis-specific outcome predictions.
-
-    Planning never executes an external action. Missing predictions are treated
-    as zero information by the underlying planner rather than guessed.
-    """
+    """Rank observations using hypothesis-specific outcome predictions."""
     options = tuple(
         ObservationOption(
             _observation_id(function_id),
@@ -121,10 +109,16 @@ def materialize_authorization_observations(model: SystemModel, reasoning: Derive
     hypothesis_ids = tuple(f"hypothesis:{hypothesis.hypothesis_id}" for hypothesis in reasoning.hypotheses)
     for plan in plans:
         observation_id = f"observation:{plan.observation_id}"
+        function_id = next(
+            (candidate for candidate in reasoning.unprotected_functions if _observation_id(candidate) == plan.observation_id),
+            None,
+        )
+        if function_id is None:
+            raise KeyError(f"observation plan has no canonical target function: {plan.observation_id}")
         prospective.add_node(Node(observation_id, "observation", plan.description, {
             "status": "planned", "information_gain": plan.information_gain,
             "cost": plan.cost, "utility": plan.utility, "rationale": plan.rationale,
-            "provenance": "system_model_reasoning",
+            "target_function_id": function_id, "provenance": "system_model_reasoning",
         }))
         prospective.add_edge(Edge(observation_id, "targets", invariant_id, {"provenance": "system_model_reasoning"}))
         for hypothesis_id in hypothesis_ids:
