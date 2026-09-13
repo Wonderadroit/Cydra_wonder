@@ -1,0 +1,130 @@
+"""Derive security-relevant reasoning from the canonical SystemModel.
+
+This module is intentionally separate from the legacy vulnerability-class
+heuristics.  It treats the graph as the evidence substrate and derives an
+authorization invariant from an observed sibling-function boundary rather
+than from function names or a hard-coded modifier name.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .hypotheses import Hypothesis
+from .invariants import Invariant, InvariantStatus
+from .system_model import Edge, Node, SystemModel
+
+
+@dataclass(frozen=True)
+class DerivedAuthorizationReasoning:
+    invariant: Invariant
+    hypotheses: tuple[Hypothesis, ...]
+    protected_functions: tuple[str, ...]
+    unprotected_functions: tuple[str, ...]
+
+
+def _contract_name(node: Node) -> str:
+    return str(node.attributes.get("contract", node.label))
+
+
+def _is_externally_callable(node: Node) -> bool:
+    return str(node.attributes.get("visibility", "")) in {"external", "public"}
+
+
+def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
+    """Infer authorization-boundary hypotheses from graph relationships.
+
+    A candidate is emitted only when the same contract contains both an
+    externally callable state-changing function that enforces an observed
+    authorization mechanism and another externally callable state-changing
+    function that does not.  This is deliberately a candidate, not a finding.
+    """
+    functions = {
+        node_id: node
+        for node_id, node in model.nodes.items()
+        if node.kind == "function" and _is_externally_callable(node)
+    }
+    writes = {
+        edge.source: edge.target
+        for edge in model.edges
+        if edge.relation == "writes" and edge.source in functions
+    }
+    enforced = {
+        edge.source: edge.target
+        for edge in model.edges
+        if edge.relation == "enforces" and edge.source in functions
+    }
+
+    by_contract: dict[str, list[str]] = {}
+    for function_id in functions:
+        if function_id in writes:
+            by_contract.setdefault(_contract_name(functions[function_id]), []).append(function_id)
+
+    results: list[DerivedAuthorizationReasoning] = []
+    for contract, function_ids in sorted(by_contract.items()):
+        protected = tuple(sorted(function_id for function_id in function_ids if function_id in enforced))
+        unprotected = tuple(sorted(function_id for function_id in function_ids if function_id not in enforced))
+        if not protected or not unprotected:
+            continue
+
+        auth_ids = tuple(sorted(enforced[function_id] for function_id in protected))
+        source_ids = protected + unprotected + auth_ids
+        invariant_id = f"INV-SYS-AUTH-{contract}"
+        invariant = Invariant(
+            invariant_id,
+            f"Externally callable state-changing operations in {contract} must preserve the authorization boundary observed on protected sibling operations.",
+            InvariantStatus.INFERRED,
+            source_ids,
+            0.85,
+            {"derivation": "sibling authorization boundary", "contract": contract},
+        )
+        hypotheses = tuple(
+            Hypothesis(
+                f"H-SYS-AUTH-{contract}-{function_id.split(':')[-1].split('(')[0]}",
+                f"{function_id} may permit an unauthorized caller to mutate state despite the contract's observed authorization boundary.",
+                0.5,
+                HypothesisState.UNRESOLVED,
+                {"unauthorized_caller": {"support": 1.0, "authorized_only": 0.0}},
+            )
+            for function_id in unprotected
+        )
+        results.append(DerivedAuthorizationReasoning(invariant, hypotheses, protected, unprotected))
+    return tuple(results)
+
+
+# Imported lazily above in type construction would obscure the contract; keep
+# the state symbol explicit and local to avoid coupling to legacy models.
+from .hypotheses import HypothesisState  # noqa: E402
+
+
+def materialize_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
+    """Persist derived invariant/hypothesis nodes and their provenance edges.
+
+    Prospective validation is performed before mutation, so a malformed
+    derivation cannot leave a partially materialized reasoning graph.
+    """
+    derived = derive_authorization_reasoning(model)
+    prospective = SystemModel.from_dict(model.export())
+    for item in derived:
+        invariant_node_id = f"invariant:{item.invariant.invariant_id}"
+        prospective.add_node(Node(invariant_node_id, "invariant", item.invariant.statement, {
+            "status": item.invariant.status.value,
+            "confidence": item.invariant.confidence,
+            "source_ids": list(item.invariant.source_ids),
+            "provenance": "system_model_reasoning",
+        }))
+        for hypothesis in item.hypotheses:
+            hypothesis_node_id = f"hypothesis:{hypothesis.hypothesis_id}"
+            prospective.add_node(Node(hypothesis_node_id, "hypothesis", hypothesis.statement, {
+                "belief": hypothesis.belief,
+                "state": hypothesis.state.value,
+                "invariant_id": invariant_node_id,
+                "provenance": "system_model_reasoning",
+            }))
+            prospective.add_edge(Edge(invariant_node_id, "informs", hypothesis_node_id, {"provenance": "system_model_reasoning"}))
+    from .graph_semantics import validate_graph
+    errors = validate_graph(prospective)
+    if errors:
+        raise ValueError("invalid derived reasoning graph: " + "; ".join(errors))
+    model.nodes = prospective.nodes
+    model.edges = prospective.edges
+    return derived
