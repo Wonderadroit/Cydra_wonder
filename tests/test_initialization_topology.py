@@ -47,3 +47,44 @@ contract CydraInitializationInvariantTest is Test {
     once = adapt_generated_initialization_for_proxy(generated, "ListingService")
     twice = adapt_generated_initialization_for_proxy(once, "ListingService")
     assert twice == once
+
+
+def test_requires_proxy_follows_imported_base_constructor(tmp_path):
+    root = tmp_path / "target"
+    contracts = root / "contracts"
+    lib = root / "lib" / "openzeppelin-contracts-upgradeable" / "contracts" / "proxy" / "utils"
+    contracts.mkdir(parents=True)
+    lib.mkdir(parents=True)
+    (contracts / "LoanProtocol.sol").write_text(
+        'import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";\n'
+        'contract LoanProtocol is Initializable { function initialize() external initializer {} }\n',
+        encoding="utf-8",
+    )
+    (lib / "Initializable.sol").write_text(
+        "abstract contract Initializable {\n"
+        "    function _disableInitializers() internal {}\n"
+        "    constructor() { _disableInitializers(); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    assert requires_proxy_initialization(contracts / "LoanProtocol.sol")
+
+
+def test_requires_proxy_does_not_treat_library_function_definition_as_disable_signal(tmp_path):
+    root = tmp_path / "target"
+    contracts = root / "contracts"
+    lib = root / "lib" / "openzeppelin-contracts-upgradeable" / "contracts" / "proxy" / "utils"
+    contracts.mkdir(parents=True)
+    lib.mkdir(parents=True)
+    (contracts / "Safe.sol").write_text(
+        'import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";\n'
+        'contract Safe is Initializable { function initialize() external initializer {} }\n',
+        encoding="utf-8",
+    )
+    (lib / "Initializable.sol").write_text(
+        "abstract contract Initializable {\n"
+        "    function _disableInitializers() internal {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    assert not requires_proxy_initialization(contracts / "Safe.sol")
