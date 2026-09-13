@@ -46,8 +46,17 @@ jobs:
             --classes initialization authorization arithmetic \
             --freeze "blind-artifacts/${{ matrix.target_path }}"
 
+      - name: Compute artifact name
+        id: artifact
+        env:
+          TARGET_PATH: ${{ matrix.target_path }}
+        run: |
+          name="${TARGET_PATH##*/}"
+          name="${name%.sol}"
+          echo "name=benchmark-005-${name}" >> "$GITHUB_OUTPUT"
+
       - name: Upload frozen blind artifact
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-005-${{ matrix.target_path }}
+          name: ${{ steps.artifact.outputs.name }}
           path: blind-artifacts/
