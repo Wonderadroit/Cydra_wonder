@@ -28,8 +28,14 @@ def test_belief_update_preserves_explicit_support():
 
 
 def test_information_gain_planning_only_ranks_observations():
-    hypotheses = (Hypothesis("H1", "A", belief=0.5), Hypothesis("H2", "B", belief=0.5))
-    observations = (ObservationOption("O1", "distinguishing observation", ("supports", "contradicts"), 1.0), ObservationOption("O2", "single outcome", ("unknown",), 1.0))
+    hypotheses = (
+        Hypothesis("H1", "A", belief=0.5, planning_predictions={"O1": {"supports": 1.0, "contradicts": 0.0}}),
+        Hypothesis("H2", "B", belief=0.5, planning_predictions={"O1": {"supports": 0.0, "contradicts": 1.0}}),
+    )
+    observations = (
+        ObservationOption("O1", "distinguishing observation", ("supports", "contradicts"), 1.0),
+        ObservationOption("O2", "single outcome", ("unknown",), 1.0),
+    )
     plans = rank_next_observations(hypotheses, observations)
     assert plans[0].observation_id == "O1"
     assert plans[0].information_gain > plans[1].information_gain
