@@ -27,7 +27,7 @@ jobs:
           PYTHONPATH: src
         run: python -m pytest -q tests/test_initialization_runtime.py tests/test_initialization_topology.py
 
-      - name: Run blind LoanProtocol integration
+      - name: Run blind ListingService integration
         env:
           PYTHONPATH: src
         run: |
@@ -35,17 +35,17 @@ jobs:
           python scripts/run_benchmark_005_blind.py \
             --target-repo https://github.com/JamieFrame/The-Gavel-Protocol.git \
             --target-ref bfb5086eb7915d2dc90f52fd761d54bc2806847d \
-            --target-path contracts/LoanProtocol.sol \
+            --target-path contracts/ListingService.sol \
             --target-project . \
             --classes initialization authorization arithmetic \
-            --freeze blind-artifacts/LoanProtocol.sol
+            --freeze blind-artifacts/ListingService.sol
 
       - name: Verify proxy topology in frozen classification
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          p = Path("blind-artifacts/contracts/LoanProtocol.sol/classification.json")
+          p = Path("blind-artifacts/contracts/ListingService.sol/classification.json")
           data = json.loads(p.read_text())
           init = next(x for x in data["hypotheses"] if x["class"] == "initialization")
           assert init["deployment_topology"] == "proxy", init
@@ -55,5 +55,5 @@ jobs:
       - name: Upload frozen artifact
         uses: actions/upload-artifact@v4
         with:
-          name: initialization-topology-loanprotocol
+          name: initialization-topology-listingservice
           path: blind-artifacts/
