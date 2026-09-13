@@ -8,6 +8,8 @@ from .models import ContractModel, Hypothesis
 
 _FUNCTION_RE = re.compile(r"\bfunction\s+(?P<name>\w+)\s*\([^)]*\)\s*(?P<tail>[^\{;]*)\{", re.MULTILINE)
 _VISIBILITIES = {"public", "external"}
+_CALLER_TOKEN_RE = re.compile(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b")
+_CALLER_KEYED_READ_RE = re.compile(r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\](?:\s*\[[^\]]*\])*")
 
 
 def _declared_modifiers(contract: ContractModel, function) -> tuple[str, ...]:
@@ -16,10 +18,7 @@ def _declared_modifiers(contract: ContractModel, function) -> tuple[str, ...]:
     except (OSError, UnicodeError):
         return ()
     for match in _FUNCTION_RE.finditer(source):
-        if match.group("name") != function.name:
-            continue
-        line = source.count("\n", 0, match.start()) + 1
-        if line != function.line:
+        if match.group("name") != function.name or source.count("\n", 0, match.start()) + 1 != function.line:
             continue
         tail = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("tail"), flags=re.DOTALL)
         tokens = re.findall(r"\b[A-Za-z_]\w*\b", tail)
@@ -27,12 +26,18 @@ def _declared_modifiers(contract: ContractModel, function) -> tuple[str, ...]:
         for token in tokens:
             if token in {"returns", "override", "virtual"}:
                 break
-            if token in {"public", "external", "internal", "private", "view", "pure", "payable"}:
-                continue
-            if token not in modifiers:
+            if token not in {"public", "external", "internal", "private", "view", "pure", "payable"} and token not in modifiers:
                 modifiers.append(token)
         return tuple(modifiers)
     return ()
+
+
+def _has_caller_authorization_predicate(function) -> bool:
+    for predicate in function.authorization_predicates:
+        residual = _CALLER_KEYED_READ_RE.sub(" ", predicate)
+        if _CALLER_TOKEN_RE.search(residual):
+            return True
+    return False
 
 
 def generate_structural_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
@@ -50,7 +55,7 @@ def generate_structural_access_control_hypotheses(contract: ContractModel) -> tu
     for function in contract.functions:
         if function.visibility not in _VISIBILITIES or not function.writes:
             continue
-        if _declared_modifiers(contract, function) or any("msg.sender" in predicate for predicate in function.authorization_predicates):
+        if _declared_modifiers(contract, function) or _has_caller_authorization_predicate(function):
             continue
         if not protected.intersection(function.writes):
             continue
