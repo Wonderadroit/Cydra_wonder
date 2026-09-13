@@ -136,7 +136,7 @@ def plan_initialization_experiment(hypothesis: Hypothesis) -> Experiment:
 
 def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
     if hypothesis.invariant_id != "INV-ARITH-001":
-        raise ValueError(f"Unsupported invariant for arithmetic experiment: {hypothesis.experiment_id}")
+        raise ValueError(f"Unsupported invariant for arithmetic experiment: {hypothesis.hypothesis_id}")
     return Experiment(
         f"X-{hypothesis.hypothesis_id}",
         hypothesis.hypothesis_id,
