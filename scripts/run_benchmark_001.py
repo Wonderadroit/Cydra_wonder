@@ -5,7 +5,9 @@ from pathlib import Path
 
 from cydra.canonical_cycle import run_canonical_differential_cycle
 from cydra.experiment_binding import bind_experiment
+from cydra.finding import Finding
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
+from cydra.finding_persistence import persist_finding
 from cydra.foundry import classify_access_control_outcome, generate_access_control_test, require_executed, run_foundry_test, test_path_for
 from cydra.impact import ImpactAssessment, ImpactLevel
 from cydra.pipeline import investigate
@@ -97,14 +99,31 @@ def main() -> int:
         ("unauthorized caller can reach setWhitelist",),
         cycle.causal_verification.evidence_ids,
     )
+    finding_candidate = FindingCandidate(True, False, True, True, True, impact.assessed, True)
     gate = evaluate_finding_graph(
         canonical_model,
-        candidate=FindingCandidate(True, False, True, True, True, impact.assessed, True),
+        candidate=finding_candidate,
         finding_id="F-AUTH-setWhitelist",
         hypothesis_id=f"hypothesis:{canonical_hypothesis.hypothesis_id}",
         evidence_ids=cycle.causal_verification.evidence_ids,
         causal_chain_id=cycle.causal_chain.chain_id,
     )
+
+    persisted_finding = None
+    if gate.decision.value == "READY":
+        finding = Finding(
+            "F-AUTH-setWhitelist",
+            "Unauthorized setWhitelist access control",
+            "An unauthorized caller can mutate privileged whitelist state through setWhitelist.",
+            "HIGH",
+            impact,
+            (canonical_binding["target_function_id"],),
+            cycle.causal_verification.evidence_ids,
+            f"hypothesis:{canonical_hypothesis.hypothesis_id}",
+            causal_chain_id=cycle.causal_chain.chain_id,
+        )
+        persist_finding(canonical_model, candidate=finding_candidate, finding=finding)
+        persisted_finding = canonical_model.nodes[finding.finding_id].attributes
 
     package = {
         "canonical_reasoning": [
@@ -125,13 +144,14 @@ def main() -> int:
             "causal_verification": cycle.causal_verification.__dict__,
         },
         "finding_gate": {"decision": gate.decision.value, "reasons": list(gate.reasons)},
+        "persisted_finding": persisted_finding,
         "hypothesis": outcome.hypothesis.__dict__,
         "vulnerable": vulnerable.__dict__,
         "patched": patched.__dict__,
         "evidence": [e.__dict__ for e in outcome.evidence],
     }
     print(json.dumps(package, indent=2, sort_keys=True, default=str))
-    return 0 if outcome.hypothesis.status == "confirmed" and gate.decision.value == "READY" else 1
+    return 0 if outcome.hypothesis.status == "confirmed" and gate.decision.value == "READY" and persisted_finding is not None else 1
 
 
 if __name__ == "__main__":
