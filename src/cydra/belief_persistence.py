@@ -1,6 +1,6 @@
 """Persist hypothesis belief transitions as canonical, auditable graph evidence."""
 from __future__ import annotations
-from .belief_persistence import BeliefUpdate, Hypothesis
+from .hypotheses import BeliefUpdate, Hypothesis
 from .system_model import Edge, Node, SystemModel
 
 
