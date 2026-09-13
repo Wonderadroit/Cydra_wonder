@@ -1,8 +1,59 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
-from .models import Evidence, Experiment, Hypothesis, Invariant, ContractModel
+from .models import Evidence, Experiment, Hypothesis, Invariant, ContractModel, FunctionModel
+
+
+_FUNCTION_SIGNATURE_RE = re.compile(
+    r"\bfunction\s+(?P<name>\w+)\s*\((?P<parameters>[^)]*)\)\s*(?P<tail>[^\{;]*)\{",
+    re.MULTILINE,
+)
+_DECLARED_MODIFIER_EXCLUSIONS = {
+    "public", "external", "internal", "private",
+    "view", "pure", "payable", "virtual", "override",
+    "returns", "memory", "calldata", "storage",
+}
+
+
+def _source_declared_modifiers(contract: ContractModel, function: FunctionModel) -> tuple[str, ...]:
+    """Recover declared modifiers when the minimal model parser misses them.
+
+    Authorization reasoning must not treat a parser allow-list omission as an
+    unprotected function. This fallback reads only the target function's
+    signature and extracts identifier tokens before Solidity's returns/override
+    tail. It does not infer authorization from function bodies.
+    """
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ()
+
+    for match in _FUNCTION_SIGNATURE_RE.finditer(source):
+        if match.group("name") != function.name:
+            continue
+        line = source.count("\n", 0, match.start()) + 1
+        if line != function.line:
+            continue
+        tail = match.group("tail")
+        identifiers = re.findall(r"\b[A-Za-z_]\w*\b", tail)
+        modifiers: list[str] = []
+        for token in identifiers:
+            if token == "returns" or token in {"override", "virtual"}:
+                break
+            if token in _DECLARED_MODIFIER_EXCLUSIONS:
+                continue
+            if token not in modifiers:
+                modifiers.append(token)
+        return tuple(modifiers)
+    return ()
+
+
+def _declared_modifiers(contract: ContractModel, function: FunctionModel) -> tuple[str, ...]:
+    if function.modifiers:
+        return function.modifiers
+    return _source_declared_modifiers(contract, function)
 
 
 def access_control_invariant(contract: ContractModel, privileged_modifier: str = "onlyGov") -> Invariant:
@@ -11,11 +62,24 @@ def access_control_invariant(contract: ContractModel, privileged_modifier: str =
 
 def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
     admin_functions = [f for f in contract.functions if f.name.startswith(("set", "add", "remove", "update", "accept"))]
-    protected = [f for f in admin_functions if f.modifiers]
+    declared = tuple((f, _declared_modifiers(contract, f)) for f in admin_functions)
+    protected = [f for f, modifiers in declared if modifiers]
     if not protected:
         return ()
     invariant = access_control_invariant(contract)
-    return tuple(Hypothesis(f"H-AUTH-{fn.name}", f"{fn.name} may permit an unauthorized caller to mutate privileged state.", invariant.invariant_id, fn.name, "arbitrary external caller", "privileged configuration or authorization state can be changed", evidence_ids=(f"E-MODEL-{fn.name}",)) for fn in admin_functions if not fn.modifiers)
+    return tuple(
+        Hypothesis(
+            f"H-AUTH-{fn.name}",
+            f"{fn.name} may permit an unauthorized caller to mutate privileged state.",
+            invariant.invariant_id,
+            fn.name,
+            "arbitrary external caller",
+            "privileged configuration or authorization state can be changed",
+            evidence_ids=(f"E-MODEL-{fn.name}",),
+        )
+        for fn, modifiers in declared
+        if not modifiers
+    )
 
 
 def initialization_invariant(contract: ContractModel) -> Invariant:
