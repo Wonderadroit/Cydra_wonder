@@ -27,7 +27,7 @@ def test_system_model_derives_competing_authorization_explanations_without_funct
     assert "observed on protected sibling operations" in derived[0].invariant.statement
     assert len(derived[0].hypotheses) == 2
     assert derived[0].hypotheses[0].hypothesis_id.startswith("H-SYS-AUTH-Fixture-")
-    assert derived[0].hypotheses[1].hypothesis_id.startswith("H-SYS-PUBLIC-Fixture-")
+    assert derived[0].hypotheses[1].hypothesis_id.startswith("H-SYS-ALT-Fixture-")
     assert {h.belief for h in derived[0].hypotheses} == {0.5}
 
 
@@ -50,7 +50,7 @@ def test_system_model_reasoning_selects_and_materializes_information_gain_observ
     assert plans[0].observation_id.startswith("OBS-AUTH-")
     assert plans[0].information_gain > 0.0
     assert plans[0].utility > 0.0
-    assert "no execution performed" in plans[0].rationale
+    assert "hypothesis-specific outcome predictions" in plans[0].rationale
 
     materialize_authorization_reasoning(model)
     materialized = materialize_authorization_observations(model, reasoning)
@@ -86,7 +86,7 @@ def test_benchmark_001_real_solidity_model_reaches_canonical_reasoning():
     assert len(derived) == 1
     hypotheses = derived[0].hypotheses
     assert any("setWhitelist" in hypothesis.statement for hypothesis in hypotheses)
-    assert any("intentionally public" in hypothesis.statement for hypothesis in hypotheses)
+    assert any("alternate enforcement path" in hypothesis.statement for hypothesis in hypotheses)
     assert any(node.kind == "invariant" and node.attributes.get("provenance") == "system_model_reasoning" for node in model.nodes.values())
     assert any(node.kind == "hypothesis" and node.attributes.get("provenance") == "system_model_reasoning" for node in model.nodes.values())
     assert sum(1 for edge in model.edges if edge.relation == "informs") == 2
