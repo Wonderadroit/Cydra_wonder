@@ -93,7 +93,11 @@ def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothe
     protected = [f for f, modifiers in declared if modifiers]
     if not protected:
         return ()
-    invariant = access_control_invariant(contract)
+    protected_modifiers = sorted({modifier for _, modifiers in declared for modifier in modifiers})
+    if len(protected_modifiers) == 1:
+        invariant = access_control_invariant(contract, protected_modifiers[0])
+    else:
+        invariant = access_control_invariant(contract, "observed privileged authorization")
     return tuple(
         Hypothesis(
             f"H-AUTH-{fn.name}",
