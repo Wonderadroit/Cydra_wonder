@@ -15,6 +15,15 @@ from .reasoning import (
 )
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
+from .structural_authorization import generate_structural_access_control_hypotheses
+
+
+def _merge_hypotheses(*groups):
+    merged = {}
+    for group in groups:
+        for hypothesis in group:
+            merged[hypothesis.hypothesis_id] = hypothesis
+    return tuple(merged.values())
 
 
 def investigate(path: str | Path, target: str | None = None) -> InvestigationResult:
@@ -23,7 +32,10 @@ def investigate(path: str | Path, target: str | None = None) -> InvestigationRes
         raise ValueError(f"No Solidity contract found in {path}")
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
     for contract in contracts:
-        auth = generate_access_control_hypotheses(contract)
+        auth = _merge_hypotheses(
+            generate_access_control_hypotheses(contract),
+            generate_structural_access_control_hypotheses(contract),
+        )
         init = generate_initialization_hypotheses(contract)
         arith = generate_arithmetic_hypotheses(contract)
         if auth:
