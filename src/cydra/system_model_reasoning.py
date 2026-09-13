@@ -1,7 +1,7 @@
 """Derive security-relevant reasoning from the canonical SystemModel.
 
 This module is intentionally separate from the legacy vulnerability-class
-heuristics.  It treats the graph as the evidence substrate and derives an
+heuristics. It treats the graph as the evidence substrate and derives an
 authorization invariant from an observed sibling-function boundary rather
 than from function names or a hard-coded modifier name.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .hypotheses import Hypothesis
+from .hypotheses import Hypothesis, HypothesisState
 from .invariants import Invariant, InvariantStatus
 from .system_model import Edge, Node, SystemModel
 
@@ -30,21 +30,25 @@ def _is_externally_callable(node: Node) -> bool:
     return str(node.attributes.get("visibility", "")) in {"external", "public"}
 
 
+def _safe_identifier(value: str) -> str:
+    return "".join(char if char.isalnum() else "_" for char in value).strip("_")
+
+
 def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
     """Infer authorization-boundary hypotheses from graph relationships.
 
     A candidate is emitted only when the same contract contains both an
     externally callable state-changing function that enforces an observed
     authorization mechanism and another externally callable state-changing
-    function that does not.  This is deliberately a candidate, not a finding.
+    function that does not. This is a candidate, not a finding.
     """
     functions = {
         node_id: node
         for node_id, node in model.nodes.items()
         if node.kind == "function" and _is_externally_callable(node)
     }
-    writes = {
-        edge.source: edge.target
+    writing_functions = {
+        edge.source
         for edge in model.edges
         if edge.relation == "writes" and edge.source in functions
     }
@@ -55,9 +59,8 @@ def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthoriza
     }
 
     by_contract: dict[str, list[str]] = {}
-    for function_id in functions:
-        if function_id in writes:
-            by_contract.setdefault(_contract_name(functions[function_id]), []).append(function_id)
+    for function_id in writing_functions:
+        by_contract.setdefault(_contract_name(functions[function_id]), []).append(function_id)
 
     results: list[DerivedAuthorizationReasoning] = []
     for contract, function_ids in sorted(by_contract.items()):
@@ -68,7 +71,7 @@ def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthoriza
 
         auth_ids = tuple(sorted(enforced[function_id] for function_id in protected))
         source_ids = protected + unprotected + auth_ids
-        invariant_id = f"INV-SYS-AUTH-{contract}"
+        invariant_id = f"INV-SYS-AUTH-{_safe_identifier(contract)}"
         invariant = Invariant(
             invariant_id,
             f"Externally callable state-changing operations in {contract} must preserve the authorization boundary observed on protected sibling operations.",
@@ -79,7 +82,7 @@ def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthoriza
         )
         hypotheses = tuple(
             Hypothesis(
-                f"H-SYS-AUTH-{contract}-{function_id.split(':')[-1].split('(')[0]}",
+                f"H-SYS-AUTH-{_safe_identifier(contract)}-{_safe_identifier(function_id)}",
                 f"{function_id} may permit an unauthorized caller to mutate state despite the contract's observed authorization boundary.",
                 0.5,
                 HypothesisState.UNRESOLVED,
@@ -89,11 +92,6 @@ def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthoriza
         )
         results.append(DerivedAuthorizationReasoning(invariant, hypotheses, protected, unprotected))
     return tuple(results)
-
-
-# Imported lazily above in type construction would obscure the contract; keep
-# the state symbol explicit and local to avoid coupling to legacy models.
-from .hypotheses import HypothesisState  # noqa: E402
 
 
 def materialize_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
