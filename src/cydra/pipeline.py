@@ -16,6 +16,7 @@ from .reasoning import (
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
 from .structural_authorization import generate_structural_access_control_hypotheses
+from .structural_initialization import generate_structural_initialization_hypotheses
 
 
 def _merge_hypotheses(*groups):
@@ -36,7 +37,10 @@ def investigate(path: str | Path, target: str | None = None) -> InvestigationRes
             generate_access_control_hypotheses(contract),
             generate_structural_access_control_hypotheses(contract),
         )
-        init = generate_initialization_hypotheses(contract)
+        init = _merge_hypotheses(
+            generate_initialization_hypotheses(contract),
+            generate_structural_initialization_hypotheses(contract),
+        )
         arith = generate_arithmetic_hypotheses(contract)
         if auth:
             all_invariants.append(access_control_invariant(contract))
