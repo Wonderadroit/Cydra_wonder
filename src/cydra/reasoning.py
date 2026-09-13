@@ -262,4 +262,13 @@ def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
 
 
 def build_evidence(contract: ContractModel, hypotheses: tuple[Hypothesis, ...]) -> tuple[Evidence, ...]:
-    return tuple(Evidence(f"E-MODEL-{fn.name}", "model", f"Function {fn.name} has modifiers={list(fn.modifiers)} and writes={list(fn.writes)}.", contract.source, f"line {fn.line}") for fn in contract.functions)
+    return tuple(
+        Evidence(
+            f"E-MODEL-{fn.name}",
+            "model",
+            f"Function {fn.name} has modifiers={list(_declared_modifiers(contract, fn))} and writes={list(fn.writes)}.",
+            contract.source,
+            f"line {fn.line}",
+        )
+        for fn in contract.functions
+    )
