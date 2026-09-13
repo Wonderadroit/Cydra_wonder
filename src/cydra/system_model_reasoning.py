@@ -35,12 +35,14 @@ def _safe_identifier(value: str) -> str:
 
 
 def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
-    """Infer authorization-boundary hypotheses from graph relationships.
+    """Infer competing authorization explanations from graph relationships.
 
     A candidate is emitted only when the same contract contains both an
     externally callable state-changing function that enforces an observed
     authorization mechanism and another externally callable state-changing
-    function that does not. This is a candidate, not a finding.
+    function that does not. The output deliberately contains two competing
+    hypotheses for each unprotected function: a boundary-violation
+    hypothesis and a benign/intended-public-interface alternative.
     """
     functions = {
         node_id: node
@@ -80,17 +82,26 @@ def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthoriza
             0.85,
             {"derivation": "sibling authorization boundary", "contract": contract},
         )
-        hypotheses = tuple(
-            Hypothesis(
-                f"H-SYS-AUTH-{_safe_identifier(contract)}-{_safe_identifier(function_id)}",
-                f"{function_id} may permit an unauthorized caller to mutate state despite the contract's observed authorization boundary.",
-                0.5,
-                HypothesisState.UNRESOLVED,
-                {"unauthorized_caller": {"support": 1.0, "authorized_only": 0.0}},
-            )
-            for function_id in unprotected
-        )
-        results.append(DerivedAuthorizationReasoning(invariant, hypotheses, protected, unprotected))
+        hypotheses: list[Hypothesis] = []
+        for function_id in unprotected:
+            function_key = _safe_identifier(function_id)
+            hypotheses.extend((
+                Hypothesis(
+                    f"H-SYS-AUTH-{_safe_identifier(contract)}-{function_key}",
+                    f"{function_id} may permit an unauthorized caller to mutate state despite the contract's observed authorization boundary.",
+                    0.5,
+                    HypothesisState.UNRESOLVED,
+                    {"unauthorized_caller": {"support": 1.0, "authorized_only": 0.0}},
+                ),
+                Hypothesis(
+                    f"H-SYS-PUBLIC-{_safe_identifier(contract)}-{function_key}",
+                    f"{function_id} may be intentionally public, making the protected sibling boundary inapplicable to this state transition.",
+                    0.5,
+                    HypothesisState.UNRESOLVED,
+                    {"intentional_public_interface": {"support": 1.0, "boundary_violation": 0.0}},
+                ),
+            ))
+        results.append(DerivedAuthorizationReasoning(invariant, tuple(hypotheses), protected, unprotected))
     return tuple(results)
 
 
