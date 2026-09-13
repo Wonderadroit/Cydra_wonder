@@ -15,6 +15,7 @@ from typing import Any
 
 from cydra.foundry import ExecutionResult, generate_initialization_test, require_executed, run_foundry_test, test_path_for
 from cydra.initialization_runtime import classify_initialization_execution
+from cydra.initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
 from cydra.pipeline import investigate
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
@@ -64,6 +65,8 @@ def target_import(contract, project: Path) -> str:
 def run_initialization(project: Path, hypothesis, experiment, contract):
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_initialization_test(hypothesis, target_import(contract, project), contract.name, output, contract_model=contract)
+    if requires_proxy_initialization(Path(contract.source)):
+        generated.write_text(adapt_generated_initialization_for_proxy(generated.read_text(encoding="utf-8"), contract.name), encoding="utf-8")
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
     require_executed(execution)
     outcome = classify_initialization_execution(hypothesis, execution)
