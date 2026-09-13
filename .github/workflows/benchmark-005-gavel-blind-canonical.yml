@@ -1,6 +1,13 @@
 name: CYDRA Benchmark 005 — Gavel blind canonical
 
 on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/run_benchmark_005_blind.py'
+      - 'benchmarks/005_gavel_blind_discovery/**'
+      - '.github/workflows/benchmark-005-gavel-blind-canonical.yml'
   workflow_dispatch:
 
 jobs:
@@ -19,14 +26,6 @@ jobs:
     steps:
       - name: Check out CYDRA
         uses: actions/checkout@v4
-
-      - name: Check out frozen Gavel target
-        uses: actions/checkout@v4
-        with:
-          repository: JamieFrame/The-Gavel-Protocol
-          ref: bfb5086eb7915d2dc90f52fd761d54bc2806847d
-          path: gavel
-          submodules: recursive
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
