@@ -41,6 +41,12 @@ def test_neither_uses_direct_fallback_and_logs_undetermined(caplog):
     assert "shape undetermined" in caplog.text
 
 
+def test_initializer_zero_address_placeholder_is_normalized():
+    body = render_initialization_test_body(_function(), "target", "0xA11CE", "address(0), payable(address(0))")
+    assert "target.initialize(address(0xCAFE), payable(address(0xCAFE)));" in body
+    assert "target.initialize(address(0), payable(address(0)));" not in body
+
+
 def test_both_prioritizes_unauthorized_caller_shape():
     body = render_initialization_test_body(_function(authorization=("msg.sender != owner",), state=("factory != address(0)",)), "target", "address(0xA11CE)", "tokenStub")
     assert "vm.prank(unauthorized);" in body
