@@ -27,7 +27,7 @@ class ExperimentBinding:
 
 
 def _node(model: SystemModel, kind: str, identifier: str) -> Node:
-    node_id = f"{kind}:{identifier}"
+    node_id = identifier if identifier.startswith(f"{kind}:") else f"{kind}:{identifier}"
     node = model.nodes.get(node_id)
     if node is None:
         raise KeyError(f"missing canonical {kind}: {node_id}")
