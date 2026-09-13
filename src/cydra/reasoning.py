@@ -62,8 +62,8 @@ def access_control_invariant(contract: ContractModel, privileged_modifier: str =
 
 def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
     admin_functions = [f for f in contract.functions if f.name.startswith(("set", "add", "remove", "update", "accept"))]
-    declared = {f.name: _declared_modifiers(contract, f) for f in admin_functions}
-    protected = [f for f in admin_functions if declared[f.name]]
+    declared = tuple((f, _declared_modifiers(contract, f)) for f in admin_functions)
+    protected = [f for f, modifiers in declared if modifiers]
     if not protected:
         return ()
     invariant = access_control_invariant(contract)
@@ -77,8 +77,8 @@ def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothe
             "privileged configuration or authorization state can be changed",
             evidence_ids=(f"E-MODEL-{fn.name}",),
         )
-        for fn in admin_functions
-        if not declared[fn.name]
+        for fn, modifiers in declared
+        if not modifiers
     )
 
 
@@ -136,7 +136,7 @@ def plan_initialization_experiment(hypothesis: Hypothesis) -> Experiment:
 
 def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
     if hypothesis.invariant_id != "INV-ARITH-001":
-        raise ValueError(f"Unsupported invariant for arithmetic experiment: {hypothesis.invariant_id}")
+        raise ValueError(f"Unsupported invariant for arithmetic experiment: {hypothesis.experiment_id}")
     return Experiment(
         f"X-{hypothesis.hypothesis_id}",
         hypothesis.hypothesis_id,
