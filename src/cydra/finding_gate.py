@@ -49,8 +49,10 @@ def evaluate_finding_graph(model: SystemModel, *, candidate: FindingCandidate, f
     if hypothesis is None or hypothesis.kind != "hypothesis":
         return GateResult(GateDecision.BLOCKED, ("finding hypothesis is not canonical",))
     graph_state = str(hypothesis.attributes.get("state", "unresolved"))
-    if graph_state not in {"supported", "contradicted"}:
-        return GateResult(GateDecision.UNRESOLVED, ("canonical hypothesis state remains unresolved",))
+    if graph_state == "unresolved" or graph_state == "supported":
+        return GateResult(GateDecision.UNRESOLVED, ("canonical hypothesis is not causally established",))
+    if graph_state != "causally_established":
+        return GateResult(GateDecision.BLOCKED, (f"canonical hypothesis state is {graph_state}; finding requires causal establishment",))
     if not evidence_ids:
         return GateResult(GateDecision.BLOCKED, ("finding has no canonical evidence IDs",))
     missing = tuple(e for e in evidence_ids if e not in model.nodes or model.nodes[e].kind != "evidence")
