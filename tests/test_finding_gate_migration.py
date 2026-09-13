@@ -23,11 +23,12 @@ def test_finding_gate_reaches_ready_only_after_causal_verification():
     assert verify_persisted_causal_chain(model, "causal:c1").state is CausalVerificationState.VERIFIED
 
 
-def test_finding_gate_preserves_unresolved_causality():
+def test_finding_gate_blocks_without_explicit_hypothesis_support():
     model = build(False)
     candidate = FindingCandidate(True, False, True, True, True, True)
     result = evaluate_finding_graph(model, candidate=candidate, finding_id="finding:1", hypothesis_id="hypothesis:h1", evidence_ids=("evidence:e1",), causal_chain_id="causal:c1")
-    assert result.decision is GateDecision.UNRESOLVED
+    assert result.decision is GateDecision.BLOCKED
+    assert "explicitly support" in result.reasons[0]
 
 
 def test_impact_assessment_unknown_is_not_assessed():
