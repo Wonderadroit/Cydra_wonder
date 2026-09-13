@@ -34,6 +34,11 @@ def _observation_id(function_id: str) -> str:
     return f"OBS-AUTH-{_safe_identifier(function_id)}"
 
 
+def _hypotheses_for_observation(reasoning: DerivedAuthorizationReasoning, observation_id: str) -> tuple[Hypothesis, ...]:
+    """Return only the competing hypotheses whose predictions name this observation."""
+    return tuple(hypothesis for hypothesis in reasoning.hypotheses if observation_id in hypothesis.planning_predictions)
+
+
 def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
     """Infer competing authorization explanations from graph relationships."""
     functions = {node_id: node for node_id, node in model.nodes.items() if node.kind == "function" and _is_externally_callable(node)}
@@ -100,13 +105,12 @@ def plan_authorization_observations(reasoning: DerivedAuthorizationReasoning) ->
 
 
 def materialize_authorization_observations(model: SystemModel, reasoning: DerivedAuthorizationReasoning) -> tuple[TestPlan, ...]:
-    """Persist ranked observations and explicit hypothesis/invariant bindings."""
+    """Persist ranked observations and bind each observation only to its local competing hypotheses."""
     plans = plan_authorization_observations(reasoning)
     prospective = SystemModel.from_dict(model.export())
     invariant_id = f"invariant:{reasoning.invariant.invariant_id}"
     if invariant_id not in prospective.nodes:
         raise KeyError(f"derived invariant is not materialized: {invariant_id}")
-    hypothesis_ids = tuple(f"hypothesis:{hypothesis.hypothesis_id}" for hypothesis in reasoning.hypotheses)
     for plan in plans:
         observation_id = f"observation:{plan.observation_id}"
         function_id = next(
@@ -115,14 +119,17 @@ def materialize_authorization_observations(model: SystemModel, reasoning: Derive
         )
         if function_id is None:
             raise KeyError(f"observation plan has no canonical target function: {plan.observation_id}")
+        local_hypotheses = _hypotheses_for_observation(reasoning, plan.observation_id)
+        if len(local_hypotheses) != 2:
+            raise ValueError(f"observation {plan.observation_id} must have exactly two competing hypotheses; found {len(local_hypotheses)}")
         prospective.add_node(Node(observation_id, "observation", plan.description, {
             "status": "planned", "information_gain": plan.information_gain,
             "cost": plan.cost, "utility": plan.utility, "rationale": plan.rationale,
             "target_function_id": function_id, "provenance": "system_model_reasoning",
         }))
         prospective.add_edge(Edge(observation_id, "targets", invariant_id, {"provenance": "system_model_reasoning"}))
-        for hypothesis_id in hypothesis_ids:
-            prospective.add_edge(Edge(observation_id, "tests", hypothesis_id, {"provenance": "system_model_reasoning"}))
+        for hypothesis in local_hypotheses:
+            prospective.add_edge(Edge(observation_id, "tests", f"hypothesis:{hypothesis.hypothesis_id}", {"provenance": "system_model_reasoning"}))
     from .graph_semantics import validate_graph
     errors = validate_graph(prospective)
     if errors:
