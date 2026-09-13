@@ -10,8 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .hypotheses import Hypothesis, HypothesisState
+from .information_gain import rank_next_observations
 from .invariants import Invariant, InvariantStatus
 from .system_model import Edge, Node, SystemModel
+from .test_planning import ObservationOption, TestPlan
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,25 @@ def derive_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthoriza
             ))
         results.append(DerivedAuthorizationReasoning(invariant, tuple(hypotheses), protected, unprotected))
     return tuple(results)
+
+
+def plan_authorization_observations(reasoning: DerivedAuthorizationReasoning) -> tuple[TestPlan, ...]:
+    """Rank observations that can distinguish the competing explanations.
+
+    Planning consumes the derived hypotheses and never executes an external
+    action. The returned plan is therefore a test-selection artifact, not a
+    security conclusion.
+    """
+    options = tuple(
+        ObservationOption(
+            f"OBS-AUTH-{_safe_identifier(function_id)}",
+            f"Call {function_id} as an unauthorized caller and observe whether the state transition is accepted or rejected.",
+            ("unauthorized mutation accepted", "authorization enforced"),
+            1.0,
+        )
+        for function_id in reasoning.unprotected_functions
+    )
+    return rank_next_observations(reasoning.hypotheses, options)
 
 
 def materialize_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
