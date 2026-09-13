@@ -23,7 +23,7 @@ jobs:
       - name: Run authorization reasoning regressions
         env:
           PYTHONPATH: src
-        run: python -m pytest -q tests/test_authorization_reasoning.py tests/test_initialization_topology.py
+        run: python -m pytest -q tests/test_authorization_reasoning.py tests/test_authorization_invariant.py tests/test_initialization_topology.py
       - name: Re-check frozen Gavel extraction boundary
         env:
           PYTHONPATH: src
