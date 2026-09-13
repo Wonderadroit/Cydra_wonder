@@ -14,7 +14,7 @@ def test_renamed_unprotected_writer_is_found_from_shared_protected_state(tmp_pat
         """pragma solidity ^0.8.20;
 contract Target {
     bool globalConfig;
-    function guardedLifecycle() external onlyGov { globalConfig = true; }
+    function guardedLifecycle() external onlyGuardian { globalConfig = true; }
     function configure(bool value) external { globalConfig = value; }
 }
 """,
@@ -30,7 +30,7 @@ def test_unrelated_unprotected_writer_is_not_flagged(tmp_path):
 contract Target {
     bool globalConfig;
     uint256 userValue;
-    function guardedLifecycle() external onlyGov { globalConfig = true; }
+    function guardedLifecycle() external onlyGuardian { globalConfig = true; }
     function setUserValue(uint256 value) external { userValue = value; }
 }
 """,
