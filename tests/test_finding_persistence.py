@@ -11,7 +11,7 @@ def build(support=True):
     model=SystemModel()
     for node_id,kind in (("hypothesis:h1","hypothesis"),("observation:o1","observation"),("evidence:e1","evidence"),("verification:v1","evidence"),("belief:b1","belief")):
         attributes={}
-        if kind=="hypothesis": attributes={"hypothesis_id":"hypothesis:h1","state":"supported","belief":0.9}
+        if kind=="hypothesis": attributes={"hypothesis_id":"hypothesis:h1","state":"causally_established","belief":0.9}
         if kind=="belief": attributes={"hypothesis_id":"hypothesis:h1"}
         model.add_node(Node(node_id,kind,node_id,attributes))
     if support: model.add_edge(Edge("evidence:e1","supports","hypothesis:h1"))
