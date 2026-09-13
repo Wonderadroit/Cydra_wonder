@@ -20,6 +20,7 @@ from cydra.pipeline import investigate
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
 INVARIANT_CLASS = {"INV-AUTH-001": "authorization", "INV-INIT-001": "initialization", "INV-ARITH-001": "arithmetic"}
 FREEZE_FILES = ("provenance.json", "target-checkout.txt", "parse-output.json", "invariants.json", "hypotheses.json", "experiments.json", "execution.json", "execution-human.txt", "integrity-check.json", "classification.json", "manifest.sha256", "README.md")
+GENERATED_MANIFEST = "manifest.sha256"
 
 
 def _json(value: Any) -> Any:
@@ -70,7 +71,7 @@ def run_initialization(project: Path, hypothesis, experiment, contract):
 
 
 def manifest(freeze: Path):
-    return [f"{hashlib.sha256((freeze / name).read_bytes()).hexdigest()}  {name}" for name in FREEZE_FILES if name != "manifest.sha256"]
+    return [f"{hashlib.sha256((freeze / name).read_bytes()).hexdigest()}  {name}" for name in FREEZE_FILES if name != GENERATED_MANIFEST]
 
 
 def freeze(files: dict[str, Any], texts: dict[str, str], destination: Path) -> None:
@@ -80,9 +81,10 @@ def freeze(files: dict[str, Any], texts: dict[str, str], destination: Path) -> N
         root.mkdir()
         for name, value in files.items(): write_json(root / name, value)
         for name, text in texts.items(): (root / name).write_text(text, encoding="utf-8")
-        missing = [n for n in FREEZE_FILES if n not in files and n not in texts]
+        required_inputs = [n for n in FREEZE_FILES if n != GENERATED_MANIFEST]
+        missing = [n for n in required_inputs if n not in files and n not in texts]
         if missing: raise RuntimeError(f"freeze missing {missing}")
-        (root / "manifest.sha256").write_text("\n".join(manifest(root)) + "\n", encoding="utf-8")
+        (root / GENERATED_MANIFEST).write_text("\n".join(manifest(root)) + "\n", encoding="utf-8")
         if destination.exists(): raise FileExistsError(destination)
         os.replace(root, destination)
 
