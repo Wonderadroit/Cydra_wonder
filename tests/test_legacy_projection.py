@@ -1,4 +1,5 @@
 from pathlib import Path
+from cydra.graph_semantics import validate_graph
 from cydra.legacy_projection import project_investigation_result
 from cydra.pipeline import investigate
 
@@ -15,3 +16,4 @@ def test_benchmark_001_legacy_result_projects_into_canonical_graph_without_class
     assert any(node.kind == "evidence" for node in model.nodes.values())
     assert not any(node.kind == "finding" for node in model.nodes.values())
     assert model.validate() == []
+    assert validate_graph(model) == []
