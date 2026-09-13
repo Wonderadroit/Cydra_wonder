@@ -20,11 +20,11 @@ def requires_proxy_initialization(contract_source: str | Path) -> bool:
     return _INITIALIZABLE_MARKER in source and _PROXY_MARKER in source
 
 
-def adapt_generated_initialization_for_proxy(source: str, target_type: str, implementation_args: str = "") -> str:
+def adapt_generated_initialization_for_proxy(source: str, target_type: str) -> str:
     """Route initialization through a minimal delegate proxy while preserving msg.sender.
 
     The implementation contract remains the real target. The proxy owns the separate
-    storage slot used by OpenZeppelin Initializable, so a constructor that calls
+    storage used by OpenZeppelin Initializable, so a constructor that calls
     _disableInitializers() does not make the intended proxy deployment untestable.
     """
     if "contract CydraDelegateProxy" in source:
@@ -37,11 +37,17 @@ def adapt_generated_initialization_for_proxy(source: str, target_type: str, impl
             raise ValueError("generated initialization test has no target declaration")
         source = source.replace(anchor, anchor + declaration, 1)
 
-    assignment = f"implementation = new {target_type}({implementation_args});\n        CydraDelegateProxy proxy = new CydraDelegateProxy(address(implementation));\n        target = {target_type}(address(proxy));"
-    pattern = re.compile(rf"target\s*=\s*new\s+{re.escape(target_type)}\([^;]*\);")
-    source, count = pattern.subn(assignment, source, count=1)
-    if count != 1:
+    pattern = re.compile(rf"target\s*=\s*new\s+{re.escape(target_type)}\(([^;]*)\);", re.MULTILINE)
+    match = pattern.search(source)
+    if match is None:
         raise ValueError("generated initialization test does not contain the expected direct target deployment")
+    implementation_args = match.group(1)
+    assignment = (
+        f"implementation = new {target_type}({implementation_args});\n"
+        "        CydraDelegateProxy proxy = new CydraDelegateProxy(address(implementation));\n"
+        f"        target = {target_type}(address(proxy));"
+    )
+    source = pattern.sub(assignment, source, count=1)
 
     proxy = '''
 
