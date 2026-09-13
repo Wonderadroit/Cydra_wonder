@@ -28,6 +28,36 @@ class TestPlan:
 def _entropy(probabilities: Iterable[float]) -> float:
     return -sum(p * log2(p) for p in probabilities if p > 0.0)
 
+def _predicted_distribution(hypothesis: Hypothesis, option: ObservationOption) -> dict[str, float] | None:
+    raw = hypothesis.planning_predictions.get(option.observation_id)
+    if not raw:
+        return None
+    values = {state: max(0.0, float(raw.get(state, 0.0))) for state in option.expected_states}
+    total = sum(values.values())
+    if total <= 0.0:
+        return None
+    return {state: value / total for state, value in values.items()}
+
+def _prediction_information_gain(hypotheses: tuple[Hypothesis, ...], option: ObservationOption, prior: list[float], prior_entropy: float) -> float | None:
+    predictions = [_predicted_distribution(hypothesis, option) for hypothesis in hypotheses]
+    if any(prediction is None for prediction in predictions):
+        return None
+    outcome_probability = {state: 0.0 for state in option.expected_states}
+    for weight, prediction in zip(prior, predictions):
+        for state, probability in prediction.items():
+            outcome_probability[state] += weight * probability
+
+    expected_posterior_entropy = 0.0
+    for state, probability in outcome_probability.items():
+        if probability <= 0.0:
+            continue
+        posterior = [
+            weight * prediction[state] / probability
+            for weight, prediction in zip(prior, predictions)
+        ]
+        expected_posterior_entropy += probability * _entropy(posterior)
+    return max(0.0, prior_entropy - expected_posterior_entropy)
+
 def rank_observations(hypotheses: Iterable[Hypothesis], observations: Iterable[ObservationOption]) -> tuple[TestPlan, ...]:
     hs = tuple(hypotheses)
     if not hs: return ()
@@ -40,9 +70,13 @@ def rank_observations(hypotheses: Iterable[Hypothesis], observations: Iterable[O
     prior_entropy = _entropy(prior)
     plans = []
     for option in observations:
-        distinct_states = len(set(option.expected_states))
-        diversity = min(1.0, (distinct_states - 1) / max(1, distinct_states))
-        gain = prior_entropy * diversity
+        prediction_gain = _prediction_information_gain(hs, option, prior, prior_entropy)
+        if prediction_gain is None:
+            gain = 0.0
+            rationale = "hypothesis-specific outcome predictions are incomplete; information gain conservatively set to zero; no execution performed"
+        else:
+            gain = prediction_gain
+            rationale = "expected posterior entropy from hypothesis-specific outcome predictions; no execution performed"
         utility = gain / option.cost
-        plans.append(TestPlan(option.observation_id, option.description, gain, option.cost, utility, "normalized hypothesis belief weighted by distinguishable expected outcomes; no execution performed"))
+        plans.append(TestPlan(option.observation_id, option.description, gain, option.cost, utility, rationale))
     return tuple(sorted(plans, key=lambda p: (-p.utility, -p.information_gain, p.observation_id)))
