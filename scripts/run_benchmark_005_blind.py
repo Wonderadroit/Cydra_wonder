@@ -135,9 +135,28 @@ def main() -> int:
             except Exception as exc:
                 status.update(failure_stage="execution_or_generation", blocked_reason=f"{type(exc).__name__}: {exc}")
             statuses.append(status)
+
+        class_coverage = {}
+        for cls in classes:
+            class_statuses = [status for status in statuses if status["class"] == cls]
+            extracted = len(class_statuses)
+            executed = sum(bool(status.get("blind_executed")) for status in class_statuses)
+            if extracted == 0:
+                coverage_status = "no_candidate_extracted"
+            elif executed == extracted:
+                coverage_status = "executed"
+            else:
+                coverage_status = "capability_gap"
+            class_coverage[cls] = {
+                "requested": True,
+                "hypotheses_extracted": extracted,
+                "hypotheses_executed": executed,
+                "status": coverage_status,
+            }
+
         build = capture(project, "forge", "build")
         provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id}
-        classification = {"surface": "initialization-only", "hypotheses": statuses, "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface"}}
+        classification = {"surface": "initialization-only", "class_coverage": class_coverage, "hypotheses": statuses, "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
         execution_human = "\n\n".join(f"{e.experiment_id}: {e.status}\n{e.stdout}\n{e.stderr}" for e in executions)
         freeze({"provenance.json": provenance, "target-checkout.txt": git(checkout, "rev-parse", "HEAD") + "\n", "parse-output.json": {"target": result.target, "contracts": result.contracts, "selected_classes": classes}, "invariants.json": result.invariants, "hypotheses.json": result.hypotheses, "experiments.json": result.experiments, "execution.json": {"results": executions}, "integrity-check.json": {"runner_source_frozen": True, "forge_build": build}, "classification.json": classification}, {"execution-human.txt": execution_human, "compilation.log": json.dumps(build, indent=2) + "\n", "README.md": "Benchmark 005 blind Gavel freeze. Raw artifacts are frozen before any ground-truth lookup.\n"}, args.freeze)
     return 0
