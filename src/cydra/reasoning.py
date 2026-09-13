@@ -26,6 +26,12 @@ _ADMIN_NAME_PREFIXES = ("set", "add", "remove", "update", "accept")
 _STATE_CHANGING_VISIBILITIES = {"public", "external"}
 
 
+def _strip_signature_comments(text: str) -> str:
+    """Remove Solidity comments from a function-signature tail."""
+    text = re.sub(r"//[^\n]*", " ", text)
+    return re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
+
+
 def _source_declared_modifiers(contract: ContractModel, function: FunctionModel) -> tuple[str, ...]:
     """Recover declared modifiers when the minimal model parser misses them."""
     try:
@@ -39,7 +45,8 @@ def _source_declared_modifiers(contract: ContractModel, function: FunctionModel)
         line = source.count("\n", 0, match.start()) + 1
         if line != function.line:
             continue
-        identifiers = re.findall(r"\b[A-Za-z_]\w*\b", match.group("tail"))
+        tail = _strip_signature_comments(match.group("tail"))
+        identifiers = re.findall(r"\b[A-Za-z_]\w*\b", tail)
         modifiers: list[str] = []
         for token in identifiers:
             if token == "returns" or token in {"override", "virtual"}:
