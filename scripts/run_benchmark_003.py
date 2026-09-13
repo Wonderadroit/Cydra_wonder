@@ -88,10 +88,15 @@ def main() -> int:
     }
     print(json.dumps(payload, indent=2, default=list))
 
-    raise SystemExit(
+    # The boundary is an expected epistemic stop, not a process failure.  The
+    # JSON payload records that downstream classification was intentionally not
+    # reached; a zero exit code lets CI distinguish a valid boundary from a
+    # broken experiment or harness.
+    print(
         "Benchmark 003 harness boundary reached: arithmetic execution evidence recorded; "
         "stop before classifier."
     )
+    return 0
 
 
 if __name__ == "__main__":
