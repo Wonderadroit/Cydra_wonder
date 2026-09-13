@@ -22,6 +22,11 @@ _CALLER_SCOPED_WRITE_RE = re.compile(
     r"(?:\+?=|-=|\*=|/=|%=|\+\+|--)"
 )
 _CALLER_TOKEN_RE = re.compile(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b")
+_CALLER_KEYED_READ_RE = re.compile(
+    r"\b[A-Za-z_]\w*\s*"
+    r"\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\]"
+    r"(?:\s*\[[^\]]*\])*"
+)
 _ADMIN_NAME_PREFIXES = ("set", "add", "remove", "update", "accept")
 _STATE_CHANGING_VISIBILITIES = {"public", "external"}
 
@@ -94,7 +99,12 @@ def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) ->
 
 
 def _has_caller_authorization_predicate(function: FunctionModel) -> bool:
-    return any(_CALLER_TOKEN_RE.search(predicate) for predicate in function.authorization_predicates)
+    """Detect caller authorization predicates, excluding caller-keyed state reads."""
+    for predicate in function.authorization_predicates:
+        residual = _CALLER_KEYED_READ_RE.sub(" ", predicate)
+        if _CALLER_TOKEN_RE.search(residual):
+            return True
+    return False
 
 
 def _state_changing_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
@@ -151,10 +161,6 @@ def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothe
     admin_functions = _admin_named_functions(contract)
     declared = tuple((function, _declared_modifiers(contract, function)) for function in admin_functions)
 
-    # Structural protected-sibling evidence is preferred when present, but the
-    # legacy name heuristic remains as a compatibility fallback. This keeps
-    # existing evidence-generating behavior while the generalized detector is
-    # being validated against historical programs.
     protected_functions = [
         function
         for function in _externally_callable_functions(contract)
