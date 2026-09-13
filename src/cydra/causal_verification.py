@@ -27,6 +27,23 @@ def verify_persisted_causal_chain(model: SystemModel, chain_id: str) -> CausalVe
     missing = [eid for eid in evidence_ids if eid not in model.nodes or model.nodes[eid].kind != "evidence"]
     if missing:
         return CausalVerificationResult(CausalVerificationState.REJECTED, chain_id, trace, evidence_ids, (f"causal evidence is missing: {', '.join(missing)}",))
+
+    outcome_evidence = model.nodes[trace.outcome_evidence_id]
+    binding = outcome_evidence.attributes.get("experiment_binding")
+    if isinstance(binding, dict):
+        if binding.get("hypothesis_id") != trace.hypothesis_id:
+            return CausalVerificationResult(CausalVerificationState.REJECTED, chain_id, trace, evidence_ids, ("experiment-bound outcome evidence points to a different hypothesis",))
+        bound_observation = binding.get("observation_id")
+        if bound_observation != trace.observation_id:
+            return CausalVerificationResult(CausalVerificationState.REJECTED, chain_id, trace, evidence_ids, ("experiment-bound outcome evidence points to a different observation",))
+        observation = model.nodes.get(trace.observation_id)
+        if observation is None or observation.kind != "observation":
+            return CausalVerificationResult(CausalVerificationState.REJECTED, chain_id, trace, evidence_ids, ("causal observation anchor is missing",))
+        bound_target = binding.get("target_function_id")
+        observed_target = observation.attributes.get("target_function_id")
+        if bound_target is not None and observed_target is not None and bound_target != observed_target:
+            return CausalVerificationResult(CausalVerificationState.REJECTED, chain_id, trace, evidence_ids, ("experiment-bound target function conflicts with observation target",))
+
     supporting = [e for e in model.edges if e.source in evidence_ids and e.target == trace.hypothesis_id and e.relation == "supports"]
     if not supporting:
         return CausalVerificationResult(CausalVerificationState.UNRESOLVED, chain_id, trace, evidence_ids, ("causal evidence does not explicitly support the chain hypothesis",))

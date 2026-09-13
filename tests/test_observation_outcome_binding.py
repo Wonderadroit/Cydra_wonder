@@ -1,6 +1,7 @@
 import pytest
 
 from cydra.experiment_binding import bind_experiment
+from cydra.hypotheses import Hypothesis
 from cydra.invariants import CandidateVerification, VerificationEvidence, VerificationRole, VerificationState
 from cydra.observation_feedback import apply_observation_feedback
 from cydra.observation_outcomes import record_observation_outcome
@@ -23,6 +24,8 @@ def test_outcome_evidence_inherits_exact_experiment_binding():
     model = _bound_model()
     outcome = record_observation_outcome(model, observation_id="OBS-1", outcome_id="OUT-1", result="unauthorized mutation accepted", source="forge test --match-test test")
     evidence = model.nodes[outcome.evidence_id]
+    assert outcome.hypothesis_id == "hypothesis:H1"
+    assert outcome.target_function_id == "function:Fixture.sol:Fixture:changeRoute()"
     assert evidence.attributes["hypothesis_id"] == "hypothesis:H1"
     assert evidence.attributes["target_function_id"] == "function:Fixture.sol:Fixture:changeRoute()"
     assert evidence.attributes["experiment_binding"]["observation_id"] == "observation:OBS-1"
@@ -36,12 +39,24 @@ def test_outcome_requires_existing_bound_hypothesis():
         record_observation_outcome(model, observation_id="OBS-1", outcome_id="OUT-2", result="accepted", source="forge")
 
 
-def test_feedback_accepts_canonical_outcome_evidence_id():
+def test_feedback_updates_only_the_exact_bound_hypothesis():
     model = _bound_model()
     outcome = record_observation_outcome(model, observation_id="OBS-1", outcome_id="OUT-3", result="accepted", source="forge")
     verification = CandidateVerification("candidate-1", VerificationState.SUPPORTED, (outcome.evidence_id,), (outcome.evidence_id,), (), 1.0)
     evidence = (VerificationEvidence(outcome.evidence_id, VerificationRole.SUPPORTS, 1.0, "execution supports hypothesis"),)
-    hypothesis = type("H", (), {})
-    # The canonical feedback function only needs hypothesis objects accepted by update_hypothesis;
-    # this test targets the identity boundary before the belief-update implementation.
-    assert outcome.evidence_id in verification.evidence_ids
+    h1 = Hypothesis("hypothesis:H1", "changeRoute permits unauthorized mutation", 0.5)
+    h2 = Hypothesis("hypothesis:H2", "unrelated alternate hypothesis", 0.5)
+    updated = apply_observation_feedback(outcome, verification, (h1, h2), evidence)
+    assert len(updated) == 1
+    assert updated[0].hypothesis_id == "hypothesis:H1"
+    assert updated[0].belief > h1.belief
+
+
+def test_feedback_rejects_bound_outcome_when_exact_hypothesis_is_missing():
+    model = _bound_model()
+    outcome = record_observation_outcome(model, observation_id="OBS-1", outcome_id="OUT-4", result="accepted", source="forge")
+    verification = CandidateVerification("candidate-1", VerificationState.SUPPORTED, (outcome.evidence_id,), (outcome.evidence_id,), (), 1.0)
+    evidence = (VerificationEvidence(outcome.evidence_id, VerificationRole.SUPPORTS, 1.0),)
+    h2 = Hypothesis("hypothesis:H2", "unrelated alternate hypothesis", 0.5)
+    with pytest.raises(ValueError, match="exactly its bound hypothesis"):
+        apply_observation_feedback(outcome, verification, (h2,), evidence)

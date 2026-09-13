@@ -12,9 +12,13 @@ class ObservationOutcome:
     result: str
     source: str
     confidence: float = 1.0
+    hypothesis_id: str | None = None
+    target_function_id: str | None = None
     def __post_init__(self) -> None:
         for value, name in ((self.observation_id,"observation_id"),(self.outcome_id,"outcome_id"),(self.result,"result"),(self.source,"source")):
             if not value.strip(): raise ValueError(f"{name} must not be empty")
+        if self.hypothesis_id is not None and not self.hypothesis_id.strip(): raise ValueError("hypothesis_id must not be empty")
+        if self.target_function_id is not None and not self.target_function_id.strip(): raise ValueError("target_function_id must not be empty")
         if not 0.0 <= self.confidence <= 1.0: raise ValueError("confidence must be between 0 and 1")
     @property
     def evidence_id(self) -> str:
@@ -33,15 +37,16 @@ def record_observation_outcome(model: SystemModel, *, observation_id: str, outco
     binding = planned.attributes.get("experiment_binding")
     if planned.attributes.get("binding_status") == "bound" and not isinstance(binding, dict):
         raise ValueError("bound observation is missing canonical experiment binding")
+    hypothesis_id = binding.get("hypothesis_id") if isinstance(binding, dict) else None
+    target_function_id = binding.get("target_function_id") if isinstance(binding, dict) else planned.attributes.get("target_function_id")
     evidence_attributes={"observation_id":observation_id,"result":result,"source":source,"confidence":confidence,"metadata":dict(metadata or {})}
     if isinstance(binding, dict):
         evidence_attributes["experiment_binding"] = dict(binding)
-        evidence_attributes["hypothesis_id"] = binding.get("hypothesis_id")
-        evidence_attributes["target_function_id"] = binding.get("target_function_id")
+        evidence_attributes["hypothesis_id"] = hypothesis_id
+        evidence_attributes["target_function_id"] = target_function_id
     evidence=Node(evidence_node_id,"evidence",result,evidence_attributes)
     edges=[Edge(node_id,"produced",evidence_node_id,{"executed_externally":True})]
     if isinstance(binding, dict):
-        hypothesis_id=binding.get("hypothesis_id")
         if hypothesis_id not in model.nodes:
             raise KeyError(f"bound hypothesis no longer exists: {hypothesis_id}")
         edges.append(Edge(evidence_node_id,"informs",hypothesis_id,{"observation_id":observation_id,"bound_experiment":True}))
@@ -54,4 +59,4 @@ def record_observation_outcome(model: SystemModel, *, observation_id: str, outco
     model.add_node(evidence)
     for edge in edges: model.add_edge(edge)
     model.update_node_attributes(node_id,{"status":"completed","executed":True,"outcome_id":outcome_id})
-    return ObservationOutcome(observation_id,outcome_id,result,source,confidence)
+    return ObservationOutcome(observation_id,outcome_id,result,source,confidence,hypothesis_id,target_function_id)
