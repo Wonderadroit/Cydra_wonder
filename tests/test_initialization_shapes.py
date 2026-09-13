@@ -18,56 +18,37 @@ def _function(*, authorization=(), state=()):
 
 
 def test_caller_only_uses_unauthorized_caller_shape():
-    body = render_initialization_test_body(
-        _function(authorization=("msg.sender != owner",)),
-        "target",
-        "0xA11CE",
-        "tokenStub, false",
-    )
-    assert "address unauthorized = address(0xA11CE);" in body
+    body = render_initialization_test_body(_function(authorization=("msg.sender != owner",)), "target", "0xA11CE", "tokenStub, false")
     assert "vm.prank(unauthorized);" in body
     assert "vm.expectRevert();" in body
     assert "target.initialize(tokenStub, false);" in body
 
 
-def test_state_only_uses_lifecycle_shape():
-    body = render_initialization_test_body(
-        _function(state=("factory != address(0)",)),
-        "target",
-        "address(0xA11CE)",
-        "tokenStub, tokenStub, false",
-    )
-    assert body.count("target.initialize(tokenStub, tokenStub, false);") == 2
-    first, second = body.split("target.initialize(tokenStub, tokenStub, false);")[:2]
-    assert "vm.expectRevert();" not in first
-    assert "vm.expectRevert();" in second
-    assert "vm.prank" not in body
+def test_state_only_uses_first_call_lifecycle_boundary():
+    body = render_initialization_test_body(_function(state=("factory != address(0)",)), "target", "0xA11CE", "tokenStub, tokenStub, false")
+    assert body.count("target.initialize(tokenStub, tokenStub, false);") == 1
+    assert "address unauthorized = address(0xA11CE);" in body
+    assert "vm.prank(unauthorized);" in body
+    assert "vm.expectRevert();" in body
 
 
 def test_neither_uses_direct_fallback_and_logs_undetermined(caplog):
     with caplog.at_level(logging.WARNING, logger="cydra.initialization_shapes"):
-        body = render_initialization_test_body(
-            _function(),
-            "target",
-            "address(0xA11CE)",
-            "params",
-        )
+        body = render_initialization_test_body(_function(), "target", "address(0xA11CE)", "params")
     assert "target.initialize(params);" in body
     assert "vm.prank" not in body
     assert "vm.expectRevert" not in body
     assert "shape undetermined" in caplog.text
 
 
+def test_initializer_zero_address_placeholder_is_normalized():
+    body = render_initialization_test_body(_function(), "target", "0xA11CE", "address(0), payable(address(0))")
+    assert "target.initialize(address(0xCAFE), payable(address(0xCAFE)));" in body
+    assert "target.initialize(address(0), payable(address(0)));" not in body
+
+
 def test_both_prioritizes_unauthorized_caller_shape():
-    body = render_initialization_test_body(
-        _function(
-            authorization=("msg.sender != owner",),
-            state=("factory != address(0)",),
-        ),
-        "target",
-        "address(0xA11CE)",
-        "tokenStub",
-    )
+    body = render_initialization_test_body(_function(authorization=("msg.sender != owner",), state=("factory != address(0)",)), "target", "address(0xA11CE)", "tokenStub")
     assert "vm.prank(unauthorized);" in body
     assert "vm.expectRevert();" in body
     assert body.count("target.initialize(tokenStub);") == 1
