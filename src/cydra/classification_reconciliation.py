@@ -43,14 +43,11 @@ def reconcile_classification(
     finding_ready: bool = False,
     execution_boundary: str | None = None,
 ) -> ClassificationReconciliation:
-    """Map canonical epistemic state to legacy labels without collapsing stages.
-
-    Structural support is not confirmation. Only an explicitly verified causal
-    chain may map to ``confirmed``; a missing or unresolved execution boundary
-    is retained as metadata rather than being confused with rejection.
-    """
+    """Map canonical epistemic state to legacy labels without collapsing stages."""
     if not hypothesis_id.strip():
         raise ValueError("hypothesis_id must not be empty")
+    if finding_ready and causal_state is not CausalVerificationState.VERIFIED:
+        raise ValueError("finding classification requires verified causal establishment")
     if finding_ready:
         stage = ReasoningStage.FINDING
         classification = LegacyClassification.CONFIRMED
