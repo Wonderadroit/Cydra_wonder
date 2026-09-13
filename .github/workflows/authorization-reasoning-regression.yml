@@ -1,0 +1,47 @@
+name: CYDRA authorization reasoning regression
+
+on:
+  push:
+    branches:
+      - fix/self-scoped-authorization-rule-2026-09-13
+  workflow_dispatch:
+
+jobs:
+  reasoning:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Run authorization reasoning regressions
+        env:
+          PYTHONPATH: src
+        run: python -m pytest -q tests/test_authorization_reasoning.py tests/test_initialization_topology.py
+      - name: Re-check frozen Gavel extraction boundary
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import tempfile
+          from cydra.reasoning import generate_access_control_hypotheses
+          from cydra.solidity_model import parse_solidity
+
+          repo = "https://github.com/JamieFrame/The-Gavel-Protocol.git"
+          ref = "bfb5086eb7915d2dc90f52fd761d54bc2806847d"
+          with tempfile.TemporaryDirectory() as tmp:
+              root = Path(tmp) / "gavel"
+              subprocess.run(("git", "clone", "--no-tags", repo, str(root)), check=True, stdout=subprocess.DEVNULL)
+              subprocess.run(("git", "-C", str(root), "checkout", "--detach", ref), check=True, stdout=subprocess.DEVNULL)
+              for name in ("LoanProtocol", "NFTLoanProtocol"):
+                  contract = parse_solidity(root / "contracts" / f"{name}.sol")[0]
+                  ids = [h.hypothesis_id for h in generate_access_control_hypotheses(contract)]
+                  assert f"H-AUTH-setOperatorApproval" not in ids, (name, ids)
+                  print(name, "authorization hypotheses:", ids)
+          PY
