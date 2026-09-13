@@ -22,6 +22,9 @@ jobs:
       - name: Install pytest
         run: python -m pip install pytest
 
+      - name: Enable recursive target submodules
+        run: git config --global submodule.recurse true
+
       - name: Run topology regressions
         env:
           PYTHONPATH: src
