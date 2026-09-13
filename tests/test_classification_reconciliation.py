@@ -1,3 +1,5 @@
+import pytest
+
 from cydra.causal_verification import CausalVerificationState
 from cydra.classification_reconciliation import LegacyClassification, ReasoningStage, reconcile_classification
 from cydra.hypotheses import HypothesisState
@@ -39,3 +41,8 @@ def test_causal_rejection_overrides_prior_structural_support():
     result = reconcile_classification("H1", HypothesisState.SUPPORTED, causal_state=CausalVerificationState.REJECTED)
     assert result.reasoning_stage is ReasoningStage.REJECTED
     assert result.legacy_classification is LegacyClassification.REJECTED
+
+
+def test_finding_flag_cannot_bypass_causal_verification():
+    with pytest.raises(ValueError, match="requires verified causal establishment"):
+        reconcile_classification("H1", HypothesisState.SUPPORTED, finding_ready=True)
