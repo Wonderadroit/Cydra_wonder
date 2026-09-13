@@ -1,0 +1,59 @@
+name: CYDRA initialization topology integration
+
+on:
+  push:
+    branches:
+      - fix/initialization-topology-inheritance
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install CYDRA
+        run: python -m pip install -e .
+
+      - name: Install pytest
+        run: python -m pip install pytest
+
+      - name: Run topology regressions
+        env:
+          PYTHONPATH: src
+        run: python -m pytest -q tests/test_initialization_runtime.py tests/test_initialization_topology.py
+
+      - name: Run blind LoanProtocol integration
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p blind-artifacts
+          python scripts/run_benchmark_005_blind.py \
+            --target-repo https://github.com/JamieFrame/The-Gavel-Protocol.git \
+            --target-ref bfb5086eb7915d2dc90f52fd761d54bc2806847d \
+            --target-path contracts/LoanProtocol.sol \
+            --target-project . \
+            --classes initialization authorization arithmetic \
+            --freeze blind-artifacts/LoanProtocol.sol
+
+      - name: Verify proxy topology in frozen classification
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("blind-artifacts/contracts/LoanProtocol.sol/classification.json")
+          data = json.loads(p.read_text())
+          init = next(x for x in data["hypotheses"] if x["class"] == "initialization")
+          assert init["deployment_topology"] == "proxy", init
+          print("deployment_topology=proxy")
+          PY
+
+      - name: Upload frozen artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: initialization-topology-loanprotocol
+          path: blind-artifacts/
