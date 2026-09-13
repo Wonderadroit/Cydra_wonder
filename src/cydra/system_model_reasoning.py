@@ -126,6 +126,35 @@ def plan_authorization_observations(reasoning: DerivedAuthorizationReasoning) ->
     return rank_next_observations(reasoning.hypotheses, options)
 
 
+def materialize_authorization_observations(model: SystemModel, reasoning: DerivedAuthorizationReasoning) -> tuple[TestPlan, ...]:
+    """Persist the ranked observation plan and its hypothesis/invariant bindings."""
+    plans = plan_authorization_observations(reasoning)
+    prospective = SystemModel.from_dict(model.export())
+    invariant_id = f"invariant:{reasoning.invariant.invariant_id}"
+    if invariant_id not in prospective.nodes:
+        raise KeyError(f"derived invariant is not materialized: {invariant_id}")
+    for plan in plans:
+        observation_id = f"observation:{plan.observation_id}"
+        prospective.add_node(Node(observation_id, "observation", plan.description, {
+            "status": "planned",
+            "information_gain": plan.information_gain,
+            "cost": plan.cost,
+            "utility": plan.utility,
+            "rationale": plan.rationale,
+            "provenance": "system_model_reasoning",
+        }))
+        prospective.add_edge(Edge(observation_id, "targets", invariant_id, {"provenance": "system_model_reasoning"}))
+        for hypothesis in reasoning.hypotheses:
+            prospective.add_edge(Edge(observation_id, "tests", f"hypothesis:{hypothesis.hypothesis_id}", {"provenance": "system_model_reasoning"}))
+    from .graph_semantics import validate_graph
+    errors = validate_graph(prospective)
+    if errors:
+        raise ValueError("invalid derived observation graph: " + "; ".join(errors))
+    model.nodes = prospective.nodes
+    model.edges = prospective.edges
+    return plans
+
+
 def materialize_authorization_reasoning(model: SystemModel) -> tuple[DerivedAuthorizationReasoning, ...]:
     """Persist derived invariant/hypothesis nodes and their provenance edges.
 
