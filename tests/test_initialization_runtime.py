@@ -51,7 +51,7 @@ Ran 3 test suites in 9.23ms (2.61ms CPU time): 3 tests passed, 0 failed, 0 skipp
 
 def test_parse_json_requires_object():
     parsed = parse_forge_json('{"suite:test":{"test_results":{"x()":{"status":"Success"}}}}')
-    assert parsed["suite:test"]["test_results"]["x()"]["status"] == "Success"
+    assert parsed["suite:test"]["test_results"]["x()"] ["status"] == "Success"
 
 
 def test_json_target_derivation_strips_t_sol_suffix():
@@ -75,11 +75,11 @@ def test_initialization_pass_rejects_and_maps_to_not_confirmed():
     assert "tests_run=1" in outcome.evidence.claim
 
 
-def test_initialization_fail_confirms():
+def test_initialization_fail_stays_proposed_without_causal_differential():
     outcome = classify_initialization_execution(_hypothesis(), _execution("FAIL", failed=1, exit_code=1))
-    assert outcome.internal_status == "confirmed"
-    assert outcome.benchmark_status == "confirmed"
-    assert outcome.hypothesis.status == "confirmed"
+    assert outcome.internal_status == "proposed"
+    assert outcome.benchmark_status == "proposed"
+    assert outcome.hypothesis.status == "proposed"
 
 
 def test_initialization_unmeasurable_stays_proposed():
