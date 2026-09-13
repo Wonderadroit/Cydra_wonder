@@ -16,8 +16,14 @@ _DECLARED_MODIFIER_EXCLUSIONS = {
     "returns", "memory", "calldata", "storage",
 }
 _CALLER_SCOPED_WRITE_RE = re.compile(
-    r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\]"
+    r"\b[A-Za-z_]\w*\s*"
+    r"\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\]"
+    r"(?:\s*\[[^\]]*\])*\s*"
+    r"(?:\+?=|-=|\*=|/=|%=|\+\+|--)"
 )
+_CALLER_TOKEN_RE = re.compile(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b")
+_ADMIN_NAME_PREFIXES = ("set", "add", "remove", "update", "accept")
+_STATE_CHANGING_VISIBILITIES = {"public", "external"}
 
 
 def _source_declared_modifiers(contract: ContractModel, function: FunctionModel) -> tuple[str, ...]:
@@ -50,18 +56,11 @@ def _declared_modifiers(contract: ContractModel, function: FunctionModel) -> tup
     return function.modifiers or _source_declared_modifiers(contract, function)
 
 
-def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) -> bool:
-    """Return true when the function writes a mapping entry keyed by the caller.
-
-    A caller-scoped write is materially different from an administrative write:
-    the caller is modifying state in its own namespace rather than mutating a
-    shared privileged configuration. This is a structural signal only; it does
-    not prove authorization safety.
-    """
+def _function_body(contract: ContractModel, function: FunctionModel) -> str | None:
     try:
         source = Path(contract.source).read_text(encoding="utf-8")
     except (OSError, UnicodeError):
-        return False
+        return None
 
     for match in _FUNCTION_SIGNATURE_RE.finditer(source):
         if match.group("name") != function.name:
@@ -77,54 +76,117 @@ def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) ->
             elif source[index] == "}":
                 depth -= 1
                 if depth == 0:
-                    body = source[body_start + 1:index]
-                    return bool(_CALLER_SCOPED_WRITE_RE.search(body))
+                    return source[body_start + 1:index]
+        return None
+    return None
+
+
+def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) -> bool:
+    """Return true only when a caller-keyed mapping entry is actually mutated.
+
+    Reading a caller-keyed mapping, comparing a caller to stored state, or
+    merely mentioning ``msg.sender`` is not enough. The structural exclusion
+    requires a mutation operator on a caller-keyed mapping expression.
+    """
+    body = _function_body(contract, function)
+    if body is None:
         return False
-    return False
+    return bool(_CALLER_SCOPED_WRITE_RE.search(body))
+
+
+def _has_caller_authorization_predicate(function: FunctionModel) -> bool:
+    """Return true when the model observed an explicit caller/state predicate."""
+    return any(_CALLER_TOKEN_RE.search(predicate) for predicate in function.authorization_predicates)
+
+
+def _state_changing_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
+    """Return externally callable functions with observed state writes."""
+    return tuple(
+        function
+        for function in contract.functions
+        if function.visibility in _STATE_CHANGING_VISIBILITIES and function.writes
+    )
+
+
+def _admin_named_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
+    return tuple(
+        function
+        for function in _state_changing_functions(contract)
+        if function.name.startswith(_ADMIN_NAME_PREFIXES)
+    )
 
 
 def access_control_invariant(contract: ContractModel, privileged_modifier: str | None = None) -> Invariant:
     """Build the authorization invariant from observed protected siblings.
 
-    `onlyGov` remains the historical default only when no protected modifier can
-    be recovered. This prevents the invariant from claiming a governance model
-    that the target does not actually use.
+    The candidate naming heuristic remains narrow, but the privileged mechanism
+    is learned from every protected, state-changing external/public sibling.
+    This prevents unrelated function names such as ``pause`` from hiding the
+    authorization mechanism used by the target.
     """
     if privileged_modifier is None:
-        admin_functions = [f for f in contract.functions if f.name.startswith(("set", "add", "remove", "update", "accept"))]
-        observed = sorted({modifier for fn in admin_functions for modifier in _declared_modifiers(contract, fn)})
+        protected_functions = [
+            function
+            for function in _state_changing_functions(contract)
+            if _declared_modifiers(contract, function)
+        ]
+        observed = sorted({
+            modifier
+            for function in protected_functions
+            for modifier in _declared_modifiers(contract, function)
+        })
         if len(observed) == 1:
             privileged_modifier = observed[0]
         elif len(observed) > 1:
             privileged_modifier = "observed privileged authorization"
         else:
             privileged_modifier = "onlyGov"
-    return Invariant("INV-AUTH-001", f"Administrative state-changing operations must enforce {privileged_modifier} authorization.", "structural sibling-function rule; modifier-bearing administrative functions", 0.90)
+    return Invariant(
+        "INV-AUTH-001",
+        f"Administrative state-changing operations must enforce {privileged_modifier} authorization.",
+        "structural sibling-function rule; modifier-bearing state-changing functions",
+        0.90,
+    )
 
 
 def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
-    admin_functions = [f for f in contract.functions if f.name.startswith(("set", "add", "remove", "update", "accept"))]
-    declared = tuple((f, _declared_modifiers(contract, f)) for f in admin_functions)
-    protected = [f for f, modifiers in declared if modifiers]
-    if not protected:
+    admin_functions = _admin_named_functions(contract)
+    declared = tuple((function, _declared_modifiers(contract, function)) for function in admin_functions)
+
+    # Do not infer an authorization mechanism from the names of candidate
+    # functions themselves. Protected siblings can have unrelated names.
+    protected_functions = [
+        function
+        for function in _state_changing_functions(contract)
+        if _declared_modifiers(contract, function)
+    ]
+    if not protected_functions:
         return ()
-    protected_modifiers = sorted({modifier for _, modifiers in declared for modifier in modifiers})
+
+    protected_modifiers = sorted({
+        modifier
+        for function in protected_functions
+        for modifier in _declared_modifiers(contract, function)
+    })
     if len(protected_modifiers) == 1:
         invariant = access_control_invariant(contract, protected_modifiers[0])
     else:
         invariant = access_control_invariant(contract, "observed privileged authorization")
+
     return tuple(
         Hypothesis(
-            f"H-AUTH-{fn.name}",
-            f"{fn.name} may permit an unauthorized caller to mutate privileged state.",
+            f"H-AUTH-{function.name}",
+            f"{function.name} may permit an unauthorized caller to mutate privileged state.",
             invariant.invariant_id,
-            fn.name,
+            function.name,
             "arbitrary external caller",
             "privileged configuration or authorization state can be changed",
-            evidence_ids=(f"E-MODEL-{fn.name}",),
+            evidence_ids=(f"E-MODEL-{function.name}",),
         )
-        for fn, modifiers in declared
-        if not modifiers and not _is_caller_scoped_write(contract, fn)
+        for function, modifiers in declared
+        if not modifiers
+        and not _is_caller_scoped_write(contract, function)
+        and not _has_caller_authorization_predicate(function)
     )
 
 
