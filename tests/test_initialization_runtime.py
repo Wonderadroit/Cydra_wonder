@@ -14,7 +14,7 @@ def _hypothesis(target="Minter"):
     )
 
 
-def _execution(status, failed=0, exit_code=0):
+def _execution(status, failed=0, exit_code=0, stdout="{}"):
     return ExecutionResult(
         "X-H-INIT-Minter",
         "Minter",
@@ -24,7 +24,7 @@ def _execution(status, failed=0, exit_code=0):
         1,
         failed,
         status,
-        "{}",
+        stdout,
         "",
     )
 
@@ -57,7 +57,7 @@ def test_parse_json_requires_object():
 def test_json_target_derivation_strips_t_sol_suffix():
     suites = {
         f"test/cydra_generated/{target}.t.sol:CydraInitializationInvariantTest": {
-            "test_results": {"testInitializationInterfaceIsCallable()": {"status": "Success"}}
+            "test_results": {"testInitializationInterfaceIsCallable()": {"status":"Success"}}
         }
         for target in ("Minter", "Voter", "Pool")
     }
@@ -73,13 +73,32 @@ def test_initialization_pass_rejects_and_maps_to_not_confirmed():
     assert outcome.hypothesis.evidence_ids == ("E-EXEC-H-INIT-Minter-INITIALIZATION",)
     assert outcome.evidence.evidence_id == "E-EXEC-H-INIT-Minter-INITIALIZATION"
     assert "tests_run=1" in outcome.evidence.claim
+    assert "semantics=successful_execution" in outcome.evidence.claim
 
 
-def test_initialization_fail_confirms():
-    outcome = classify_initialization_execution(_hypothesis(), _execution("FAIL", failed=1, exit_code=1))
+def test_initialization_security_assertion_failure_confirms():
+    stdout = "[FAIL: expected revert, but no revert was received] testInitializationInterfaceIsCallable()"
+    outcome = classify_initialization_execution(_hypothesis(), _execution("FAIL", failed=1, exit_code=1, stdout=stdout))
     assert outcome.internal_status == "confirmed"
     assert outcome.benchmark_status == "confirmed"
     assert outcome.hypothesis.status == "confirmed"
+    assert "semantics=security_assertion_failure" in outcome.evidence.claim
+
+
+def test_initialization_guard_revert_does_not_confirm():
+    stdout = "[FAIL: InvalidInitialization()] testInitializationInterfaceIsCallable()"
+    outcome = classify_initialization_execution(_hypothesis(), _execution("FAIL", failed=1, exit_code=1, stdout=stdout))
+    assert outcome.internal_status == "proposed"
+    assert outcome.benchmark_status == "proposed"
+    assert outcome.hypothesis.status == "proposed"
+    assert "semantics=deployment_guard_revert" in outcome.evidence.claim
+
+
+def test_initialization_unclassified_failure_stays_proposed():
+    outcome = classify_initialization_execution(_hypothesis(), _execution("FAIL", failed=1, exit_code=1, stdout="[FAIL: SomeCustomError()] testInitializationInterfaceIsCallable()"))
+    assert outcome.internal_status == "proposed"
+    assert outcome.benchmark_status == "proposed"
+    assert outcome.hypothesis.status == "proposed"
 
 
 def test_initialization_unmeasurable_stays_proposed():
