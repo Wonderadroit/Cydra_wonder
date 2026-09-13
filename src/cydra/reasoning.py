@@ -27,13 +27,11 @@ _STATE_CHANGING_VISIBILITIES = {"public", "external"}
 
 
 def _strip_signature_comments(text: str) -> str:
-    """Remove Solidity comments from a function-signature tail."""
     text = re.sub(r"//[^\n]*", " ", text)
     return re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
 
 
 def _source_declared_modifiers(contract: ContractModel, function: FunctionModel) -> tuple[str, ...]:
-    """Recover declared modifiers when the minimal model parser misses them."""
     try:
         source = Path(contract.source).read_text(encoding="utf-8")
     except (OSError, UnicodeError):
@@ -89,12 +87,6 @@ def _function_body(contract: ContractModel, function: FunctionModel) -> str | No
 
 
 def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) -> bool:
-    """Return true only when a caller-keyed mapping entry is actually mutated.
-
-    Reading a caller-keyed mapping, comparing a caller to stored state, or
-    merely mentioning ``msg.sender`` is not enough. The structural exclusion
-    requires a mutation operator on a caller-keyed mapping expression.
-    """
     body = _function_body(contract, function)
     if body is None:
         return False
@@ -102,12 +94,10 @@ def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) ->
 
 
 def _has_caller_authorization_predicate(function: FunctionModel) -> bool:
-    """Return true when the model observed an explicit caller/state predicate."""
     return any(_CALLER_TOKEN_RE.search(predicate) for predicate in function.authorization_predicates)
 
 
 def _state_changing_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    """Return externally callable functions with observed state writes."""
     return tuple(
         function
         for function in contract.functions
@@ -132,14 +122,6 @@ def _admin_named_functions(contract: ContractModel) -> tuple[FunctionModel, ...]
 
 
 def access_control_invariant(contract: ContractModel, privileged_modifier: str | None = None) -> Invariant:
-    """Build the authorization invariant from observed protected siblings.
-
-    The candidate naming heuristic remains narrow, but the privileged mechanism
-    is learned from every externally callable function carrying a modifier.
-    This includes lifecycle guards such as ``pause`` whose state mutation may
-    occur in an inherited/internal call and therefore may not appear in the
-    minimal function write list.
-    """
     if privileged_modifier is None:
         protected_functions = [
             function
@@ -169,25 +151,30 @@ def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothe
     admin_functions = _admin_named_functions(contract)
     declared = tuple((function, _declared_modifiers(contract, function)) for function in admin_functions)
 
-    # Do not infer an authorization mechanism from the names of candidate
-    # functions themselves. Protected siblings can have unrelated names.
+    # Structural protected-sibling evidence is preferred when present, but the
+    # legacy name heuristic remains as a compatibility fallback. This keeps
+    # existing evidence-generating behavior while the generalized detector is
+    # being validated against historical programs.
     protected_functions = [
         function
         for function in _externally_callable_functions(contract)
         if _declared_modifiers(contract, function)
     ]
-    if not protected_functions:
-        return ()
-
-    protected_modifiers = sorted({
-        modifier
-        for function in protected_functions
-        for modifier in _declared_modifiers(contract, function)
-    })
-    if len(protected_modifiers) == 1:
-        invariant = access_control_invariant(contract, protected_modifiers[0])
+    candidate_functions: list[tuple[FunctionModel, tuple[str, ...]]] = list(declared)
+    if protected_functions:
+        protected_modifiers = sorted({
+            modifier
+            for function in protected_functions
+            for modifier in _declared_modifiers(contract, function)
+        })
+        invariant = access_control_invariant(
+            contract,
+            protected_modifiers[0] if len(protected_modifiers) == 1 else "observed privileged authorization",
+        )
+    elif admin_functions:
+        invariant = access_control_invariant(contract)
     else:
-        invariant = access_control_invariant(contract, "observed privileged authorization")
+        return ()
 
     return tuple(
         Hypothesis(
@@ -199,7 +186,7 @@ def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothe
             "privileged configuration or authorization state can be changed",
             evidence_ids=(f"E-MODEL-{function.name}",),
         )
-        for function, modifiers in declared
+        for function, modifiers in candidate_functions
         if not modifiers
         and not _is_caller_scoped_write(contract, function)
         and not _has_caller_authorization_predicate(function)
@@ -219,35 +206,15 @@ def generate_initialization_hypotheses(contract: ContractModel) -> tuple[Hypothe
 
 
 def arithmetic_rounding_invariant(contract: ContractModel) -> Invariant | None:
-    """Detect the Benchmark 003 rounding boundary without changing shared schemas."""
-    source = Path(contract.source).read_text(encoding="utf-8")
-    if "(assets * SCALE + 996) / 997" not in source:
-        return None
-    return Invariant(
-        "INV-ARITH-001",
-        "The quote calculation must not round an exact floor upward; observed output must equal the floor of the reference division.",
-        "arithmetic rule; integer division with upward rounding offset",
-        0.90,
-    )
+    """Compatibility wrapper; structural arithmetic detection owns discovery."""
+    from .structural_arithmetic import detect_arithmetic_rounding
+    return detect_arithmetic_rounding(contract)
 
 
 def generate_arithmetic_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
-    invariant = arithmetic_rounding_invariant(contract)
-    if invariant is None:
-        return ()
-    targets = [f for f in contract.functions if f.name == "quoteMint"]
-    return tuple(
-        Hypothesis(
-            f"H-ARITH-{fn.name}",
-            f"{fn.name} may return a value above the exact floor because the arithmetic path rounds upward.",
-            invariant.invariant_id,
-            fn.name,
-            "arithmetic boundary input that exposes rounding drift",
-            "quoted value exceeds the exact floor by at least one unit",
-            evidence_ids=(f"E-MODEL-{fn.name}",),
-        )
-        for fn in targets
-    )
+    """Compatibility wrapper; structural arithmetic detection owns discovery."""
+    from .structural_arithmetic import generate_arithmetic_hypotheses as _generate
+    return _generate(contract)
 
 
 def plan_access_control_experiment(hypothesis: Hypothesis) -> Experiment:
