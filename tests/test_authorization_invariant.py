@@ -19,3 +19,5 @@ def test_authorization_invariant_uses_observed_only_owner_modifier(tmp_path: Pat
     auth = next(item for item in result.invariants if item.invariant_id == "INV-AUTH-001")
     assert "onlyOwner" in auth.statement
     assert "onlyGov" not in auth.statement
+
+# Regression remains intentionally source/model based; no target oracle is imported.
