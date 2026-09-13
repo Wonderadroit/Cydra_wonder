@@ -27,13 +27,7 @@ class CanonicalCycleResult:
     causal_verification: CausalVerificationResult
 
 
-def _differential_verification(
-    hypothesis_id: str,
-    vulnerable: ExecutionResult,
-    patched: ExecutionResult,
-    outcome_evidence_id: str,
-) -> tuple[CandidateVerification, tuple[VerificationEvidence, ...]]:
-    """Turn execution facts into verification evidence without benchmark labels."""
+def _differential_verification(hypothesis_id: str, vulnerable: ExecutionResult, patched: ExecutionResult, outcome_evidence_id: str) -> tuple[CandidateVerification, tuple[VerificationEvidence, ...]]:
     vulnerable_supports = vulnerable.status == "FAIL" and patched.status == "PASS"
     contradicted = vulnerable.status == "PASS" and patched.status == "FAIL"
     verification_evidence_id = f"verification:{hypothesis_id}:{vulnerable.experiment_id}:{patched.experiment_id}"
@@ -49,7 +43,6 @@ def _differential_verification(
         role = VerificationRole.NEUTRAL
         state = VerificationState.UNRESOLVED
         rationale = "differential execution did not produce a decisive vulnerable-versus-patched result"
-
     evidence = (
         VerificationEvidence(outcome_evidence_id, role, 1.0, rationale),
         VerificationEvidence(verification_evidence_id, role, 1.0, rationale),
@@ -81,19 +74,10 @@ def _persist_verification_evidence(model: SystemModel, hypothesis_id: str, evide
     }))
 
 
-def run_canonical_differential_cycle(
-    model: SystemModel,
-    *,
-    hypothesis: Hypothesis,
-    observation_id: str,
-    vulnerable: ExecutionResult,
-    patched: ExecutionResult,
-    outcome_id: str,
-) -> CanonicalCycleResult:
+def run_canonical_differential_cycle(model: SystemModel, *, hypothesis: Hypothesis, observation_id: str, vulnerable: ExecutionResult, patched: ExecutionResult, outcome_id: str) -> CanonicalCycleResult:
     """Persist one executed differential cycle and return its verified state."""
     require_executed(vulnerable)
     require_executed(patched)
-
     outcome = record_observation_outcome(
         model,
         observation_id=observation_id,
@@ -101,75 +85,37 @@ def run_canonical_differential_cycle(
         result=f"vulnerable={vulnerable.status}; patched={patched.status}",
         source="foundry:differential-execution",
         confidence=1.0,
-        metadata={
-            "vulnerable_experiment_id": vulnerable.experiment_id,
-            "patched_experiment_id": patched.experiment_id,
-        },
+        metadata={"vulnerable_experiment_id": vulnerable.experiment_id, "patched_experiment_id": patched.experiment_id},
     )
-    if outcome.hypothesis_id != hypothesis.hypothesis_id:
+    expected_hypothesis_node = f"hypothesis:{hypothesis.hypothesis_id}"
+    if outcome.hypothesis_id != expected_hypothesis_node:
         raise ValueError("executed outcome is bound to a different hypothesis")
 
-    verification, evidence = _differential_verification(
-        hypothesis.hypothesis_id, vulnerable, patched, outcome.evidence_id
-    )
+    verification, evidence = _differential_verification(hypothesis.hypothesis_id, vulnerable, patched, outcome.evidence_id)
     _persist_verification_evidence(model, hypothesis.hypothesis_id, evidence, vulnerable, patched)
-
-    # The observation outcome and verification evidence are explicit graph support;
-    # no benchmark answer, expected label, or fixture metadata participates here.
     relation = "supports" if verification.state == VerificationState.SUPPORTED else "contradicts" if verification.state == VerificationState.CONTRADICTED else "informs"
-    model.add_edge(Edge(outcome.evidence_id, relation, f"hypothesis:{hypothesis.hypothesis_id}", {
-        "provenance": "executed_differential_experiment"
-    }))
+    model.add_edge(Edge(outcome.evidence_id, relation, expected_hypothesis_node, {"provenance": "executed_differential_experiment"}))
 
     updated, belief_update = update_hypothesis(hypothesis, verification, evidence)
-    persist_belief_update(
-        model,
-        hypothesis,
-        belief_update,
-        update_id=f"belief:{outcome_id}",
-    )
+    persist_belief_update(model, hypothesis, belief_update, update_id=f"belief:{outcome_id}")
 
-    # A successful causal experiment is stronger than merely generic support.
     if verification.state == VerificationState.SUPPORTED:
-        updated = Hypothesis(
-            updated.hypothesis_id,
-            updated.statement,
-            updated.belief,
-            HypothesisState.CAUSALLY_ESTABLISHED,
-            dict(updated.planning_predictions),
-        )
+        updated = Hypothesis(updated.hypothesis_id, updated.statement, updated.belief, HypothesisState.CAUSALLY_ESTABLISHED, dict(updated.planning_predictions))
         belief_update = BeliefUpdate(
-            belief_update.hypothesis_id,
-            belief_update.prior_belief,
-            belief_update.posterior_belief,
-            belief_update.prior_state,
-            HypothesisState.CAUSALLY_ESTABLISHED,
-            belief_update.evidence_ids,
-            "executed differential evidence causally established the hypothesis",
+            belief_update.hypothesis_id, belief_update.prior_belief, belief_update.posterior_belief,
+            belief_update.prior_state, HypothesisState.CAUSALLY_ESTABLISHED,
+            belief_update.evidence_ids, "executed differential evidence causally established the hypothesis",
         )
-        model.update_node_attributes(f"hypothesis:{hypothesis.hypothesis_id}", {
-            "state": HypothesisState.CAUSALLY_ESTABLISHED.value,
-            "belief": updated.belief,
-            "last_belief_update": f"belief:{outcome_id}",
-        })
-        model.nodes[f"belief:{outcome_id}"].attributes.update({
-            "posterior_state": HypothesisState.CAUSALLY_ESTABLISHED.value,
-            "rationale": belief_update.rationale,
-        })
-    
+        model.update_node_attributes(expected_hypothesis_node, {"state": HypothesisState.CAUSALLY_ESTABLISHED.value, "belief": updated.belief, "last_belief_update": f"belief:{outcome_id}"})
+        model.update_node_attributes(f"belief:{outcome_id}", {"posterior_state": HypothesisState.CAUSALLY_ESTABLISHED.value, "rationale": belief_update.rationale})
+
     causal_chain = CausalChain(
-        chain_id=f"causal:{outcome_id}",
-        hypothesis_id=f"hypothesis:{hypothesis.hypothesis_id}",
-        observation_id=f"observation:{observation_id}",
-        outcome_evidence_id=outcome.evidence_id,
-        verification_id=evidence[1].evidence_id,
-        belief_update_id=f"belief:{outcome_id}",
+        chain_id=f"causal:{outcome_id}", hypothesis_id=expected_hypothesis_node,
+        observation_id=f"observation:{observation_id}", outcome_evidence_id=outcome.evidence_id,
+        verification_id=evidence[1].evidence_id, belief_update_id=f"belief:{outcome_id}",
     )
     persist_causal_chain(model, causal_chain)
     causal_verification = verify_persisted_causal_chain(model, causal_chain.chain_id)
-    if causal_verification.state.name != "VERIFIED":
-        raise ValueError(
-            "canonical causal cycle did not verify: "
-            + "; ".join(causal_verification.reasons)
-        )
+    if verification.state != VerificationState.UNRESOLVED and causal_verification.state.name != "VERIFIED":
+        raise ValueError("canonical causal cycle did not verify: " + "; ".join(causal_verification.reasons))
     return CanonicalCycleResult(updated, belief_update, outcome, verification, causal_chain, causal_verification)
