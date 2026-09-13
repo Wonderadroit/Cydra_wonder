@@ -50,5 +50,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-005-${{ matrix.target_path }}
-            
           path: blind-artifacts/
