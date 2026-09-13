@@ -15,6 +15,9 @@ _DECLARED_MODIFIER_EXCLUSIONS = {
     "view", "pure", "payable", "virtual", "override",
     "returns", "memory", "calldata", "storage",
 }
+_CALLER_SCOPED_WRITE_RE = re.compile(
+    r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\]"
+)
 
 
 def _source_declared_modifiers(contract: ContractModel, function: FunctionModel) -> tuple[str, ...]:
@@ -47,6 +50,39 @@ def _declared_modifiers(contract: ContractModel, function: FunctionModel) -> tup
     return function.modifiers or _source_declared_modifiers(contract, function)
 
 
+def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) -> bool:
+    """Return true when the function writes a mapping entry keyed by the caller.
+
+    A caller-scoped write is materially different from an administrative write:
+    the caller is modifying state in its own namespace rather than mutating a
+    shared privileged configuration. This is a structural signal only; it does
+    not prove authorization safety.
+    """
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False
+
+    for match in _FUNCTION_SIGNATURE_RE.finditer(source):
+        if match.group("name") != function.name:
+            continue
+        line = source.count("\n", 0, match.start()) + 1
+        if line != function.line:
+            continue
+        body_start = match.end() - 1
+        depth = 0
+        for index in range(body_start, len(source)):
+            if source[index] == "{":
+                depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    body = source[body_start + 1:index]
+                    return bool(_CALLER_SCOPED_WRITE_RE.search(body))
+        return False
+    return False
+
+
 def access_control_invariant(contract: ContractModel, privileged_modifier: str = "onlyGov") -> Invariant:
     return Invariant("INV-AUTH-001", f"Administrative state-changing operations must enforce {privileged_modifier} authorization.", "structural sibling-function rule; modifier-bearing administrative functions", 0.90)
 
@@ -69,7 +105,7 @@ def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothe
             evidence_ids=(f"E-MODEL-{fn.name}",),
         )
         for fn, modifiers in declared
-        if not modifiers
+        if not modifiers and not _is_caller_scoped_write(contract, fn)
     )
 
 
