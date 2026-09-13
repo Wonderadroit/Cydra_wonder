@@ -32,7 +32,7 @@ jobs:
           from pathlib import Path
           import subprocess
           import tempfile
-          from cydra.reasoning import generate_access_control_hypotheses
+          from cydra.reasoning import access_control_invariant, generate_access_control_hypotheses
           from cydra.solidity_model import parse_solidity
 
           repo = "https://github.com/JamieFrame/The-Gavel-Protocol.git"
@@ -41,11 +41,16 @@ jobs:
               root = Path(tmp) / "gavel"
               subprocess.run(("git", "clone", "--no-tags", repo, str(root)), check=True, stdout=subprocess.DEVNULL)
               subprocess.run(("git", "-C", str(root), "checkout", "--detach", ref), check=True, stdout=subprocess.DEVNULL)
-              for name in ("LoanProtocol", "NFTLoanProtocol"):
+              for name in ("LoanProtocol", "NFTLoanProtocol", "PositionNFT", "NFTPositionNFT"):
                   contract = parse_solidity(root / "contracts" / f"{name}.sol")[0]
                   ids = [h.hypothesis_id for h in generate_access_control_hypotheses(contract)]
                   assert f"H-AUTH-setOperatorApproval" not in ids, (name, ids)
                   print(name, "authorization hypotheses:", ids)
+
+              loan = parse_solidity(root / "contracts" / "LoanProtocol.sol")[0]
+              invariant = access_control_invariant(loan)
+              assert invariant.statement.endswith("onlyOwner authorization."), invariant.statement
+              print("LoanProtocol authorization invariant:", invariant.statement)
           PY
 
 # Push-triggered regression gate; no benchmark oracle is fed into CYDRA.
