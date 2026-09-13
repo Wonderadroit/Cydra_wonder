@@ -2,7 +2,10 @@ import pytest
 
 from cydra.experiment_binding import bind_experiment, validate_experiment_binding
 from cydra.graph_semantics import validate_graph
+from cydra.solidity_model import parse_solidity
+from cydra.solidity_system_model import project_contracts
 from cydra.system_model import Edge, Node, SystemModel
+from cydra.system_model_reasoning import materialize_authorization_observations, materialize_authorization_reasoning
 
 
 def _model() -> SystemModel:
@@ -22,13 +25,7 @@ def _model() -> SystemModel:
 def test_binding_persists_exact_hypothesis_observation_and_function():
     model = _model()
     source = "// CYDRA-HYPOTHESIS: H1\nfunction testH1() public { target.changeRoute(); }"
-    binding = bind_experiment(
-        model,
-        hypothesis_id="H1",
-        observation_id="OBS-1",
-        target_function_id="function:Fixture.sol:Fixture:changeRoute()",
-        generated_source=source,
-    )
+    binding = bind_experiment(model, hypothesis_id="H1", observation_id="OBS-1", target_function_id="function:Fixture.sol:Fixture:changeRoute()", generated_source=source)
     assert validate_experiment_binding(model, binding)
     attrs = model.nodes["observation:OBS-1"].attributes
     assert attrs["bound_hypothesis_id"] == "hypothesis:H1"
@@ -41,44 +38,40 @@ def test_binding_rejects_wrong_generated_target_and_does_not_mutate_graph():
     model = _model()
     before = model.export()
     with pytest.raises(ValueError, match="does not invoke target function"):
-        bind_experiment(
-            model,
-            hypothesis_id="H1",
-            observation_id="OBS-1",
-            target_function_id="function:Fixture.sol:Fixture:changeRoute()",
-            generated_source="// CYDRA-HYPOTHESIS: H1\nfunction testH1() public { target.rotate(); }",
-        )
+        bind_experiment(model, hypothesis_id="H1", observation_id="OBS-1", target_function_id="function:Fixture.sol:Fixture:changeRoute()", generated_source="// CYDRA-HYPOTHESIS: H1\nfunction testH1() public { target.rotate(); }")
     assert model.export() == before
 
 
 def test_binding_rejects_wrong_hypothesis_even_when_test_calls_correct_function():
     model = _model()
-    with pytest.raises(ValueError, match="observation does not test"):
-        bind_experiment(
-            model,
-            hypothesis_id="UNKNOWN",
-            observation_id="OBS-1",
-            target_function_id="function:Fixture.sol:Fixture:changeRoute()",
-            generated_source="// CYDRA-HYPOTHESIS: UNKNOWN\nfunction test() public { target.changeRoute(); }",
-        )
+    with pytest.raises(KeyError, match="missing canonical hypothesis"):
+        bind_experiment(model, hypothesis_id="UNKNOWN", observation_id="OBS-1", target_function_id="function:Fixture.sol:Fixture:changeRoute()", generated_source="// CYDRA-HYPOTHESIS: UNKNOWN\nfunction test() public { target.changeRoute(); }")
 
 
 def test_conflicting_rebinding_is_fail_closed():
     model = _model()
-    bind_experiment(
-        model,
-        hypothesis_id="H1",
-        observation_id="OBS-1",
-        target_function_id="function:Fixture.sol:Fixture:changeRoute()",
-        generated_source="// CYDRA-HYPOTHESIS: H1\nfunction test() public { target.changeRoute(); }",
-    )
+    bind_experiment(model, hypothesis_id="H1", observation_id="OBS-1", target_function_id="function:Fixture.sol:Fixture:changeRoute()", generated_source="// CYDRA-HYPOTHESIS: H1\nfunction test() public { target.changeRoute(); }")
     before = model.export()
     with pytest.raises(ValueError, match="conflicting experiment binding"):
-        bind_experiment(
-            model,
-            hypothesis_id="H2",
-            observation_id="OBS-1",
-            target_function_id="function:Fixture.sol:Fixture:changeRoute()",
-            generated_source="// CYDRA-HYPOTHESIS: H2\nfunction test() public { target.changeRoute(); }",
-        )
+        bind_experiment(model, hypothesis_id="H2", observation_id="OBS-1", target_function_id="function:Fixture.sol:Fixture:changeRoute()", generated_source="// CYDRA-HYPOTHESIS: H2\nfunction test() public { target.changeRoute(); }")
     assert model.export() == before
+
+
+def test_real_benchmark_001_hypothesis_binds_to_the_function_it_names():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    contracts = parse_solidity(root / "benchmarks/alchemix_missing_access_control/Target.sol")
+    model = project_contracts(tuple(contracts))
+    reasoning = materialize_authorization_reasoning(model)[0]
+    plans = materialize_authorization_observations(model, reasoning)
+
+    hypothesis = next(h for h in reasoning.hypotheses if "setWhitelist" in h.statement and "alternate enforcement" not in h.statement)
+    observation_id = next(oid for oid in hypothesis.planning_predictions if oid in {plan.observation_id for plan in plans})
+    target_function_id = next(node_id for node_id, node in model.nodes.items() if node.kind == "function" and node.label == "setWhitelist")
+    source = "// CYDRA-HYPOTHESIS: " + hypothesis.hypothesis_id + "\nfunction testGenerated() public { target.setWhitelist(account, true); }"
+
+    binding = bind_experiment(model, hypothesis_id=hypothesis.hypothesis_id, observation_id=observation_id, target_function_id=target_function_id, generated_source=source)
+    assert validate_experiment_binding(model, binding)
+    assert model.nodes[f"observation:{observation_id}"].attributes["target_function_id"] == target_function_id
+    assert validate_graph(model) == []
