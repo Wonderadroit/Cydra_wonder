@@ -47,11 +47,11 @@ def bind_experiment(
 ) -> ExperimentBinding:
     """Bind one generated experiment to exactly one hypothesis and function.
 
-    The binding is rejected unless the observation already tests the supplied
-    hypothesis, the observation targets the supplied invariant, and the
+    Binding is rejected unless the observation already tests the supplied
+    hypothesis, explicitly names the supplied target function, and the
     generated source contains both the hypothesis marker and the exact target
-    function name. This prevents a generic PoC from being credited as testing
-    a different hypothesis merely because it executed successfully.
+    function call. A generic PoC therefore cannot be credited to another
+    hypothesis merely because it executed successfully.
     """
     hypothesis = _node(model, "hypothesis", hypothesis_id)
     observation = _node(model, "observation", observation_id)
@@ -69,8 +69,8 @@ def bind_experiment(
         raise ValueError("observation does not test the supplied hypothesis")
 
     observed_target = observation.attributes.get("target_function_id")
-    if observed_target is not None and observed_target != target.node_id:
-        raise ValueError("observation target function conflicts with supplied target")
+    if observed_target != target.node_id:
+        raise ValueError("observation target function does not match supplied target")
 
     marker = source_marker or f"CYDRA-HYPOTHESIS: {hypothesis_id}"
     if marker not in generated_source:
@@ -109,6 +109,8 @@ def validate_experiment_binding(model: SystemModel, binding: ExperimentBinding) 
     hypothesis = _node(model, "hypothesis", binding.hypothesis_id)
     target = _node(model, "function", binding.target_function_id)
     if observation.attributes.get("binding_status") != "bound":
+        return False
+    if observation.attributes.get("target_function_id") != target.node_id:
         return False
     persisted = observation.attributes.get("experiment_binding")
     expected = {
