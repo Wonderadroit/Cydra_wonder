@@ -200,7 +200,11 @@ def _failure_status(hypothesis, class_name: str, stage: str, error: Exception) -
 def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_access_control_test(
-        hypothesis, _target_import(contract, project), contract.name, output
+        hypothesis,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract_model=contract,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
     require_executed(execution)
@@ -388,71 +392,81 @@ def main() -> int:
             "hypotheses": statuses,
             "outcome_taxonomy": {
                 "initialization": {"TP": "confirmed", "FP": "rejected", "FN": "not_confirmed"},
-                "authorization": "capability gap: differential-only classifier",
-                "arithmetic": "capability gap: patched target required for generator",
-                "accounting": "rule gap: absent from frozen executable pipeline",
-                "other": "rule gap",
+                "authorization": {"execution": "measured", "classification": "requires_patched_counterpart"},
+                "arithmetic": {"execution": "capability_gap"},
             },
         }
-        runner_commit = _git_output(root, "rev-parse", "HEAD")
-        runner_blob = _git_output(root, "rev-parse", "HEAD:scripts/run_benchmark_blind.py")
+        by_class: dict[str, dict[str, int | bool | str]] = {}
+        for class_name in classes:
+            class_statuses = [status for status in statuses if status["class"] == class_name]
+            extracted = sum(1 for status in class_statuses if status.get("extracted"))
+            executed = sum(1 for status in class_statuses if status.get("blind_executed"))
+            if extracted == 0:
+                class_status = "no_candidate_extracted"
+            elif executed == extracted:
+                class_status = "executed"
+            else:
+                class_status = "capability_gap"
+            by_class[class_name] = {
+                "requested": True,
+                "hypotheses_extracted": extracted,
+                "hypotheses_executed": executed,
+                "status": class_status,
+            }
+        classification["class_coverage"] = by_class
+        classification["taxonomy"] = {
+            "confirmed": "independently confirmed initialization candidate",
+            "not_confirmed": "executed candidate did not confirm",
+            "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules",
+            "capability_gap": "class was extracted but executable coverage was incomplete",
+            "pipeline_gap": "hypothesis generated but execution/classification could not complete",
+            "rule_gap": "relevant invariant/class absent from extraction",
+        }
+
+        execution_json = {
+            "executions": [_json(execution) for execution in executions],
+            "evidence": _json(evidence),
+            "build": build_capture,
+        }
+        execution_human = "\n\n".join(
+            f"{execution.experiment_id}: {execution.status} executed={execution.executed} "
+            f"tests_run={execution.tests_run} tests_failed={execution.tests_failed}\n"
+            f"$ {' '.join(execution.command)}\n{execution.stdout}\n{execution.stderr}"
+            for execution in executions
+        )
         provenance = {
-            "cydra_commit": CYDRA_COMMIT,
-            "runner_commit": runner_commit,
-            "runner_file_blob": runner_blob,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "target_repo": args.target_repo,
             "target_ref": args.target_ref,
-            "target_checkout_commit": _git_output(checkout, "rev-parse", "HEAD"),
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-            "ci_run_id": args.ci_run_id,
-            **provenance_env,
-        }
-        execution_human = []
-        for item in executions:
-            execution_human.append(
-                f"=== {item.experiment_id} / {item.target} ===\n"
-                f"command: {' '.join(item.command)}\n"
-                f"exit_code: {item.exit_code}\n"
-                f"status: {item.status}\n"
-                f"tests_run: {item.tests_run}\n"
-                f"tests_failed: {item.tests_failed}\n"
-                f"--- stdout ---\n{item.stdout}\n"
-                f"--- stderr ---\n{item.stderr}\n"
-            )
-        integrity = {
-            "runner_source_frozen": True,
-            "runner_commit": runner_commit,
-            "runner_file_blob": runner_blob,
+            "target_path": args.target_path,
+            "target_project": args.target_project,
+            "classes": list(classes),
             "cydra_commit": CYDRA_COMMIT,
-            "forge_build_exit_code": build_capture["exit_code"],
-            "forge_build_ok": build_capture["ok"],
+            "environment": provenance_env,
         }
-        create_freeze(
-            {
-                "provenance.json": provenance,
-                "parse-output.json": {
-                    "target": result.target,
-                    "contracts": result.contracts,
-                    "selected_classes": classes,
-                },
-                "invariants.json": result.invariants,
-                "hypotheses.json": result.hypotheses,
-                "experiments.json": result.experiments,
-                "execution.json": {"results": executions, "evidence": evidence},
-                "integrity-check.json": integrity,
-                "classification.json": classification,
-            },
-            {
-                "target-checkout.txt": _git_output(checkout, "rev-parse", "HEAD") + "\n",
-                "compilation.log": (
-                    f"$ forge build\n{build_capture['stdout']}\n{build_capture['stderr']}"
-                    f"\n\n=== forge config --json ===\n{forge_config_text}\n"
-                ),
-                "execution-human.txt": "\n".join(execution_human),
-                "README.md": "B006-A blind-target freeze. Frozen blind classification surface: initialization only.\n",
-            },
-            args.freeze,
-        )
+        text_files = {
+            "target-checkout.txt": _git_output(checkout, "rev-parse", "HEAD") + "\n",
+            "compilation.log": json.dumps(build_capture, indent=2, sort_keys=True) + "\n",
+            "execution-human.txt": execution_human,
+            "README.md": (
+                "# CYDRA blind capability artifact\n\n"
+                "This artifact records structural hypotheses, generated experiments, "
+                "execution evidence, and explicit capability gaps. A measured execution "
+                "is not itself a vulnerability confirmation.\n"
+            ),
+            "integrity-check.json": json.dumps({"manifest": "manifest.sha256"}, indent=2) + "\n",
+            "forge-config.json": forge_config_text,
+        }
+        files = {
+            "provenance.json": provenance,
+            "parse-output.json": {"target": args.target_path, "contracts": _json(result.contracts)},
+            "invariants.json": result.invariants,
+            "hypotheses.json": result.hypotheses,
+            "experiments.json": result.experiments,
+            "execution.json": execution_json,
+            "classification.json": classification,
+        }
+        create_freeze(files, text_files, args.freeze)
     return 0
 
 
