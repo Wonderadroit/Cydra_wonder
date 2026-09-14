@@ -68,3 +68,19 @@ contract Target {
 """,
     )
     assert generate_structural_access_control_hypotheses(contract) == ()
+
+
+def test_nested_mapping_and_struct_member_mutation_is_recognized(tmp_path):
+    contract = _parse(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract Target {
+    struct Config { bool enabled; }
+    mapping(address => Config) configs;
+    function guardedLifecycle(address account) external onlyGuardian { configs[account].enabled = true; }
+    function configure(address account, bool value) external { configs[account].enabled = value; }
+}
+""",
+    )
+    hypotheses = generate_structural_access_control_hypotheses(contract)
+    assert [item.target_function for item in hypotheses] == ["configure"]
