@@ -90,8 +90,9 @@ contract RenamedTarget {
         contract_model=model,
     )
     generated_source = generated.read_text(encoding="utf-8")
-    assert "rotate(address,uint256)" in generated_source
-    assert "target.rotate(address(0xCAFE), 1)" in generated_source
+    assert "rotate" in generated_source
+    assert "abi.encodeWithSignature" in generated_source
+    assert "target.rotate" not in generated_source
     assert "whiteList" not in generated_source
     assert "setWhitelist" not in generated_source
     assert "vm.record();" in generated_source
