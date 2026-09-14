@@ -50,3 +50,21 @@ contract Target {
 """,
     )
     assert generate_structural_access_control_hypotheses(contract) == ()
+
+
+def test_comment_only_state_write_does_not_create_protected_or_candidate_state(tmp_path):
+    contract = _parse(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract Target {
+    bool globalConfig;
+    function guardedLifecycle() external onlyGuardian {
+        // globalConfig = true;
+    }
+    function configure(bool value) external {
+        // globalConfig = value;
+    }
+}
+""",
+    )
+    assert generate_structural_access_control_hypotheses(contract) == ()
