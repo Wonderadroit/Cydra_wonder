@@ -10,7 +10,10 @@ _FUNCTION_RE = re.compile(r"\bfunction\s+(?P<name>\w+)\s*\([^)]*\)\s*(?P<tail>[^
 _VISIBILITIES = {"public", "external"}
 _CALLER_TOKEN_RE = re.compile(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b")
 _CALLER_KEYED_READ_RE = re.compile(r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\](?:\s*\[[^\]]*\])*\s*")
-_STATE_WRITE_RE = re.compile(r"\b(?P<name>[A-Za-z_]\w*)\s*(?:\[[^\]]*\])*\s*(?P<op>=|\+=|-=|\*=|/=|%=|\+\+|--)")
+_STATE_WRITE_RE = re.compile(
+    r"\b(?P<name>[A-Za-z_]\w*)\s*(?:(?:\[[^\]]*\])|(?:\.[A-Za-z_]\w*))*\s*"
+    r"(?P<op>=|\+=|-=|\*=|/=|%=|\+\+|--)"
+)
 
 
 def _strip_comments(source: str) -> str:
@@ -79,10 +82,9 @@ def _source_function_body(contract: ContractModel, function) -> str:
 def _source_state_writes(contract: ContractModel, function) -> tuple[str, ...]:
     """Return explicit state-root mutations visible in this function body.
 
-    Model-level writes are treated as supporting evidence only. This function
-    requires source-level mutation of a declared state variable so reads,
-    getters, local variables, and comment text cannot create authorization
-    candidates accidentally.
+    Model-level writes are supporting evidence only. Source-level mutation must
+    reach a declared state root, including mapping/array indexing and struct
+    member assignment. Internal-call side effects are intentionally not guessed.
     """
     body = _source_function_body(contract, function)
     if not body:
