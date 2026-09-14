@@ -36,3 +36,17 @@ contract Target {
 """,
     )
     assert generate_structural_access_control_hypotheses(contract) == ()
+
+
+def test_read_only_function_is_not_flagged_even_when_model_marks_state_related_expression(tmp_path):
+    contract = _parse(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract Target {
+    bool globalConfig;
+    function guardedLifecycle() external onlyGuardian { globalConfig = true; }
+    function currentConfig() external view returns (bool) { return globalConfig; }
+}
+""",
+    )
+    assert generate_structural_access_control_hypotheses(contract) == ()
