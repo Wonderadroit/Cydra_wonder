@@ -4,10 +4,11 @@ import pytest
 
 from cydra.foundry import (
     ExecutionResult,
-    classify_access_control_outcome,
     generate_access_control_test,
+    classify_access_control_outcome,
     require_executed,
 )
+from cydra.models import ContractModel, FunctionModel, Hypothesis, ParameterModel
 from cydra.pipeline import investigate
 
 
@@ -46,7 +47,82 @@ def test_foundry_generator_uses_hypothesis_and_invariant(tmp_path):
     assert "setWhitelist(account, true);" in source
 
 
-def test_hypothesis_is_confirmed_only_by_vulnerable_failure_and_patched_pass():
+def test_structural_auth_generator_uses_renamed_target_and_parameters(tmp_path):
+    source = tmp_path / "RenamedTarget.sol"
+    source.write_text(
+        """pragma solidity ^0.8.20;
+contract RenamedTarget {
+    uint256 internal limit;
+    function guardedLifecycle(uint256 value) external { limit = value; }
+    function rotate(address recipient, uint256 value) external { limit = value; }
+}
+""",
+        encoding="utf-8",
+    )
+    function = FunctionModel(
+        name="rotate",
+        visibility="external",
+        modifiers=(),
+        writes=("limit",),
+        external_calls=(),
+        line=4,
+        parameters=(ParameterModel("recipient", "address"), ParameterModel("value", "uint256")),
+    )
+    hypothesis = Hypothesis(
+        "H-AUTH-rotate",
+        "An unprotected writer may mutate protected state.",
+        "INV-AUTH-001",
+        "rotate",
+        "arbitrary caller",
+        "unauthorized mutation",
+    )
+    model = ContractModel(
+        "RenamedTarget",
+        str(source),
+        (FunctionModel("guardedLifecycle", "external", ("onlyGuardian",), ("limit",), (), 3), function),
+        state_variables=("limit",),
+    )
+    generated = generate_access_control_test(
+        hypothesis,
+        "RenamedTarget.sol",
+        "RenamedTarget",
+        tmp_path / "generated.t.sol",
+        contract_model=model,
+    )
+    generated_source = generated.read_text(encoding="utf-8")
+    assert "rotate(address,uint256)" in generated_source
+    assert "target.rotate(address(0xCAFE), 1)" in generated_source
+    assert "whiteList" not in generated_source
+    assert "setWhitelist" not in generated_source
+    assert "vm.record();" in generated_source
+    assert "vm.accesses(address(target))" in generated_source
+
+
+def test_structural_auth_generator_rejects_unresolved_custom_argument(tmp_path):
+    function = FunctionModel(
+        name="rotate",
+        visibility="external",
+        modifiers=(),
+        writes=("limit",),
+        external_calls=(),
+        line=2,
+        parameters=(ParameterModel("config", "UnknownStruct memory"),),
+    )
+    model = ContractModel("Target", str(tmp_path / "Target.sol"), (function,), state_variables=("limit",))
+    hypothesis = Hypothesis(
+        "H-AUTH-rotate",
+        "An unprotected writer may mutate protected state.",
+        "INV-AUTH-001",
+        "rotate",
+        "arbitrary caller",
+        "unauthorized mutation",
+    )
+    (tmp_path / "Target.sol").write_text("contract Target {}", encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported authorization argument type"):
+        generate_access_control_test(hypothesis, "Target.sol", "Target", tmp_path / "generated.t.sol", contract_model=model)
+
+
+def test_hypothesis_is_confirmed_only_by_vulnerable_failure_and_patched_passes():
     result = investigate(TARGET)
     hypothesis = next(h for h in result.hypotheses if h.hypothesis_id == "H-AUTH-setWhitelist")
     vulnerable = _execution("X-H-AUTH-setWhitelist", "vulnerable", 1, "FAIL", 1, 1)
