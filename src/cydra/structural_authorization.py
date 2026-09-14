@@ -9,13 +9,55 @@ from .models import ContractModel, Hypothesis
 _FUNCTION_RE = re.compile(r"\bfunction\s+(?P<name>\w+)\s*\([^)]*\)\s*(?P<tail>[^\{;]*)\{", re.MULTILINE)
 _VISIBILITIES = {"public", "external"}
 _CALLER_TOKEN_RE = re.compile(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b")
-_CALLER_KEYED_READ_RE = re.compile(r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\](?:\s*\[[^\]]*\])*")
+_CALLER_KEYED_READ_RE = re.compile(r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\](?:\s*\[[^\]]*\])*\s*")
 _STATE_WRITE_RE = re.compile(r"\b(?P<name>[A-Za-z_]\w*)\s*(?:\[[^\]]*\])*\s*(?P<op>=|\+=|-=|\*=|/=|%=|\+\+|--)")
+
+
+def _strip_comments(source: str) -> str:
+    """Blank Solidity comments while preserving line/character positions."""
+    chars = list(source)
+    i = 0
+    quote: str | None = None
+    while i < len(source):
+        char = source[i]
+        if quote is not None:
+            if char == "\\":
+                i += 2
+                continue
+            if char == quote:
+                quote = None
+            i += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            i += 1
+            continue
+        if char == "/" and i + 1 < len(source) and source[i + 1] == "/":
+            chars[i] = chars[i + 1] = " "
+            i += 2
+            while i < len(source) and source[i] != "\n":
+                chars[i] = " "
+                i += 1
+            continue
+        if char == "/" and i + 1 < len(source) and source[i + 1] == "*":
+            chars[i] = chars[i + 1] = " "
+            i += 2
+            while i < len(source):
+                if i + 1 < len(source) and source[i] == "*" and source[i + 1] == "/":
+                    chars[i] = chars[i + 1] = " "
+                    i += 2
+                    break
+                if source[i] != "\n":
+                    chars[i] = " "
+                i += 1
+            continue
+        i += 1
+    return "".join(chars)
 
 
 def _source_function_body(contract: ContractModel, function) -> str:
     try:
-        source = Path(contract.source).read_text(encoding="utf-8")
+        source = _strip_comments(Path(contract.source).read_text(encoding="utf-8"))
     except (OSError, UnicodeError):
         return ""
     for match in _FUNCTION_RE.finditer(source):
@@ -37,11 +79,10 @@ def _source_function_body(contract: ContractModel, function) -> str:
 def _source_state_writes(contract: ContractModel, function) -> tuple[str, ...]:
     """Return explicit state-root mutations visible in this function body.
 
-    This is intentionally conservative. A model-level ``writes`` entry is not
-    enough to establish a mutation because reads/getters can be represented as
-    state-related expressions. Only direct assignment or increment/decrement
-    syntax is accepted here; internal-call side effects remain a future
-    data-flow milestone rather than being guessed.
+    Model-level writes are treated as supporting evidence only. This function
+    requires source-level mutation of a declared state variable so reads,
+    getters, local variables, and comment text cannot create authorization
+    candidates accidentally.
     """
     body = _source_function_body(contract, function)
     if not body:
@@ -59,14 +100,13 @@ def _source_state_writes(contract: ContractModel, function) -> tuple[str, ...]:
 
 def _declared_modifiers(contract: ContractModel, function) -> tuple[str, ...]:
     try:
-        source = Path(contract.source).read_text(encoding="utf-8")
+        source = _strip_comments(Path(contract.source).read_text(encoding="utf-8"))
     except (OSError, UnicodeError):
         return ()
     for match in _FUNCTION_RE.finditer(source):
         if match.group("name") != function.name or source.count("\n", 0, match.start()) + 1 != function.line:
             continue
-        tail = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("tail"), flags=re.DOTALL)
-        tokens = re.findall(r"\b[A-Za-z_]\w*\b", tail)
+        tokens = re.findall(r"\b[A-Za-z_]\w*\b", match.group("tail"))
         modifiers: list[str] = []
         for token in tokens:
             if token in {"returns", "override", "virtual"}:
@@ -87,12 +127,11 @@ def _has_caller_authorization_predicate(function) -> bool:
 
 def generate_structural_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
     """Find unguarded writers to storage also written by protected siblings."""
-    protected = {
-        write
-        for function in contract.functions
-        if function.visibility in _VISIBILITIES and _declared_modifiers(contract, function)
-        for write in function.writes
-    }
+    protected: set[str] = set()
+    for function in contract.functions:
+        if function.visibility not in _VISIBILITIES or not _declared_modifiers(contract, function):
+            continue
+        protected.update(_source_state_writes(contract, function))
     if not protected:
         return ()
 
