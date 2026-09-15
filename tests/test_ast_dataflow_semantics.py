@@ -8,7 +8,7 @@ def _identifier(node_id, declaration, name):
 
 def _function(function_id, name, body):
     return {"nodeType": "FunctionDefinition", "id": function_id, "name": name,
-            "kind": "function", "scope": 1,
+            "kind": "function", "scope": 2,
             "body": {"nodeType": "Block", "id": function_id + 100, "statements": body}}
 
 
@@ -24,14 +24,14 @@ def _relations(ast):
     return {(item.function, item.relation, item.target) for item in extract_ast_relationships(ast, "Fixture.sol")}
 
 
-def test_getter_is_read_not_write():
+def test_getter_is_reads_not_writes():
     ast = _ast([_function(20, "get", [
         {"nodeType": "Return", "id": 30, "expression": _identifier(31, 10, "value")}
     ])])
     relations = _relations(ast)
-    assert ("get", "read", "value") in relations
-    assert ("get", "write", "value") not in relations
-    assert ("get", "read_write", "value") not in relations
+    assert ("get", "reads", "value") in relations
+    assert ("get", "writes", "value") not in relations
+    assert ("get", "transition_expression", "value") not in relations
 
 
 def test_direct_assignment_is_write():
@@ -41,18 +41,17 @@ def test_direct_assignment_is_write():
          "rightHandSide": {"nodeType": "Literal", "id": 32, "value": "7"}}
     ])])
     relations = _relations(ast)
-    assert ("set", "write", "value") in relations
-    assert ("set", "read", "value") not in relations
+    assert ("set", "writes", "value") in relations
 
 
-def test_compound_assignment_is_read_write():
+def test_compound_assignment_is_read_write_context():
     ast = _ast([_function(20, "add", [
         {"nodeType": "Assignment", "id": 30, "operator": "+=",
          "leftHandSide": _identifier(31, 10, "value"),
          "rightHandSide": {"nodeType": "Literal", "id": 32, "value": "1"}}
     ])])
     relations = _relations(ast)
-    assert ("add", "read_write", "value") in relations
+    assert ("add", "transition_expression", "value") in relations
 
 
 def test_mapping_index_write_is_write_and_index_state_read_is_preserved():
@@ -64,8 +63,8 @@ def test_mapping_index_write_is_write_and_index_state_read_is_preserved():
          "rightHandSide": {"nodeType": "Literal", "id": 34, "value": "1"}}
     ])])
     relations = _relations(ast)
-    assert ("set", "write", "value") in relations
-    assert ("set", "read", "value") in relations
+    assert ("set", "writes", "value") in relations
+    assert ("set", "reads", "value") in relations
 
 
 def test_increment_and_delete_have_write_context():
@@ -76,8 +75,8 @@ def test_increment_and_delete_have_write_context():
          "subExpression": _identifier(33, 10, "value")},
     ])])
     relations = _relations(ast)
-    assert ("mutate", "read_write", "value") in relations
-    assert ("mutate", "write", "value") in relations
+    assert ("mutate", "transition_expression", "value") in relations
+    assert ("mutate", "writes", "value") in relations
 
 
 def test_ast_semantics_ignore_source_comment_or_string_text():
