@@ -27,6 +27,26 @@ def test_supported_hypothesis_requires_a_discriminating_competing_explanation():
     assert result.recommended_observation == "obs:probe"
 
 
+def test_prediction_scale_does_not_fake_a_difference():
+    primary = Hypothesis(
+        "hypothesis:primary",
+        "same outcome distribution",
+        planning_predictions={"obs:probe": {"yes": 1.0, "no": 1.0}},
+    )
+    alternative = Hypothesis(
+        "hypothesis:alternative",
+        "same outcome distribution with different scale",
+        planning_predictions={"obs:probe": {"yes": 10.0, "no": 10.0}},
+    )
+    result = assess_hypothesis_challenge(
+        primary,
+        (alternative,),
+        (ObservationOption("obs:probe", "probe", ("yes", "no")),),
+    )
+    assert result.challenged is False
+    assert result.discriminating_observations == ()
+
+
 def test_missing_competing_prediction_fails_closed():
     primary = Hypothesis(
         "hypothesis:primary",
