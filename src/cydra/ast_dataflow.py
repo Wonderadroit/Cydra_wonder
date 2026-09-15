@@ -7,7 +7,6 @@ from typing import Any, Iterator
 @dataclass(frozen=True)
 class SemanticRelationshipEvidence:
     """A compiler-AST-backed relationship; never inferred from co-occurrence."""
-
     contract: str
     function: str
     relation: str
@@ -45,12 +44,52 @@ def _location(node: dict[str, Any]) -> tuple[int, int, int] | None:
         return None
 
 
-def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRelationshipEvidence]:
-    """Conservatively extract compiler-linked state relationships.
+def _node_id(node: Any) -> int | None:
+    value = node.get("id") if isinstance(node, dict) else None
+    return value if isinstance(value, int) else None
 
-    This migration shim intentionally emits only relationships whose declaration IDs
-    are explicit in the compiler AST. Unsupported constructs remain absent rather than
-    being reconstructed from lexical coincidence.
+
+def _state_refs(node: Any, states: dict[int, str]) -> list[dict[str, Any]]:
+    return [item for item in _walk(node)
+            if item.get("nodeType") == "Identifier"
+            and isinstance(item.get("referencedDeclaration"), int)
+            and item["referencedDeclaration"] in states]
+
+
+def _mark_lvalue_roles(node: Any, states: dict[int, str], roles: dict[int, str], role: str) -> None:
+    """Mark the storage-root state reference; index/member expressions remain reads."""
+    refs = _state_refs(node, states)
+    if not refs:
+        return
+    first = _node_id(refs[0])
+    if first is not None:
+        roles[first] = role
+    for ref in refs[1:]:
+        ref_id = _node_id(ref)
+        if ref_id is not None and ref_id not in roles:
+            roles[ref_id] = "read"
+
+
+def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int, str]:
+    roles: dict[int, str] = {}
+    for node in _walk(body):
+        if node.get("nodeType") == "Assignment":
+            operator = node.get("operator")
+            if operator == "=":
+                _mark_lvalue_roles(node.get("leftHandSide"), states, roles, "write")
+            elif isinstance(operator, str):
+                _mark_lvalue_roles(node.get("leftHandSide"), states, roles, "read_write")
+        elif node.get("nodeType") == "UnaryOperation" and node.get("operator") in {"++", "--", "delete"}:
+            _mark_lvalue_roles(node.get("subExpression"), states, roles,
+                                "read_write" if node.get("operator") in {"++", "--"} else "write")
+    return roles
+
+
+def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRelationshipEvidence]:
+    """Extract compiler-linked state reads/writes from AST operator context.
+
+    Declaration IDs are authoritative. Existing ``reference`` records are preserved;
+    semantic ``read``, ``write`` and ``read_write`` records add operator provenance.
     """
     declarations: dict[int, dict[str, Any]] = {}
     states: dict[int, str] = {}
@@ -68,33 +107,30 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             continue
         function_id = node["id"]
         kind = node.get("kind")
-        if isinstance(node.get("name"), str) and node.get("name"):
-            function_name = node["name"]
-        elif kind == "constructor":
-            function_name = "constructor"
-        elif kind == "receive":
-            function_name = "receive"
-        elif kind == "fallback":
-            function_name = "fallback"
-        else:
-            function_name = "anonymous"
+        function_name = (node.get("name") if isinstance(node.get("name"), str) and node.get("name")
+                         else kind if kind in {"constructor", "receive", "fallback"} else "anonymous")
         scope = node.get("scope")
         contract = declarations.get(scope, {}).get("name", "unknown") if isinstance(scope, int) else "unknown"
         body = node.get("body")
         if not isinstance(body, dict):
             continue
+        roles = _operator_contexts(body, states)
         for item in _walk(body):
             if item.get("nodeType") != "Identifier":
                 continue
             ref = item.get("referencedDeclaration")
             if not isinstance(ref, int) or ref not in states:
                 continue
-            evidence.append(SemanticRelationshipEvidence(
-                contract=str(contract), function=str(function_name), relation="reference",
-                target=states[ref], confidence=0.90, source=f"solc-json-ast:{file}",
-                ast_node_id=item.get("id") if isinstance(item.get("id"), int) else None,
-                source_location=_location(item), function_ast_node_id=function_id,
-                target_ast_node_id=ref,
-                metadata={"function_kind": kind},
-            ))
+            item_id = _node_id(item)
+            relation = roles.get(item_id, "read") if item_id is not None else "read"
+            common = dict(contract=str(contract), function=str(function_name), relation=relation,
+                          target=states[ref], confidence=0.98 if item_id in roles else 0.90,
+                          source=f"solc-json-ast:{file}", ast_node_id=item_id,
+                          source_location=_location(item), function_ast_node_id=function_id,
+                          target_ast_node_id=ref, metadata={"function_kind": kind})
+            evidence.append(SemanticRelationshipEvidence(**common))
+            if relation != "read":
+                evidence.append(SemanticRelationshipEvidence(
+                    **{**common, "relation": "reference", "confidence": 0.90,
+                       "metadata": {"function_kind": kind, "semantic_relation": relation}}))
     return evidence
