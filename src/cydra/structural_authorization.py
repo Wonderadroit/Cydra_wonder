@@ -14,6 +14,12 @@ _STATE_WRITE_RE = re.compile(
     r"\b(?P<name>[A-Za-z_]\w*)\s*(?:(?:\[[^\]]*\])|(?:\.[A-Za-z_]\w*))*\s*"
     r"(?P<op>=|\+=|-=|\*=|/=|%=|\+\+|--)"
 )
+_STATE_DECL_RE = re.compile(
+    r"^\s*(?P<type>mapping\s*\([^;]+\)|[A-Za-z_]\w*(?:\s*\[[^\]]*\])*)\s+"
+    r"(?:(?:public|private|internal|external|constant|immutable|transient|override|virtual)\s+)*"
+    r"(?P<name>[A-Za-z_]\w*)\s*(?:=.*)?$"
+)
+_STATE_KEYWORDS = {"event", "error", "using", "struct", "enum", "function", "modifier", "constructor", "fallback", "receive"}
 
 
 def _strip_comments(source: str) -> str:
@@ -58,6 +64,40 @@ def _strip_comments(source: str) -> str:
     return "".join(chars)
 
 
+def _source_contract_state_names(contract: ContractModel) -> tuple[str, ...]:
+    """Recover contract-scope state roots independently of the minimal model parser."""
+    try:
+        source = _strip_comments(Path(contract.source).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        return contract.state_variables
+    contract_match = re.search(r"\bcontract\s+" + re.escape(contract.name) + r"\b[^\{]*\{", source)
+    if not contract_match:
+        return contract.state_variables
+    depth = 1
+    start = contract_match.end()
+    names: list[str] = list(contract.state_variables)
+    for index in range(start, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                break
+            if depth == 1:
+                start = index + 1
+        elif char == ";" and depth == 1:
+            statement = source[start:index].strip()
+            match = _STATE_DECL_RE.match(statement)
+            if match:
+                name = match.group("name")
+                type_token = match.group("type").split()[0]
+                if type_token not in _STATE_KEYWORDS and name not in names:
+                    names.append(name)
+            start = index + 1
+    return tuple(names)
+
+
 def _source_function_body(contract: ContractModel, function) -> str:
     try:
         source = _strip_comments(Path(contract.source).read_text(encoding="utf-8"))
@@ -80,18 +120,11 @@ def _source_function_body(contract: ContractModel, function) -> str:
 
 
 def _source_state_writes(contract: ContractModel, function) -> tuple[str, ...]:
-    """Return explicit state-root mutations visible in this function body.
-
-    Model-level writes are supporting evidence only. Source-level mutation must
-    reach a declared state root, including mapping/array indexing and struct
-    member assignment. Internal-call side effects are intentionally not guessed.
-    """
+    """Return explicit state-root mutations visible in this function body."""
     body = _source_function_body(contract, function)
     if not body:
         return ()
-    state_names = set(contract.state_variables)
-    if not state_names:
-        return ()
+    state_names = set(_source_contract_state_names(contract))
     writes: list[str] = []
     for match in _STATE_WRITE_RE.finditer(body):
         name = match.group("name")
