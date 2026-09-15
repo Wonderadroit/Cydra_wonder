@@ -17,7 +17,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install CYDRA
-        run: pip install -e .
+      - name: Install CYDRA and test runner
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
       - name: Run readiness regressions
-        run: pytest -q tests/test_investigation_readiness.py
+        run: python -m pytest -q tests/test_investigation_readiness.py
