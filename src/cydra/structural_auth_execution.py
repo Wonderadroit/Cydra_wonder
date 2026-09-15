@@ -36,7 +36,8 @@ def _argument(parameter: ParameterModel) -> str:
     if parameter_type == "bytes":
         return "bytes(\"\")"
     if parameter_type.startswith("bytes"):
-        return f"{parameter_type}(hex\"01\")"
+        width = int(parameter_type[5:])
+        return f"{parameter_type}(hex\"{'01'.ljust(width * 2, '0')}\")"
     raise ValueError(f"unsupported structural authorization argument type: {parameter_type}")
 
 
@@ -62,9 +63,12 @@ def generate_structural_authorization_test(
         raise ValueError(f"Model has no target function: {hypothesis.target_function}")
     if function.visibility not in {"public", "external"}:
         raise ValueError(f"authorization target {function.name} is not externally callable")
-    if contract_model.constructor and contract_model.constructor.parameters:
-        raise ValueError("structural authorization execution currently requires a zero-argument constructor")
 
+    constructor_arguments = ""
+    if contract_model.constructor and contract_model.constructor.parameters:
+        constructor_arguments = ", ".join(
+            _argument(parameter) for parameter in contract_model.constructor.parameters
+        )
     interface_parameters = ", ".join(
         _interface_parameter(parameter, index) for index, parameter in enumerate(function.parameters)
     )
@@ -74,9 +78,9 @@ def generate_structural_authorization_test(
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
-// Typed structural authorization experiment. The callable signature and
-// argument values are derived from ContractModel; no benchmark function name
-// or selector is hardcoded here.
+// Typed structural authorization experiment. The callable signature,
+// constructor arguments, and function arguments are derived from ContractModel;
+// no benchmark function name or selector is hardcoded here.
 import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
 
@@ -89,7 +93,7 @@ contract CydraAuthInvariantTest is Test {{
     address internal attacker = address(0xBEEF);
 
     function setUp() public {{
-        target = new {target_type}();
+        target = new {target_type}({constructor_arguments});
     }}
 
     function testUnauthorizedCallerMutationSurface() public {{
