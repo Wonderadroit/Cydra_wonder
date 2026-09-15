@@ -6,7 +6,9 @@ on:
       - "src/cydra/**"
       - "tests/**"
       - "scripts/validate_structural_authorization_execution.py"
+      - "scripts/run_benchmark_003.py"
       - "benchmarks/alchemix_missing_access_control/**"
+      - "benchmarks/003_arithmetic_rounding/**"
       - "pyproject.toml"
       - ".github/workflows/structural-reasoning-regression.yml"
 
@@ -38,3 +40,20 @@ jobs:
         env:
           PYTHONPATH: src
         run: python scripts/validate_structural_authorization_execution.py
+
+  historical-structural-arithmetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std
+        working-directory: benchmarks/003_arithmetic_rounding/foundry
+        run: forge install foundry-rs/forge-std --no-commit
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Execute structural arithmetic differential
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_003.py
