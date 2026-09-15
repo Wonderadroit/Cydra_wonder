@@ -1,0 +1,25 @@
+name: CYDRA causal challenge regression
+
+on:
+  push:
+    branches:
+      - feat/information-gain-planner-2026-09-15
+  pull_request:
+    branches:
+      - feat/information-gain-planner-2026-09-15
+      - feat/next-reasoning-hardening-2026-09-15
+
+jobs:
+  challenge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CYDRA and test runner
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Run causal challenge regressions
+        run: python -m pytest -q tests/test_causal_challenge.py tests/test_information_gain_planner.py
