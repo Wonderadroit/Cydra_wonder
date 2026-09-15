@@ -31,18 +31,18 @@ def main() -> int:
     vulnerable_model = parse_solidity(vulnerable_source)[0]
     patched_model = parse_solidity(patched_source)[0]
 
-    # Generated tests live one directory deeper than the Foundry test root.
-    # Resolve the benchmark target from that actual generated-file location.
+    # Foundry resolves source imports relative to the project root (the
+    # directory containing foundry.toml), not relative to test/generated/.
     vulnerable_test = generate_access_control_test(
         hypothesis,
-        "../../../Target.sol",
+        "../Target.sol",
         vulnerable_model.name,
         test_path_for(FOUNDRY, "generated/structural_auth_vulnerable.t.sol"),
         contract_model=vulnerable_model,
     )
     patched_test = generate_access_control_test(
         hypothesis,
-        "../../../PatchedTarget.sol",
+        "../PatchedTarget.sol",
         patched_model.name,
         test_path_for(FOUNDRY, "generated/structural_auth_patched.t.sol"),
         contract_model=patched_model,
