@@ -77,7 +77,7 @@ contract RenamedTarget {
     assert extract_positive_offset_division(model, "calculate") is None
 
 
-def test_non_discriminating_offset_is_rejected(tmp_path: Path):
+def test_small_offset_can_require_nontrivial_boundary_search(tmp_path: Path):
     model = _model(
         tmp_path,
         """pragma solidity ^0.8.20;
@@ -93,7 +93,7 @@ contract RenamedTarget {
     )
     shape = extract_positive_offset_division(model, "calculate")
     assert shape is not None
-    assert choose_boundary_input(shape) == 1
+    assert choose_boundary_input(shape) == 332
 
 
 def test_generator_rejects_other_invariants(tmp_path: Path):
@@ -110,7 +110,7 @@ contract RenamedTarget {
     hypothesis = Hypothesis(
         "H-AUTH-nope", "claim", "INV-AUTH-001", "calculate", "capability", "impact"
     )
-    with pytest.raises(ValueError, match="INV-ARITH-001"):
+    with pytest.raises(ValueError, match="Unsupported invariant"):
         generate_structural_arithmetic_test(
             hypothesis,
             model,
