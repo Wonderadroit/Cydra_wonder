@@ -36,7 +36,8 @@ def _argument(parameter: ParameterModel) -> str:
     if parameter_type == "bytes":
         return "bytes(\"\")"
     if parameter_type.startswith("bytes"):
-        return f"{parameter_type}(hex\"01\")"
+        width = int(parameter_type[5:])
+        return f"{parameter_type}(hex\"{'01'.ljust(width * 2, '0')}\")"
     raise ValueError(f"unsupported structural authorization argument type: {parameter_type}")
 
 
