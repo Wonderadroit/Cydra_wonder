@@ -88,8 +88,9 @@ def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int
 def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRelationshipEvidence]:
     """Extract compiler-linked state reads/writes from AST operator context.
 
-    Declaration IDs are authoritative. Existing ``reference`` records are preserved;
-    semantic ``read``, ``write`` and ``read_write`` records add operator provenance.
+    Declaration IDs are authoritative. Canonical SystemModel relation names are used
+    for projection: ``reads``, ``writes`` and ``transition_expression``. The precise
+    semantic role is also retained in edge metadata, so read/write context is never lost.
     """
     declarations: dict[int, dict[str, Any]] = {}
     states: dict[int, str] = {}
@@ -122,15 +123,16 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             if not isinstance(ref, int) or ref not in states:
                 continue
             item_id = _node_id(item)
-            relation = roles.get(item_id, "read") if item_id is not None else "read"
+            semantic_role = roles.get(item_id, "read") if item_id is not None else "read"
+            relation = {"read": "reads", "write": "writes", "read_write": "transition_expression"}[semantic_role]
             common = dict(contract=str(contract), function=str(function_name), relation=relation,
                           target=states[ref], confidence=0.98 if item_id in roles else 0.90,
                           source=f"solc-json-ast:{file}", ast_node_id=item_id,
                           source_location=_location(item), function_ast_node_id=function_id,
-                          target_ast_node_id=ref, metadata={"function_kind": kind})
+                          target_ast_node_id=ref,
+                          metadata={"function_kind": kind, "semantic_relation": semantic_role})
             evidence.append(SemanticRelationshipEvidence(**common))
-            if relation != "read":
-                evidence.append(SemanticRelationshipEvidence(
-                    **{**common, "relation": "reference", "confidence": 0.90,
-                       "metadata": {"function_kind": kind, "semantic_relation": relation}}))
+            evidence.append(SemanticRelationshipEvidence(
+                **{**common, "relation": "reference", "confidence": 0.90,
+                   "metadata": {"function_kind": kind, "semantic_relation": semantic_role}}))
     return evidence
