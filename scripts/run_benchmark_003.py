@@ -49,13 +49,19 @@ def main() -> int:
 
     hypothesis = arithmetic_hypotheses[0]
     experiment = arithmetic_experiments[0]
-    shape = extract_positive_offset_division(result.contracts[0], hypothesis.target_function)
+    contract = next(
+        (item for item in result.contracts if any(fn.name == hypothesis.target_function for fn in item.functions)),
+        None,
+    )
+    if contract is None:
+        raise SystemExit(f"No analyzed contract contains target function {hypothesis.target_function!r}.")
+    shape = extract_positive_offset_division(contract, hypothesis.target_function)
     if shape is None:
         raise SystemExit("Benchmark 003 structural arithmetic hypothesis could not be reconstructed into an executable shape.")
 
     generated_path = generate_structural_arithmetic_test(
         hypothesis,
-        result.contracts[0],
+        contract,
         "../src/Target.sol",
         "../src/PatchedTarget.sol",
         "ArithmeticRoundingFixture",
