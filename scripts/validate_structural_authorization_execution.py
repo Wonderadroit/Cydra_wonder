@@ -49,18 +49,18 @@ def main() -> int:
     patched_model = parse_solidity(patched_source)[0]
     _stage_targets(vulnerable_source, patched_source)
 
-    # Generated tests live under foundry/test/generated and staged targets live
-    # under foundry/test, so Solidity's relative import is ../Target.sol.
+    # The generator's layout conversion accepts a project-relative source
+    # path; test/Target.sol therefore becomes ../Target.sol from test/generated.
     vulnerable_test = generate_access_control_test(
         hypothesis,
-        "../Target.sol",
+        "test/Target.sol",
         vulnerable_model.name,
         test_path_for(FOUNDRY, "generated/structural_auth_vulnerable.t.sol"),
         contract_model=vulnerable_model,
     )
     patched_test = generate_access_control_test(
         hypothesis,
-        "../PatchedTarget.sol",
+        "test/PatchedTarget.sol",
         patched_model.name,
         test_path_for(FOUNDRY, "generated/structural_auth_patched.t.sol"),
         contract_model=patched_model,
