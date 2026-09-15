@@ -1,0 +1,43 @@
+name: CYDRA structural arithmetic regression
+
+on:
+  pull_request:
+    paths:
+      - "src/cydra/structural_arithmetic.py"
+      - "src/cydra/structural_arithmetic_execution.py"
+      - "src/cydra/foundry.py"
+      - "tests/test_structural_arithmetic.py"
+      - "tests/test_structural_arithmetic_execution.py"
+      - "scripts/run_benchmark_003.py"
+      - "benchmarks/003_arithmetic_rounding/**"
+      - "pyproject.toml"
+      - ".github/workflows/structural-arithmetic-regression.yml"
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_structural_arithmetic.py tests/test_structural_arithmetic_execution.py
+
+  benchmark-003-structural-execution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std
+        working-directory: benchmarks/003_arithmetic_rounding/foundry
+        run: forge install foundry-rs/forge-std --no-commit
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Execute structural arithmetic differential
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_003.py
