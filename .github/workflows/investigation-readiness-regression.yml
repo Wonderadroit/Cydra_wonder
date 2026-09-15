@@ -21,5 +21,5 @@ jobs:
         run: |
           python -m pip install -e .
           python -m pip install pytest
-      - name: Run readiness regressions
-        run: python -m pytest -q tests/test_investigation_readiness.py
+      - name: Run readiness and planning regressions
+        run: python -m pytest -q tests/test_investigation_readiness.py tests/test_investigation_readiness_model.py tests/test_information_gain_planner.py
