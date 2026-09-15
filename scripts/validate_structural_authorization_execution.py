@@ -23,6 +23,23 @@ def _print_execution(label, result) -> None:
         print(result.stderr)
 
 
+def _stage_targets(vulnerable_source: Path, patched_source: Path) -> tuple[Path, Path]:
+    """Stage historical targets under Foundry's test root.
+
+    Foundry treats the configured project root as the import boundary, so a
+    generated test cannot reliably escape the project with ../../ imports.
+    Staging keeps this validation harness deterministic without changing the
+    benchmark sources or the CYDRA model.
+    """
+    test_dir = test_path_for(FOUNDRY, "generated/structural_auth_vulnerable.t.sol").parent.parent
+    test_dir.mkdir(parents=True, exist_ok=True)
+    staged_vulnerable = test_dir / "Target.sol"
+    staged_patched = test_dir / "PatchedTarget.sol"
+    staged_vulnerable.write_text(vulnerable_source.read_text(encoding="utf-8"), encoding="utf-8")
+    staged_patched.write_text(patched_source.read_text(encoding="utf-8"), encoding="utf-8")
+    return staged_vulnerable, staged_patched
+
+
 def main() -> int:
     vulnerable_source = BENCHMARK / "Target.sol"
     patched_source = BENCHMARK / "PatchedTarget.sol"
@@ -30,19 +47,20 @@ def main() -> int:
     hypothesis = next(h for h in result.hypotheses if h.hypothesis_id == "H-AUTH-setWhitelist")
     vulnerable_model = parse_solidity(vulnerable_source)[0]
     patched_model = parse_solidity(patched_source)[0]
+    _stage_targets(vulnerable_source, patched_source)
 
-    # Generated tests live under foundry/test/generated, so the benchmark
-    # source beside foundry/ is two levels above the generated test file.
+    # Generated tests live under foundry/test/generated and staged targets live
+    # under foundry/test, so Solidity's relative import is ../Target.sol.
     vulnerable_test = generate_access_control_test(
         hypothesis,
-        "../../Target.sol",
+        "../Target.sol",
         vulnerable_model.name,
         test_path_for(FOUNDRY, "generated/structural_auth_vulnerable.t.sol"),
         contract_model=vulnerable_model,
     )
     patched_test = generate_access_control_test(
         hypothesis,
-        "../../PatchedTarget.sol",
+        "../PatchedTarget.sol",
         patched_model.name,
         test_path_for(FOUNDRY, "generated/structural_auth_patched.t.sol"),
         contract_model=patched_model,
