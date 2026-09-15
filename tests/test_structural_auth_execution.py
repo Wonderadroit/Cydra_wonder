@@ -75,3 +75,13 @@ def test_generation_rejects_unresolved_custom_type(tmp_path: Path):
         generate_structural_authorization_test(
             _hypothesis(), model, "../Target.sol", model.name, tmp_path / "generated.t.sol"
         )
+
+
+def test_generation_uses_width_correct_bytes_literals(tmp_path: Path):
+    model = _model((ParameterModel("payload", "bytes2"), ParameterModel("digest", "bytes32")))
+    path = generate_structural_authorization_test(
+        _hypothesis(), model, "../Target.sol", model.name, tmp_path / "generated.t.sol"
+    )
+    source = path.read_text(encoding="utf-8")
+    assert 'bytes2(hex"0100")' in source
+    assert 'bytes32(hex"0100000000000000000000000000000000000000000000000000000000000000")' in source
