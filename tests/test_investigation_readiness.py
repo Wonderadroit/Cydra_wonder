@@ -22,12 +22,18 @@ def test_uncertainty_is_conditional_and_actionable():
         model_confidence=0.8,
         hypothesis_coverage=0.7,
         contradiction_clearance=0.8,
-        experiment_validity=1.0,
+        experiment_validity=0.8,
     )
     assert result.state is ReadinessState.CONDITIONAL
     assert "evidence coverage is incomplete" in result.unresolved_reasons
     assert "relevant behavior remains untested" in result.unresolved_reasons
+    assert "experiment validity is incomplete" in result.unresolved_reasons
+    assert "system model remains uncertain" in result.unresolved_reasons
     assert "challenge competing system explanations" in result.recommended_next_tests
+    assert "collect evidence for uncovered hypotheses" in result.recommended_next_tests
+    assert "execute the highest-information untested observation" in result.recommended_next_tests
+    assert "validate experiment binding and execution provenance" in result.recommended_next_tests
+    assert "inspect compiler-backed model evidence and unresolved relationships" in result.recommended_next_tests
 
 
 def test_serious_model_or_contradiction_gap_blocks_claim_readiness():
