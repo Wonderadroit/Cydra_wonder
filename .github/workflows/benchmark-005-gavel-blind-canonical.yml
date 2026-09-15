@@ -58,6 +58,11 @@ jobs:
             --classes initialization authorization arithmetic \
             --freeze "blind-artifacts/${{ matrix.target_path }}"
 
+      - name: Print blind class coverage
+        run: |
+          echo "=== CYDRA blind class coverage: ${{ matrix.target_path }} ==="
+          find blind-artifacts -name classification.json -print -exec cat {} \;
+
       - name: Compute artifact name
         id: artifact
         env:

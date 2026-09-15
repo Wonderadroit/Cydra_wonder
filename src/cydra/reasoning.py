@@ -6,54 +6,37 @@ import re
 from .models import Evidence, Experiment, Hypothesis, Invariant, ContractModel, FunctionModel
 
 
-_FUNCTION_SIGNATURE_RE = re.compile(
-    r"\bfunction\s+(?P<name>\w+)\s*\((?P<parameters>[^)]*)\)\s*(?P<tail>[^\{;]*)\{",
-    re.MULTILINE,
-)
-_DECLARED_MODIFIER_EXCLUSIONS = {
-    "public", "external", "internal", "private",
-    "view", "pure", "payable", "virtual", "override",
-    "returns", "memory", "calldata", "storage",
-}
-_CALLER_SCOPED_WRITE_RE = re.compile(
-    r"\b[A-Za-z_]\w*\s*"
-    r"\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\]"
-    r"(?:\s*\[[^\]]*\])*\s*"
-    r"(?:\+?=|-=|\*=|/=|%=|\+\+|--)"
-)
+_FUNCTION_SIGNATURE_RE = re.compile(r"\bfunction\s+(?P<name>\w+)\s*\((?P<parameters>[^)]*)\)\s*(?P<tail>[^\{;]*)\{", re.MULTILINE)
+_DECLARED_MODIFIER_EXCLUSIONS = {"public", "external", "internal", "private", "view", "pure", "payable", "virtual", "override", "returns", "memory", "calldata", "storage"}
+_CALLER_SCOPED_WRITE_RE = re.compile(r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\](?:\s*\[[^\]]*\])*\s*(?:\+?=|-=|\*=|/=|%=|\+\+|--)")
 _CALLER_TOKEN_RE = re.compile(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b")
+_CALLER_KEYED_READ_RE = re.compile(r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\](?:\s*\[[^\]]*\])*")
 _ADMIN_NAME_PREFIXES = ("set", "add", "remove", "update", "accept")
 _STATE_CHANGING_VISIBILITIES = {"public", "external"}
 
 
 def _strip_signature_comments(text: str) -> str:
-    """Remove Solidity comments from a function-signature tail."""
     text = re.sub(r"//[^\n]*", " ", text)
     return re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
 
 
 def _source_declared_modifiers(contract: ContractModel, function: FunctionModel) -> tuple[str, ...]:
-    """Recover declared modifiers when the minimal model parser misses them."""
     try:
         source = Path(contract.source).read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return ()
-
     for match in _FUNCTION_SIGNATURE_RE.finditer(source):
         if match.group("name") != function.name:
             continue
         line = source.count("\n", 0, match.start()) + 1
         if line != function.line:
             continue
-        tail = _strip_signature_comments(match.group("tail"))
-        identifiers = re.findall(r"\b[A-Za-z_]\w*\b", tail)
+        identifiers = re.findall(r"\b[A-Za-z_]\w*\b", _strip_signature_comments(match.group("tail")))
         modifiers: list[str] = []
         for token in identifiers:
             if token == "returns" or token in {"override", "virtual"}:
                 break
-            if token in _DECLARED_MODIFIER_EXCLUSIONS:
-                continue
-            if token not in modifiers:
+            if token not in _DECLARED_MODIFIER_EXCLUSIONS and token not in modifiers:
                 modifiers.append(token)
         return tuple(modifiers)
     return ()
@@ -68,12 +51,8 @@ def _function_body(contract: ContractModel, function: FunctionModel) -> str | No
         source = Path(contract.source).read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return None
-
     for match in _FUNCTION_SIGNATURE_RE.finditer(source):
-        if match.group("name") != function.name:
-            continue
-        line = source.count("\n", 0, match.start()) + 1
-        if line != function.line:
+        if match.group("name") != function.name or source.count("\n", 0, match.start()) + 1 != function.line:
             continue
         body_start = match.end() - 1
         depth = 0
@@ -89,120 +68,52 @@ def _function_body(contract: ContractModel, function: FunctionModel) -> str | No
 
 
 def _is_caller_scoped_write(contract: ContractModel, function: FunctionModel) -> bool:
-    """Return true only when a caller-keyed mapping entry is actually mutated.
-
-    Reading a caller-keyed mapping, comparing a caller to stored state, or
-    merely mentioning ``msg.sender`` is not enough. The structural exclusion
-    requires a mutation operator on a caller-keyed mapping expression.
-    """
     body = _function_body(contract, function)
-    if body is None:
-        return False
-    return bool(_CALLER_SCOPED_WRITE_RE.search(body))
+    return body is not None and bool(_CALLER_SCOPED_WRITE_RE.search(body))
 
 
 def _has_caller_authorization_predicate(function: FunctionModel) -> bool:
-    """Return true when the model observed an explicit caller/state predicate."""
-    return any(_CALLER_TOKEN_RE.search(predicate) for predicate in function.authorization_predicates)
+    for predicate in function.authorization_predicates:
+        residual = _CALLER_KEYED_READ_RE.sub(" ", predicate)
+        if _CALLER_TOKEN_RE.search(residual):
+            return True
+    return False
 
 
 def _state_changing_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    """Return externally callable functions with observed state writes."""
-    return tuple(
-        function
-        for function in contract.functions
-        if function.visibility in _STATE_CHANGING_VISIBILITIES and function.writes
-    )
+    return tuple(f for f in contract.functions if f.visibility in _STATE_CHANGING_VISIBILITIES and f.writes)
 
 
 def _externally_callable_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    return tuple(
-        function
-        for function in contract.functions
-        if function.visibility in _STATE_CHANGING_VISIBILITIES
-    )
+    return tuple(f for f in contract.functions if f.visibility in _STATE_CHANGING_VISIBILITIES)
 
 
 def _admin_named_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    return tuple(
-        function
-        for function in _state_changing_functions(contract)
-        if function.name.startswith(_ADMIN_NAME_PREFIXES)
-    )
+    return tuple(f for f in _state_changing_functions(contract) if f.name.startswith(_ADMIN_NAME_PREFIXES))
 
 
 def access_control_invariant(contract: ContractModel, privileged_modifier: str | None = None) -> Invariant:
-    """Build the authorization invariant from observed protected siblings.
-
-    The candidate naming heuristic remains narrow, but the privileged mechanism
-    is learned from every externally callable function carrying a modifier.
-    This includes lifecycle guards such as ``pause`` whose state mutation may
-    occur in an inherited/internal call and therefore may not appear in the
-    minimal function write list.
-    """
     if privileged_modifier is None:
-        protected_functions = [
-            function
-            for function in _externally_callable_functions(contract)
-            if _declared_modifiers(contract, function)
-        ]
-        observed = sorted({
-            modifier
-            for function in protected_functions
-            for modifier in _declared_modifiers(contract, function)
-        })
-        if len(observed) == 1:
-            privileged_modifier = observed[0]
-        elif len(observed) > 1:
-            privileged_modifier = "observed privileged authorization"
-        else:
-            privileged_modifier = "onlyGov"
-    return Invariant(
-        "INV-AUTH-001",
-        f"Administrative state-changing operations must enforce {privileged_modifier} authorization.",
-        "structural sibling-function rule; modifier-bearing externally callable functions",
-        0.90,
-    )
+        observed = sorted({m for f in _externally_callable_functions(contract) for m in _declared_modifiers(contract, f)})
+        privileged_modifier = observed[0] if len(observed) == 1 else ("observed privileged authorization" if observed else "onlyGov")
+    return Invariant("INV-AUTH-001", f"Administrative state-changing operations must enforce {privileged_modifier} authorization.", "structural sibling-function rule; modifier-bearing externally callable functions", 0.90)
 
 
 def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
     admin_functions = _admin_named_functions(contract)
-    declared = tuple((function, _declared_modifiers(contract, function)) for function in admin_functions)
-
-    # Do not infer an authorization mechanism from the names of candidate
-    # functions themselves. Protected siblings can have unrelated names.
-    protected_functions = [
-        function
-        for function in _externally_callable_functions(contract)
-        if _declared_modifiers(contract, function)
-    ]
-    if not protected_functions:
+    declared = tuple((f, _declared_modifiers(contract, f)) for f in admin_functions)
+    protected_functions = [f for f in _externally_callable_functions(contract) if _declared_modifiers(contract, f)]
+    if not protected_functions and not admin_functions:
         return ()
-
-    protected_modifiers = sorted({
-        modifier
-        for function in protected_functions
-        for modifier in _declared_modifiers(contract, function)
-    })
-    if len(protected_modifiers) == 1:
-        invariant = access_control_invariant(contract, protected_modifiers[0])
+    if protected_functions:
+        observed = sorted({m for f in protected_functions for m in _declared_modifiers(contract, f)})
+        invariant = access_control_invariant(contract, observed[0] if len(observed) == 1 else "observed privileged authorization")
     else:
-        invariant = access_control_invariant(contract, "observed privileged authorization")
-
+        invariant = access_control_invariant(contract)
     return tuple(
-        Hypothesis(
-            f"H-AUTH-{function.name}",
-            f"{function.name} may permit an unauthorized caller to mutate privileged state.",
-            invariant.invariant_id,
-            function.name,
-            "arbitrary external caller",
-            "privileged configuration or authorization state can be changed",
-            evidence_ids=(f"E-MODEL-{function.name}",),
-        )
-        for function, modifiers in declared
-        if not modifiers
-        and not _is_caller_scoped_write(contract, function)
-        and not _has_caller_authorization_predicate(function)
+        Hypothesis(f"H-AUTH-{f.name}", f"{f.name} may permit an unauthorized caller to mutate privileged state.", invariant.invariant_id, f.name, "arbitrary external caller", "privileged configuration or authorization state can be changed", evidence_ids=(f"E-MODEL-{f.name}",))
+        for f, modifiers in declared
+        if not modifiers and not _is_caller_scoped_write(contract, f) and not _has_caller_authorization_predicate(f)
     )
 
 
@@ -212,42 +123,18 @@ def initialization_invariant(contract: ContractModel) -> Invariant:
 
 def generate_initialization_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
     initializers = [f for f in contract.functions if f.name in {"initialize", "init"} and f.visibility in {"public", "external"}]
-    if not initializers:
-        return ()
     invariant = initialization_invariant(contract)
-    return tuple(Hypothesis(f"H-INIT-{fn.name}", f"{fn.name} may be callable in the deployed uninitialized state by an arbitrary caller, allowing privileged initialization state to be claimed.", invariant.invariant_id, fn.name, "arbitrary external caller", "attacker-controlled initialization or privileged state", evidence_ids=(f"E-MODEL-{fn.name}",)) for fn in initializers)
+    return tuple(Hypothesis(f"H-INIT-{f.name}", f"{f.name} may be callable in the deployed uninitialized state by an arbitrary caller, allowing privileged initialization state to be claimed.", invariant.invariant_id, f.name, "arbitrary external caller", "attacker-controlled initialization or privileged state", evidence_ids=(f"E-MODEL-{f.name}",)) for f in initializers)
 
 
 def arithmetic_rounding_invariant(contract: ContractModel) -> Invariant | None:
-    """Detect the Benchmark 003 rounding boundary without changing shared schemas."""
-    source = Path(contract.source).read_text(encoding="utf-8")
-    if "(assets * SCALE + 996) / 997" not in source:
-        return None
-    return Invariant(
-        "INV-ARITH-001",
-        "The quote calculation must not round an exact floor upward; observed output must equal the floor of the reference division.",
-        "arithmetic rule; integer division with upward rounding offset",
-        0.90,
-    )
+    from .structural_arithmetic import arithmetic_rounding_invariant as _detect
+    return _detect(contract)
 
 
 def generate_arithmetic_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
-    invariant = arithmetic_rounding_invariant(contract)
-    if invariant is None:
-        return ()
-    targets = [f for f in contract.functions if f.name == "quoteMint"]
-    return tuple(
-        Hypothesis(
-            f"H-ARITH-{fn.name}",
-            f"{fn.name} may return a value above the exact floor because the arithmetic path rounds upward.",
-            invariant.invariant_id,
-            fn.name,
-            "arithmetic boundary input that exposes rounding drift",
-            "quoted value exceeds the exact floor by at least one unit",
-            evidence_ids=(f"E-MODEL-{fn.name}",),
-        )
-        for fn in targets
-    )
+    from .structural_arithmetic import generate_arithmetic_hypotheses as _generate
+    return _generate(contract)
 
 
 def plan_access_control_experiment(hypothesis: Hypothesis) -> Experiment:
@@ -261,23 +148,8 @@ def plan_initialization_experiment(hypothesis: Hypothesis) -> Experiment:
 def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
     if hypothesis.invariant_id != "INV-ARITH-001":
         raise ValueError(f"Unsupported invariant for arithmetic experiment: {hypothesis.invariant_id}")
-    return Experiment(
-        f"X-{hypothesis.hypothesis_id}",
-        hypothesis.hypothesis_id,
-        f"Execute {hypothesis.target_function} with an arithmetic boundary input and assert the observed output equals the exact floor reference value; repeat against the patched version.",
-        ("observed quote exceeds the exact floor", "observed quote equals the exact floor"),
-        1.0,
-    )
+    return Experiment(f"X-{hypothesis.hypothesis_id}", hypothesis.hypothesis_id, f"Execute {hypothesis.target_function} with an arithmetic boundary input and assert the observed output equals the exact floor reference value; repeat against the patched version.", ("observed quote exceeds the exact floor", "observed quote equals the exact floor"), 1.0)
 
 
 def build_evidence(contract: ContractModel, hypotheses: tuple[Hypothesis, ...]) -> tuple[Evidence, ...]:
-    return tuple(
-        Evidence(
-            f"E-MODEL-{fn.name}",
-            "model",
-            f"Function {fn.name} has modifiers={list(_declared_modifiers(contract, fn))} and writes={list(fn.writes)}.",
-            contract.source,
-            f"line {fn.line}",
-        )
-        for fn in contract.functions
-    )
+    return tuple(Evidence(f"E-MODEL-{f.name}", "model", f"Function {f.name} has modifiers={list(_declared_modifiers(contract, f))} and writes={list(f.writes)}.", contract.source, f"line {f.line}") for f in contract.functions)

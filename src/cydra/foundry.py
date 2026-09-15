@@ -60,10 +60,50 @@ def test_path_for(project_dir: str | Path, filename: str) -> Path:
     return configured_test_dir(project_dir) / filename
 
 
-def generate_access_control_test(hypothesis: Hypothesis, target_import: str, target_type: str, output_path: str | Path) -> Path:
+def _function_argument(parameter: ParameterModel, index: int) -> str:
+    """Return a conservative compile-time value for a supported ABI type.
+
+    Authorization experiments must not invent semantics for unresolved custom
+    structs/enums. Such a parameter is rejected so the caller records a
+    generation capability gap instead of fabricating a potentially misleading
+    experiment.
+    """
+    parameter_type = parameter.type.strip()
+    base = parameter_type.split()[0].rstrip("[]")
+    if parameter_type.endswith("[]"):
+        if base.startswith(("uint", "int")) or base in {"address", "bool", "bytes32", "bytes"}:
+            return f"new {base}[](0)"
+        raise ValueError(f"unsupported authorization argument type: {parameter.type}")
+    if parameter_type == "address payable":
+        return "payable(address(0xCAFE))"
+    if base == "address":
+        return "address(0xCAFE)"
+    if base == "bool":
+        return "false"
+    if base.startswith(("uint", "int")):
+        return "1"
+    if base == "string":
+        return '"CYDRA"'
+    if base == "bytes":
+        return "bytes(\"\")"
+    if base.startswith("bytes") and base[5:].isdigit():
+        return "bytes32(0x01)" if base == "bytes32" else f"{base}(0x01)"
+    raise ValueError(f"unsupported authorization argument type: {parameter.type}")
+
+
+def generate_access_control_test(
+    hypothesis: Hypothesis,
+    target_import: str,
+    target_type: str,
+    output_path: str | Path,
+    contract_model: ContractModel | None = None,
+) -> Path:
     if hypothesis.invariant_id != "INV-AUTH-001":
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
-    return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
+
+    if contract_model is None:
+        # Preserve the legacy fixture generator for the older benchmark tests.
+        return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 // Hypothesis: {hypothesis.hypothesis_id}
 import {{Test}} from "forge-std/Test.sol";
@@ -77,6 +117,43 @@ contract CydraAuthInvariantTest is Test {{
         assertFalse(target.whiteList(account));
         vm.expectRevert(); vm.prank(attacker); target.setWhitelist(account, true);
         assertFalse(target.whiteList(account));
+    }}
+}}
+''', output_path)
+
+    function = next((item for item in contract_model.functions if item.name == hypothesis.target_function), None)
+    if function is None:
+        raise ValueError(f"Model has no target function: {hypothesis.target_function}")
+    if function.visibility not in {"public", "external"}:
+        raise ValueError(f"authorization target {function.name} is not externally callable")
+
+    arguments = ", ".join(_function_argument(parameter, index) for index, parameter in enumerate(function.parameters))
+    call = f"target.{function.name}({arguments});"
+    pragma = contract_model.pragma or "^0.8.20"
+    target_import = _layout_aware_import_path(target_import, output_path)
+    return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
+pragma solidity {pragma};
+// Hypothesis: {hypothesis.hypothesis_id}
+// Structural authorization experiment: the target function and argument
+// shapes come from ContractModel; no benchmark-specific function name is used.
+import {{Test}} from "forge-std/Test.sol";
+import {{ {target_type} }} from "{target_import}";
+contract CydraAuthInvariantTest is Test {{
+    {target_type} internal target;
+    address internal attacker = address(0xBEEF);
+
+    function setUp() public {{
+        target = new {target_type}();
+    }}
+
+    function testUnauthorizedCallerMutationSurface() public {{
+        vm.record();
+        vm.prank(attacker);
+        (bool ok,) = address(target).call(abi.encodeWithSignature("{function.name}({', '.join(parameter.type.split()[0] for parameter in function.parameters)})", {arguments}));
+        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(target));
+        reads;
+        assertTrue(ok, "candidate call reverted; unauthorized mutation not demonstrated");
+        assertGt(writes.length, 0, "candidate call did not mutate target storage");
     }}
 }}
 ''', output_path)
@@ -433,7 +510,6 @@ def _model_initialization_source(
         initialize_args_str=initialize_args_str,
     )
     if declarations_text := "\n        ".join(declarations):
-        # render_initialization_test_body() returns the complete test function.
         opening_brace = test_body.index("{") + 1
         test_body = (
             test_body[:opening_brace]

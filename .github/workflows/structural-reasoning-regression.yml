@@ -1,0 +1,40 @@
+name: CYDRA structural reasoning regression
+
+on:
+  pull_request:
+    paths:
+      - "src/cydra/**"
+      - "tests/**"
+      - "scripts/validate_structural_authorization_execution.py"
+      - "benchmarks/alchemix_missing_access_control/**"
+      - "pyproject.toml"
+      - ".github/workflows/structural-reasoning-regression.yml"
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - run: python -m pip install pytest
+      - run: python -m pytest -q
+
+  historical-structural-authorization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std
+        working-directory: benchmarks/alchemix_missing_access_control/foundry
+        run: forge install foundry-rs/forge-std --no-commit
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Execute structural authorization against vulnerable and patched controls
+        env:
+          PYTHONPATH: src
+        run: python scripts/validate_structural_authorization_execution.py
