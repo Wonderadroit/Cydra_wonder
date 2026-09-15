@@ -61,18 +61,22 @@ def assess_investigation_readiness(
     reasons = list(unresolved_reasons)
     tests = list(recommended_next_tests)
 
-    if contradiction_clearance < 1.0 and "unresolved contradictions" not in reasons:
-        reasons.append("unresolved contradictions")
-        if "challenge competing system explanations" not in tests:
-            tests.append("challenge competing system explanations")
-    if evidence_coverage < 1.0 and "evidence coverage is incomplete" not in reasons:
-        reasons.append("evidence coverage is incomplete")
-    if hypothesis_coverage < 1.0 and "relevant behavior remains untested" not in reasons:
-        reasons.append("relevant behavior remains untested")
-    if experiment_validity < 1.0 and "experiment validity is incomplete" not in reasons:
-        reasons.append("experiment validity is incomplete")
-    if model_confidence < 1.0 and "system model remains uncertain" not in reasons:
-        reasons.append("system model remains uncertain")
+    def add_reason(reason: str, test: str | None = None) -> None:
+        if reason not in reasons:
+            reasons.append(reason)
+        if test is not None and test not in tests:
+            tests.append(test)
+
+    if contradiction_clearance < 1.0:
+        add_reason("unresolved contradictions", "challenge competing system explanations")
+    if evidence_coverage < 1.0:
+        add_reason("evidence coverage is incomplete", "collect evidence for uncovered hypotheses")
+    if hypothesis_coverage < 1.0:
+        add_reason("relevant behavior remains untested", "execute the highest-information untested observation")
+    if experiment_validity < 1.0:
+        add_reason("experiment validity is incomplete", "validate experiment binding and execution provenance")
+    if model_confidence < 1.0:
+        add_reason("system model remains uncertain", "inspect compiler-backed model evidence and unresolved relationships")
 
     if experiment_validity == 0.0 or model_confidence < 0.5 or contradiction_clearance < 0.5:
         state = ReadinessState.BLOCKED
