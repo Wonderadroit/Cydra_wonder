@@ -98,6 +98,38 @@ def assess_investigation_readiness(
     )
 
 
+def _observation_execution_is_proven(model: SystemModel, observation_id: str) -> bool:
+    """Require canonical binding plus externally produced outcome evidence.
+
+    A caller-controlled ``executed=True`` flag is not sufficient: the observation
+    must be completed, bound to an experiment, and have a produced evidence node
+    carrying the execution provenance marker.
+    """
+    observation = model.nodes.get(observation_id)
+    if observation is None or observation.kind != "observation":
+        return False
+    if observation.attributes.get("status") != "completed":
+        return False
+    if observation.attributes.get("executed") is not True:
+        return False
+    if observation.attributes.get("binding_status") != "bound":
+        return False
+    outcome_id = observation.attributes.get("outcome_id")
+    if not isinstance(outcome_id, str) or not outcome_id.strip():
+        return False
+    evidence_id = f"observation_outcome:{outcome_id}"
+    evidence = model.nodes.get(evidence_id)
+    if evidence is None or evidence.kind != "evidence":
+        return False
+    return any(
+        edge.source == observation_id
+        and edge.target == evidence_id
+        and edge.relation == "produced"
+        and edge.attributes.get("executed_externally") is True
+        for edge in model.edges
+    )
+
+
 def assess_system_model_readiness(model: SystemModel) -> InvestigationReadiness:
     """Derive readiness dimensions from canonical graph state.
 
@@ -130,8 +162,7 @@ def assess_system_model_readiness(model: SystemModel) -> InvestigationReadiness:
             has_completed_test = any(
                 edge.target == hid
                 and edge.relation == "tests"
-                and model.nodes.get(edge.source, None) is not None
-                and model.nodes[edge.source].attributes.get("executed") is True
+                and _observation_execution_is_proven(model, edge.source)
                 for edge in model.edges
             )
             evidence_bound += int(has_evidence)
@@ -171,10 +202,7 @@ def assess_system_model_readiness(model: SystemModel) -> InvestigationReadiness:
     if not observations:
         experiment_validity = 0.0
     else:
-        valid = sum(
-            int(observation.attributes.get("executed") is True and observation.attributes.get("status") == "completed")
-            for observation in observations
-        )
+        valid = sum(int(_observation_execution_is_proven(model, observation.node_id)) for observation in observations)
         experiment_validity = valid / len(observations)
 
     reasons: list[str] = []
@@ -182,6 +210,8 @@ def assess_system_model_readiness(model: SystemModel) -> InvestigationReadiness:
         reasons.append("no canonical hypotheses have been registered")
     if evidence and not observations:
         reasons.append("evidence exists without a corresponding executed observation")
+    if observations and experiment_validity < 1.0:
+        reasons.append("one or more observations lack bound, externally produced execution evidence")
 
     return assess_investigation_readiness(
         evidence_coverage=evidence_coverage,
