@@ -39,6 +39,19 @@ def test_missing_compiler_effects_fall_back_without_inventing_semantics(tmp_path
         FunctionModel("guarded", "external", ("onlyOwner",), (), (), 4),
         FunctionModel("mutator", "external", (), (), (), 5),
     ), state_variables=("adminState",))
-    evidence = [_evidence("guarded", "writes", "adminState")]
+    hypotheses = generate_structural_access_control_hypotheses(contract, [_evidence("guarded", "writes", "adminState")])
+    assert [h.target_function for h in hypotheses] == ["mutator"]
+    assert hypotheses[0].evidence_ids == ("E-MODEL-mutator",)
+
+
+def test_compiler_backed_candidate_records_ast_provenance(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("pragma solidity ^0.8.20;\ncontract Target {\nuint256 public adminState;\nfunction guarded() external onlyOwner { adminState = 1; }\nfunction mutator() external { adminState = 2; }\n}\n", encoding="utf-8")
+    contract = ContractModel("Target", str(source), (
+        FunctionModel("guarded", "external", ("onlyOwner",), (), (), 4),
+        FunctionModel("mutator", "external", (), (), (), 5),
+    ), state_variables=("adminState",))
+    evidence = [_evidence("guarded", "writes", "adminState"), _evidence("mutator", "writes", "adminState")]
     hypotheses = generate_structural_access_control_hypotheses(contract, evidence)
     assert [h.target_function for h in hypotheses] == ["mutator"]
+    assert hypotheses[0].evidence_ids == ("E-AST-STATE-mutator",)
