@@ -59,6 +59,7 @@ def test_constraints_reach_experiment_planning(monkeypatch, tmp_path: Path):
 
     experiment = result.experiments[0]
     assert experiment.hypothesis_id == "H-AUTH-withdraw"
+    assert experiment.target_function == "withdraw"
     assert experiment.planned_inputs == ("1",)
 
 
@@ -81,4 +82,5 @@ def test_foreign_function_constraint_never_reaches_target_experiment(monkeypatch
 
     # The foreign constraint would select 0 if contamination were present.
     # The target function therefore must retain its generic safe default of 1.
+    assert result.experiments[0].target_function == "withdraw"
     assert result.experiments[0].planned_inputs == ("1",)
