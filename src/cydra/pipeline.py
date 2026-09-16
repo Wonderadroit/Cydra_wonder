@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Iterable
 
+from .ast_dataflow import SemanticRelationshipEvidence
 from .models import InvestigationResult
 from .reasoning import (
     access_control_invariant,
@@ -27,28 +29,37 @@ def _merge_hypotheses(*groups):
     return tuple(merged.values())
 
 
-def investigate(path: str | Path, target: str | None = None) -> InvestigationResult:
-    """Build an investigation from the class-neutral reasoning pipeline.
+def investigate(
+    path: str | Path,
+    target: str | None = None,
+    semantic_evidence: Iterable[SemanticRelationshipEvidence] | None = None,
+) -> InvestigationResult:
+    """Build an investigation from class-neutral behavioral reasoning.
 
-    Structural extractors are the authoritative discovery path for behavioral
-    reasoning. Legacy extractors remain available as compatibility fallbacks, but
-    arithmetic discovery must not silently regress to benchmark-specific matching.
+    When compiler-backed state-effect evidence is supplied for a contract, it is
+    authoritative for authorization state mutation. The lexical/model authorization
+    path is used only when compiler evidence is absent, preventing contradictory
+    legacy metadata from reintroducing a candidate that compiler semantics exclude.
     """
     contracts = parse_solidity(path)
     if not contracts:
         raise ValueError(f"No Solidity contract found in {path}")
+
+    semantic = tuple(semantic_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
     for contract in contracts:
-        auth = _merge_hypotheses(
-            generate_access_control_hypotheses(contract),
-            generate_structural_access_control_hypotheses(contract),
-        )
+        contract_semantic = tuple(item for item in semantic if item.contract == contract.name)
+        if contract_semantic:
+            auth = generate_structural_access_control_hypotheses(contract, contract_semantic)
+        else:
+            auth = _merge_hypotheses(
+                generate_access_control_hypotheses(contract),
+                generate_structural_access_control_hypotheses(contract),
+            )
         init = _merge_hypotheses(
             generate_initialization_hypotheses(contract),
             generate_structural_initialization_hypotheses(contract),
         )
-        # Arithmetic discovery is structural: function names and exact benchmark
-        # constants must not determine whether a candidate exists.
         arith = generate_arithmetic_hypotheses(contract)
 
         if auth:
@@ -64,6 +75,7 @@ def investigate(path: str | Path, target: str | None = None) -> InvestigationRes
         all_experiments.extend(plan_initialization_experiment(h) for h in init)
         all_experiments.extend(plan_arithmetic_experiment(h) for h in arith)
         all_evidence.extend(build_evidence(contract, (*auth, *init, *arith)))
+
     return InvestigationResult(
         target=target or str(path),
         contracts=tuple(contracts),
