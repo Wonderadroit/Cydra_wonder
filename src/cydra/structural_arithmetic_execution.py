@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
-from .models import ContractModel, Hypothesis
+from .models import ContractModel, Experiment, Hypothesis
+from .planned_call import render_function_arguments
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,19 @@ def choose_boundary_input(shape: ArithmeticDivisionShape, limit: int = 10_000) -
     return None
 
 
+def _planned_arithmetic_input(experiment: Experiment, contract_model: ContractModel, function_name: str) -> str:
+    function = next((item for item in contract_model.functions if item.name == function_name), None)
+    if function is None:
+        raise ValueError(f"model has no arithmetic target function: {function_name}")
+    arguments = render_function_arguments(experiment, function)
+    if len(arguments) != 1:
+        raise ValueError(
+            f"arithmetic execution requires exactly one planned argument for {function_name}; "
+            f"got {len(arguments)}"
+        )
+    return arguments[0]
+
+
 def generate_structural_arithmetic_test(
     hypothesis: Hypothesis,
     contract_model: ContractModel,
@@ -103,22 +117,32 @@ def generate_structural_arithmetic_test(
     vulnerable_type: str,
     patched_type: str,
     output_path: str | Path,
+    experiment: Experiment | None = None,
 ) -> Path:
     if hypothesis.invariant_id != "INV-ARITH-001":
         raise ValueError(f"Unsupported invariant for structural arithmetic execution: {hypothesis.invariant_id}")
+    if experiment is not None and experiment.hypothesis_id != hypothesis.hypothesis_id:
+        raise ValueError(
+            f"experiment/hypothesis mismatch: {experiment.hypothesis_id} != {hypothesis.hypothesis_id}"
+        )
     shape = extract_positive_offset_division(contract_model, hypothesis.target_function)
     if shape is None:
         raise ValueError("structural arithmetic execution requires a supported one-parameter positive-offset division")
-    boundary = choose_boundary_input(shape)
-    if boundary is None:
-        raise ValueError("could not find a discriminating boundary input for the arithmetic hypothesis")
+
+    if experiment is not None and experiment.planned_inputs:
+        boundary_value = _planned_arithmetic_input(experiment, contract_model, hypothesis.target_function)
+    else:
+        boundary = choose_boundary_input(shape)
+        if boundary is None:
+            raise ValueError("could not find a discriminating boundary input for the arithmetic hypothesis")
+        boundary_value = str(boundary)
 
     pragma = contract_model.pragma or "^0.8.20"
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
-// Structural arithmetic differential experiment. The callable name, input,
-// and exact-floor oracle are derived from the observed source expression.
+// Structural arithmetic differential experiment. The callable name and
+// complete ABI input vector come from the canonical Experiment plan when present.
 import {{Test}} from "forge-std/Test.sol";
 import {{ {vulnerable_type} as VulnerableTarget }} from "{vulnerable_import}";
 import {{ {patched_type} as PatchedTarget }} from "{patched_import}";
@@ -133,7 +157,7 @@ contract CydraArithmeticInvariantTest is Test {{
     }}
 
     function testBoundaryDistinguishesUpwardRounding() public {{
-        uint256 input = {boundary};
+        uint256 input = {boundary_value};
         uint256 vulnerableValue = vulnerable.{shape.function_name}(input);
         uint256 patchedValue = patched.{shape.function_name}(input);
         uint256 exactFloor = (input * {shape.multiplier}) / {shape.divisor};
