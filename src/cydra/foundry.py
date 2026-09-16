@@ -102,6 +102,7 @@ def generate_access_control_test(
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
 
     if contract_model is None:
+        # Preserve the legacy fixture generator for the older benchmark tests.
         return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -307,7 +308,7 @@ def _initializer_runtime_requirements(contract_model: ContractModel, function_na
         if receiver == "ERC20" and method == "symbol"
     }
     factory_context = bool(re.search(r"\b\w+\s*=\s*_msgSender\s*\(\s*\)\s*;", body)) and bool(
-        re.search(r"\bIPoolFactory\s*\(\s*\w+\s*\)\s*\.\s*voter\s*\(", body
+        re.search(r"\bIPoolFactory\s*\(\s*\w+\s*\)\s*\.\s*voter\s*\(", body)
     )
     return token_parameters, factory_context
 
