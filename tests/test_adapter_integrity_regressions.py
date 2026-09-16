@@ -40,5 +40,8 @@ def test_receive_and_fallback_keep_distinct_ast_kinds_when_state_evidence_exists
         }],
     }
     evidence = extract_ast_relationships(ast, "src/C.sol")
-    assert [item.function for item in evidence] == ["receive", "fallback"]
-    assert [item.metadata["function_kind"] for item in evidence] == ["receive", "fallback"]
+    semantic = [item for item in evidence if item.relation != "reference"]
+    references = [item for item in evidence if item.relation == "reference"]
+    assert [item.function for item in semantic] == ["receive", "fallback"]
+    assert [item.metadata["function_kind"] for item in semantic] == ["receive", "fallback"]
+    assert [item.function for item in references] == ["receive", "fallback"]

@@ -1,16 +1,17 @@
-name: CYDRA investigation readiness regression
+name: CYDRA causal challenge regression
 
 on:
   push:
     branches:
-      - feat/investigation-readiness-2026-09-15
+      - feat/information-gain-planner-2026-09-15
   pull_request:
     branches:
-      - feat/next-reasoning-hardening-2026-09-15
+      - feat/information-gain-planner-2026-09-15
       - feat/investigation-readiness-2026-09-15
+      - feat/next-reasoning-hardening-2026-09-15
 
 jobs:
-  readiness:
+  challenge:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,5 +22,5 @@ jobs:
         run: |
           python -m pip install -e .
           python -m pip install pytest
-      - name: Run readiness and planning regressions
-        run: python -m pytest -q tests/test_investigation_readiness.py tests/test_investigation_readiness_model.py tests/test_information_gain_planner.py
+      - name: Run causal and blind-artifact regressions
+        run: python -m pytest -q tests/test_causal_challenge.py tests/test_information_gain_planner.py tests/test_benchmark_005_freeze.py

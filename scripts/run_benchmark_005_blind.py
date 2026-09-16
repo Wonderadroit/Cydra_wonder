@@ -20,7 +20,7 @@ from cydra.pipeline import investigate
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
 INVARIANT_CLASS = {"INV-AUTH-001": "authorization", "INV-INIT-001": "initialization", "INV-ARITH-001": "arithmetic"}
-FREEZE_FILES = ("provenance.json", "target-checkout.txt", "parse-output.json", "invariants.json", "hypotheses.json", "experiments.json", "execution.json", "execution-human.txt", "integrity-check.json", "classification.json", "manifest.sha256", "README.md")
+FREEZE_FILES = ("provenance.json", "target-checkout.txt", "parse-output.json", "invariants.json", "hypotheses.json", "experiments.json", "execution.json", "execution-human.txt", "integrity-check.json", "classification.json", "compilation.log", "manifest.sha256", "README.md")
 GENERATED_MANIFEST = "manifest.sha256"
 
 
