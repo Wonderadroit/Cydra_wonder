@@ -1,6 +1,6 @@
 from cydra.foundry import generate_initialization_test
 from cydra.interface_resolver import ResolvedInterface
-from cydra.models import ConstructorModel, ContractModel, FunctionModel, Hypothesis, ParameterModel
+from cydra.models import ConstructorModel, ContractModel, Experiment, FunctionModel, Hypothesis, ParameterModel
 
 
 def _hypothesis() -> Hypothesis:
@@ -71,6 +71,68 @@ def test_model_aware_generator_consumes_constructor_and_parameters(tmp_path):
     assert "guardian()" not in source
 
 
+def test_planned_inputs_override_initializer_fallback_arguments(tmp_path):
+    model = _model(
+        "SimpleInitializer",
+        (),
+        (
+            ParameterModel("amount", "uint256"),
+            ParameterModel("recipient", "address"),
+        ),
+    )
+    experiment = Experiment(
+        experiment_id="X-H-INIT-interface",
+        hypothesis_id="H-INIT-interface",
+        action="execute initialize",
+        discriminates=("lifecycle",),
+        cost=1.0,
+        planned_inputs=("7", "address(0xCAFE)"),
+    )
+    output = generate_initialization_test(
+        _hypothesis(),
+        "../src/SimpleInitializer.sol",
+        "SimpleInitializer",
+        tmp_path / "generated.t.sol",
+        contract_model=model,
+        experiment=experiment,
+    )
+    source = output.read_text(encoding="utf-8")
+    assert "target.initialize(7, address(0xCAFE));" in source
+    assert "target.initialize(0, address(0));" not in source
+
+
+def test_planned_input_arity_mismatch_fails_closed(tmp_path):
+    model = _model(
+        "SimpleInitializer",
+        (),
+        (
+            ParameterModel("amount", "uint256"),
+            ParameterModel("recipient", "address"),
+        ),
+    )
+    experiment = Experiment(
+        experiment_id="X-H-INIT-interface",
+        hypothesis_id="H-INIT-interface",
+        action="execute initialize",
+        discriminates=("lifecycle",),
+        cost=1.0,
+        planned_inputs=("7",),
+    )
+    try:
+        generate_initialization_test(
+            _hypothesis(),
+            "../src/SimpleInitializer.sol",
+            "SimpleInitializer",
+            tmp_path / "generated.t.sol",
+            contract_model=model,
+            experiment=experiment,
+        )
+    except ValueError as exc:
+        assert "planned input arity mismatch" in str(exc)
+    else:
+        raise AssertionError("planned input arity mismatch must fail closed")
+
+
 def test_model_aware_generator_qualifies_and_imports_inherited_custom_type(tmp_path):
     inherited = ResolvedInterface(
         name="IMinter",
@@ -102,19 +164,14 @@ def test_model_aware_generator_qualifies_and_imports_inherited_custom_type(tmp_p
     assert 'import { IMinter } from "interfaces/IMinter.sol";' in source
     assert source.count('import { IMinter } from "interfaces/IMinter.sol";') == 1
     assert "IMinter.AirdropParams memory parameter0;" in source
-
     function_start = source.index("function testInitializationInterfaceIsCallable()")
     function_body_start = source.index("{", function_start) + 1
     function_body_end = source.index("}", function_body_start)
     declaration_pos = source.index("IMinter.AirdropParams memory parameter0;")
-
     assert function_body_start < declaration_pos < function_body_end
-    assert "Minter.AirdropParams memory parameter0;" not in source.replace(
-        "IMinter.AirdropParams memory parameter0;", ""
-    )
+    assert "Minter.AirdropParams memory parameter0;" not in source.replace("IMinter.AirdropParams memory parameter0;", "")
     assert "target.initialize(parameter0);" in source
     assert "target.guardian()" not in source
-
 
 
 def test_target_declared_custom_type_precedes_inherited_type(tmp_path):
