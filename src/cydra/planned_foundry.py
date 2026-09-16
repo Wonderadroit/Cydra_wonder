@@ -61,9 +61,12 @@ contract CydraAuthInvariantTest is Test {{
     function testUnauthorizedCallerMutationSurface() public {{
         vm.record();
         vm.prank(attacker);
-        (bool ok,) = address(target).call(
-            abi.encodeWithSignature("{function.name}({signature_types})", {arguments})
-        );
+        bool ok;
+        try target.{function.name}({arguments}) {{
+            ok = true;
+        }} catch {{
+            ok = false;
+        }}
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(target));
         reads;
         assertTrue(ok, "candidate call reverted; unauthorized mutation not demonstrated");
