@@ -49,7 +49,8 @@ def _constraint_value(predicate: str, parameter: ParameterModel) -> str | None:
         if re.search(rf"\b{name}\s*==\s*0\b", predicate):
             return "0"
         if re.search(rf"\b{name}\s*>=\s*0\b", predicate):
-            return "0"
+            # 1 also satisfies >= 0 and is compatible with a stricter > 0 guard.
+            return "1"
     return None
 
 
@@ -64,6 +65,10 @@ def select_parameter_candidates(
     Candidate selection is bound to both the target function and parameter identity
     when a function name is supplied. The selector is otherwise unaware of
     vulnerability class, invariant, or benchmark-specific function names.
+
+    If supported constraints for one parameter imply incompatible concrete values,
+    no candidate is emitted for that parameter. This fails closed instead of letting
+    source ordering decide which contradictory predicate wins.
     """
     by_key: dict[tuple[str, int], list[ConstraintEvidence]] = {}
     for constraint in constraints:
@@ -74,17 +79,25 @@ def select_parameter_candidates(
     selected: list[ParameterCandidate] = []
     for index, parameter in enumerate(parameters):
         matches = by_key.get((parameter.name, index), [])
-        for constraint in matches:
-            value = _constraint_value(constraint.predicate, parameter)
-            if value is not None:
-                selected.append(
-                    ParameterCandidate(
-                        parameter=parameter.name,
-                        parameter_index=index,
-                        value=value,
-                        reason="satisfies observed compiler-linked predicate",
-                        constraint_sources=(constraint.source,),
-                    )
-                )
-                break
+        candidates = [
+            (constraint, _constraint_value(constraint.predicate, parameter))
+            for constraint in matches
+        ]
+        supported = [(constraint, value) for constraint, value in candidates if value is not None]
+        values = {value for _, value in supported}
+        if len(values) > 1:
+            continue
+        if not supported:
+            continue
+
+        constraint, value = supported[0]
+        selected.append(
+            ParameterCandidate(
+                parameter=parameter.name,
+                parameter_index=index,
+                value=value,
+                reason="satisfies observed compiler-linked predicate",
+                constraint_sources=tuple(item.source for item, _ in supported),
+            )
+        )
     return tuple(selected)
