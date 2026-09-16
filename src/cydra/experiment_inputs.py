@@ -11,16 +11,18 @@ def plan_parameter_inputs(
     parameters: Iterable[ParameterModel],
     constraints: Iterable[ConstraintEvidence],
     defaults: Mapping[str, str],
+    *,
+    function_name: str | None = None,
 ) -> tuple[str, ...]:
     """Build an ordered ABI argument vector from observed constraints plus fallback defaults.
 
-    Compiler evidence may override only the parameter it actually constrains. Every
-    other parameter retains the caller's conservative default. This function is
-    intentionally unaware of vulnerability class, invariant, or function name.
+    Compiler evidence may override only the parameter of the requested function.
+    Every other parameter retains the caller's conservative default. This function
+    is intentionally unaware of vulnerability class or invariant.
     """
     parameter_list = tuple(parameters)
     selected: tuple[ParameterCandidate, ...] = select_parameter_candidates(
-        parameter_list, constraints
+        parameter_list, constraints, function_name=function_name
     )
     by_index = {candidate.parameter_index: candidate.value for candidate in selected}
     return tuple(
