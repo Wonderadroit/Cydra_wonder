@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from cydra.compiler_constraints import ConstraintEvidence
-from cydra.models import ContractModel, FunctionModel, ParameterModel
+from cydra.models import ContractModel, FunctionModel, Hypothesis, ParameterModel
 from cydra.pipeline import investigate
 
 
@@ -20,9 +20,29 @@ def _contract(tmp_path: Path) -> tuple[Path, ContractModel]:
     return source, ContractModel(name="Target", source=str(source), functions=(function,))
 
 
+def _withdraw_hypothesis() -> Hypothesis:
+    return Hypothesis(
+        hypothesis_id="H-AUTH-withdraw",
+        claim="withdraw may permit an unauthorized caller to mutate state",
+        invariant_id="INV-AUTH-001",
+        target_function="withdraw",
+        attacker_capability="arbitrary external caller",
+        expected_impact="state mutation",
+    )
+
+
+def _patch_pipeline(monkeypatch, contract):
+    monkeypatch.setattr("cydra.pipeline.parse_solidity", lambda path: (contract,))
+    monkeypatch.setattr("cydra.pipeline.generate_access_control_hypotheses", lambda c: (_withdraw_hypothesis(),))
+    monkeypatch.setattr("cydra.pipeline.generate_structural_access_control_hypotheses", lambda c, evidence=(): ())
+    monkeypatch.setattr("cydra.pipeline.generate_initialization_hypotheses", lambda c: ())
+    monkeypatch.setattr("cydra.pipeline.generate_structural_initialization_hypotheses", lambda c: ())
+    monkeypatch.setattr("cydra.pipeline.generate_arithmetic_hypotheses", lambda c: ())
+
+
 def test_constraints_reach_experiment_planning(monkeypatch, tmp_path: Path):
     source, contract = _contract(tmp_path)
-    monkeypatch.setattr("cydra.pipeline.parse_solidity", lambda path: (contract,))
+    _patch_pipeline(monkeypatch, contract)
 
     constraints = (
         ConstraintEvidence(
@@ -38,13 +58,13 @@ def test_constraints_reach_experiment_planning(monkeypatch, tmp_path: Path):
     result = investigate(source, constraint_evidence=constraints)
 
     experiment = result.experiments[0]
-    assert experiment.hypothesis_id == result.hypotheses[0].hypothesis_id
+    assert experiment.hypothesis_id == "H-AUTH-withdraw"
     assert experiment.planned_inputs == ("1",)
 
 
 def test_foreign_function_constraint_never_reaches_target_experiment(monkeypatch, tmp_path: Path):
     source, contract = _contract(tmp_path)
-    monkeypatch.setattr("cydra.pipeline.parse_solidity", lambda path: (contract,))
+    _patch_pipeline(monkeypatch, contract)
 
     constraints = (
         ConstraintEvidence(
