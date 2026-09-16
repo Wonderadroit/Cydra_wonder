@@ -7,7 +7,7 @@ from cydra.pipeline import investigate
 FIXTURE = Path(__file__).parents[1] / "benchmarks/alchemix_missing_access_control/Target.sol"
 
 
-def test_compiler_state_effects_override_lying_model_write():
+def test_compiler_coverage_does_not_suppress_independent_auth_reasoning():
     evidence = [
         SemanticRelationshipEvidence(
             contract="AlchemixAccessControlFixture",
@@ -21,7 +21,7 @@ def test_compiler_state_effects_override_lying_model_write():
 
     result = investigate(FIXTURE, semantic_evidence=evidence)
 
-    assert not any(h.hypothesis_id == "H-AUTH-setWhitelist" for h in result.hypotheses)
+    assert any(h.hypothesis_id == "H-AUTH-setWhitelist" for h in result.hypotheses)
 
 
 def test_missing_compiler_effects_keep_existing_fallback():
