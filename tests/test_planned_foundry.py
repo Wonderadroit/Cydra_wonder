@@ -66,9 +66,8 @@ def test_planned_constraint_value_reaches_generated_target_call(tmp_path: Path):
         _model(tmp_path),
     )
     source = generated.read_text(encoding="utf-8")
-    assert "target.withdraw(7);" not in source
-    assert 'abi.encodeWithSignature("withdraw(uint256)", 7)' in source
-    assert "1" not in source.split("abi.encodeWithSignature", 1)[1].split(")", 1)[0]
+    assert "try target.withdraw(7)" in source
+    assert "try target.withdraw(1)" not in source
 
 
 def test_partial_planned_vector_fails_closed(tmp_path: Path):
