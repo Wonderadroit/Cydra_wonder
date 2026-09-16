@@ -73,13 +73,11 @@ def investigate(
         contract_semantic = tuple(item for item in semantic if item.contract == contract.name)
         contract_constraints = tuple(item for item in constraints if item.contract == contract.name)
         if contract_semantic:
-            covered_functions = {item.function for item in contract_semantic}
             structural_auth = generate_structural_access_control_hypotheses(contract, contract_semantic)
-            lexical_auth = tuple(
-                hypothesis
-                for hypothesis in generate_access_control_hypotheses(contract)
-                if hypothesis.target_function not in covered_functions
-            )
+            # Compiler coverage is evidence, not an instruction to disable another
+            # reasoning path. Structural and lexical detectors are independent
+            # witnesses and are merged/deduplicated by hypothesis identity.
+            lexical_auth = generate_access_control_hypotheses(contract)
             auth = _merge_hypotheses(structural_auth, lexical_auth)
         else:
             auth = _merge_hypotheses(
