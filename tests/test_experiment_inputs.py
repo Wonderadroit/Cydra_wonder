@@ -25,11 +25,12 @@ def test_constraint_overrides_only_constrained_parameter():
         parameters,
         (evidence("amount", 1, "amount > 0"),),
         defaults,
+        function_name="withdraw",
     )
     assert result == ("address(0)", "1", "false")
 
 
-def test_multiple_constraints_are_function_local_and_parameter_local():
+def test_constraints_are_function_local_and_parameter_local():
     parameters = (
         ParameterModel(name="recipient", type="address"),
         ParameterModel(name="amount", type="uint256"),
@@ -43,8 +44,20 @@ def test_multiple_constraints_are_function_local_and_parameter_local():
             evidence("other", 0, "other > 0", function="withdraw"),
         ),
         defaults,
+        function_name="withdraw",
     )
     assert result == ("address(0)", "1")
+
+
+def test_foreign_function_constraint_cannot_change_target_input():
+    parameters = (ParameterModel(name="amount", type="uint256"),)
+    result = plan_parameter_inputs(
+        parameters,
+        (evidence("amount", 0, "amount > 0", function="deposit"),),
+        {"amount": "0"},
+        function_name="withdraw",
+    )
+    assert result == ("0",)
 
 
 def test_unknown_constraint_keeps_conservative_default():
@@ -53,5 +66,6 @@ def test_unknown_constraint_keeps_conservative_default():
         parameters,
         (evidence("amount", 0, "amount <= maxAmount"),),
         {"amount": "0"},
+        function_name="withdraw",
     )
     assert result == ("0",)
