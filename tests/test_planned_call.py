@@ -45,6 +45,27 @@ def test_empty_plan_preserves_conservative_fallback():
     assert render_function_call(_experiment(), function) == "target.withdraw(1, address(0xCAFE));"
 
 
+def test_empty_plan_uses_the_same_canonical_defaults_for_multiple_types():
+    function = _function(
+        "configure",
+        (
+            ParameterModel("who", "address payable"),
+            ParameterModel("enabled", "bool"),
+            ParameterModel("label", "string"),
+            ParameterModel("payload", "bytes32"),
+        ),
+    )
+    assert render_function_call(_experiment(), function) == (
+        'target.configure(payable(address(0xCAFE)), false, "CYDRA", bytes32(0x01));'
+    )
+
+
+def test_unsupported_custom_type_fails_closed_without_fabricating_argument():
+    function = _function("configure", (ParameterModel("settings", "Settings"),))
+    with pytest.raises(ValueError, match="unsupported planned-call argument type"):
+        render_function_call(_experiment(), function)
+
+
 def test_partial_plan_cannot_silently_reorder_or_invent_arguments():
     function = _function("withdraw", (
         ParameterModel("amount", "uint256"),
