@@ -94,6 +94,10 @@ class Experiment:
     action: str
     discriminates: tuple[str, ...]
     cost: float
+    # Ordered ABI arguments selected by the generic experiment-input planner.
+    # Empty means no complete vector was safely planned and the generator may use
+    # its existing conservative fallback.
+    planned_inputs: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
