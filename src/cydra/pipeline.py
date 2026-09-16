@@ -46,7 +46,7 @@ def _attach_input_plan(
         constraints,
         function_name=function.name,
     )
-    return replace(experiment, planned_inputs=vector)
+    return replace(experiment, planned_inputs=vector, target_function=function.name)
 
 
 def investigate(
