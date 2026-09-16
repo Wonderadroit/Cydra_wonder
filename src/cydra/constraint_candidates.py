@@ -17,7 +17,6 @@ class ParameterCandidate:
     constraint_sources: tuple[str, ...] = ()
 
 
-_ZERO_ADDRESS = "address(0)"
 _NONZERO_ADDRESS = "address(0xCAFE)"
 
 
@@ -57,18 +56,19 @@ def _constraint_value(predicate: str, parameter: ParameterModel) -> str | None:
 def select_parameter_candidates(
     parameters: Iterable[ParameterModel],
     constraints: Iterable[ConstraintEvidence],
+    *,
+    function_name: str | None = None,
 ) -> tuple[ParameterCandidate, ...]:
-    """Select conservative ABI values using observed parameter predicates.
+    """Select conservative ABI values from compiler-linked predicates.
 
-    The selector is deliberately independent of vulnerability class and function
-    name. It never treats a constraint as evidence of a vulnerability; it only
-    chooses a concrete input that is compatible with an observed predicate when
-    that predicate is simple enough to interpret safely. Parameters without a
-    recognized constraint are omitted so existing fallback generation can remain
-    authoritative for them.
+    Candidate selection is bound to both the target function and parameter identity
+    when a function name is supplied. The selector is otherwise unaware of
+    vulnerability class, invariant, or benchmark-specific function names.
     """
     by_key: dict[tuple[str, int], list[ConstraintEvidence]] = {}
     for constraint in constraints:
+        if function_name is not None and constraint.function != function_name:
+            continue
         by_key.setdefault((constraint.parameter, constraint.parameter_index), []).append(constraint)
 
     selected: list[ParameterCandidate] = []
@@ -77,12 +77,14 @@ def select_parameter_candidates(
         for constraint in matches:
             value = _constraint_value(constraint.predicate, parameter)
             if value is not None:
-                selected.append(ParameterCandidate(
-                    parameter=parameter.name,
-                    parameter_index=index,
-                    value=value,
-                    reason="satisfies observed compiler-linked predicate",
-                    constraint_sources=(constraint.source,),
-                ))
+                selected.append(
+                    ParameterCandidate(
+                        parameter=parameter.name,
+                        parameter_index=index,
+                        value=value,
+                        reason="satisfies observed compiler-linked predicate",
+                        constraint_sources=(constraint.source,),
+                    )
+                )
                 break
     return tuple(selected)
