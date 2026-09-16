@@ -22,6 +22,11 @@ def render_function_call(experiment: Experiment, function: FunctionModel, receiv
     if function.visibility not in {"public", "external"}:
         raise ValueError(f"target function is not externally callable: {function.name}")
 
+    if experiment.target_function is not None and experiment.target_function != function.name:
+        raise ValueError(
+            f"experiment target mismatch: expected {experiment.target_function}, got {function.name}"
+        )
+
     if experiment.planned_inputs:
         if len(experiment.planned_inputs) != len(function.parameters):
             raise ValueError(
