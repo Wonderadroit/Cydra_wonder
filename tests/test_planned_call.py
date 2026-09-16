@@ -16,7 +16,7 @@ def _function(name="withdraw", parameters=()):
     )
 
 
-def _experiment(inputs=()):
+def _experiment(inputs=(), target_function=None):
     return Experiment(
         experiment_id="X-H-AUTH-withdraw",
         hypothesis_id="H-AUTH-withdraw",
@@ -24,20 +24,27 @@ def _experiment(inputs=()):
         discriminates=("authorization",),
         cost=1.0,
         planned_inputs=tuple(inputs),
+        target_function=target_function,
     )
 
 
 def test_planned_inputs_are_authoritative_for_target_call():
     function = _function("withdraw", (ParameterModel("amount", "uint256"),))
-    assert render_function_call(_experiment(("1",)), function) == "target.withdraw(1);"
+    assert render_function_call(_experiment(("1",), "withdraw"), function) == "target.withdraw(1);"
 
 
-def test_planned_input_vector_is_function_scoped_by_the_caller():
+def test_target_identity_prevents_cross_function_plan_reuse():
     withdraw = _function("withdraw", (ParameterModel("amount", "uint256"),))
     deposit = _function("deposit", (ParameterModel("amount", "uint256"),))
-    experiment = _experiment(("1",))
+    experiment = _experiment(("1",), "withdraw")
     assert render_function_call(experiment, withdraw) == "target.withdraw(1);"
-    assert render_function_call(experiment, deposit) == "target.deposit(1);"
+    with pytest.raises(ValueError, match="experiment target mismatch"):
+        render_function_call(experiment, deposit)
+
+
+def test_legacy_unbound_experiment_can_render_for_compatible_function():
+    function = _function("withdraw", (ParameterModel("amount", "uint256"),))
+    assert render_function_call(_experiment(("1",)), function) == "target.withdraw(1);"
 
 
 def test_empty_plan_preserves_conservative_fallback():
