@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from cydra.compiler_state import compile_state_effects
 from cydra.foundry import ExecutionResult, generate_initialization_test, require_executed, run_foundry_test, test_path_for
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
@@ -20,7 +21,7 @@ from cydra.pipeline import investigate
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
 INVARIANT_CLASS = {"INV-AUTH-001": "authorization", "INV-INIT-001": "initialization", "INV-ARITH-001": "arithmetic"}
-FREEZE_FILES = ("provenance.json", "target-checkout.txt", "parse-output.json", "invariants.json", "hypotheses.json", "experiments.json", "execution.json", "execution-human.txt", "integrity-check.json", "classification.json", "compilation.log", "manifest.sha256", "README.md")
+FREEZE_FILES = ("provenance.json", "target-checkout.txt", "parse-output.json", "semantic-evidence.json", "compiler-evidence.json", "invariants.json", "hypotheses.json", "experiments.json", "execution.json", "execution-human.txt", "integrity-check.json", "classification.json", "compilation.log", "manifest.sha256", "README.md")
 GENERATED_MANIFEST = "manifest.sha256"
 
 
@@ -115,7 +116,9 @@ def main() -> int:
         clone_target(args.target_repo, args.target_ref, checkout)
         project = checkout / args.target_project
         source = checkout / args.target_path
-        result = investigate(source, target=f"{args.target_repo}@{args.target_ref}")
+
+        compiler = compile_state_effects(project, source)
+        result = investigate(source, target=f"{args.target_repo}@{args.target_ref}", semantic_evidence=compiler.evidence)
         experiments = {e.hypothesis_id: e for e in result.experiments}
         statuses, executions, evidence = [], [], []
         for hypothesis in result.hypotheses:
@@ -155,10 +158,11 @@ def main() -> int:
             }
 
         build = capture(project, "forge", "build")
-        provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id}
-        classification = {"surface": "initialization-only", "class_coverage": class_coverage, "hypotheses": statuses, "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
+        provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions}
+        classification = {"surface": "initialization-only", "class_coverage": class_coverage, "hypotheses": statuses, "compiler_evidence_status": compiler.status, "semantic_evidence_count": len(compiler.evidence), "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
         execution_human = "\n\n".join(f"{e.experiment_id}: {e.status}\n{e.stdout}\n{e.stderr}" for e in executions)
-        freeze({"provenance.json": provenance, "target-checkout.txt": git(checkout, "rev-parse", "HEAD") + "\n", "parse-output.json": {"target": result.target, "contracts": result.contracts, "selected_classes": classes}, "invariants.json": result.invariants, "hypotheses.json": result.hypotheses, "experiments.json": result.experiments, "execution.json": {"results": executions}, "integrity-check.json": {"runner_source_frozen": True, "forge_build": build}, "classification.json": classification}, {"execution-human.txt": execution_human, "compilation.log": json.dumps(build, indent=2) + "\n", "README.md": "Benchmark 005 blind Gavel freeze. Raw artifacts are frozen before any ground-truth lookup.\n"}, args.freeze)
+        compiler_record = {"executed": compiler.executed, "status": compiler.status, "command": compiler.command, "stdout": compiler.stdout, "stderr": compiler.stderr, "build_info_files": compiler.build_info_files, "compiler_versions": compiler.compiler_versions}
+        freeze({"provenance.json": provenance, "target-checkout.txt": git(checkout, "rev-parse", "HEAD") + "\n", "parse-output.json": {"target": result.target, "contracts": result.contracts, "selected_classes": classes}, "semantic-evidence.json": compiler.evidence, "compiler-evidence.json": compiler_record, "invariants.json": result.invariants, "hypotheses.json": result.hypotheses, "experiments.json": result.experiments, "execution.json": {"results": executions}, "integrity-check.json": {"runner_source_frozen": True, "forge_build": build, "compiler_evidence_status": compiler.status}, "classification.json": classification}, {"execution-human.txt": execution_human, "compilation.log": json.dumps(build, indent=2) + "\n", "README.md": "Benchmark 005 blind Gavel freeze. Compiler-backed semantic evidence is collected before reasoning; raw artifacts are frozen before any ground-truth lookup.\n"}, args.freeze)
     return 0
 
 
