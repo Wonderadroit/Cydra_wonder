@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cydra.models import ContractModel, FunctionModel, Hypothesis, ParameterModel
+from cydra.models import ContractModel, Experiment, FunctionModel, Hypothesis, ParameterModel
 from cydra.structural_arithmetic_execution import (
     choose_boundary_input,
     extract_positive_offset_division,
@@ -39,6 +39,18 @@ def _hypothesis(function_name: str = "calculate") -> Hypothesis:
         target_function=function_name,
         attacker_capability="boundary input",
         expected_impact="observed output exceeds exact floor",
+    )
+
+
+def _experiment(hypothesis_id: str = "H-ARITH-calculate", inputs=("777",), target_function="calculate") -> Experiment:
+    return Experiment(
+        experiment_id=f"X-{hypothesis_id}",
+        hypothesis_id=hypothesis_id,
+        action="execute candidate function",
+        discriminates=("boundary behavior",),
+        cost=1.0,
+        planned_inputs=tuple(inputs),
+        target_function=target_function,
     )
 
 
@@ -81,7 +93,7 @@ def test_small_offset_can_require_nontrivial_boundary_search(tmp_path: Path):
     model = _model(
         tmp_path,
         """pragma solidity ^0.8.20;
-contract RenamedTarget {
+    contract RenamedTarget {
     uint256 constant MULTIPLIER = 1000;
     uint256 constant OFFSET = 1;
     uint256 constant DIVISOR = 997;
@@ -146,3 +158,53 @@ contract RenamedTarget {
     assert "exactFloor" in source
     assert "vulnerableValue > exactFloor" in source or "assertGt(vulnerableValue, exactFloor" in source
     assert "quoteMint" not in source
+
+
+def test_generator_uses_canonical_planned_input(tmp_path: Path):
+    model = _model(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract RenamedTarget {
+    function calculate(uint256 amount) external pure returns (uint256) {
+        return (amount * 10 + 9) / 7;
+    }
+}
+""",
+    )
+    path = generate_structural_arithmetic_test(
+        _hypothesis(),
+        model,
+        "../Target.sol",
+        "../PatchedTarget.sol",
+        "RenamedTarget",
+        "RenamedTarget",
+        tmp_path / "planned.t.sol",
+        experiment=_experiment(),
+    )
+    source = path.read_text(encoding="utf-8")
+    assert "uint256 input = 777;" in source
+    assert "uint256 input = 1;" not in source
+
+
+def test_generator_rejects_planned_input_for_wrong_target_function(tmp_path: Path):
+    model = _model(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract RenamedTarget {
+    function calculate(uint256 amount) external pure returns (uint256) {
+        return (amount * 10 + 9) / 7;
+    }
+}
+""",
+    )
+    with pytest.raises(ValueError, match="experiment target mismatch"):
+        generate_structural_arithmetic_test(
+            _hypothesis(),
+            model,
+            "../Target.sol",
+            "../PatchedTarget.sol",
+            "RenamedTarget",
+            "RenamedTarget",
+            tmp_path / "wrong-target.t.sol",
+            experiment=_experiment(target_function="other"),
+        )
