@@ -16,12 +16,12 @@ def _function(name="withdraw", parameters=()):
     )
 
 
-def _experiment(inputs=(), target_function=None):
+def _experiment(inputs=(), target_function=None, experiment_id="X-H-AUTH-withdraw", hypothesis_id="H-AUTH-withdraw"):
     return Experiment(
-        experiment_id="X-H-AUTH-withdraw",
-        hypothesis_id="H-AUTH-withdraw",
-        action="call withdraw",
-        discriminates=("authorization",),
+        experiment_id=experiment_id,
+        hypothesis_id=hypothesis_id,
+        action="call target function",
+        discriminates=("candidate behavior",),
         cost=1.0,
         planned_inputs=tuple(inputs),
         target_function=target_function,
@@ -80,3 +80,14 @@ def test_partial_plan_cannot_silently_reorder_or_invent_arguments():
     ))
     with pytest.raises(ValueError, match="planned input arity mismatch"):
         render_function_call(_experiment(("1",)), function)
+
+
+def test_planned_call_does_not_depend_on_vulnerability_class_or_invariant_id():
+    function = _function("rebalance", (ParameterModel("amount", "uint256"),))
+    experiment = _experiment(
+        ("777",),
+        "rebalance",
+        experiment_id="X-HYPOTHESIS-rebalance",
+        hypothesis_id="HYPOTHESIS-rebalance",
+    )
+    assert render_function_call(experiment, function) == "target.rebalance(777);"
