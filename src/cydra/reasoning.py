@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from .experiment_planning import plan_experiment as _plan_experiment
 from .models import Evidence, Experiment, Hypothesis, Invariant, ContractModel, FunctionModel
 
 
@@ -138,21 +139,30 @@ def generate_arithmetic_hypotheses(contract: ContractModel) -> tuple[Hypothesis,
 
 
 def plan_access_control_experiment(hypothesis: Hypothesis) -> Experiment:
-    return Experiment(f"X-{hypothesis.hypothesis_id}", hypothesis.hypothesis_id, f"Execute {hypothesis.target_function} from an unprivileged actor and assert that the privileged state does not change; then repeat against the patched version.", ("missing authorization is exploitable", "authorization is enforced elsewhere"), 1.0)
+    return _plan_experiment(
+        hypothesis,
+        f"Execute {hypothesis.target_function} from an unprivileged actor and assert that the privileged state does not change; then repeat against the patched version.",
+        ("missing authorization is exploitable", "authorization is enforced elsewhere"),
+        1.0,
+    )
 
 
 def plan_initialization_experiment(hypothesis: Hypothesis) -> Experiment:
-    return Experiment(f"X-{hypothesis.hypothesis_id}", hypothesis.hypothesis_id, f"Deploy the target, call {hypothesis.target_function} as an arbitrary actor, and assert the actor cannot claim privileged initialization state; repeat against the patched version.", ("deployed lifecycle state is takeover-capable", "initializer is unavailable or safely initialized"), 1.0)
+    return _plan_experiment(
+        hypothesis,
+        f"Deploy the target, call {hypothesis.target_function} as an arbitrary actor, and assert the actor cannot claim privileged initialization state; repeat against the patched version.",
+        ("deployed lifecycle state is takeover-capable", "initializer is unavailable or safely initialized"),
+        1.0,
+    )
 
 
 def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
-    """Create an arithmetic experiment from the hypothesis without validating its invariant.
-
-    Invariant-specific validation belongs to the arithmetic execution adapter. The
-    core experiment model/planner must remain usable for independently defined
-    invariants and future reasoning classes.
-    """
-    return Experiment(f"X-{hypothesis.hypothesis_id}", hypothesis.hypothesis_id, f"Execute {hypothesis.target_function} with an arithmetic boundary input and assert the observed output equals the exact floor reference value; repeat against the patched version.", ("observed quote exceeds the exact floor", "observed quote equals the exact floor"), 1.0)
+    return _plan_experiment(
+        hypothesis,
+        f"Execute {hypothesis.target_function} with an arithmetic boundary input and assert the observed output equals the exact floor reference value; repeat against the patched version.",
+        ("observed quote exceeds the exact floor", "observed quote equals the exact floor"),
+        1.0,
+    )
 
 
 def build_evidence(contract: ContractModel, hypotheses: tuple[Hypothesis, ...]) -> tuple[Evidence, ...]:
