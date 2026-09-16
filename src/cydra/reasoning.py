@@ -146,8 +146,12 @@ def plan_initialization_experiment(hypothesis: Hypothesis) -> Experiment:
 
 
 def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
-    if hypothesis.invariant_id != "INV-ARITH-001":
-        raise ValueError(f"Unsupported invariant for arithmetic experiment: {hypothesis.invariant_id}")
+    """Create an arithmetic experiment from the hypothesis without validating its invariant.
+
+    Invariant-specific validation belongs to the arithmetic execution adapter. The
+    core experiment model/planner must remain usable for independently defined
+    invariants and future reasoning classes.
+    """
     return Experiment(f"X-{hypothesis.hypothesis_id}", hypothesis.hypothesis_id, f"Execute {hypothesis.target_function} with an arithmetic boundary input and assert the observed output equals the exact floor reference value; repeat against the patched version.", ("observed quote exceeds the exact floor", "observed quote equals the exact floor"), 1.0)
 
 
