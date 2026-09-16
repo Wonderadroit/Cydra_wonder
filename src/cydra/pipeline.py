@@ -36,10 +36,10 @@ def investigate(
 ) -> InvestigationResult:
     """Build an investigation from class-neutral behavioral reasoning.
 
-    When compiler-backed state-effect evidence is supplied for a contract, it is
-    authoritative for authorization state mutation. The lexical/model authorization
-    path is used only when compiler evidence is absent, preventing contradictory
-    legacy metadata from reintroducing a candidate that compiler semantics exclude.
+    Compiler-backed state effects are authoritative only for functions covered by
+    that evidence. Functions without compiler coverage retain the existing
+    lexical/model fallback, so partial semantic coverage cannot silently turn into
+    a contract-wide capability gap.
     """
     contracts = parse_solidity(path)
     if not contracts:
@@ -50,7 +50,14 @@ def investigate(
     for contract in contracts:
         contract_semantic = tuple(item for item in semantic if item.contract == contract.name)
         if contract_semantic:
-            auth = generate_structural_access_control_hypotheses(contract, contract_semantic)
+            covered_functions = {item.function for item in contract_semantic}
+            structural_auth = generate_structural_access_control_hypotheses(contract, contract_semantic)
+            lexical_auth = tuple(
+                hypothesis
+                for hypothesis in generate_access_control_hypotheses(contract)
+                if hypothesis.target_function not in covered_functions
+            )
+            auth = _merge_hypotheses(structural_auth, lexical_auth)
         else:
             auth = _merge_hypotheses(
                 generate_access_control_hypotheses(contract),

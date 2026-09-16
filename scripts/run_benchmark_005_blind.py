@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from cydra.compiler_state import compile_state_effects
 from cydra.foundry import ExecutionResult, generate_initialization_test, require_executed, run_foundry_test, test_path_for
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
@@ -20,7 +22,7 @@ from cydra.pipeline import investigate
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
 INVARIANT_CLASS = {"INV-AUTH-001": "authorization", "INV-INIT-001": "initialization", "INV-ARITH-001": "arithmetic"}
-FREEZE_FILES = ("provenance.json", "target-checkout.txt", "parse-output.json", "invariants.json", "hypotheses.json", "experiments.json", "execution.json", "execution-human.txt", "integrity-check.json", "classification.json", "compilation.log", "manifest.sha256", "README.md")
+FREEZE_FILES = ("provenance.json", "target-checkout.txt", "parse-output.json", "semantic-evidence.json", "compiler-evidence.json", "invariants.json", "hypotheses.json", "experiments.json", "execution.json", "execution-human.txt", "integrity-check.json", "classification.json", "compilation.log", "manifest.sha256", "README.md")
 GENERATED_MANIFEST = "manifest.sha256"
 
 
@@ -62,9 +64,70 @@ def target_import(contract, project: Path) -> str:
     return os.path.relpath(Path(contract.source), project).replace(os.sep, "/")
 
 
+def _function_body(source: str, function_name: str) -> str:
+    match = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\(([^)]*)\)[^{{;]*\{{", source, re.MULTILINE)
+    if match is None:
+        return ""
+    body = source[match.end():]
+    depth = 1
+    for index, char in enumerate(body):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return body[:index]
+    return body
+
+
+def _initializer_zero_guarded_addresses(contract, function_name: str) -> tuple[int, ...]:
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ()
+    signature = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\(([^)]*)\)[^{{;]*\{{", source, re.MULTILINE)
+    if signature is None:
+        return ()
+    raw_parameters = [item.strip() for item in signature.group(1).split(",") if item.strip()]
+    parameter_names: list[str] = []
+    address_parameters: set[int] = set()
+    for index, raw in enumerate(raw_parameters):
+        tokens = raw.split()
+        if not tokens:
+            continue
+        parameter_names.append(tokens[-1])
+        if tokens[0].startswith("address"):
+            address_parameters.add(index)
+    body = _function_body(source, function_name)
+    guarded: list[int] = []
+    for index in sorted(address_parameters):
+        name = parameter_names[index]
+        if re.search(rf"\b{re.escape(name)}\s*==\s*address\s*\(\s*0\s*\)", body) or re.search(rf"address\s*\(\s*0\s*\)\s*==\s*\b{re.escape(name)}\b", body):
+            guarded.append(index)
+    return tuple(guarded)
+
+
+def _harden_generated_initializer_arguments(generated: Path, contract, function_name: str) -> None:
+    guarded = _initializer_zero_guarded_addresses(contract, function_name)
+    if not guarded:
+        return
+    source = generated.read_text(encoding="utf-8")
+    pattern = re.compile(rf"(\btarget\.{re.escape(function_name)}\()([^\n;]*)(\);)")
+    match = pattern.search(source)
+    if match is None:
+        return
+    arguments = [item.strip() for item in match.group(2).split(",")]
+    for index in guarded:
+        if index < len(arguments) and arguments[index] in {"address(0)", "payable(address(0))"}:
+            arguments[index] = "address(0xCAFE)" if arguments[index] == "address(0)" else "payable(address(0xCAFE))"
+    rewritten = ", ".join(arguments)
+    generated.write_text(source[:match.start(2)] + rewritten + source[match.end(2):], encoding="utf-8")
+
+
 def run_initialization(project: Path, hypothesis, experiment, contract):
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_initialization_test(hypothesis, target_import(contract, project), contract.name, output, contract_model=contract)
+    _harden_generated_initializer_arguments(generated, contract, hypothesis.target_function)
     if requires_proxy_initialization(Path(contract.source)):
         generated.write_text(adapt_generated_initialization_for_proxy(generated.read_text(encoding="utf-8"), contract.name), encoding="utf-8")
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
@@ -115,7 +178,9 @@ def main() -> int:
         clone_target(args.target_repo, args.target_ref, checkout)
         project = checkout / args.target_project
         source = checkout / args.target_path
-        result = investigate(source, target=f"{args.target_repo}@{args.target_ref}")
+
+        compiler = compile_state_effects(project, source)
+        result = investigate(source, target=f"{args.target_repo}@{args.target_ref}", semantic_evidence=compiler.evidence)
         experiments = {e.hypothesis_id: e for e in result.experiments}
         statuses, executions, evidence = [], [], []
         for hypothesis in result.hypotheses:
@@ -147,18 +212,14 @@ def main() -> int:
                 coverage_status = "executed"
             else:
                 coverage_status = "capability_gap"
-            class_coverage[cls] = {
-                "requested": True,
-                "hypotheses_extracted": extracted,
-                "hypotheses_executed": executed,
-                "status": coverage_status,
-            }
+            class_coverage[cls] = {"requested": True, "hypotheses_extracted": extracted, "hypotheses_executed": executed, "status": coverage_status}
 
         build = capture(project, "forge", "build")
-        provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id}
-        classification = {"surface": "initialization-only", "class_coverage": class_coverage, "hypotheses": statuses, "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
+        provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions}
+        classification = {"surface": "initialization-only", "class_coverage": class_coverage, "hypotheses": statuses, "compiler_evidence_status": compiler.status, "semantic_evidence_count": len(compiler.evidence), "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
         execution_human = "\n\n".join(f"{e.experiment_id}: {e.status}\n{e.stdout}\n{e.stderr}" for e in executions)
-        freeze({"provenance.json": provenance, "target-checkout.txt": git(checkout, "rev-parse", "HEAD") + "\n", "parse-output.json": {"target": result.target, "contracts": result.contracts, "selected_classes": classes}, "invariants.json": result.invariants, "hypotheses.json": result.hypotheses, "experiments.json": result.experiments, "execution.json": {"results": executions}, "integrity-check.json": {"runner_source_frozen": True, "forge_build": build}, "classification.json": classification}, {"execution-human.txt": execution_human, "compilation.log": json.dumps(build, indent=2) + "\n", "README.md": "Benchmark 005 blind Gavel freeze. Raw artifacts are frozen before any ground-truth lookup.\n"}, args.freeze)
+        compiler_record = {"executed": compiler.executed, "status": compiler.status, "command": compiler.command, "stdout": compiler.stdout, "stderr": compiler.stderr, "build_info_files": compiler.build_info_files, "compiler_versions": compiler.compiler_versions}
+        freeze({"provenance.json": provenance, "target-checkout.txt": git(checkout, "rev-parse", "HEAD") + "\n", "parse-output.json": {"target": result.target, "contracts": result.contracts, "selected_classes": classes}, "semantic-evidence.json": compiler.evidence, "compiler-evidence.json": compiler_record, "invariants.json": result.invariants, "hypotheses.json": result.hypotheses, "experiments.json": result.experiments, "execution.json": {"results": executions}, "integrity-check.json": {"runner_source_frozen": True, "forge_build": build, "compiler_evidence_status": compiler.status}, "classification.json": classification}, {"execution-human.txt": execution_human, "compilation.log": json.dumps(build, indent=2) + "\n", "README.md": "Benchmark 005 blind Gavel freeze. Compiler-backed semantic evidence is collected before reasoning; raw artifacts are frozen before any ground-truth lookup.\n"}, args.freeze)
     return 0
 
 
