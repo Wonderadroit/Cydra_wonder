@@ -30,9 +30,7 @@ def _source_keys(payload: dict[str, Any], source: Path, project: Path) -> tuple[
     sources = output.get("sources")
     if not isinstance(sources, dict):
         return ()
-    source_abs = source.resolve()
-    project_abs = project.resolve()
-    relative = os.path.relpath(source_abs, project_abs).replace(os.sep, "/")
+    relative = os.path.relpath(source.resolve(), project.resolve()).replace(os.sep, "/")
     candidates: list[tuple[str, dict[str, Any]]] = []
     for key, value in sources.items():
         if not isinstance(key, str) or not isinstance(value, dict):
@@ -57,7 +55,6 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
     """Compile a Foundry project and consume compiler AST evidence when available.
 
     Compilation failure is a capability gap, not evidence that no state effect exists.
-    The caller may therefore retain the existing source/model fallback.
     """
     project_path = Path(project).resolve()
     source_path = Path(source).resolve()
@@ -69,9 +66,9 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
         info_path = Path(temp)
         command = ("forge", "build", "--build-info", "--build-info-path", str(info_path))
         completed = subprocess.run(command, cwd=project_path, text=True, capture_output=True, check=False)
-        build_files = tuple(str(path) for path in sorted(info_path.rglob("*.json")))
+        build_files = tuple(sorted(info_path.rglob("*.json")))
         if completed.returncode != 0:
-            return CompilerEvidenceResult((), True, "compile_failed", command, completed.stdout, completed.stderr, build_files)
+            return CompilerEvidenceResult((), True, "compile_failed", command, completed.stdout, completed.stderr, tuple(map(str, build_files)))
 
         evidence: list[SemanticRelationshipEvidence] = []
         versions: set[str] = set()
@@ -85,4 +82,4 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
             except (OSError, json.JSONDecodeError):
                 continue
         status = "success" if evidence else "no_ast_for_source"
-        return CompilerEvidenceResult(tuple(evidence), True, status, command, completed.stdout, completed.stderr, build_files, tuple(sorted(versions)))
+        return CompilerEvidenceResult(tuple(evidence), True, status, command, completed.stdout, completed.stderr, tuple(map(str, build_files)), tuple(sorted(versions)))
