@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from collections.abc import Iterable
 
 from .ast_dataflow import SemanticRelationshipEvidence
-from .models import InvestigationResult
+from .compiler_constraints import ConstraintEvidence
+from .experiment_inputs import plan_parameter_inputs
+from .models import Experiment, InvestigationResult
 from .reasoning import (
     access_control_invariant,
     build_evidence,
@@ -29,26 +32,46 @@ def _merge_hypotheses(*groups):
     return tuple(merged.values())
 
 
+def _attach_input_plan(
+    contract,
+    hypothesis,
+    experiment: Experiment,
+    constraints: tuple[ConstraintEvidence, ...],
+) -> Experiment:
+    function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+    if function is None:
+        return experiment
+    vector = plan_parameter_inputs(
+        function.parameters,
+        constraints,
+        function_name=function.name,
+    )
+    return replace(experiment, planned_inputs=vector)
+
+
 def investigate(
     path: str | Path,
     target: str | None = None,
     semantic_evidence: Iterable[SemanticRelationshipEvidence] | None = None,
+    constraint_evidence: Iterable[ConstraintEvidence] | None = None,
 ) -> InvestigationResult:
-    """Build an investigation from class-neutral behavioral reasoning.
+    """Build an investigation from compiler-backed evidence and class-neutral reasoning.
 
-    Compiler-backed state effects are authoritative only for functions covered by
-    that evidence. Functions without compiler coverage retain the existing
-    lexical/model fallback, so partial semantic coverage cannot silently turn into
-    a contract-wide capability gap.
+    Parameter constraints are optional evidence. When a complete safe ABI vector can
+    be constructed, it is attached to the experiment; otherwise the empty vector
+    explicitly preserves the existing generator fallback. Constraint interpretation
+    remains independent of vulnerability class and invariant.
     """
     contracts = parse_solidity(path)
     if not contracts:
         raise ValueError(f"No Solidity contract found in {path}")
 
     semantic = tuple(semantic_evidence or ())
+    constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
     for contract in contracts:
         contract_semantic = tuple(item for item in semantic if item.contract == contract.name)
+        contract_constraints = tuple(item for item in constraints if item.contract == contract.name)
         if contract_semantic:
             covered_functions = {item.function for item in contract_semantic}
             structural_auth = generate_structural_access_control_hypotheses(contract, contract_semantic)
@@ -77,11 +100,15 @@ def investigate(
         if arith and arithmetic_invariant is not None:
             all_invariants.append(arithmetic_invariant)
 
-        all_hypotheses.extend((*auth, *init, *arith))
-        all_experiments.extend(plan_access_control_experiment(h) for h in auth)
-        all_experiments.extend(plan_initialization_experiment(h) for h in init)
-        all_experiments.extend(plan_arithmetic_experiment(h) for h in arith)
-        all_evidence.extend(build_evidence(contract, (*auth, *init, *arith)))
+        hypotheses = (*auth, *init, *arith)
+        all_hypotheses.extend(hypotheses)
+        for hypothesis in auth:
+            all_experiments.append(_attach_input_plan(contract, hypothesis, plan_access_control_experiment(hypothesis), contract_constraints))
+        for hypothesis in init:
+            all_experiments.append(_attach_input_plan(contract, hypothesis, plan_initialization_experiment(hypothesis), contract_constraints))
+        for hypothesis in arith:
+            all_experiments.append(_attach_input_plan(contract, hypothesis, plan_arithmetic_experiment(hypothesis), contract_constraints))
+        all_evidence.extend(build_evidence(contract, hypotheses))
 
     return InvestigationResult(
         target=target or str(path),
