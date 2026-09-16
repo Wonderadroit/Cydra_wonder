@@ -1,0 +1,25 @@
+name: CYDRA semantic state effect consumption regression
+
+on:
+  pull_request:
+    paths:
+      - 'src/cydra/ast_dataflow.py'
+      - 'src/cydra/semantic_state_effects.py'
+      - 'src/cydra/structural_authorization.py'
+      - 'tests/test_semantic_state_effect_consumption.py'
+      - '.github/workflows/semantic-state-effects-regression.yml'
+
+jobs:
+  semantic-state-effects:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CYDRA
+        run: pip install -e .
+      - name: Run focused semantic state-effect tests
+        run: pytest -q tests/test_semantic_state_effect_consumption.py tests/test_ast_dataflow_semantics.py tests/test_system_model_ast_projection.py
+      - name: Run full regression suite
+        run: pytest -q
