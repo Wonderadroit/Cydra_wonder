@@ -19,6 +19,8 @@ jobs:
           python-version: '3.11'
       - name: Install CYDRA
         run: pip install -e .
+      - name: Install pytest
+        run: pip install pytest
       - name: Run focused semantic state-effect tests
         shell: bash
         run: |
