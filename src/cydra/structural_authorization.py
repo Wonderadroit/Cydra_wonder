@@ -108,20 +108,22 @@ def _has_caller_authorization_predicate(function) -> bool:
 def _writes_for(function, contract: ContractModel, semantic_effects: dict[str, tuple] | None) -> tuple[str, ...]:
     if semantic_effects is not None:
         semantic = state_writes_for_function(semantic_effects, function.name)
-        if semantic is not None:
-            return semantic
+        if semantic is not None: return semantic
     return _source_state_writes(contract, function)
 
 
-def generate_structural_access_control_hypotheses(
-    contract: ContractModel,
-    semantic_evidence: Iterable[SemanticRelationshipEvidence] | None = None,
-) -> tuple[Hypothesis, ...]:
+def _effect_evidence_id(function, semantic_effects: dict[str, tuple] | None) -> str:
+    if semantic_effects is not None and function.name in semantic_effects:
+        return f"E-AST-STATE-{function.name}"
+    return f"E-MODEL-{function.name}"
+
+
+def generate_structural_access_control_hypotheses(contract: ContractModel, semantic_evidence: Iterable[SemanticRelationshipEvidence] | None = None) -> tuple[Hypothesis, ...]:
     """Find unguarded writers to storage also written by protected siblings.
 
     Compiler-backed state effects take precedence when supplied. If a function has
-    no compiler evidence, reasoning falls back to the existing source-linked path;
-    it never treats missing semantic evidence as proof of a write.
+    no compiler evidence, reasoning falls back to the existing source-linked path.
+    Provenance is reflected in the hypothesis evidence ID.
     """
     semantic_effects = build_state_effect_index(semantic_evidence) if semantic_evidence is not None else None
     protected: set[str] = set()
@@ -140,6 +142,6 @@ def generate_structural_access_control_hypotheses(
             f"{function.name} may permit an unauthorized caller to mutate state also controlled by a protected sibling.",
             "INV-AUTH-001", function.name, "arbitrary external caller",
             "state shared with a protected administrative path can be changed without its authorization mechanism",
-            evidence_ids=(f"E-MODEL-{function.name}",),
+            evidence_ids=(_effect_evidence_id(function, semantic_effects),),
         ))
     return tuple(hypotheses)
