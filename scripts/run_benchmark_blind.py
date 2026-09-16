@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from cydra.compiler_state import CompilerEvidenceResult, compile_state_effects
 from cydra.foundry import (
     ExecutionResult,
-    generate_access_control_test,
     generate_initialization_test,
     require_executed,
     run_foundry_test,
@@ -23,8 +23,8 @@ from cydra.foundry import (
 )
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.pipeline import investigate
+from cydra.planned_foundry import generate_authorization_test_from_experiment
 
-CYDRA_COMMIT = "8adf1ca1c8fd49fb7e04ca6d635b1e644e84bdcf"
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
 
 CLASS_CAPABILITIES = {
@@ -129,22 +129,23 @@ def _command_capture(cwd: Path, *command: str) -> dict[str, Any]:
 
 def require_frozen_source() -> None:
     root = Path(__file__).resolve().parents[1]
+    frozen_commit = _git_output(root, "rev-parse", "HEAD")
     source_diff = subprocess.run(
-        ("git", "diff", "--quiet", CYDRA_COMMIT, "--", "src", "tests"),
+        ("git", "diff", "--quiet", frozen_commit, "--", "src", "tests"),
         cwd=root,
         check=False,
     )
     if source_diff.returncode != 0:
-        raise RuntimeError(f"CYDRA source/tests differ from frozen commit {CYDRA_COMMIT}")
+        raise RuntimeError(f"CYDRA source/tests differ from frozen commit {frozen_commit}")
 
     runner_path = Path(__file__).resolve()
     runner_diff = subprocess.run(
-        ("git", "diff", "--quiet", "HEAD", "--", str(runner_path.relative_to(root))),
+        ("git", "diff", "--quiet", frozen_commit, "--", str(runner_path.relative_to(root))),
         cwd=root,
         check=False,
     )
     if runner_diff.returncode != 0:
-        raise RuntimeError("run_benchmark_blind.py has uncommitted changes")
+        raise RuntimeError("run_benchmark_blind.py differs from the frozen commit")
 
     untracked = subprocess.run(
         ("git", "status", "--porcelain", "--", str(runner_path.relative_to(root))),
@@ -199,12 +200,13 @@ def _failure_status(hypothesis, class_name: str, stage: str, error: Exception) -
 
 def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
-    generated = generate_access_control_test(
+    generated = generate_authorization_test_from_experiment(
         hypothesis,
+        experiment,
         _target_import(contract, project),
         contract.name,
         output,
-        contract_model=contract,
+        contract,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
     require_executed(execution)
@@ -376,19 +378,27 @@ def main() -> int:
     require_frozen_source()
     classes = validate_classes(args.classes)
     root = Path(__file__).resolve().parents[1]
+    cydra_commit = _git_output(root, "rev-parse", "HEAD")
 
     with tempfile.TemporaryDirectory(prefix="b006-a-target-") as temp:
         checkout = Path(temp) / "target"
         clone_target(args.target_repo, args.target_ref, checkout)
         project = checkout / args.target_project
         source = checkout / args.target_path
-        result = investigate(source, target=f"{args.target_repo}@{args.target_ref}")
+
+        compiler_evidence: CompilerEvidenceResult = compile_state_effects(project, source)
+        result = investigate(
+            source,
+            target=f"{args.target_repo}@{args.target_ref}",
+            semantic_evidence=compiler_evidence.evidence,
+            constraint_evidence=compiler_evidence.constraints,
+        )
         statuses, executions, evidence = run_layers(result, project, classes)
         build_capture = _command_capture(project, "forge", "build")
         provenance_env, _, forge_config_text = _environment_provenance(root, project)
 
         classification = {
-            "surface": "initialization-only",
+            "surface": "compiler-backed-planned-execution",
             "hypotheses": statuses,
             "outcome_taxonomy": {
                 "initialization": {"TP": "confirmed", "FP": "rejected", "FN": "not_confirmed"},
@@ -424,6 +434,7 @@ def main() -> int:
         }
 
         execution_json = {
+            "compiler_evidence": _json(compiler_evidence),
             "executions": [_json(execution) for execution in executions],
             "evidence": _json(evidence),
             "build": build_capture,
@@ -441,18 +452,23 @@ def main() -> int:
             "target_path": args.target_path,
             "target_project": args.target_project,
             "classes": list(classes),
-            "cydra_commit": CYDRA_COMMIT,
+            "cydra_commit": cydra_commit,
             "environment": provenance_env,
         }
         text_files = {
             "target-checkout.txt": _git_output(checkout, "rev-parse", "HEAD") + "\n",
-            "compilation.log": json.dumps(build_capture, indent=2, sort_keys=True) + "\n",
+            "compilation.log": json.dumps(
+                {"compiler_evidence": _json(compiler_evidence), "build": build_capture},
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
             "execution-human.txt": execution_human,
             "README.md": (
                 "# CYDRA blind capability artifact\n\n"
-                "This artifact records structural hypotheses, generated experiments, "
-                "execution evidence, and explicit capability gaps. A measured execution "
-                "is not itself a vulnerability confirmation.\n"
+                "This artifact records compiler-backed constraints, structural hypotheses, "
+                "planned experiment inputs, generated experiments, execution evidence, "
+                "and explicit capability gaps. A measured execution is not itself a "
+                "vulnerability confirmation.\n"
             ),
             "integrity-check.json": json.dumps({"manifest": "manifest.sha256"}, indent=2) + "\n",
             "forge-config.json": forge_config_text,
