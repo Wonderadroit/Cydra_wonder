@@ -46,6 +46,11 @@ def _constraint_value(predicate: str, parameter: ParameterModel) -> str | None:
             return "1"
         if re.search(rf"\b{name}\s*>=\s*1\b", predicate):
             return "1"
+        if re.search(rf"\b{name}\s*!=\s*0\b", predicate):
+            return "1"
+        equality = re.search(rf"\b{name}\s*==\s*(\d+)\b", predicate)
+        if equality:
+            return equality.group(1)
         if re.search(rf"\b{name}\s*==\s*0\b", predicate):
             return "0"
         if re.search(rf"\b{name}\s*>=\s*0\b", predicate):
