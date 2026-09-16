@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -63,9 +64,70 @@ def target_import(contract, project: Path) -> str:
     return os.path.relpath(Path(contract.source), project).replace(os.sep, "/")
 
 
+def _function_body(source: str, function_name: str) -> str:
+    match = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\(([^)]*)\)[^{{;]*\{{", source, re.MULTILINE)
+    if match is None:
+        return ""
+    body = source[match.end():]
+    depth = 1
+    for index, char in enumerate(body):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return body[:index]
+    return body
+
+
+def _initializer_zero_guarded_addresses(contract, function_name: str) -> tuple[int, ...]:
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ()
+    signature = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\(([^)]*)\)[^{{;]*\{{", source, re.MULTILINE)
+    if signature is None:
+        return ()
+    raw_parameters = [item.strip() for item in signature.group(1).split(",") if item.strip()]
+    parameter_names: list[str] = []
+    address_parameters: set[int] = set()
+    for index, raw in enumerate(raw_parameters):
+        tokens = raw.split()
+        if not tokens:
+            continue
+        parameter_names.append(tokens[-1])
+        if tokens[0].startswith("address"):
+            address_parameters.add(index)
+    body = _function_body(source, function_name)
+    guarded: list[int] = []
+    for index in sorted(address_parameters):
+        name = parameter_names[index]
+        if re.search(rf"\b{re.escape(name)}\s*==\s*address\s*\(\s*0\s*\)", body) or re.search(rf"address\s*\(\s*0\s*\)\s*==\s*\b{re.escape(name)}\b", body):
+            guarded.append(index)
+    return tuple(guarded)
+
+
+def _harden_generated_initializer_arguments(generated: Path, contract, function_name: str) -> None:
+    guarded = _initializer_zero_guarded_addresses(contract, function_name)
+    if not guarded:
+        return
+    source = generated.read_text(encoding="utf-8")
+    pattern = re.compile(rf"(\btarget\.{re.escape(function_name)}\()([^\n;]*)(\);)")
+    match = pattern.search(source)
+    if match is None:
+        return
+    arguments = [item.strip() for item in match.group(2).split(",")]
+    for index in guarded:
+        if index < len(arguments) and arguments[index] in {"address(0)", "payable(address(0))"}:
+            arguments[index] = "address(0xCAFE)" if arguments[index] == "address(0)" else "payable(address(0xCAFE))"
+    rewritten = ", ".join(arguments)
+    generated.write_text(source[:match.start(2)] + rewritten + source[match.end(2):], encoding="utf-8")
+
+
 def run_initialization(project: Path, hypothesis, experiment, contract):
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_initialization_test(hypothesis, target_import(contract, project), contract.name, output, contract_model=contract)
+    _harden_generated_initializer_arguments(generated, contract, hypothesis.target_function)
     if requires_proxy_initialization(Path(contract.source)):
         generated.write_text(adapt_generated_initialization_for_proxy(generated.read_text(encoding="utf-8"), contract.name), encoding="utf-8")
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
@@ -150,12 +212,7 @@ def main() -> int:
                 coverage_status = "executed"
             else:
                 coverage_status = "capability_gap"
-            class_coverage[cls] = {
-                "requested": True,
-                "hypotheses_extracted": extracted,
-                "hypotheses_executed": executed,
-                "status": coverage_status,
-            }
+            class_coverage[cls] = {"requested": True, "hypotheses_extracted": extracted, "hypotheses_executed": executed, "status": coverage_status}
 
         build = capture(project, "forge", "build")
         provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions}
