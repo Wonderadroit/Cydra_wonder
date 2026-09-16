@@ -12,7 +12,7 @@ def _model(tmp_path: Path) -> ContractModel:
         """pragma solidity ^0.8.20;
 contract Target {
     uint256 public value;
-    function withdraw(uint256 amount) external { value = amount; }
+    function withdraw(uint256 amount, address recipient) external { value = amount; recipient; }
 }
 """,
         encoding="utf-8",
@@ -28,7 +28,10 @@ contract Target {
                 writes=("value",),
                 external_calls=(),
                 line=3,
-                parameters=(ParameterModel("amount", "uint256"),),
+                parameters=(
+                    ParameterModel("amount", "uint256"),
+                    ParameterModel("recipient", "address"),
+                ),
             ),
         ),
     )
@@ -45,7 +48,7 @@ def _hypothesis() -> Hypothesis:
     )
 
 
-def _experiment(inputs=("1",)) -> Experiment:
+def _experiment(inputs=("1", "address(0xCAFE)")) -> Experiment:
     return Experiment(
         "X-H-AUTH-withdraw",
         "H-AUTH-withdraw",
@@ -59,15 +62,15 @@ def _experiment(inputs=("1",)) -> Experiment:
 def test_planned_constraint_value_reaches_generated_target_call(tmp_path: Path):
     generated = generate_authorization_test_from_experiment(
         _hypothesis(),
-        _experiment(("7",)),
+        _experiment(("7", "address(0xBEEF)")),
         "Target.sol",
         "Target",
         tmp_path / "generated.t.sol",
         _model(tmp_path),
     )
     source = generated.read_text(encoding="utf-8")
-    assert "try target.withdraw(7)" in source
-    assert "try target.withdraw(1)" not in source
+    assert "try target.withdraw(7, address(0xBEEF))" in source
+    assert "try target.withdraw(1, address(0xCAFE))" not in source
 
 
 def test_partial_planned_vector_fails_closed(tmp_path: Path):
@@ -76,7 +79,7 @@ def test_partial_planned_vector_fails_closed(tmp_path: Path):
     with pytest.raises(ValueError, match="planned input arity mismatch"):
         generate_authorization_test_from_experiment(
             hypothesis,
-            _experiment(()),
+            _experiment(("7",)),
             "Target.sol",
             "Target",
             tmp_path / "generated.t.sol",
