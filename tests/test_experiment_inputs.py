@@ -69,3 +69,31 @@ def test_unknown_constraint_keeps_conservative_default():
         function_name="withdraw",
     )
     assert result == ("0",)
+
+
+def test_compatible_nonnegative_and_positive_constraints_use_one():
+    parameters = (ParameterModel(name="amount", type="uint256"),)
+    result = plan_parameter_inputs(
+        parameters,
+        (
+            evidence("amount", 0, "amount >= 0"),
+            evidence("amount", 0, "amount > 0"),
+        ),
+        {"amount": "0"},
+        function_name="withdraw",
+    )
+    assert result == ("1",)
+
+
+def test_contradictory_zero_and_positive_constraints_fail_closed():
+    parameters = (ParameterModel(name="amount", type="uint256"),)
+    result = plan_parameter_inputs(
+        parameters,
+        (
+            evidence("amount", 0, "amount == 0"),
+            evidence("amount", 0, "amount > 0"),
+        ),
+        {"amount": "0"},
+        function_name="withdraw",
+    )
+    assert result == ("0",)
