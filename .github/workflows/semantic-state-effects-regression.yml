@@ -22,18 +22,18 @@ jobs:
       - name: Install pytest
         run: pip install pytest
       - name: Run focused semantic state-effect tests
+        run: pytest -vv tests/test_semantic_state_effect_consumption.py tests/test_ast_dataflow_semantics.py tests/test_system_model_ast_projection.py
+      - name: Run full regression suite
         shell: bash
         run: |
           set +e
-          pytest -vv tests/test_semantic_state_effect_consumption.py tests/test_ast_dataflow_semantics.py tests/test_system_model_ast_projection.py > focused-pytest.log 2>&1
+          pytest -vv > full-pytest.log 2>&1
           status=$?
-          cat focused-pytest.log
+          cat full-pytest.log
           exit $status
-      - name: Upload focused pytest diagnostics
+      - name: Upload full pytest diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: semantic-state-effect-pytest-diagnostics
-          path: focused-pytest.log
-      - name: Run full regression suite
-        run: pytest -q
+          name: semantic-state-effect-full-pytest-diagnostics
+          path: full-pytest.log
