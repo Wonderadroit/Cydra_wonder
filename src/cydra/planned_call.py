@@ -12,12 +12,12 @@ def conservative_argument(parameter: ParameterModel) -> str:
     return defaults[parameter.name]
 
 
-def render_function_call(experiment: Experiment, function: FunctionModel, receiver: str = "target") -> str:
-    """Render an externally callable Solidity invocation from the canonical Experiment.
+def render_function_arguments(experiment: Experiment, function: FunctionModel) -> tuple[str, ...]:
+    """Resolve the canonical ordered ABI argument vector for an experiment.
 
-    ``planned_inputs`` is authoritative when it contains a complete ordered ABI
-    vector. An empty vector intentionally falls back to the canonical conservative
-    type defaults so unsupported/custom types do not get fabricated values.
+    The planner owns the vector. An empty vector means no complete plan was safely
+    produced, so the canonical conservative ABI defaults remain the explicit
+    compatibility fallback.
     """
     if function.visibility not in {"public", "external"}:
         raise ValueError(f"target function is not externally callable: {function.name}")
@@ -33,13 +33,17 @@ def render_function_call(experiment: Experiment, function: FunctionModel, receiv
                 f"planned input arity mismatch for {function.name}: "
                 f"expected {len(function.parameters)}, got {len(experiment.planned_inputs)}"
             )
-        arguments = experiment.planned_inputs
-    else:
-        defaults = conservative_defaults(function.parameters)
-        if defaults is None:
-            raise ValueError(
-                f"unsupported planned-call argument type in {function.name}"
-            )
-        arguments = tuple(defaults[parameter.name] for parameter in function.parameters)
+        return experiment.planned_inputs
 
+    defaults = conservative_defaults(function.parameters)
+    if defaults is None:
+        raise ValueError(
+            f"unsupported planned-call argument type in {function.name}"
+        )
+    return tuple(defaults[parameter.name] for parameter in function.parameters)
+
+
+def render_function_call(experiment: Experiment, function: FunctionModel, receiver: str = "target") -> str:
+    """Render an externally callable Solidity invocation from the canonical Experiment."""
+    arguments = render_function_arguments(experiment, function)
     return f"{receiver}.{function.name}({', '.join(arguments)});"
