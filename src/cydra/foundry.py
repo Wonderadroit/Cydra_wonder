@@ -12,6 +12,7 @@ from typing import Literal
 from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothesis, ParameterModel
 from .initialization_shapes import render_initialization_test_body
 
+# Benchmark 005 / Prediction 5I CI verification trigger.
 
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
 
