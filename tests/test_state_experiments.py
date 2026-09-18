@@ -1,4 +1,4 @@
-from cydra.models import Hypothesis
+from cydra.models import ExperimentStep, Hypothesis
 from cydra.state_experiments import plan_cross_function_state_experiment
 
 
@@ -28,6 +28,7 @@ def test_cross_function_state_sequence_planner_preserves_ordered_causal_pair():
         "the ordered composition preserves the modeled shared-state relation",
     )
     assert experiment.cost == 2.0
+    assert experiment.steps == (ExperimentStep("increase", ("7",)), ExperimentStep("decrease", ("7",)))
 
 
 def test_cross_function_state_sequence_planner_rejects_self_pair():
