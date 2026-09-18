@@ -6,7 +6,7 @@ from .models import Experiment, Hypothesis
 
 def plan_cross_function_state_experiment(
     hypothesis: Hypothesis,
-    peer_function: str,
+    peer_function: str | None = None,
     *,
     first_input: str = "1",
     second_input: str = "1",
@@ -15,12 +15,18 @@ def plan_cross_function_state_experiment(
 
     The planner is deliberately class-neutral. It does not assume deposit,
     withdraw, balances, accounting, or any benchmark-specific function name.
-    The reasoning surface supplies the target and an observed peer transition;
-    this layer preserves the sequence as the causal experiment to execute.
+    The reasoning surface supplies the target and, when available, related
+    transitions; this layer preserves the sequence as the causal experiment.
     """
-    if not peer_function.strip():
+    peer = peer_function
+    if peer is None:
+        if not hypothesis.related_functions:
+            raise ValueError("state hypothesis has no related transition")
+        peer = hypothesis.related_functions[0]
+
+    if not peer.strip():
         raise ValueError("peer function must not be empty")
-    if peer_function == hypothesis.target_function:
+    if peer == hypothesis.target_function:
         raise ValueError("peer function must differ from target function")
     if not first_input.strip() or not second_input.strip():
         raise ValueError("sequence inputs must not be empty")
@@ -28,7 +34,7 @@ def plan_cross_function_state_experiment(
     return plan_experiment(
         hypothesis,
         (
-            f"Execute {peer_function}({first_input}) then "
+            f"Execute {peer}({first_input}) then "
             f"{hypothesis.target_function}({second_input}) as an arbitrary external caller; "
             "observe the modeled shared state before, between, and after transitions; "
             "repeat the identical ordered sequence against the patched target."
