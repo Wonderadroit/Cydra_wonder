@@ -14,6 +14,7 @@ from cydra.pipeline import investigate
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 from cydra.reasoning import plan_access_control_experiment, plan_initialization_experiment
 from cydra.sequence_foundry import generate_sequence_test_from_experiment
+from cydra.solidity_model import parse_solidity
 from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 
@@ -39,9 +40,9 @@ def state_surface(contract, semantic):
     return generate_cross_function_state_hypotheses(contract, semantic=semantic)
 
 
-def planner(hypothesis):
+def planner(hypothesis, contract):
     if hypothesis.invariant_id.startswith("INV-STATE-"):
-        return plan_cross_function_state_experiment(hypothesis)
+        return plan_cross_function_state_experiment(hypothesis, contract=contract)
     if hypothesis.invariant_id == "INV-AUTH-001":
         return plan_access_control_experiment(hypothesis)
     if hypothesis.invariant_id == "INV-INIT-001":
@@ -52,12 +53,15 @@ def planner(hypothesis):
 def run_mode(mode: str, target: Path, output: Path):
     compiler = compile_state_effects(target.parent, target, build_paths=(target.name,))
     surfaces = (state_surface,) if mode == "guided-state" else ()
+    target_contract = next(iter(parse_solidity(target)), None)
+    if target_contract is None:
+        raise ValueError(f"No Solidity contract found in {target}")
     result = investigate(
         target,
         target=f"{TARGET}@{REF}",
         semantic_evidence=compiler.evidence,
         constraint_evidence=compiler.constraints,
-        experiment_planner=planner,
+        experiment_planner=lambda hypothesis: planner(hypothesis, target_contract),
         reasoning_surfaces=surfaces,
     )
 
