@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .experiment_planning import plan_experiment
-from .models import Experiment, Hypothesis
+from .models import Experiment, ExperimentStep, Hypothesis
 
 
 def plan_cross_function_state_experiment(
@@ -31,7 +31,7 @@ def plan_cross_function_state_experiment(
     if not first_input.strip() or not second_input.strip():
         raise ValueError("sequence inputs must not be empty")
 
-    return plan_experiment(
+    experiment = plan_experiment(
         hypothesis,
         (
             f"Execute {peer}({first_input}) then "
@@ -44,4 +44,14 @@ def plan_cross_function_state_experiment(
             "the ordered composition preserves the modeled shared-state relation",
         ),
         2.0,
+    )
+    return Experiment(
+        experiment.experiment_id,
+        experiment.hypothesis_id,
+        experiment.action,
+        experiment.discriminates,
+        experiment.cost,
+        experiment.planned_inputs,
+        experiment.target_function,
+        (ExperimentStep(peer, (first_input,)), ExperimentStep(hypothesis.target_function, (second_input,))),
     )
