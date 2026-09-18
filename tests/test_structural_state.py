@@ -37,6 +37,7 @@ contract StateSurface {
     assert {h.target_function for h in hypotheses} == {"deposit", "withdraw"}
     assert {h.invariant_id for h in hypotheses} == {"INV-STATE-balance"}
     assert all(h.status == "proposed" for h in hypotheses)
+    assert all(h.related_functions for h in hypotheses)
     assert any(i.invariant_id == "INV-STATE-balance" for i in result.invariants)
 
 
