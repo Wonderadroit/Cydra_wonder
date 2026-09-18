@@ -1,6 +1,5 @@
-from pathlib import Path
-
 from cydra.ast_dataflow import SemanticRelationshipEvidence
+from cydra.models import Experiment
 from cydra.pipeline import investigate
 from cydra.solidity_model import parse_solidity
 from cydra.structural_state import generate_cross_function_state_hypotheses
@@ -19,7 +18,20 @@ contract StateSurface {
         encoding="utf-8",
     )
 
-    result = investigate(source, reasoning_surfaces=(generate_cross_function_state_hypotheses,))
+    def planner(hypothesis):
+        return Experiment(
+            f"X-{hypothesis.hypothesis_id}",
+            hypothesis.hypothesis_id,
+            hypothesis.invariant_id,
+            hypothesis.target_function,
+            hypothesis.claim,
+        )
+
+    result = investigate(
+        source,
+        reasoning_surfaces=(generate_cross_function_state_hypotheses,),
+        experiment_planner=planner,
+    )
     hypotheses = [h for h in result.hypotheses if h.hypothesis_id.startswith("H-STATE-")]
 
     assert {h.target_function for h in hypotheses} == {"deposit", "withdraw"}
