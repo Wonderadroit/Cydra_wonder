@@ -459,6 +459,7 @@ def _model_initialization_source(
     target_type: str,
     contract_model: ContractModel,
     output_path: str | Path | None = None,
+    experiment: Experiment | None = None,
 ) -> str:
     if output_path is not None:
         target_import = _layout_aware_import_path(target_import, output_path)
@@ -502,6 +503,19 @@ def _model_initialization_source(
         arguments.append(argument)
         if declaration:
             declarations.append(declaration)
+
+    if experiment is not None and experiment.planned_inputs:
+        if len(experiment.planned_inputs) != len(function.parameters):
+            raise ValueError(
+                f"planned input arity mismatch for {function.name}: "
+                f"expected {len(function.parameters)}, got {len(experiment.planned_inputs)}"
+            )
+        # The canonical Experiment vector is authoritative once a safe complete
+        # vector was planned. Special runtime declarations are only the fallback
+        # for experiments whose planner could not safely represent the ABI inputs.
+        arguments = list(experiment.planned_inputs)
+        declarations = []
+
     initialize_args_str = ", ".join(arguments)
     test_body = render_initialization_test_body(
         function,
@@ -582,9 +596,20 @@ contract CydraInitializationInvariantTest is Test {{
 '''
 
 
-def generate_initialization_test(hypothesis: Hypothesis, target_import: str, target_type: str, output_path: str | Path, contract_model: ContractModel | None = None) -> Path:
+def generate_initialization_test(
+    hypothesis: Hypothesis,
+    target_import: str,
+    target_type: str,
+    output_path: str | Path,
+    contract_model: ContractModel | None = None,
+    experiment: Experiment | None = None,
+) -> Path:
     if hypothesis.invariant_id != "INV-INIT-001":
         raise ValueError(f"Unsupported invariant for Foundry generation: {hypothesis.invariant_id}")
+    if experiment is not None and experiment.hypothesis_id != hypothesis.hypothesis_id:
+        raise ValueError(
+            f"experiment/hypothesis mismatch: {experiment.hypothesis_id} != {hypothesis.hypothesis_id}"
+        )
     if contract_model is None:
         return _write_test(f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
@@ -601,7 +626,17 @@ contract CydraInitializationInvariantTest is Test {{
     }}
 }}
 ''', output_path)
-    return _write_test(_model_initialization_source(hypothesis, target_import, target_type, contract_model, output_path), output_path)
+    return _write_test(
+        _model_initialization_source(
+            hypothesis,
+            target_import,
+            target_type,
+            contract_model,
+            output_path,
+            experiment,
+        ),
+        output_path,
+    )
 
 
 def generate_arithmetic_foundry_test(experiment: Experiment, target: str, patched: str) -> str:

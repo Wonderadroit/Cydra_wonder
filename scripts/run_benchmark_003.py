@@ -67,6 +67,7 @@ def main() -> int:
         "ArithmeticRoundingFixture",
         "ArithmeticRoundingFixture",
         GENERATED_TEST,
+        experiment=experiment,
     )
     generated_source = generated_path.read_text(encoding="utf-8")
     execution = run_foundry_test(

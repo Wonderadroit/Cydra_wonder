@@ -94,6 +94,13 @@ class Experiment:
     action: str
     discriminates: tuple[str, ...]
     cost: float
+    # Ordered ABI arguments selected by the generic experiment-input planner.
+    # Empty means no complete vector was safely planned and the generator may use
+    # its existing conservative fallback.
+    planned_inputs: tuple[str, ...] = field(default_factory=tuple)
+    # Optional identity binding prevents a planned vector from being reused for a
+    # different target function. Kept optional for compatibility with legacy plans.
+    target_function: str | None = None
 
 
 @dataclass(frozen=True)
