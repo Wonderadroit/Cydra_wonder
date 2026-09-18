@@ -63,7 +63,7 @@ def extract_constraints_from_build_info(build_info: Path, source: Path, project:
     return tuple(evidence)
 
 
-def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEvidenceResult:
+def compile_state_effects(project: str | Path, source: str | Path, *, build_paths: tuple[str | Path, ...] = ()) -> CompilerEvidenceResult:
     """Compile a Foundry project and consume compiler AST evidence when available.
 
     Compilation failure is a capability gap, not evidence that no state effect exists.
@@ -76,7 +76,13 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
 
     with tempfile.TemporaryDirectory(prefix="cydra-build-info-", dir=project_path.parent) as temp:
         info_path = Path(temp)
-        command = ("forge", "build", "--build-info", "--build-info-path", str(info_path))
+        command = ["forge", "build", "--build-info", "--build-info-path", str(info_path)]
+        for build_path in build_paths:
+            relative = Path(build_path)
+            if relative.is_absolute():
+                relative = relative.relative_to(project_path)
+            command.append(str(relative))
+        command = tuple(command)
         completed = subprocess.run(command, cwd=project_path, text=True, capture_output=True, check=False)
         build_files = tuple(sorted(info_path.rglob("*.json")))
         if completed.returncode != 0:
