@@ -8,7 +8,7 @@ from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
 from .experiment_inputs import plan_parameter_inputs
 from .experiment_planning import bind_experiment
-from .models import Experiment, Hypothesis, InvestigationResult, Invariant
+from .models import ContractModel, Experiment, Hypothesis, InvestigationResult, Invariant
 from .reasoning import (
     access_control_invariant,
     build_evidence,
@@ -38,7 +38,7 @@ class ReasoningContribution:
     hypotheses: tuple[Hypothesis, ...]
 
 
-ReasoningSurface = Callable[[object, tuple[SemanticRelationshipEvidence, ...]], ReasoningContribution]
+ReasoningSurface = Callable[[ContractModel, tuple[SemanticRelationshipEvidence, ...]], ReasoningContribution]
 
 
 def _merge_hypotheses(*groups):
