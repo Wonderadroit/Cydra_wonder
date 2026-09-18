@@ -2,7 +2,9 @@
 
 ## 1. Mission
 
-CYDRA is a security-research reasoning engine for authorized targets. Its purpose is to understand a target system deeply and discover real, non-obvious, reproducible vulnerabilities that can be responsibly reported under the target program's rules.
+CYDRA is a personal security-research reasoning engine for authorized targets. Its purpose is to help its owner understand a target system deeply and discover real, non-obvious, reproducible vulnerabilities that can be responsibly reported under the target program's rules and potentially submitted for bug-bounty rewards.
+
+CYDRA is not being built as a company product, commercial audit platform, compliance product, or service to sell. Its primary purpose is practical personal bug-bounty/security research.
 
 CYDRA optimizes for **truth, causal understanding, reproducibility, and useful research outcomes**, not the number of alerts or reports produced.
 
@@ -31,6 +33,8 @@ A vulnerability is not a prompt answer. It is a demonstrated causal relationship
 13. CYDRA must adversarially challenge its own hypotheses.
 14. Human review remains responsible for any external submission.
 15. CYDRA must never fabricate functions, state variables, execution paths, impact, or evidence.
+16. CYDRA development must not drift toward a commercial-product objective that is not part of its mission.
+17. The Project Bible is the authoritative source of truth for CYDRA's purpose, architecture, priorities, and development direction.
 
 ## 4. Investigation doctrine
 
@@ -305,6 +309,8 @@ The primary success metric is not the number of alerts.
 
 CYDRA succeeds when it can take a real authorized target, understand its behavior, identify non-obvious hypotheses, efficiently select discriminating tests, and produce reproducible evidence for a genuine vulnerability that survives adversarial review.
 
+For the owner's practical objective, CYDRA should ultimately function as a useful personal bug-bounty research instrument: something that improves the researcher's ability to discover and validate genuine vulnerabilities in authorized programs.
+
 ## 24. Architectural rule
 
 Do not add architecture merely because it is interesting.
@@ -328,3 +334,143 @@ Build → run → test → inspect evidence → benchmark → improve.
 Prefer one demonstrated capability over many speculative files.
 
 The project should continuously prove that each new reasoning capability works against historical or authorized live cases.
+
+
+## 26. Guided-to-blind development loop
+
+CYDRA development should now use a deliberate two-stage backtesting cycle to accelerate diagnosis while preserving the ultimate requirement of blind discovery.
+
+### 26.1 Guided discovery
+
+In guided mode, CYDRA may be told the general security question or vulnerability class being investigated, but it must not be given the answer.
+
+Guidance must not reveal:
+- the vulnerable function;
+- the exact vulnerable line or condition;
+- the exploit sequence;
+- the expected invariant violation;
+- the expected state transition;
+- the expected impact;
+- the historical finding or PoC answer.
+
+CYDRA must still perform the reasoning chain itself: Target → System Model → Invariant → Hypotheses → Experiments → Evidence → Causal Conclusion.
+
+Guided mode exists primarily to expose missing capabilities quickly and make failures diagnosable.
+
+### 26.2 Diagnose and repair
+
+When guided discovery fails, CYDRA development must identify the exact stage that failed before changing architecture.
+
+Possible failure stages include extraction/modeling, invariant generation, hypothesis generation, competing-condition discovery, experiment planning, input planning, execution/rendering, observation/evidence collection, hypothesis updating, causal classification, and impact/finding promotion.
+
+Only the demonstrated blocker should drive the next implementation change. After a repair, the guided target and appropriate negative controls must be retested.
+
+### 26.3 Blind discovery
+
+After the guided capability works, the same or comparable target should be investigated in blind mode.
+
+Blind mode removes the vulnerability-class guidance and exposes CYDRA only to the information a real researcher would have in the authorized investigation.
+
+A historical benchmark's known answer must remain hidden from CYDRA until the blind investigation is complete.
+
+### 26.4 Repeating the cycle
+
+The preferred development cycle is:
+
+Guided → Diagnose → Fix → Guided Retest → Blind → Diagnose → Fix → Blind Retest → New Target
+
+This replaces speculative infrastructure expansion as the default development method.
+
+A guided success is not proof of general vulnerability discovery. A blind success is stronger evidence that the capability generalizes.
+
+### 26.5 Differential causal verification
+
+Where a historical vulnerable and patched version are available, they may be used for differential validation after CYDRA has independently formed its investigation.
+
+The patched version is evidence for causal discrimination, not an oracle that tells CYDRA what to find.
+
+Record at least: guided failure; guided success but blind failure; blind correct hypothesis; blind hypothesis without sufficient proof; blind incorrect hypothesis; blind unrelated real finding; unsupported claim; and execution/tool failure.
+
+## 27. Anti-overfitting and generalization rule
+
+CYDRA must not be built as a collection of isolated detectors for a growing list of named vulnerability classes.
+
+Existing reasoning capabilities such as authorization, initialization, arithmetic, and cross-function state reasoning are examples of demonstrated capabilities, not the boundaries of CYDRA's brain.
+
+When a new historical vulnerability is missed, ask: What general reasoning capability did the investigation require that CYDRA lacked?
+
+Address that demonstrated capability at the appropriate abstraction level rather than encoding the historical answer or benchmark-specific pattern.
+
+A new component, heuristic, detector, or abstraction should require evidence from an actual investigation or reproducible regression showing that it improves system understanding, hypothesis quality, uncertainty reduction, test selection, causal verification, reproducibility, or benchmark performance.
+
+## 28. Blind discovery is the primary progress criterion
+
+CYDRA must not be considered mature merely because CI is green, many benchmarks pass, many vulnerability classes have dedicated code, many hypotheses are generated, many scanners are integrated, or the repository contains extensive infrastructure.
+
+The stronger progress signal is demonstrated behavior on unfamiliar authorized targets.
+
+The development priority is therefore:
+
+Use CYDRA → observe what it cannot do → diagnose the failure → improve the missing general capability → retest → hide the guidance → verify generalization.
+
+The purpose of historical backtesting is to make CYDRA better at real bug-bounty research, not to maximize benchmark scores.
+
+## 29. Project Bible authority and drift prevention
+
+The Project Bible is the single source of truth for CYDRA.
+
+Before any new feature, architecture change, benchmark strategy, recommendation, prioritization, or change in project direction, the current Project Bible must be consulted.
+
+No recommendation should silently introduce a new objective, product direction, abstraction, workflow, or capability that conflicts with the Bible.
+
+When a proposed change appears to conflict with the Bible, stop and resolve the conflict against the Bible before implementation.
+
+Decision hierarchy:
+1. Project Bible.
+2. Demonstrated evidence from authorized investigations and regressions.
+3. Actual tool and execution evidence.
+4. Engineering judgment.
+
+Engineering convenience, novelty, benchmark aesthetics, or speculative future needs must not override the first three.
+
+If the project direction genuinely needs to change, update the Bible deliberately first; implementation then follows the updated Bible. Drift must never happen implicitly through accumulated code.
+
+## 30. Working-branch discipline
+
+main is the canonical working branch after repository consolidation.
+
+Feature branches are temporary laboratories for a specific demonstrated investigation need. They should not become permanent parallel versions of CYDRA.
+
+Preferred workflow:
+
+main → focused experiment/change → validate → merge into main → clean up branch → continue from main
+
+Branch proliferation must not become a substitute for deciding what CYDRA actually needs.
+
+## 31. Current development phase
+
+CYDRA is now in a discovery-validation phase, not a foundation-expansion phase.
+
+The immediate objective is to use the consolidated system on unfamiliar historical vulnerable targets and determine whether the complete reasoning loop can produce useful, reproducible discoveries.
+
+Do not add another layer of architecture merely because the Project Bible mentions it.
+
+Instead:
+
+Backtest → Diagnose → Fix demonstrated blocker → Retest → Blind → Generalize → Repeat.
+
+The next capability should be determined by the next real investigation failure.
+
+### CYDRA development rule
+
+> Before we add anything, we read the Bible.
+>
+> Before we recommend anything, we check it against the Bible.
+>
+> Before we change direction, we update the Bible deliberately.
+>
+> We do not build CYDRA around what sounds impressive. We build what real investigations prove it needs.
+>
+> Guided testing teaches us where we are weak. Blind testing tells us whether we actually learned.
+>
+> The end goal is a personal bug-bounty research instrument that helps its owner find and prove real vulnerabilities—not a commercial product.
