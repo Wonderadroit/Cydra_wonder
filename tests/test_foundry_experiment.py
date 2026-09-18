@@ -7,7 +7,6 @@ from cydra.foundry import (
     generate_access_control_test,
     classify_access_control_outcome,
     classify_experiment_outcome,
-    classify_experiment_outcome,
     require_executed,
 )
 from cydra.models import ContractModel, FunctionModel, Hypothesis, ParameterModel, Experiment, Invariant
