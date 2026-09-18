@@ -47,3 +47,34 @@ def test_cross_function_state_sequence_planner_rejects_self_pair():
         assert "peer function must differ" in str(exc)
     else:
         raise AssertionError("self-pair must not produce a sequence experiment")
+
+
+def test_cross_function_state_sequence_planner_binds_modeled_abi_arity():
+    from cydra.models import ContractModel, FunctionModel, ParameterModel
+
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel("increase", "external", (), ("counter",), (), 1,
+                          parameters=(ParameterModel("amount", "uint256"), ParameterModel("recipient", "address"))),
+            FunctionModel("decrease", "external", (), ("counter",), (), 2,
+                          parameters=(ParameterModel("amount", "uint256"),)),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-counter-decrease",
+        "candidate",
+        "INV-STATE-counter",
+        "decrease",
+        "arbitrary external caller",
+        "candidate impact",
+        related_functions=("increase",),
+    )
+
+    experiment = plan_cross_function_state_experiment(hypothesis, contract=contract)
+
+    assert experiment.steps == (
+        ExperimentStep("increase", ("1", "address(0)")),
+        ExperimentStep("decrease", ("1",)),
+    )
