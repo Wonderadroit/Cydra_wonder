@@ -6,6 +6,7 @@ from cydra.foundry import (
     ExecutionResult,
     generate_access_control_test,
     classify_access_control_outcome,
+    classify_experiment_outcome,
     require_executed,
 )
 from cydra.models import ContractModel, FunctionModel, Hypothesis, ParameterModel
@@ -132,6 +133,29 @@ def test_hypothesis_is_confirmed_only_by_vulnerable_failure_and_patched_passes()
     assert outcome.hypothesis.status == "confirmed"
     assert "E-EXEC-H-AUTH-setWhitelist-VULNERABLE" in outcome.hypothesis.evidence_ids
     assert "E-EXEC-H-AUTH-setWhitelist-PATCHED" in outcome.hypothesis.evidence_ids
+
+
+def test_future_reasoning_class_crosses_class_neutral_causal_classifier():
+    hypothesis = Hypothesis(
+        "H-FUTURE-causal",
+        "rebalance may violate the modeled invariant under a boundary input",
+        "INV-FUTURE-046",
+        "rebalance",
+        "externally callable actor",
+        "incorrect position state",
+    )
+    vulnerable = _execution("X-H-FUTURE-causal-VULNERABLE", "vulnerable", 1, "FAIL", 1, 1)
+    patched = _execution("X-H-FUTURE-causal-PATCHED", "patched", 0, "PASS", 1, 0)
+
+    outcome = classify_experiment_outcome(hypothesis, vulnerable, patched)
+
+    assert outcome.hypothesis.status == "confirmed"
+    assert outcome.hypothesis.invariant_id == "INV-FUTURE-046"
+    assert outcome.hypothesis.target_function == "rebalance"
+    assert [item.evidence_id for item in outcome.evidence] == [
+        "E-EXEC-H-FUTURE-causal-VULNERABLE",
+        "E-EXEC-H-FUTURE-causal-PATCHED",
+    ]
 
 
 def test_unmeasurable_execution_cannot_confirm():
