@@ -9,7 +9,8 @@ from cydra.foundry import (
     classify_experiment_outcome,
     require_executed,
 )
-from cydra.models import ContractModel, FunctionModel, Hypothesis, ParameterModel
+from cydra.models import ContractModel, FunctionModel, Hypothesis, ParameterModel, Experiment, Invariant
+from cydra.pipeline import ReasoningContribution
 from cydra.pipeline import investigate
 
 
@@ -156,6 +157,66 @@ def test_future_reasoning_class_crosses_class_neutral_causal_classifier():
         "E-EXEC-H-FUTURE-causal-VULNERABLE",
         "E-EXEC-H-FUTURE-causal-PATCHED",
     ]
+
+
+def test_future_reasoning_surface_enters_pipeline_without_vulnerability_class_branch(tmp_path):
+    source = tmp_path / "FutureSurface.sol"
+    source.write_text(
+        """pragma solidity ^0.8.20;
+contract FutureSurface {
+    uint256 internal position;
+    function rebalance(uint256 amount) external { position += amount; }
+    function settle(uint256 amount) external { position -= amount; }
+}
+""",
+        encoding="utf-8",
+    )
+
+    def future_surface(contract, _semantic):
+        function = next(item for item in contract.functions if item.name == "rebalance")
+        invariant = Invariant(
+            "INV-FUTURE-046",
+            "State transitions must preserve the modeled position invariant.",
+            "future reasoning surface",
+            0.70,
+        )
+        hypothesis = Hypothesis(
+            "H-FUTURE-rebalance",
+            "rebalance may violate the modeled position invariant under a boundary input.",
+            invariant.invariant_id,
+            function.name,
+            "externally callable actor",
+            "incorrect position state",
+            evidence_ids=(f"E-MODEL-{function.name}",),
+        )
+        return ReasoningContribution((invariant,), (hypothesis,))
+
+    def future_planner(hypothesis):
+        return Experiment(
+            "X-FUTURE-rebalance",
+            hypothesis.hypothesis_id,
+            "Execute the candidate transition at a boundary input and compare the modeled invariant.",
+            ("state remains valid", "state becomes invalid"),
+            1.0,
+            target_function=hypothesis.target_function,
+        )
+
+    result = investigate(
+        source,
+        reasoning_surfaces=(future_surface,),
+        experiment_planner=future_planner,
+    )
+    hypothesis = next(item for item in result.hypotheses if item.hypothesis_id == "H-FUTURE-rebalance")
+    experiment = next(item for item in result.experiments if item.hypothesis_id == hypothesis.hypothesis_id)
+
+    assert hypothesis.invariant_id == "INV-FUTURE-046"
+    assert experiment.target_function == "rebalance"
+    assert experiment.experiment_id == "X-FUTURE-rebalance"
+
+    vulnerable = _execution("X-FUTURE-rebalance-VULNERABLE", "vulnerable", 1, "FAIL", 1, 1)
+    patched = _execution("X-FUTURE-rebalance-PATCHED", "patched", 0, "PASS", 1, 0)
+    outcome = classify_experiment_outcome(hypothesis, vulnerable, patched)
+    assert outcome.hypothesis.status == "confirmed"
 
 
 def test_unmeasurable_execution_cannot_confirm():
