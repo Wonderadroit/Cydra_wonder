@@ -92,6 +92,14 @@ class Hypothesis:
 
 
 @dataclass(frozen=True)
+class ExperimentStep:
+    """One ordered externally callable action in a causal experiment."""
+
+    function: str
+    arguments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class Experiment:
     experiment_id: str
     hypothesis_id: str
@@ -105,6 +113,10 @@ class Experiment:
     # Optional identity binding prevents a planned vector from being reused for a
     # different target function. Kept optional for compatibility with legacy plans.
     target_function: str | None = None
+    # Optional structured execution steps. Legacy experiments remain valid when
+    # this is empty; generic sequence renderers consume it without knowing a
+    # vulnerability class.
+    steps: tuple[ExperimentStep, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
