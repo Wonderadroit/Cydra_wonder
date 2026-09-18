@@ -50,7 +50,7 @@ def planner(hypothesis):
 
 
 def run_mode(mode: str, target: Path, output: Path):
-    compiler = compile_state_effects(target.parent, target)
+    compiler = compile_state_effects(target.parent, target, build_paths=(target.name,))
     result = investigate(
         target,
         target=f"{TARGET}@{REF}",
