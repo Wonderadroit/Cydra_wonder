@@ -705,12 +705,25 @@ def require_executed(result: ExecutionResult) -> ExecutionResult:
     return result
 
 
-def classify_access_control_outcome(hypothesis: Hypothesis, vulnerable: ExecutionResult, patched: ExecutionResult) -> ExperimentOutcome:
+def classify_experiment_outcome(
+    hypothesis: Hypothesis,
+    vulnerable: ExecutionResult,
+    patched: ExecutionResult,
+) -> ExperimentOutcome:
+    """Apply the shared causal differential rule to any hypothesis class.
+
+    Vulnerability-specific wrappers below are retained for compatibility, but
+    new reasoning surfaces should use this class-neutral entry point.
+    """
     return _classify(hypothesis, vulnerable, patched)
+
+
+def classify_access_control_outcome(hypothesis: Hypothesis, vulnerable: ExecutionResult, patched: ExecutionResult) -> ExperimentOutcome:
+    return classify_experiment_outcome(hypothesis, vulnerable, patched)
 
 
 def classify_initialization_outcome(hypothesis: Hypothesis, vulnerable: ExecutionResult, patched: ExecutionResult) -> ExperimentOutcome:
-    return _classify(hypothesis, vulnerable, patched)
+    return classify_experiment_outcome(hypothesis, vulnerable, patched)
 
 
 def _classify(hypothesis: Hypothesis, vulnerable: ExecutionResult, patched: ExecutionResult) -> ExperimentOutcome:
