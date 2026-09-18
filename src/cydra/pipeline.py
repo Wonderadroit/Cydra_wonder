@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
 from .experiment_inputs import plan_parameter_inputs
 from .experiment_planning import bind_experiment
-from .models import Experiment, Hypothesis, InvestigationResult
+from .models import Experiment, Hypothesis, InvestigationResult, Invariant
 from .reasoning import (
     access_control_invariant,
     build_evidence,
@@ -22,6 +23,22 @@ from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
 from .structural_authorization import generate_structural_access_control_hypotheses
 from .structural_initialization import generate_structural_initialization_hypotheses
+
+
+@dataclass(frozen=True)
+class ReasoningContribution:
+    """Class-neutral contribution from an optional reasoning surface.
+
+    The orchestration layer transports invariants and hypotheses without knowing
+    their vulnerability class. Experiment planning remains injected through the
+    existing class-neutral planner boundary.
+    """
+
+    invariants: tuple[Invariant, ...]
+    hypotheses: tuple[Hypothesis, ...]
+
+
+ReasoningSurface = Callable[[object, tuple[SemanticRelationshipEvidence, ...]], ReasoningContribution]
 
 
 def _merge_hypotheses(*groups):
@@ -81,6 +98,7 @@ def investigate(
     semantic_evidence: Iterable[SemanticRelationshipEvidence] | None = None,
     constraint_evidence: Iterable[ConstraintEvidence] | None = None,
     experiment_planner: Callable[[Hypothesis], Experiment] | None = None,
+    reasoning_surfaces: Iterable[ReasoningSurface] | None = None,
 ) -> InvestigationResult:
     """Build an investigation while keeping experiment transport class-neutral.
 
@@ -94,6 +112,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
+    surfaces = tuple(reasoning_surfaces or ())
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
@@ -126,7 +145,15 @@ def investigate(
         if arith and arithmetic_invariant is not None:
             all_invariants.append(arithmetic_invariant)
 
-        hypotheses = (*auth, *init, *arith)
+        surface_invariants: list[Invariant] = []
+        surface_hypotheses: list[Hypothesis] = []
+        for surface in surfaces:
+            contribution = surface(contract, contract_semantic)
+            surface_invariants.extend(contribution.invariants)
+            surface_hypotheses.extend(contribution.hypotheses)
+
+        hypotheses = (*auth, *init, *arith, *surface_hypotheses)
+        all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
             experiment = planner(hypothesis)
