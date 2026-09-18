@@ -51,13 +51,14 @@ def planner(hypothesis):
 
 def run_mode(mode: str, target: Path, output: Path):
     compiler = compile_state_effects(target.parent, target, build_paths=(target.name,))
+    surfaces = (state_surface,) if mode == "guided-state" else ()
     result = investigate(
         target,
         target=f"{TARGET}@{REF}",
         semantic_evidence=compiler.evidence,
         constraint_evidence=compiler.constraints,
         experiment_planner=planner,
-        reasoning_surfaces=(state_surface,),
+        reasoning_surfaces=surfaces,
     )
 
     rows = []
@@ -122,6 +123,11 @@ def run_mode(mode: str, target: Path, output: Path):
                 "mode": mode,
                 "target": f"{TARGET}@{REF}:{PATH}",
                 "compiler_evidence": jsonable(compiler.evidence),
+                "compiler_status": compiler.status,
+                "compiler_executed": compiler.executed,
+                "compiler_command": list(compiler.command),
+                "compiler_stderr": compiler.stderr,
+                "compiler_stdout": compiler.stdout,
                 "hypotheses": jsonable(result.hypotheses),
                 "experiments": jsonable(result.experiments),
                 "executions": rows,
