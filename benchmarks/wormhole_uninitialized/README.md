@@ -32,3 +32,5 @@ Protocol:
 4. Only after recording the failure decide whether the cause is a class-specific extraction issue (allowed) or a structural/information-flow failure (falsifies the architecture claim).
 
 This negative control is deliberately separate from the vulnerable-vs-patched historical differential: it tests whether CYDRA declines to confirm when the lifecycle is actually safe.
+
+Verification branch: this commit exists only to force the same negative-control workflow through the pull-request CI trigger so its execution can be inspected.
