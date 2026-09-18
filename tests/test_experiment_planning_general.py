@@ -1,5 +1,6 @@
 from cydra.experiment_planning import bind_experiment, plan_experiment
-from cydra.models import Hypothesis
+from cydra.models import FunctionModel, Hypothesis, ParameterModel
+from cydra.planned_call import render_function_call
 
 
 def test_class_neutral_experiment_envelope_accepts_future_invariant():
@@ -76,3 +77,27 @@ def test_class_neutral_binding_rejects_cross_hypothesis_and_target_reuse():
         pass
     else:
         raise AssertionError("cross-target binding must fail closed")
+
+
+def test_generic_binding_flows_into_canonical_call_renderer():
+    hypothesis = Hypothesis(
+        "H-FUTURE-render", "claim", "INV-FUTURE-045", "rebalance", "actor", "impact"
+    )
+    experiment = plan_experiment(hypothesis, "exercise", ("changed", "unchanged"), 1.0)
+    bound = bind_experiment(
+        hypothesis,
+        experiment,
+        target_function="rebalance",
+        planned_inputs=("777",),
+    )
+    function = FunctionModel(
+        name="rebalance",
+        visibility="external",
+        modifiers=(),
+        writes=("position",),
+        external_calls=(),
+        line=1,
+        parameters=(ParameterModel("amount", "uint256"),),
+    )
+
+    assert render_function_call(bound, function) == "target.rebalance(777);"
