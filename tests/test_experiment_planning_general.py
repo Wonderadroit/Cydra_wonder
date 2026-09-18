@@ -1,5 +1,5 @@
 from cydra.experiment_planning import bind_experiment, plan_experiment
-from cydra.models import Experiment, Hypothesis
+from cydra.models import Hypothesis
 
 
 def test_class_neutral_experiment_envelope_accepts_future_invariant():
@@ -52,9 +52,9 @@ def test_class_neutral_binding_preserves_target_and_inputs():
         planned_inputs=("777",),
     )
 
+    assert bound.hypothesis_id == hypothesis.hypothesis_id
     assert bound.target_function == "rebalance"
     assert bound.planned_inputs == ("777",)
-    assert bound.invariant_id if hasattr(bound, "invariant_id") else True
 
 
 def test_class_neutral_binding_rejects_cross_hypothesis_and_target_reuse():
