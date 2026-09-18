@@ -2,6 +2,7 @@ from cydra.ast_dataflow import SemanticRelationshipEvidence
 from cydra.models import Experiment
 from cydra.pipeline import investigate
 from cydra.solidity_model import parse_solidity
+from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 
 
@@ -97,3 +98,26 @@ contract Negative {
     result = investigate(source, reasoning_surfaces=(generate_cross_function_state_hypotheses,))
 
     assert not any(h.hypothesis_id.startswith("H-STATE-") for h in result.hypotheses)
+
+
+def test_cross_function_state_surface_reaches_structured_sequence_planner(tmp_path):
+    source = tmp_path / "StateSurface.sol"
+    source.write_text(
+        """pragma solidity ^0.8.20;
+contract StateSurface {
+    uint256 internal balance;
+    function deposit(uint256 amount) external { balance += amount; }
+    function withdraw(uint256 amount) external { balance -= amount; }
+}
+""",
+        encoding="utf-8",
+    )
+    result = investigate(
+        source,
+        reasoning_surfaces=(generate_cross_function_state_hypotheses,),
+        experiment_planner=plan_cross_function_state_experiment,
+    )
+    experiments = {e.hypothesis_id: e for e in result.experiments if e.hypothesis_id.startswith("H-STATE-")}
+    assert set(experiments) == {"H-STATE-balance-deposit", "H-STATE-balance-withdraw"}
+    assert tuple(step.function for step in experiments["H-STATE-balance-deposit"].steps) == ("withdraw", "deposit")
+    assert tuple(step.function for step in experiments["H-STATE-balance-withdraw"].steps) == ("deposit", "withdraw")
