@@ -101,3 +101,53 @@ def test_generic_binding_flows_into_canonical_call_renderer():
     )
 
     assert render_function_call(bound, function) == "target.rebalance(777);"
+
+
+def test_actual_pipeline_accepts_future_reasoning_planner_without_class_branch(monkeypatch, tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("contract Target {}\n", encoding="utf-8")
+    function = FunctionModel(
+        name="rebalance",
+        visibility="external",
+        modifiers=(),
+        writes=("position",),
+        external_calls=(),
+        line=1,
+        parameters=(ParameterModel("amount", "uint256"),),
+    )
+    from cydra.models import ContractModel
+    contract = ContractModel(name="Target", source=str(source), functions=(function,))
+    hypothesis = Hypothesis(
+        "H-FUTURE-pipeline",
+        "rebalance may violate the modeled invariant under a boundary input",
+        "INV-FUTURE-046",
+        "rebalance",
+        "externally callable actor",
+        "incorrect position state",
+    )
+
+    monkeypatch.setattr("cydra.pipeline.parse_solidity", lambda path: (contract,))
+    monkeypatch.setattr("cydra.pipeline.generate_access_control_hypotheses", lambda c: (hypothesis,))
+    monkeypatch.setattr("cydra.pipeline.generate_structural_access_control_hypotheses", lambda c, evidence=(): ())
+    monkeypatch.setattr("cydra.pipeline.generate_initialization_hypotheses", lambda c: ())
+    monkeypatch.setattr("cydra.pipeline.generate_structural_initialization_hypotheses", lambda c: ())
+    monkeypatch.setattr("cydra.pipeline.generate_arithmetic_hypotheses", lambda c: ())
+
+    def future_planner(candidate):
+        assert candidate.invariant_id == "INV-FUTURE-046"
+        return plan_experiment(
+            candidate,
+            "Call rebalance with the modeled boundary input and compare the resulting position.",
+            ("invariant violated", "invariant preserved"),
+            1.0,
+        )
+
+    from cydra.pipeline import investigate
+
+    result = investigate(source, experiment_planner=future_planner)
+    assert result.hypotheses == (hypothesis,)
+    assert len(result.experiments) == 1
+    experiment = result.experiments[0]
+    assert experiment.hypothesis_id == hypothesis.hypothesis_id
+    assert experiment.target_function == "rebalance"
+    assert render_function_call(experiment, function) == "target.rebalance(1);"
