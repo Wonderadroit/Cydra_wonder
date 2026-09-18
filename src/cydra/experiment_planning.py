@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from .models import Experiment, Hypothesis
 
 
@@ -27,4 +29,35 @@ def plan_experiment(
         action=action,
         discriminates=tuple(discriminates),
         cost=cost,
+    )
+
+
+def bind_experiment(
+    hypothesis: Hypothesis,
+    experiment: Experiment,
+    *,
+    target_function: str,
+    planned_inputs: tuple[str, ...] = (),
+) -> Experiment:
+    """Bind an experiment to its hypothesis and concrete target without class knowledge.
+
+    This is the generic handoff boundary between reasoning and execution. It does
+    not inspect invariant IDs or vulnerability classes.
+    """
+    if experiment.hypothesis_id != hypothesis.hypothesis_id:
+        raise ValueError(
+            f"experiment/hypothesis mismatch: {experiment.hypothesis_id} != {hypothesis.hypothesis_id}"
+        )
+    if not target_function.strip():
+        raise ValueError("experiment target function must not be empty")
+    if planned_inputs and experiment.planned_inputs:
+        raise ValueError("experiment already has planned inputs")
+    if experiment.target_function is not None and experiment.target_function != target_function:
+        raise ValueError(
+            f"experiment target mismatch: {experiment.target_function} != {target_function}"
+        )
+    return replace(
+        experiment,
+        target_function=target_function,
+        planned_inputs=tuple(planned_inputs) if planned_inputs else experiment.planned_inputs,
     )
