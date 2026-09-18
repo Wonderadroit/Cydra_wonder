@@ -74,3 +74,37 @@ def test_unmatched_source_does_not_invent_semantic_evidence(tmp_path):
     evidence = extract_state_effects_from_build_info(build, other, project)
 
     assert evidence == ()
+
+
+def test_compile_state_effects_scopes_forge_build_to_selected_paths(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    source = project / "src" / "Fixture.sol"
+    source.parent.mkdir(parents=True)
+    source.write_text("contract Fixture {}", encoding="utf-8")
+
+    calls = []
+
+    class Completed:
+        returncode = 1
+        stdout = ""
+        stderr = "synthetic compile failure"
+
+    def fake_run(command, **kwargs):
+        calls.append(tuple(command))
+        return Completed()
+
+    monkeypatch.setattr("cydra.compiler_state.subprocess.run", fake_run)
+
+    from cydra.compiler_state import compile_state_effects
+
+    result = compile_state_effects(project, source, build_paths=("src/Fixture.sol",))
+
+    assert result.status == "compile_failed"
+    assert calls == [(
+        "forge",
+        "build",
+        "--build-info",
+        "--build-info-path",
+        calls[0][4],
+        "src/Fixture.sol",
+    )]
