@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
 from .experiment_inputs import plan_parameter_inputs
 from .experiment_planning import bind_experiment
-from .models import Experiment, InvestigationResult
+from .models import Experiment, Hypothesis, InvestigationResult
 from .reasoning import (
     access_control_invariant,
     build_evidence,
@@ -30,6 +30,27 @@ def _merge_hypotheses(*groups):
         for hypothesis in group:
             merged[hypothesis.hypothesis_id] = hypothesis
     return tuple(merged.values())
+
+
+def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
+    """Adapt today's reasoning surfaces to the class-neutral experiment envelope.
+
+    This is the legacy/class-specific adapter, deliberately kept outside the core
+    pipeline. New reasoning surfaces may supply their own planner without adding a
+    branch to investigate().
+    """
+    planners = {
+        "INV-AUTH-001": plan_access_control_experiment,
+        "INV-INIT-001": plan_initialization_experiment,
+        "INV-ARITH-001": plan_arithmetic_experiment,
+    }
+    try:
+        planner = planners[hypothesis.invariant_id]
+    except KeyError as exc:
+        raise ValueError(
+            f"no default experiment planner for invariant {hypothesis.invariant_id}"
+        ) from exc
+    return planner(hypothesis)
 
 
 def _attach_input_plan(
@@ -59,18 +80,20 @@ def investigate(
     target: str | None = None,
     semantic_evidence: Iterable[SemanticRelationshipEvidence] | None = None,
     constraint_evidence: Iterable[ConstraintEvidence] | None = None,
+    experiment_planner: Callable[[Hypothesis], Experiment] | None = None,
 ) -> InvestigationResult:
-    """Build an investigation from compiler-backed evidence and class-neutral reasoning.
+    """Build an investigation while keeping experiment transport class-neutral.
 
-    Parameter constraints are optional evidence. When a complete safe ABI vector can
-    be constructed, it is attached to the experiment; otherwise the empty vector
-    explicitly preserves the existing generator fallback. Constraint interpretation
-    remains independent of vulnerability class and invariant.
+    Reasoning adapters discover hypotheses and may plan class-specific experiments.
+    The pipeline only transports those plans through generic binding and execution
+    preparation. A caller can inject a planner for a new reasoning surface without
+    changing this orchestration layer.
     """
     contracts = parse_solidity(path)
     if not contracts:
         raise ValueError(f"No Solidity contract found in {path}")
 
+    planner = experiment_planner or _default_experiment_planner
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
@@ -105,12 +128,11 @@ def investigate(
 
         hypotheses = (*auth, *init, *arith)
         all_hypotheses.extend(hypotheses)
-        for hypothesis in auth:
-            all_experiments.append(_attach_input_plan(contract, hypothesis, plan_access_control_experiment(hypothesis), contract_constraints))
-        for hypothesis in init:
-            all_experiments.append(_attach_input_plan(contract, hypothesis, plan_initialization_experiment(hypothesis), contract_constraints))
-        for hypothesis in arith:
-            all_experiments.append(_attach_input_plan(contract, hypothesis, plan_arithmetic_experiment(hypothesis), contract_constraints))
+        for hypothesis in hypotheses:
+            experiment = planner(hypothesis)
+            all_experiments.append(
+                _attach_input_plan(contract, hypothesis, experiment, contract_constraints)
+            )
         all_evidence.extend(build_evidence(contract, hypotheses))
 
     return InvestigationResult(
