@@ -24,10 +24,23 @@ from cydra.foundry import (
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.pipeline import investigate
 from cydra.planned_foundry import generate_authorization_test_from_experiment
+from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment
+from cydra.sequence_foundry import generate_sequence_test_from_experiment
+from cydra.state_experiments import plan_cross_function_state_experiment
+from cydra.structural_state import generate_cross_function_state_hypotheses
 
-SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
+SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state"}
 
 CLASS_CAPABILITIES = {
+    "state": {
+        "extract": True,
+        "generate_hypothesis": True,
+        "plan_experiment": True,
+        "generate_foundry": True,
+        "execute_blind": True,
+        "classify_blind": False,
+        "classify_block_reason": "state sequence classification requires an independently verified relation and patched counterpart",
+    },
     "authorization": {
         "extract": True,
         "generate_hypothesis": True,
@@ -218,6 +231,20 @@ def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[
     }
 
 
+def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, _target_import(contract, project), contract.name, output, contract
+    )
+    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    require_executed(execution)
+    return {
+        "generated_path": str(generated),
+        "execution": execution,
+        "classification": "NOT_REACHED",
+        "classification_blocked_reason": CLASS_CAPABILITIES["state"]["classify_block_reason"],
+    }
+
 def _run_initialization(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_initialization_test(
@@ -249,6 +276,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...]):
 
     for hypothesis in result.hypotheses:
         class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
+        if class_name is None and hypothesis.invariant_id.startswith("INV-STATE-"):
+            class_name = "state"
         if class_name is None or class_name not in classes:
             continue
         capability = CLASS_CAPABILITIES[class_name]
@@ -273,6 +302,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...]):
         try:
             if class_name == "authorization":
                 run = _run_authorization(project, hypothesis, experiment, contract)
+            elif class_name == "state":
+                run = _run_state(project, hypothesis, experiment, contract)
             elif class_name == "initialization":
                 run = _run_initialization(project, hypothesis, experiment, contract)
             else:
@@ -363,6 +394,16 @@ def _environment_provenance(root: Path, project: Path) -> tuple[dict[str, Any], 
     return provenance, dependency_text, json.dumps(forge_config, indent=2, sort_keys=True)
 
 
+def _blind_planner(hypothesis):
+    if hypothesis.invariant_id.startswith("INV-STATE-"):
+        return plan_cross_function_state_experiment(hypothesis)
+    planners = {
+        "INV-AUTH-001": plan_access_control_experiment,
+        "INV-INIT-001": plan_initialization_experiment,
+        "INV-ARITH-001": plan_arithmetic_experiment,
+    }
+    return planners[hypothesis.invariant_id](hypothesis)
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run frozen CYDRA capability layers against a blind target."
@@ -388,11 +429,14 @@ def main() -> int:
         source = checkout / args.target_path
 
         compiler_evidence: CompilerEvidenceResult = compile_state_effects(project, source)
+        surfaces = (generate_cross_function_state_hypotheses,) if "state" in classes else ()
         result = investigate(
             source,
             target=f"{args.target_repo}@{args.target_ref}",
             semantic_evidence=compiler_evidence.evidence,
             constraint_evidence=compiler_evidence.constraints,
+            experiment_planner=_blind_planner,
+            reasoning_surfaces=surfaces,
         )
         statuses, executions, evidence = run_layers(result, project, classes)
         build_capture = _command_capture(project, "forge", "build")
