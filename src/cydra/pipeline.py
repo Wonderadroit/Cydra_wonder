@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from collections.abc import Iterable
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
 from .experiment_inputs import plan_parameter_inputs
+from .experiment_planning import bind_experiment
 from .models import Experiment, InvestigationResult
 from .reasoning import (
     access_control_invariant,
@@ -46,7 +46,12 @@ def _attach_input_plan(
         constraints,
         function_name=function.name,
     )
-    return replace(experiment, planned_inputs=vector, target_function=function.name)
+    return bind_experiment(
+        hypothesis,
+        experiment,
+        target_function=function.name,
+        planned_inputs=vector,
+    )
 
 
 def investigate(
