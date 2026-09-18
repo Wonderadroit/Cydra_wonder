@@ -1,0 +1,57 @@
+name: CYDRA discovery campaign — guided then blind
+
+on:
+  workflow_dispatch:
+
+jobs:
+  campaign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install CYDRA and pytest
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+
+      - name: Regression gate before investigation
+        run: python -m pytest -q
+
+      - name: Guided investigation
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p discovery-artifacts
+          python scripts/run_discovery_target.py             --mode guided-state             --output discovery-artifacts
+
+      - name: Blind investigation
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_discovery_target.py             --mode blind             --output discovery-artifacts
+
+      - name: Summarize discovery outputs
+        run: |
+          echo "=== Guided ==="
+          python - <<'PY'
+          import json
+          for name in ("guided-state", "blind"):
+              p=f"discovery-artifacts/{name}.json"
+              d=json.load(open(p))
+              print("\n===", name, "===")
+              print("hypotheses:", len(d["hypotheses"]))
+              print("experiments:", len(d["experiments"]))
+              for x in d["executions"]:
+                  e=x["execution"] or {}
+                  print(x["hypothesis_id"], x["invariant_id"], x["target_function"], e.get("status"), e.get("tests_run"), e.get("tests_failed"))
+          PY
+
+      - name: Upload discovery artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-alchemist-guided-blind
+          path: discovery-artifacts/
