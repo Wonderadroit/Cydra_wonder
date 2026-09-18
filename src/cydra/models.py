@@ -85,6 +85,10 @@ class Hypothesis:
     expected_impact: str
     status: HypothesisStatus = "proposed"
     evidence_ids: tuple[str, ...] = field(default_factory=tuple)
+    # Other modeled transitions that the reasoning surface identifies as causally
+    # relevant. This remains class-neutral so sequence planners do not have to infer
+    # peer functions from prose or benchmark-specific names.
+    related_functions: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
