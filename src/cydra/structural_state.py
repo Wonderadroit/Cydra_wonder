@@ -88,6 +88,7 @@ def generate_cross_function_state_hypotheses(
                     "arbitrary external caller able to invoke the transition",
                     f"inconsistent {state} after a valid cross-function transition sequence",
                     evidence_ids=evidence_ids,
+                    related_functions=tuple(peer for peer in functions if peer != function),
                 )
             )
 
