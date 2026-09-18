@@ -10,11 +10,11 @@ def test_cross_function_state_sequence_planner_preserves_ordered_causal_pair():
         "decrease",
         "arbitrary external caller able to invoke the transition",
         "inconsistent counter after a valid cross-function transition sequence",
+        related_functions=("increase",),
     )
 
     experiment = plan_cross_function_state_experiment(
         hypothesis,
-        "increase",
         first_input="7",
         second_input="7",
     )
