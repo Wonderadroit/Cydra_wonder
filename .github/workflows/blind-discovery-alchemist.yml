@@ -1,6 +1,12 @@
 name: CYDRA discovery campaign — guided then blind
 
 on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/run_discovery_target.py'
+      - '.github/workflows/blind-discovery-alchemist.yml'
   workflow_dispatch:
 
 jobs:
