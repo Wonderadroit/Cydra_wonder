@@ -64,7 +64,6 @@ def main() -> int:
                 output,
                 contract,
             )
-            print(generated.read_text(encoding="utf-8"))
             execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
             print("EXECUTION_STATUS", execution.status, "exit=", execution.exit_code, "tests=", execution.tests_run, "failed=", execution.tests_failed)
             print(execution.stdout)
