@@ -56,32 +56,39 @@ def _state_refs(node: Any, states: dict[int, str]) -> list[dict[str, Any]]:
             and item["referencedDeclaration"] in states]
 
 
-def _mark_lvalue_roles(node: Any, states: dict[int, str], roles: dict[int, str], role: str) -> None:
-    """Mark the storage-root state reference; index/member expressions remain reads."""
+def _mark_lvalue_roles(
+    node: Any,
+    states: dict[int, str],
+    roles: dict[int, tuple[str, str]],
+    role: str,
+    operator: str,
+) -> None:
+    """Mark the storage-root state reference; indexed/member references remain reads."""
     refs = _state_refs(node, states)
     if not refs:
         return
     first = _node_id(refs[0])
     if first is not None:
-        roles[first] = role
+        roles[first] = (role, operator)
     for ref in refs[1:]:
         ref_id = _node_id(ref)
         if ref_id is not None and ref_id not in roles:
-            roles[ref_id] = "read"
+            roles[ref_id] = ("read", operator)
 
 
-def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int, str]:
-    roles: dict[int, str] = {}
+def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int, tuple[str, str]]:
+    roles: dict[int, tuple[str, str]] = {}
     for node in _walk(body):
         if node.get("nodeType") == "Assignment":
             operator = node.get("operator")
-            if operator == "=":
-                _mark_lvalue_roles(node.get("leftHandSide"), states, roles, "write")
-            elif isinstance(operator, str):
-                _mark_lvalue_roles(node.get("leftHandSide"), states, roles, "read_write")
+            if not isinstance(operator, str):
+                continue
+            role = "write" if operator == "=" else "read_write"
+            _mark_lvalue_roles(node.get("leftHandSide"), states, roles, role, operator)
         elif node.get("nodeType") == "UnaryOperation" and node.get("operator") in {"++", "--", "delete"}:
-            _mark_lvalue_roles(node.get("subExpression"), states, roles,
-                                "read_write" if node.get("operator") in {"++", "--"} else "write")
+            operator = node["operator"]
+            role = "read_write" if operator in {"++", "--"} else "write"
+            _mark_lvalue_roles(node.get("subExpression"), states, roles, role, operator)
     return roles
 
 
@@ -123,16 +130,16 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             if not isinstance(ref, int) or ref not in states:
                 continue
             item_id = _node_id(item)
-            semantic_role = roles.get(item_id, "read") if item_id is not None else "read"
+            semantic_role, operator = roles.get(item_id, ("read", "read")) if item_id is not None else ("read", "read")
             relation = {"read": "reads", "write": "writes", "read_write": "transition_expression"}[semantic_role]
             common = dict(contract=str(contract), function=str(function_name), relation=relation,
                           target=states[ref], confidence=0.98 if item_id in roles else 0.90,
                           source=f"solc-json-ast:{file}", ast_node_id=item_id,
                           source_location=_location(item), function_ast_node_id=function_id,
                           target_ast_node_id=ref,
-                          metadata={"function_kind": kind, "semantic_relation": semantic_role})
+                          metadata={"function_kind": kind, "semantic_relation": semantic_role, "operator": operator})
             evidence.append(SemanticRelationshipEvidence(**common))
             evidence.append(SemanticRelationshipEvidence(
                 **{**common, "relation": "reference", "confidence": 0.90,
-                   "metadata": {"function_kind": kind, "semantic_relation": semantic_role}}))
+                   "metadata": {"function_kind": kind, "semantic_relation": semantic_role, "operator": operator}}))
     return evidence

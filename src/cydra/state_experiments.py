@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from .experiment_planning import plan_experiment
-from .models import Experiment, ExperimentStep, Hypothesis
+from .experiment_inputs import conservative_defaults
+from .models import ContractModel, Experiment, ExperimentStep, Hypothesis
 
 
 def plan_cross_function_state_experiment(
     hypothesis: Hypothesis,
     peer_function: str | None = None,
     *,
+    contract: ContractModel | None = None,
     first_input: str = "1",
     second_input: str = "1",
 ) -> Experiment:
@@ -31,6 +33,22 @@ def plan_cross_function_state_experiment(
     if not first_input.strip() or not second_input.strip():
         raise ValueError("sequence inputs must not be empty")
 
+    if contract is not None:
+        functions = {function.name: function for function in contract.functions}
+        peer_model = functions.get(peer)
+        target_model = functions.get(hypothesis.target_function)
+        if peer_model is None or target_model is None:
+            raise ValueError("state sequence function is absent from contract model")
+        peer_defaults = conservative_defaults(peer_model.parameters)
+        target_defaults = conservative_defaults(target_model.parameters)
+        if peer_defaults is None or target_defaults is None:
+            raise ValueError("state sequence contains unsupported parameter type")
+        first_arguments = tuple(peer_defaults[p.name] for p in peer_model.parameters)
+        second_arguments = tuple(target_defaults[p.name] for p in target_model.parameters)
+    else:
+        first_arguments = (first_input,)
+        second_arguments = (second_input,)
+
     experiment = plan_experiment(
         hypothesis,
         (
@@ -53,5 +71,5 @@ def plan_cross_function_state_experiment(
         experiment.cost,
         experiment.planned_inputs,
         experiment.target_function,
-        (ExperimentStep(peer, (first_input,)), ExperimentStep(hypothesis.target_function, (second_input,))),
+        (ExperimentStep(peer, first_arguments), ExperimentStep(hypothesis.target_function, second_arguments)),
     )
