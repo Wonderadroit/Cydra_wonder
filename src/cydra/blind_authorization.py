@@ -52,7 +52,6 @@ pragma solidity {pragma};
 // Experiment: {experiment.experiment_id}
 // One-sided invariant test: no patched target or benchmark answer is imported.
 import {{Test}} from "forge-std/Test.sol";
-import {{Vm}} from "forge-std/Vm.sol";
 import {{ {target_type} }} from "{target_import}";
 
 contract CydraBlindAuthorizationTest is Test {{
