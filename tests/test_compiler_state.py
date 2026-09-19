@@ -106,6 +106,8 @@ def test_compile_state_effects_scopes_forge_build_to_selected_paths(tmp_path, mo
         "--build-info",
         "--build-info-path",
         calls[0][4],
+        "--profile",
+        "lite",
         "--skip",
         "test",
         "--skip",
