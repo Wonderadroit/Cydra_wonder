@@ -1,0 +1,38 @@
+name: Benchmark 006 Blind Authorization
+
+on:
+  push:
+    branches:
+      - "feat/blind-auth-causal-gate-2026-09-19"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_006_blind_auth.py"
+      - "tests/test_blind_authorization.py"
+      - ".github/workflows/benchmark-006-blind-auth.yml"
+
+jobs:
+  # State-diff-backed one-sided authorization verification.
+  # Final regression after blind authorization implementation cleanup.
+  blind-authorization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install dependencies
+        run: python -m pip install -e . pytest
+      - name: Python tests
+        run: pytest -q tests/test_blind_authorization.py
+      - name: Blind vulnerable backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_benchmark_006_blind_auth.py             --target-repo https://github.com/Wonderadroit/Cydra_wonder.git             --target-ref main             --target-path benchmarks/alchemix_missing_access_control/foundry/src/Target.sol             --target-project benchmarks/alchemix_missing_access_control/foundry
+      - name: Blind negative control
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_006_blind_auth_negative.py
