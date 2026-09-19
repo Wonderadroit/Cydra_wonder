@@ -78,7 +78,7 @@ contract CydraBlindAuthorizationTest is Test {{
             if (accesses[i].account != address(target)) continue;
             for (uint256 j = 0; j < accesses[i].storageAccesses.length; j++) {{
                 Vm.StorageAccess memory access = accesses[i].storageAccesses[j];
-                if (access.isWrite && !access.reverted && access.oldValue != access.newValue) {{
+                if (access.isWrite && !access.reverted) {{
                     unauthorizedMutation = true;
                 }}
             }}
