@@ -76,7 +76,12 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
 
     with tempfile.TemporaryDirectory(prefix="cydra-build-info-", dir=project_path.parent) as temp:
         info_path = Path(temp)
-        command = ("forge", "build", "--build-info", "--build-info-path", str(info_path))
+        relative_source = os.path.relpath(source_path, project_path).replace(os.sep, "/")
+        command = (
+            "forge", "build", "--build-info", "--build-info-path", str(info_path),
+            "--profile", "lite", "--skip", "test", "--skip", "script", "--threads", "1",
+            relative_source,
+        )
         completed = subprocess.run(command, cwd=project_path, text=True, capture_output=True, check=False)
         build_files = tuple(sorted(info_path.rglob("*.json")))
         if completed.returncode != 0:
