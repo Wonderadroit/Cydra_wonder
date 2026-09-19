@@ -20,7 +20,7 @@ jobs:
       - name: Run structural tests
         run: |
           set +e
-          python -m pytest -vv tests/test_structural_arithmetic.py tests/test_structural_authorization.py tests/test_structural_initialization.py 2>&1 | tee pytest.log
+          python -m pytest -vv tests/test_structural_arithmetic.py tests/test_structural_authorization.py tests/test_structural_initialization.py tests/test_structural_state.py 2>&1 | tee pytest.log
           status=${PIPESTATUS[0]}
           echo "pytest_exit=$status" >> pytest.log
           exit $status
