@@ -14,7 +14,7 @@ on:
 
 jobs:
   # State-diff-backed one-sided authorization verification.
-  # Regression trigger after canonical ABI selector fix.
+  # Final regression after blind authorization implementation cleanup.
   blind-authorization:
     runs-on: ubuntu-latest
     steps:
