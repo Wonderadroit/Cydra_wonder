@@ -15,12 +15,16 @@ from pathlib import Path
 from typing import Any
 
 from cydra.compiler_state import compile_state_effects
-from cydra.foundry import ExecutionResult, generate_initialization_test, require_executed, run_foundry_test, test_path_for
+from cydra.foundry import generate_initialization_test, require_executed, run_foundry_test, test_path_for
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
 from cydra.pipeline import investigate
+from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment
+from cydra.sequence_foundry import generate_sequence_test_from_experiment
+from cydra.state_experiments import plan_cross_function_state_experiment
+from cydra.structural_state import generate_cross_function_state_hypotheses
 
-SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
+SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state"}
 INVARIANT_CLASS = {"INV-AUTH-001": "authorization", "INV-INIT-001": "initialization", "INV-ARITH-001": "arithmetic"}
 FREEZE_FILES = ("provenance.json", "target-checkout.txt", "parse-output.json", "semantic-evidence.json", "compiler-evidence.json", "invariants.json", "hypotheses.json", "experiments.json", "execution.json", "execution-human.txt", "integrity-check.json", "classification.json", "compilation.log", "manifest.sha256", "README.md")
 GENERATED_MANIFEST = "manifest.sha256"
@@ -136,6 +140,32 @@ def run_initialization(project: Path, hypothesis, experiment, contract):
     return generated, execution, outcome
 
 
+def run_state(project: Path, hypothesis, experiment, contract):
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+    )
+    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    require_executed(execution)
+    return generated, execution
+
+
+def blind_experiment_planner(hypothesis):
+    if hypothesis.invariant_id.startswith("INV-STATE-"):
+        return plan_cross_function_state_experiment(hypothesis)
+    planners = {
+        "INV-AUTH-001": plan_access_control_experiment,
+        "INV-INIT-001": plan_initialization_experiment,
+        "INV-ARITH-001": plan_arithmetic_experiment,
+    }
+    return planners[hypothesis.invariant_id](hypothesis)
+
+
 def manifest(freeze: Path):
     return [f"{hashlib.sha256((freeze / name).read_bytes()).hexdigest()}  {name}" for name in FREEZE_FILES if name != GENERATED_MANIFEST]
 
@@ -180,23 +210,64 @@ def main() -> int:
         source = checkout / args.target_path
 
         compiler = compile_state_effects(project, source)
-        result = investigate(source, target=f"{args.target_repo}@{args.target_ref}", semantic_evidence=compiler.evidence)
+        surfaces = (generate_cross_function_state_hypotheses,) if "state" in classes else ()
+        result = investigate(
+            source,
+            target=f"{args.target_repo}@{args.target_ref}",
+            semantic_evidence=compiler.evidence,
+            constraint_evidence=compiler.constraints,
+            experiment_planner=blind_experiment_planner,
+            reasoning_surfaces=surfaces,
+        )
         experiments = {e.hypothesis_id: e for e in result.experiments}
         statuses, executions, evidence = [], [], []
         for hypothesis in result.hypotheses:
-            cls = INVARIANT_CLASS.get(hypothesis.invariant_id, "other")
+            if hypothesis.invariant_id.startswith("INV-STATE-"):
+                cls = "state"
+            else:
+                cls = INVARIANT_CLASS.get(hypothesis.invariant_id, "other")
             if cls not in classes: continue
-            status = {"hypothesis_id": hypothesis.hypothesis_id, "class": cls, "extracted": True, "hypothesis_generated": True, "experiment_planned": hypothesis.hypothesis_id in experiments, "foundry_generated": False, "blind_executed": False, "classification": "NOT_REACHED"}
-            if cls != "initialization":
-                status["classification"] = "NOT_REACHED"
-                status["blocked_reason"] = "Benchmark 005 current executable blind surface is initialization-only; non-initialization classes are recorded as capability gaps, not silently skipped."
-                statuses.append(status); continue
+            status = {
+                "hypothesis_id": hypothesis.hypothesis_id,
+                "class": cls,
+                "extracted": True,
+                "hypothesis_generated": True,
+                "experiment_planned": hypothesis.hypothesis_id in experiments,
+                "foundry_generated": False,
+                "blind_executed": False,
+                "classification": "NOT_REACHED",
+            }
             try:
                 contract = contract_for(result, hypothesis)
-                proxy_topology = requires_proxy_initialization(Path(contract.source))
-                generated, execution, outcome = run_initialization(project, hypothesis, experiments[hypothesis.hypothesis_id], contract)
-                status.update(foundry_generated=True, blind_executed=True, generated_path=str(generated), deployment_topology="proxy" if proxy_topology else "direct", classification=outcome.benchmark_status, internal_status=outcome.internal_status, evidence=_json(outcome.evidence))
-                executions.append(execution); evidence.append(outcome.evidence)
+                experiment = experiments.get(hypothesis.hypothesis_id)
+                if experiment is None:
+                    raise RuntimeError("hypothesis has no planned experiment")
+                if cls == "state":
+                    generated, execution = run_state(project, hypothesis, experiment, contract)
+                    status.update(
+                        foundry_generated=True,
+                        blind_executed=True,
+                        generated_path=str(generated),
+                        classification="NOT_REACHED",
+                        classification_blocked_reason="state sequence execution is not independently classified without a verified state relation and patched counterpart",
+                    )
+                    executions.append(execution)
+                elif cls == "initialization":
+                    proxy_topology = requires_proxy_initialization(Path(contract.source))
+                    generated, execution, outcome = run_initialization(project, hypothesis, experiment, contract)
+                    status.update(
+                        foundry_generated=True,
+                        blind_executed=True,
+                        generated_path=str(generated),
+                        deployment_topology="proxy" if proxy_topology else "direct",
+                        classification=outcome.benchmark_status,
+                        internal_status=outcome.internal_status,
+                        evidence=_json(outcome.evidence),
+                    )
+                    executions.append(execution)
+                else:
+                    status["classification"] = "NOT_REACHED"
+                    status["blocked_reason"] = "Benchmark 005 current executable blind surface does not independently classify authorization or arithmetic candidates."
             except Exception as exc:
                 status.update(failure_stage="execution_or_generation", blocked_reason=f"{type(exc).__name__}: {exc}")
             statuses.append(status)
@@ -216,10 +287,10 @@ def main() -> int:
 
         build = capture(project, "forge", "build")
         provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions}
-        classification = {"surface": "initialization-only", "class_coverage": class_coverage, "hypotheses": statuses, "compiler_evidence_status": compiler.status, "semantic_evidence_count": len(compiler.evidence), "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
+        classification = {"surface": "initialization-and-state-execution", "class_coverage": class_coverage, "hypotheses": statuses, "compiler_evidence_status": compiler.status, "semantic_evidence_count": len(compiler.evidence), "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules", "state_execution_unclassified": "state sequence executed, but blind classification is not claimed without an independently verified relation and patched counterpart"}}
         execution_human = "\n\n".join(f"{e.experiment_id}: {e.status}\n{e.stdout}\n{e.stderr}" for e in executions)
         compiler_record = {"executed": compiler.executed, "status": compiler.status, "command": compiler.command, "stdout": compiler.stdout, "stderr": compiler.stderr, "build_info_files": compiler.build_info_files, "compiler_versions": compiler.compiler_versions}
-        freeze({"provenance.json": provenance, "target-checkout.txt": git(checkout, "rev-parse", "HEAD") + "\n", "parse-output.json": {"target": result.target, "contracts": result.contracts, "selected_classes": classes}, "semantic-evidence.json": compiler.evidence, "compiler-evidence.json": compiler_record, "invariants.json": result.invariants, "hypotheses.json": result.hypotheses, "experiments.json": result.experiments, "execution.json": {"results": executions}, "integrity-check.json": {"runner_source_frozen": True, "forge_build": build, "compiler_evidence_status": compiler.status}, "classification.json": classification}, {"execution-human.txt": execution_human, "compilation.log": json.dumps(build, indent=2) + "\n", "README.md": "Benchmark 005 blind Gavel freeze. Compiler-backed semantic evidence is collected before reasoning; raw artifacts are frozen before any ground-truth lookup.\n"}, args.freeze)
+        freeze({"provenance.json": provenance, "target-checkout.txt": git(checkout, "rev-parse", "HEAD") + "\n", "parse-output.json": {"target": result.target, "contracts": result.contracts, "selected_classes": classes}, "semantic-evidence.json": compiler.evidence, "compiler-evidence.json": compiler_record, "invariants.json": result.invariants, "hypotheses.json": result.hypotheses, "experiments.json": result.experiments, "execution.json": {"results": executions}, "integrity-check.json": {"runner_source_frozen": True, "forge_build": build, "compiler_evidence_status": compiler.status}, "classification.json": classification}, {"execution-human.txt": execution_human, "compilation.log": json.dumps(build, indent=2) + "\n", "README.md": "Benchmark 005 blind Gavel freeze. Compiler-backed semantic evidence is collected before reasoning; raw artifacts are frozen before any ground-truth lookup. State sequences are executable evidence, not vulnerability confirmations without an independently verified relation and patched counterpart.\n"}, args.freeze)
     return 0
 
 
