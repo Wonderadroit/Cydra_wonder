@@ -106,3 +106,29 @@ def test_compiler_uses_bounded_lightweight_profile_and_selected_source(tmp_path,
     )
     assert captured["kwargs"]["cwd"] == project.resolve()
     assert captured["kwargs"]["check"] is False
+
+
+
+def test_compiler_does_not_require_lite_profile(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    source = project / "contracts" / "Fixture.sol"
+    source.parent.mkdir(parents=True)
+    source.write_text("contract Fixture {}\n", encoding="utf-8")
+
+    class Completed:
+        returncode = 1
+        stdout = ""
+        stderr = ""
+
+    captured = {}
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        return Completed()
+
+    monkeypatch.setattr("cydra.compiler_state.subprocess.run", fake_run)
+    from cydra.compiler_state import compile_state_effects
+    result = compile_state_effects(project, source)
+
+    assert result.status == "compile_failed"
+    assert "--profile" not in result.command
+    assert result.command[-3:] == ("--threads", "1", "contracts/Fixture.sol")
