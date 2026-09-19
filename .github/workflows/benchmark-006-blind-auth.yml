@@ -27,8 +27,12 @@ jobs:
         run: python -m pip install -e . pytest
       - name: Python tests
         run: pytest -q tests/test_blind_authorization.py
-      - name: Blind backtest
+      - name: Blind vulnerable backtest
         env:
           PYTHONPATH: src
         run: |
           python scripts/run_benchmark_006_blind_auth.py             --target-repo https://github.com/Wonderadroit/Cydra_wonder.git             --target-ref main             --target-path benchmarks/alchemix_missing_access_control/foundry/src/Target.sol             --target-project benchmarks/alchemix_missing_access_control/foundry
+      - name: Blind negative control
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_006_blind_auth_negative.py
