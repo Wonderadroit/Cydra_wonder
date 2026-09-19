@@ -63,6 +63,14 @@ def extract_constraints_from_build_info(build_info: Path, source: Path, project:
     return tuple(evidence)
 
 
+def _has_lite_profile(project: Path) -> bool:
+    config = project / "foundry.toml"
+    try:
+        return "[profile.lite]" in config.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEvidenceResult:
     """Compile a Foundry project and consume compiler AST evidence when available.
 
@@ -77,10 +85,10 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
     with tempfile.TemporaryDirectory(prefix="cydra-build-info-", dir=project_path.parent) as temp:
         info_path = Path(temp)
         relative_source = os.path.relpath(source_path, project_path).replace(os.sep, "/")
+        profile = ("--profile", "lite") if _has_lite_profile(project_path) else ()
         command = (
             "forge", "build", "--build-info", "--build-info-path", str(info_path),
-            "--profile", "lite", "--skip", "test", "--skip", "script", "--threads", "1",
-            relative_source,
+            *profile, "--skip", "test", "--skip", "script", "--threads", "1", relative_source,
         )
         completed = subprocess.run(command, cwd=project_path, text=True, capture_output=True, check=False)
         build_files = tuple(sorted(info_path.rglob("*.json")))
