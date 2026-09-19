@@ -64,6 +64,9 @@ def main() -> int:
                 contract,
             )
             execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+            print("EXECUTION_STATUS", execution.status, "exit=", execution.exit_code, "tests=", execution.tests_run, "failed=", execution.tests_failed)
+            print(execution.stdout)
+            print(execution.stderr)
             require_executed(execution)
             outcome = classify_authorization_blind_execution(hypothesis, execution)
             print(
