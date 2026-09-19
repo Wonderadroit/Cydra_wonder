@@ -51,7 +51,7 @@ def planner(hypothesis, contract):
 
 
 def run_mode(mode: str, target: Path, output: Path):
-    compiler = compile_state_effects(target.parent, target, build_paths=(target.name,))
+    compiler = compile_state_effects(target.parents[1], target, build_paths=(Path("src") / target.name,))
     surfaces = (state_surface,) if mode == "guided-state" else ()
     target_contract = next(iter(parse_solidity(target)), None)
     if target_contract is None:
