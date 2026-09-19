@@ -35,6 +35,7 @@ def main() -> int:
         subprocess.run(("git", "-C", str(checkout), "checkout", "--detach", args.target_ref), check=True)
         project = checkout / args.target_project
         source = checkout / args.target_path
+        subprocess.run(("forge", "install", "foundry-rs/forge-std", "--no-commit"), cwd=project, check=True)
 
         compiler = compile_state_effects(project, source)
         result = investigate(
