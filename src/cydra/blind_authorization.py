@@ -40,6 +40,7 @@ def generate_blind_authorization_test_from_experiment(
 
     call = render_function_call(experiment, function)
     arguments = call.removeprefix(f"target.{function.name}(").removesuffix(");")
+    signature_types = ", ".join(parameter.type.split()[0] for parameter in function.parameters)
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,7 +67,7 @@ contract CydraBlindAuthorizationTest is Test {{
         vm.prank(attacker);
         (bool ok,) = address(target).call(
             abi.encodeWithSignature(
-                "{function.name}({", ".join(parameter.type.split()[0] for parameter in function.parameters)})",
+                "{function.name}({signature_types})",
                 {arguments}
             )
         );
