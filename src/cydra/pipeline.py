@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
 from .experiment_inputs import plan_parameter_inputs
 from .experiment_planning import bind_experiment
-from .models import ContractModel, Experiment, Hypothesis, InvestigationResult, Invariant
+from .models import ContractModel, Experiment, ExperimentStep, Hypothesis, InvestigationResult, Invariant
 from .reasoning import (
     access_control_invariant,
     build_evidence,
@@ -76,20 +76,51 @@ def _attach_input_plan(
     experiment: Experiment,
     constraints: tuple[ConstraintEvidence, ...],
 ) -> Experiment:
+    """Attach complete ABI argument vectors to the experiment and its sequence steps.
+
+    The same generic input-planning capability must serve both single-call and
+    ordered experiments. A sequence planner may identify a causally relevant peer
+    with only a placeholder argument; the orchestration boundary resolves that
+    placeholder against the peer function's actual parameter model. No invariant
+    class or benchmark-specific knowledge is used here.
+    """
     function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
-    if function is None:
-        return experiment
-    vector = plan_parameter_inputs(
-        function.parameters,
-        constraints,
-        function_name=function.name,
-    )
-    return bind_experiment(
-        hypothesis,
-        experiment,
-        target_function=function.name,
-        planned_inputs=vector,
-    )
+    bound = experiment
+    if function is not None:
+        vector = plan_parameter_inputs(
+            function.parameters,
+            constraints,
+            function_name=function.name,
+        )
+        bound = bind_experiment(
+            hypothesis,
+            experiment,
+            target_function=function.name,
+            planned_inputs=vector,
+        )
+
+    if not bound.steps:
+        return bound
+
+    functions = {item.name: item for item in contract.functions}
+    planned_steps: list[ExperimentStep] = []
+    for step in bound.steps:
+        step_function = functions.get(step.function)
+        if step_function is None:
+            planned_steps.append(step)
+            continue
+        vector = plan_parameter_inputs(
+            step_function.parameters,
+            constraints,
+            function_name=step_function.name,
+        )
+        # An empty vector is the explicit "not safely planned" signal from the
+        # generic planner. Preserve the existing step so the renderer fails closed
+        # rather than inventing ABI values for custom/unknown types.
+        arguments = vector if vector or not step_function.parameters else ()
+        planned_steps.append(replace(step, arguments=arguments))
+
+    return replace(bound, steps=tuple(planned_steps))
 
 
 def investigate(
