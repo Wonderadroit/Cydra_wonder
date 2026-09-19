@@ -100,7 +100,6 @@ def compile_state_effects(project: str | Path, source: str | Path, *, build_path
                 if isinstance(version, str):
                     versions.add(version)
                 evidence.extend(extract_state_effects_from_build_info(build_file, source_path, project_path))
-                constraints.extend(extract_parameter_constraints(build_file, source_path, project_path) if False else ())
                 constraints.extend(extract_constraints_from_build_info(build_file, source_path, project_path))
             except (OSError, json.JSONDecodeError):
                 continue
