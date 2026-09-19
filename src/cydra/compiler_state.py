@@ -66,17 +66,19 @@ def extract_constraints_from_build_info(build_info: Path, source: Path, project:
 def compile_state_effects(project: str | Path, source: str | Path, *, build_paths: tuple[str | Path, ...] = ()) -> CompilerEvidenceResult:
     """Compile a Foundry project and consume compiler AST evidence when available.
 
+    The selected source is compiled with the target's light profile where available,
+    avoiding target-specific optimized/via-IR settings when only AST semantics are needed.
     Compilation failure is a capability gap, not evidence that no state effect exists.
     """
     project_path = Path(project).resolve()
     source_path = Path(source).resolve()
-    command = ("forge", "build", "--build-info", "--skip", "test", "--skip", "script", "--threads", "0")
+    command = ("forge", "build", "--build-info", "--profile", "lite", "--skip", "test", "--skip", "script", "--threads", "0")
     if not project_path.exists() or not source_path.exists():
         return CompilerEvidenceResult((), (), False, "input_missing", command, "", "project or source missing")
 
     with tempfile.TemporaryDirectory(prefix="cydra-build-info-", dir=project_path.parent) as temp:
         info_path = Path(temp)
-        command = ["forge", "build", "--build-info", "--build-info-path", str(info_path), "--skip", "test", "--skip", "script", "--threads", "0"]
+        command = ["forge", "build", "--build-info", "--build-info-path", str(info_path), "--profile", "lite", "--skip", "test", "--skip", "script", "--threads", "0"]
         for build_path in build_paths:
             relative = Path(build_path)
             if relative.is_absolute():
@@ -87,7 +89,7 @@ def compile_state_effects(project: str | Path, source: str | Path, *, build_path
         build_files = tuple(sorted(info_path.rglob("*.json")))
         if completed.returncode != 0:
             return CompilerEvidenceResult((), (), True, "compile_failed", command, completed.stdout, completed.stderr, tuple(map(str, build_files)))
-        
+
         evidence: list[SemanticRelationshipEvidence] = []
         constraints: list[ConstraintEvidence] = []
         versions: set[str] = set()
@@ -98,6 +100,7 @@ def compile_state_effects(project: str | Path, source: str | Path, *, build_path
                 if isinstance(version, str):
                     versions.add(version)
                 evidence.extend(extract_state_effects_from_build_info(build_file, source_path, project_path))
+                constraints.extend(extract_parameter_constraints(build_file, source_path, project_path) if False else ())
                 constraints.extend(extract_constraints_from_build_info(build_file, source_path, project_path))
             except (OSError, json.JSONDecodeError):
                 continue
