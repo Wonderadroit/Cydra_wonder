@@ -106,5 +106,12 @@ def test_compile_state_effects_scopes_forge_build_to_selected_paths(tmp_path, mo
         "--build-info",
         "--build-info-path",
         calls[0][4],
+        "--no-optimize",
+        "--skip",
+        "test",
+        "--skip",
+        "script",
+        "--threads",
+        "0",
         "src/Fixture.sol",
     )]
