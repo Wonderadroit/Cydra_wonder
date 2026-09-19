@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -57,7 +58,7 @@ def main() -> int:
             generated = generate_blind_authorization_test_from_experiment(
                 hypothesis,
                 experiment,
-                str(Path(contract.source).relative_to(project)).replace("\\", "/"),
+                os.path.relpath(Path(contract.source), output.parent).replace(os.sep, "/"),
                 contract.name,
                 output,
                 contract,
