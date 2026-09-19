@@ -86,3 +86,15 @@ def test_ast_semantics_ignore_source_comment_or_string_text():
                          "kind": "string", "value": "value = 999;"}}
     ])])
     assert not _relations(ast)
+
+
+def test_transition_evidence_preserves_operator_semantics():
+    ast = _ast([_function(20, "add", [
+        {"nodeType": "Assignment", "id": 30, "operator": "+=",
+         "leftHandSide": _identifier(31, 10, "value"),
+         "rightHandSide": {"nodeType": "Literal", "id": 32, "value": "1"}}
+    ])])
+    evidence = extract_ast_relationships(ast, "Fixture.sol")
+    transition = next(item for item in evidence if item.relation == "transition_expression")
+    assert transition.metadata["operator"] == "+="
+    assert transition.metadata["semantic_relation"] == "read_write"
