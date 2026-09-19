@@ -63,7 +63,7 @@ contract CydraBlindAuthorizationTest is Test {{
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
-        vm.record();
+        vm.startStateDiffRecording();
         vm.prank(attacker);
         (bool ok,) = address(target).call(
             abi.encodeWithSignature(
@@ -71,8 +71,17 @@ contract CydraBlindAuthorizationTest is Test {{
                 {arguments}
             )
         );
-        (, bytes32[] memory writes) = vm.accesses(address(target));
-        bool unauthorizedMutation = ok && writes.length > 0;
+        Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+        bool unauthorizedMutation = false;
+        for (uint256 i = 0; i < accesses.length; i++) {{
+            if (accesses[i].account != address(target)) continue;
+            for (uint256 j = 0; j < accesses[i].storageAccesses.length; j++) {{
+                Vm.StorageAccess memory access = accesses[i].storageAccesses[j];
+                if (access.isWrite && !access.reverted && access.oldValue != access.newValue) {{
+                    unauthorizedMutation = true;
+                }}
+            }}
+        }}
         assertTrue(
             !unauthorizedMutation,
             "{marker}: unauthorized caller mutated modeled administrative state"
