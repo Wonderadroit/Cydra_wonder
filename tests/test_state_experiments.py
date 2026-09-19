@@ -75,6 +75,6 @@ def test_cross_function_state_sequence_planner_binds_modeled_abi_arity():
     experiment = plan_cross_function_state_experiment(hypothesis, contract=contract)
 
     assert experiment.steps == (
-        ExperimentStep("increase", ("1", "address(0)")),
+        ExperimentStep("increase", ("1", "address(0xCAFE)")),
         ExperimentStep("decrease", ("1",)),
     )
