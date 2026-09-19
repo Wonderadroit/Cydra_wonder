@@ -14,7 +14,7 @@ on:
 
 jobs:
   # State-diff-backed one-sided authorization verification.
-  # Regression trigger after compiler namespace fix.
+  # Regression trigger after direct authorization assertion fix.
   blind-authorization:
     runs-on: ubuntu-latest
     steps:
