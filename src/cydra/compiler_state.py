@@ -70,13 +70,13 @@ def compile_state_effects(project: str | Path, source: str | Path, *, build_path
     """
     project_path = Path(project).resolve()
     source_path = Path(source).resolve()
-    command = ("forge", "build", "--build-info", "--no-optimize", "--skip", "test", "--skip", "script", "--threads", "0")
+    command = ("forge", "build", "--build-info", "--skip", "test", "--skip", "script", "--threads", "0")
     if not project_path.exists() or not source_path.exists():
         return CompilerEvidenceResult((), (), False, "input_missing", command, "", "project or source missing")
 
     with tempfile.TemporaryDirectory(prefix="cydra-build-info-", dir=project_path.parent) as temp:
         info_path = Path(temp)
-        command = ["forge", "build", "--build-info", "--build-info-path", str(info_path), "--no-optimize", "--skip", "test", "--skip", "script", "--threads", "0"]
+        command = ["forge", "build", "--build-info", "--build-info-path", str(info_path), "--skip", "test", "--skip", "script", "--threads", "0"]
         for build_path in build_paths:
             relative = Path(build_path)
             if relative.is_absolute():
@@ -87,7 +87,7 @@ def compile_state_effects(project: str | Path, source: str | Path, *, build_path
         build_files = tuple(sorted(info_path.rglob("*.json")))
         if completed.returncode != 0:
             return CompilerEvidenceResult((), (), True, "compile_failed", command, completed.stdout, completed.stderr, tuple(map(str, build_files)))
-
+        
         evidence: list[SemanticRelationshipEvidence] = []
         constraints: list[ConstraintEvidence] = []
         versions: set[str] = set()
