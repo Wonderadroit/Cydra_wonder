@@ -246,7 +246,7 @@ def main() -> int:
         oid = "observation:cross-contract-readonly"
         model.add_node(Node(iid, "invariant", hypothesis.claim, {"status": "inferred"}))
         model.add_node(Node(hid, "hypothesis", hypothesis.claim, {"belief": 0.5}))
-        model.add_node(Node(oid, "observation", "external state-derived reads differ during a callback", {"status": "observed", "hypothesis_id": hid, "binding_status": "bound"}))
+        model.add_node(Node(oid, "observation", "external state-derived reads differ during a callback", {"status": "planned", "hypothesis_id": hid, "binding_status": "bound"}))
         model.add_edge(Edge(iid, "informs", hid, {}))
         model.add_edge(Edge(oid, "tests", hid, {}))
 
