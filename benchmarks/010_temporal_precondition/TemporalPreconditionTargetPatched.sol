@@ -5,6 +5,7 @@ contract TemporalPreconditionTarget {
     function schedule(bytes32 id) external { timestamps[id] = block.timestamp; }
     function isReady(bytes32 id) public view returns (bool) { return timestamps[id] != 0 && timestamps[id] <= block.timestamp; }
     function execute(bytes32 id) external {
+        require(isReady(id), "not ready");
         this.schedule(id);
         require(isReady(id), "not ready");
         timestamps[id] = 2;
