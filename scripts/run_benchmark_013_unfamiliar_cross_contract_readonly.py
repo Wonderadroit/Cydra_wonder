@@ -12,11 +12,23 @@ from cydra.canonical_cycle import run_canonical_differential_cycle
 from cydra.foundry import run_foundry_test, require_executed
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
 from cydra.hypotheses import Hypothesis as CH
+from cydra.models import Experiment
 from cydra.system_model import SystemModel, Node, Edge
 
 TARGET_REPO = "https://github.com/sherlock-audit/2023-04-blueberry.git"
 TARGET_REF = "1f123ee62b0479637557ea320493249059db6981"
 TARGET_SOURCE = "blueberry-core/contracts/oracle/BalancerPairOracle.sol"
+
+
+def plan_cross_contract_experiment(hypothesis):
+    return Experiment(
+        experiment_id=f"EXP-XREADONLY-{hypothesis.target_function}",
+        hypothesis_id=hypothesis.hypothesis_id,
+        action="invoke the state-derived public view from an external callback while one queried component is in an intermediate state",
+        discriminates=("callback-time observation differs from settled observation",),
+        cost=1.0,
+        target_function=hypothesis.target_function,
+    )
 
 
 def clone_target(root: Path) -> Path:
@@ -210,6 +222,7 @@ def main() -> int:
             source,
             target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_SOURCE}",
             reasoning_surfaces=(generate_cross_contract_read_only_reentrancy_hypotheses,),
+            experiment_planner=plan_cross_contract_experiment,
         )
         hypotheses = [
             h for h in investigation.hypotheses
