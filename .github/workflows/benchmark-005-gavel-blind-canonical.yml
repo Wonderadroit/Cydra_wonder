@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 
 # Only the latest commit is meaningful for this frozen blind benchmark.
+# State surface is included as a diagnostic execution-only experiment.
 # Prevent superseded matrix runs from accumulating in the queue.
 concurrency:
   group: benchmark-005-gavel-${{ github.event.pull_request.number || github.ref }}
