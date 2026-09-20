@@ -32,7 +32,7 @@ def run_side(source, h, label):
 
 def canonical_model(h):
     model=SystemModel()
-    cid="contract:Vault"; fid="function:Vault:syncStrategy"; iid=f"invariant:{h.invariant_id}"; hid=f"hypothesis:{h.hypothesis_id}"; oid="observation:cross-contract-backing"
+    cid="contract:Vault"; fid="function:Vault:syncStrategy"; iid=f"invariant:{h.invariant_id}"; hid=f"hypothesis:{h.hypothesis_id}"; oid="cross-contract-backing"
     model.add_node(Node(cid,"contract","Vault",{"provenance":"solidity_model"}))
     model.add_node(Node(fid,"function","syncStrategy",{"contract":"Vault","provenance":"solidity_model"}))
     model.add_node(Node(iid,"invariant",h.claim,{"status":"inferred","confidence":0.80,"provenance":"cross-contract economic reasoning"}))
