@@ -236,11 +236,13 @@ def _initializer_argument(
         return runtime_arguments[parameter.name], None
     parameter_type = parameter.type.strip()
     if parameter_type.endswith("[]"):
-        # A zero-length array is often rejected by real initializers as an
-        # invalid boundary. For struct/custom arrays, one zero-initialized
-        # element is a generic valid-shape probe; no target-specific field is
-        # invented.
-        return f"new {parameter_type[:-2]}[](1)", None
+        base = parameter_type[:-2].strip()
+        # Preserve the conservative empty boundary for primitive arrays.
+        # For a source-defined struct array, provide one zero-initialized
+        # element so initializers that require a non-empty collection can
+        # execute without inventing target-specific field values.
+        length = "1" if "." in base else "0"
+        return f"new {base}[]({length})", None
     if parameter_type.startswith("address"):
         return ("payable(address(0))" if parameter_type == "address payable" else "address(0)"), None
     if parameter_type.startswith(("uint", "int")):
