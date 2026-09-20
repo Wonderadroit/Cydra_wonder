@@ -45,7 +45,7 @@ def _has_external_inflow_attribution_gap(body: str) -> bool:
     )
     transfer = re.search(r"\b\w+\.(?:safeTransferFrom|transferFrom)\s*\([^;]+\)", normalized)
     received = re.search(
-        r"\b(?:uint\w*\s+)?(?P<received>\w+)\s*=\s*\w+\.balanceOf\s*\(\s*address\s*\(\s*this\s*\)\s*-\s*(?P<before>\w+)\s*;",
+        r"\b(?:uint\w*\s+)?(?P<received>\w+)\s*=\s*\w+\.balanceOf\s*\(\s*address\s*\(\s*this\s*\)\s*\)\s*-\s*(?P<before>\w+)\s*;",
         normalized,
     )
     if not (snapshot and transfer and received):
