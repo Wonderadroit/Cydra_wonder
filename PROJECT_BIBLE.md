@@ -1125,3 +1125,50 @@ The final machine-readable artifact records:
 This milestone materially expands the Solidity generalization evidence into storage-reference semantics / state persistence, a mechanism that the previous reasoning surfaces did not recognize. The result is bounded to the demonstrated persistence violation: acknowledgeEdge can return successfully while the intended acknowledgment state remains unchanged. No broader impact is asserted without additional evidence.
 
 The Solidity maturity gate remains open. The next investigation should continue toward another unfamiliar mechanism, preferably one that initially breaks the current reasoning surfaces, while preserving the same blind, causal, independent-reproduction, and fail-closed finding gate.
+
+
+## 57. Unfamiliar Tapioca double-debit fund-flow — blind causal finding with independent reproduction
+
+A fifth materially different unfamiliar-target mechanism has completed the full causal/reproduction finding gate: a leveraged purchase flow acquires the economic value into the market through the external executor path and then invokes a collateral-accounting path that pulls the same modeled collateral amount from the caller again, while only one collateral accounting position is recorded.
+
+Target:
+- repository: https://github.com/sherlock-audit/2024-02-tapioca.git;
+- target source: Tapioca-bar/contracts/markets/bigBang/BBLeverage.sol;
+- target function discovered blind: buyCollateral;
+- related inherited mechanisms: BBLendingCommon._addCollateral and BBCommon._addTokens.
+
+The new reasoning surface is class-neutral. It looks for the topology external value acquisition → returned value/accounting → subsequent caller-funded pull, then proposes the invariant that one economic amount must not be charged twice while only one persistent accounting position is recorded. It does not encode Tapioca, buyCollateral, the historical issue, or its expected answer.
+
+The blind campaign completed:
+
+**Target → System Model → Fund-Flow Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Synthetic Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+
+Observed CI result from the unfamiliar double-debit backtest (run #11):
+- blind hypothesis: H-DOUBLE-DEBIT-buyCollateral;
+- invariant: INV-DOUBLE-DEBIT-buyCollateral;
+- blind execution: one Foundry test executed and failed because the same modeled economic amount was charged twice;
+- patched causal control: the second caller-funded pull was disabled while retaining the acquired collateral and accounting position;
+- patched execution: one Foundry test executed and passed;
+- causal verification: VERIFIED, chain causal:double-debit-differential;
+- independent vulnerable reproduction: one fresh Foundry test executed and failed with the same double-charge assertion;
+- independent patched reproduction: one fresh Foundry test executed and passed;
+- reproduction verification: VERIFIED;
+- finding gate: READY.
+
+The benchmark binds its hypothesis to the real Tapioca source by requiring the observed buyCollateral, _borrow, leverageExecutor.getCollateral, and _addCollateral topology, plus the inherited _addTokens implementation in BBCommon. The executable Foundry harness is source-derived and isolates that fund-flow causal variable rather than claiming to compile the entire historical Tapioca dependency graph.
+
+The causal control is explicitly synthetic, not a claim that this exact harness edit is the historical production remediation. Its purpose is to isolate whether the second caller-funded pull is the variable that creates the extra economic charge.
+
+The final machine-readable CI artifact records:
+- blind hypothesis and invariant;
+- blind execution: executed=true, tests_run=1, tests_failed=1;
+- patched execution: executed=true, tests_run=1, tests_failed=0;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction_verified: true;
+- finding_gate: READY.
+
+This milestone expands the Solidity generalization evidence into **fund-flow provenance / duplicate economic charging**, distinct from transfer accounting, storage persistence, authorization, initialization, and transient read-only state. The result is bounded to the demonstrated double-charge invariant; broader financial impact is not asserted without additional evidence.
+
+The Solidity maturity gate remains open. The next investigation should continue against an unfamiliar mechanism that is not reducible to an already-covered surface, while preserving blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and fail-closed finding gates.
