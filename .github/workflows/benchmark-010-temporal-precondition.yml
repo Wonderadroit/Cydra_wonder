@@ -1,0 +1,18 @@
+name: CYDRA Benchmark 010 Temporal Precondition
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  temporal-precondition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install -e . pytest
+      - run: pytest -q tests/test_temporal_precondition.py
+      - run: PYTHONPATH=src python scripts/run_benchmark_010_temporal_precondition.py
