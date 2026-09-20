@@ -403,3 +403,23 @@ def test_inherited_interface_resolved_types_are_preserved_in_contract_model(tmp_
     assert inherited.source_path == "interfaces/IMinter.sol"
     assert inherited.resolution_method == "relative_import"
     assert inherited.declared_types == ("AirdropParams", "Mode", "Amount")
+
+
+def test_nested_mapping_writes_are_attributed_to_state_variable(tmp_path: Path) -> None:
+    path = tmp_path / "NestedMapping.sol"
+    path.write_text(
+        """
+        contract NestedMapping {
+            mapping(address => mapping(address => bool)) public approvals;
+            function setApproval(address operator, bool allowed) external {
+                approvals[msg.sender][operator] = allowed;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    function = contract.functions[0]
+    assert contract.state_variables == ("approvals",)
+    assert function.writes == ("approvals",)
