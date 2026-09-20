@@ -1,0 +1,35 @@
+name: CYDRA unfamiliar signature replay backtest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/cydra/**"
+      - "benchmarks/018_signature_replay/**"
+      - "scripts/run_benchmark_018_unfamiliar_signature_replay.py"
+      - "tests/test_signature_replay.py"
+      - ".github/workflows/benchmark-018-unfamiliar-signature-replay.yml"
+  pull_request:
+    paths:
+      - "src/cydra/**"
+      - "benchmarks/018_signature_replay/**"
+      - "scripts/run_benchmark_018_unfamiliar_signature_replay.py"
+      - "tests/test_signature_replay.py"
+      - ".github/workflows/benchmark-018-unfamiliar-signature-replay.yml"
+  workflow_dispatch:
+
+jobs:
+  signature-replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+      - run: python -m pip install -e . pytest
+      - run: pytest -q tests/test_signature_replay.py
+      - run: PYTHONPATH=src python scripts/run_benchmark_018_unfamiliar_signature_replay.py --output backtest-artifacts/signature-replay
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-018-signature-replay
+          path: backtest-artifacts/signature-replay/
