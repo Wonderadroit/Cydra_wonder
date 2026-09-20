@@ -93,11 +93,13 @@ def test_fallback_binds_access_probe_to_selected_target_variable():
     function = FunctionModel(
         name="initialise",
         visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
         parameters=(),
-        mutability="nonpayable",
         authorization_predicates=(),
         state_predicates=(),
-        line=1,
     )
     body = render_initialization_test_body(function, "vault", "0xA11CE", "")
     assert "vault.initialise();" in body
