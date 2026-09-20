@@ -28,7 +28,6 @@ def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
     if base.startswith("bytes") and base[5:].isdigit():
         return f"{base}(0)"
     if abi_only:
-        # Contract/interface constructor parameters are ABI-encoded as addresses.
         return "address(0x1001)"
     return f"{base}(address(0x1001))"
 
@@ -52,12 +51,7 @@ def generate_blind_authorization_test_from_experiment(
     contract_model: ContractModel,
     creation_bytecode: str | None = None,
 ) -> Path:
-    """Render a one-sided authorization invariant test from the canonical plan.
-
-    The renderer is independent of forge-std. When creation bytecode is supplied,
-    deployment is performed with raw EVM CREATE so legacy Solidity constructors do
-    not require Foundry's generated DeployHelper.
-    """
+    """Render a one-sided authorization invariant test from the canonical plan."""
     if hypothesis.invariant_id != "INV-AUTH-001":
         raise ValueError(
             f"Unsupported invariant for blind authorization generation: {hypothesis.invariant_id}"
@@ -101,12 +95,7 @@ def generate_blind_authorization_test_from_experiment(
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    marker = security_assertion_marker()
-    signature_types = ",".join(parameter.type.split()[0] for parameter in function.parameters)
 
-    # If the target function writes a simple public state variable, assert that
-    # state is unchanged after the arbitrary-caller call. This is stronger than
-    # requiring a revert and remains target-agnostic.
     state_getter = None
     state_type = None
     try:
@@ -122,11 +111,23 @@ def generate_blind_authorization_test_from_experiment(
             state_type = match.group(1).strip()
             state_getter = written
             break
+
+    state_view = ""
     if state_getter is not None:
-        state_snapshot = f"        {state_type} beforeState = target.{state_getter}();"
+        if creation_bytecode:
+            state_view = f"""
+interface CydraBlindAuthorizationStateView {{
+    function {state_getter}() external view returns ({state_type});
+}}
+"""
+            state_snapshot = f"        {state_type} beforeState = CydraBlindAuthorizationStateView(target).{state_getter}();"
+            post_state = f"CydraBlindAuthorizationStateView(target).{state_getter}()"
+        else:
+            state_snapshot = f"        {state_type} beforeState = target.{state_getter}();"
+            post_state = f"target.{state_getter}()"
         call_assertion = f'''        require(ok, "{security_assertion_marker()}: authorization call reverted before invariant observation");
         require(
-            target.{state_getter}() == beforeState,
+            {post_state} == beforeState,
             "{security_assertion_marker()}: unauthorized caller mutated modeled administrative state"
         );'''
     else:
@@ -142,7 +143,7 @@ pragma solidity {pragma};
 // Experiment: {experiment.experiment_id}
 // One-sided invariant test: no patched target or benchmark answer is imported.
 {import_line}
-
+{state_view}
 contract CydraBlindAuthorizationTest {{
     {target_declaration}
 
@@ -160,7 +161,7 @@ contract CydraBlindAuthorizationTest {{
 {state_snapshot}
         (bool ok,) = target.call(
             abi.encodeWithSignature(
-                "{function.name}({signature_types})",
+                "{function.name}({','.join(parameter.type.split()[0] for parameter in function.parameters)})",
                 {arguments}
             )
         );
