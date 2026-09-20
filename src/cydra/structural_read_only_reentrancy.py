@@ -130,3 +130,70 @@ def generate_read_only_reentrancy_hypotheses(
             break
 
     return ReadOnlyReentrancyContribution(tuple(invariants), tuple(hypotheses))
+
+
+def generate_cross_contract_read_only_reentrancy_hypotheses(
+    contract: ContractModel, semantic=()
+) -> ReadOnlyReentrancyContribution:
+    """Find view functions that combine live state from external components.
+
+    This surface is intentionally independent of Balancer/Curve names.  It looks
+    for a public/external view that obtains a state vector from one external
+    component and an independently queried denominator/supply/rate from another
+    component, then combines them arithmetically without an observed context
+    guard.  Such a view can be unsafe when called during an external component's
+    state transition.
+    """
+    invariants: list[Invariant] = []
+    hypotheses: list[Hypothesis] = []
+    views = _view_functions(contract)
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ReadOnlyReentrancyContribution((), ())
+
+    for view in views:
+        body = _body(contract, view)
+        if not body or _lock_guarded(contract, view):
+            continue
+        external_reads = re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", body)
+        if len(external_reads) < 2:
+            continue
+        has_state_vector = bool(re.search(
+            r"getPoolTokens|getBalances|getReserves|getAmounts|balances|reserves",
+            body,
+            re.I,
+        ))
+        has_supply_or_rate = bool(re.search(
+            r"totalSupply|getRate|getVirtualSupply|getInvariant|virtualPrice|exchangeRate",
+            body,
+            re.I,
+        ))
+        has_combination = bool(re.search(
+            r"[/\\*]|return\\s*\\(",
+            body,
+        ))
+        if not (has_state_vector and has_supply_or_rate and has_combination):
+            continue
+
+        iid = f"INV-READONLY-XCONTRACT-{view.name}"
+        invariants.append(
+            Invariant(
+                iid,
+                "A security or economic observation must not combine externally readable state from components while one component may be in an intermediate transition state.",
+                "cross-contract external-read topology plus arithmetic state-derived observation",
+                0.70,
+            )
+        )
+        hypotheses.append(
+            Hypothesis(
+                f"H-READONLY-XCONTRACT-{view.name}",
+                f"{view.name} may combine inconsistent externally sourced state during a callback, allowing a consumer to use a transient cross-contract value as if it represented settled state.",
+                iid,
+                view.name,
+                "an external callback that occurs while one queried component is in an intermediate state",
+                f"{view.name} can return a materially different state-derived value during the callback than after the external transition settles",
+                evidence_ids=(f"E-MODEL-EXTERNAL-READS-{view.name}", f"E-MODEL-STATE-DERIVATION-{view.name}"),
+            )
+        )
+    return ReadOnlyReentrancyContribution(tuple(invariants), tuple(hypotheses))
