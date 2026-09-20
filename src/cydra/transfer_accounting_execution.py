@@ -18,7 +18,6 @@ contract CydraTransferAccountingTest is Test {{
         token=new FeeTransferToken();
         vault=new {target_type}(address(token));
         token.mint(address(this),1000);
-        token.approve(address(vault),type(uint256).max);
     }}
     function testInboundCreditMatchesActualReceived() public {{
         vault.deposit(100);
