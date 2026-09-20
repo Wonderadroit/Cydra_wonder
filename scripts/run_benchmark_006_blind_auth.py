@@ -204,8 +204,13 @@ def main() -> int:
                 cwd=execution_project,
                 text=True,
                 capture_output=True,
-                check=True,
             )
+            if bytecode_result.returncode != 0:
+                raise RuntimeError(
+                    "isolated target compilation failed before authorization execution"
+                    f"\\nSTDOUT:\\n{bytecode_result.stdout}"
+                    f"\\nSTDERR:\\n{bytecode_result.stderr}"
+                )
             creation_bytecode = bytecode_result.stdout.strip().removeprefix("0x")
             output = test_path_for(execution_project, f"generated/{hypothesis.hypothesis_id}.t.sol")
             generated = generate_blind_authorization_test_from_experiment(
