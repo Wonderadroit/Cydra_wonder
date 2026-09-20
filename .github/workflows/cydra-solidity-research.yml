@@ -1,4 +1,5 @@
 name: CYDRA Solidity research loop
+# Canonical main pushes exercise the full reproducible research gate.
 
 on:
   push:
