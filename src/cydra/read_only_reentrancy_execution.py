@@ -12,12 +12,17 @@ def generate_read_only_reentrancy_test(
     output_path: str | Path,
     *,
     experiment: Experiment,
+    patched: bool = False,
 ) -> Path:
     if not hypothesis.invariant_id.startswith("INV-READONLY-REENTRANCY-"):
         raise ValueError("unsupported invariant")
     target_import = _layout_aware_import_path(target_import, output_path)
     pragma = contract_model.pragma or "^0.8.20"
     view_name = hypothesis.related_functions[0]
+    if patched:
+        callback_assertion = 'assertTrue(!observer.callbackSucceeded(), "view remained callable during protected callback");'
+    else:
+        callback_assertion = 'assertTrue(observer.callbackSucceeded(), "view was unexpectedly protected before the callback");\n        assertGt(observer.observed(), settledAfter, "no inconsistent intermediate observation");'
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 import {{Test}} from "forge-std/Test.sol";
@@ -40,11 +45,7 @@ contract CydraReadOnlyReentrancyTest is Test {{
 
         assertEq(settledBefore, 1e18);
         assertEq(settledAfter, 1e18);
-
-        if (address(pool).code.length > 0) {{
-            assertTrue(observer.callbackSucceeded(), "view was protected before the callback");
-            assertGt(observer.observed(), settledAfter, "no inconsistent intermediate observation");
-        }}
+        {callback_assertion}
     }}
 }}
 '''
