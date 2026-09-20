@@ -57,7 +57,7 @@ def _has_external_inflow_attribution_gap(body: str) -> bool:
     if not subtracts_received:
         return False
     bounded = bool(re.search(
-        rf"\b(?:min\s*\(|(?:require|assert)\s*\([^;]*\b{re.escape(variable)}\b\s*<=\s*\w+|{re.escape(variable)}\s*=\s*[^;]*\bmin\s*\()",
+        rf"\b(?:min\s*\(|(?:require|assert)\s*\([^;]*\b{re.escape(variable)}\b\s*<=\s*\w+|{re.escape(variable)}\s*=\s*[^;]*\bmin\s*\(|if\s*\(\s*{re.escape(variable)}\s*>\s*\w+\s*\)\s*{re.escape(variable)}\s*=\s*\w+)",
         normalized,
     ))
     return not bounded
