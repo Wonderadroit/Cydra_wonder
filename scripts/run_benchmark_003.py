@@ -96,7 +96,7 @@ def _canonical_model(hypothesis, contract_name: str) -> tuple[SystemModel, Canon
                 "binding_status": "bound",
                 "experiment_binding": {
                     "hypothesis_id": hypothesis_id,
-                    "observation_id": observation_id,
+                    "observation_id": f"observation:{observation_id}",
                     "target_function_id": function_id,
                 },
                 "provenance": "structural arithmetic experiment",
