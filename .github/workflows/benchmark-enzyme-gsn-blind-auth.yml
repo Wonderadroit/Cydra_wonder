@@ -1,0 +1,32 @@
+name: Historical Enzyme GSN Blind Authorization Backtest
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_006_blind_auth.py"
+      - ".github/workflows/benchmark-enzyme-gsn-blind-auth.yml"
+  workflow_dispatch:
+
+jobs:
+  enzyme-gsn-blind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Blind historical Enzyme backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_benchmark_006_blind_auth.py \
+            --target-repo https://github.com/enzymefinance/protocol.git \
+            --target-ref 1b95ec53cbd816386a79098c5b1e64685e6456e2 \
+            --target-path contracts/release/infrastructure/gas-relayer/GasRelayPaymasterLib.sol \
+            --target-project . \
+            --target-npm-dependency @openzeppelin/contracts@3.4.2
