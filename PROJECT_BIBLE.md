@@ -1249,3 +1249,42 @@ This milestone expands the demonstrated Solidity reasoning surface into **single
 Boundary: the benchmark proves the demonstrated invariant violation in the pinned historical Phi source and its causal reproduction. It does not independently assign severity beyond the tested unauthorized repeated claim transition, and it does not generalize the result to all signature-based systems without evidence.
 
 The Solidity maturity gate remains open. The next cycle should deliberately seek a materially different mechanism and unfamiliar target, while preserving direct execution, blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
+## 60. Unfamiliar epoch-boundary accounting — blind causal finding with independent reproduction
+
+An eighth materially distinct Solidity mechanism has now completed the full causal/reproduction finding gate on an unfamiliar target whose **actual pinned repository and dependency graph were executed**: a reward/accounting transition can carry the rate from the epoch containing an unaligned checkpoint across the next epoch boundary because the segment end is calculated as the current position plus a full epoch rather than the next aligned epoch boundary.
+
+Target:
+- repository: https://github.com/code-423n4/2024-01-canto.git;
+- pinned revision: 5e0d6f1f981993f83d0db862bcf1b2a49bb6ff50;
+- source: src/LendingLedger.sol;
+- blind target function: update_market;
+- observed mechanism: BLOCK_EPOCH-aligned cantoPerBlock schedule combined with an unaligned market.lastRewardBlock and iterative reward accumulation.
+
+The new reasoning surface derives the epoch-accounting invariant from the target source. It recognizes an epoch bucket derived from the current position, a next segment expressed as current position + BLOCK_EPOCH, and a bounded interval calculation. The implementation was generalized to preserve Solidity token boundaries and numeric separators and to recover directly from source text when the lightweight model does not expose a function. It does not encode the Canto historical answer.
+
+The blind campaign completed:
+
+**Target → System Model → Epoch Accounting Invariant → Blind Hypothesis → Experiment → Actual Target Execution → Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+
+Observed dedicated CI run #11 (run ID 35539921742, artifact ID 10614910600):
+- blind hypothesis: H-EPOCH-ACCOUNTING-update_market;
+- invariant: INV-EPOCH-ACCOUNTING-update_market;
+- vulnerable execution: executed=true, tests_run=1, tests_failed=1;
+- vulnerable observation: starting at block 50,000 and updating through block 150,000 produced 100,000e18 accumulated CANTO-per-share instead of the piecewise 150,000e18 schedule implied by 50,000 blocks at 1e18/block followed by 50,000 blocks at 2e18/block;
+- patched causal control: only the epoch segment-end expression was changed from i + BLOCK_EPOCH to the next aligned epoch boundary;
+- patched execution: executed=true, tests_run=1, tests_failed=0;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction verification: VERIFIED;
+- finding gate: READY.
+
+The actual pinned Canto repository was cloned and executed with Foundry. The benchmark did not install or mutate an unrelated npm dependency graph. The generated Foundry harness configured two reward epochs, created an unaligned checkpoint, crossed the epoch boundary, and asserted the resulting accounting state. Four fresh target clones were used for vulnerable, patched, independent-vulnerable, and independent-patched executions.
+
+The causal control is explicitly synthetic: it isolates the epoch-segment-end calculation as the causal variable and is not presented as the historical production remediation.
+
+This milestone expands the demonstrated Solidity reasoning surface into **piecewise epoch-boundary accounting / temporal rate partitioning**, distinct from authorization, initialization, transfer/accounting, rounding, transient cross-contract state, storage-reference persistence, duplicate economic charging, signature-domain binding, and single-use signed authorization.
+
+Boundary: this benchmark establishes the invariant violation and causal reproduction in the pinned historical Canto revision. It is evidence of CYDRA's ability to derive and verify this mechanism on a directly executable unfamiliar target; it is not by itself an open-ended proof that every temporal/accounting defect can be discovered.
+
+The Solidity maturity gate remains open. The next cycle should deliberately seek another unfamiliar mechanism that is not reducible to the current reasoning surfaces, while preserving direct execution, blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
