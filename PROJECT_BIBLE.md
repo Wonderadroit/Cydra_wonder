@@ -1035,3 +1035,46 @@ Observed result from the real Alchemix CI campaign (run #301):
 The machine-readable CI artifact records the exact historical target, hypothesis, experiment, execution results, inferred control, causal verification, reproduction verification, and `finding_gate: READY`. The result is bounded to the demonstrated missing-authorization state-transition claim and does not infer impact beyond the executed invariant.
 
 This milestone materially strengthens the Solidity generalization gate because it is a genuinely unfamiliar target and a materially different mechanism from the earlier Morph/Olas initialization and transfer-accounting findings. The hypothesis was generated from the target's observed model, the causal control was inferred from sibling authorization semantics, and the result survived independent vulnerable/patched reproduction. It still does not mean arbitrary Solidity research is solved; the next priority remains another unfamiliar mechanism and continued adversarial generalization.
+
+## 55. Unfamiliar Blueberry cross-contract read-only state — blind causal finding with independent reproduction
+
+A third materially different unfamiliar-target mechanism has now completed the full causal/reproduction finding gate: transient cross-contract state observed through a public state-derived view during an external callback.
+
+Target:
+- repository: `https://github.com/sherlock-audit/2023-04-blueberry.git`;
+- pinned revision: `1f123ee62b0479637557ea320493249059db6981`;
+- source: `blueberry-core/contracts/oracle/BalancerPairOracle.sol`;
+- target function discovered blind: `getPrice`.
+
+The new reasoning surface is class-neutral. It looks for a public/external view that combines state-derived reads from multiple external components (for example a balance/reserve vector with a supply/rate/invariant) and lacks an observed context guard. It then forms the hypothesis that a callback can observe one component while it is in an intermediate state, producing a value that differs from the settled observation. No Blueberry, Balancer, Curve, pool, or historical-answer condition is encoded in the reasoning rule.
+
+The blind campaign completed:
+
+**Target → System Model → Cross-Contract Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Synthetic Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+
+Observed CI result from the Blueberry backtest:
+- blind hypothesis: `H-READONLY-XCONTRACT-getPrice`;
+- invariant: `INV-READONLY-XCONTRACT-getPrice`;
+- blind execution: one Foundry test executed and failed because the callback-time `getPrice` observation differed from the settled-state expectation;
+- patched causal control: one Foundry test executed and the synthetic external-context guard reverted the callback-time observation;
+- causal verification: **VERIFIED**;
+- independent vulnerable reproduction: one fresh Foundry test executed and failed with the same transient-state assertion;
+- independent patched reproduction: one fresh Foundry test executed and the synthetic guard prevented the observation;
+- reproduction verification: **VERIFIED**;
+- finding gate: **READY**.
+
+The causal control is deliberately described as **synthetic**, not as a claim that this exact guard is the historical production remediation. Its purpose is to demonstrate causality: blocking observation while the external component is in the intermediate context removes the observed transient value. The result therefore supports the bounded claim that the target's state-derived view can return a materially different value when queried during an external state transition. Impact beyond that invariant is not asserted.
+
+The CI artifact for run #17 records:
+- target revision and source path;
+- blind hypothesis and invariant;
+- executable vulnerable differential;
+- patched differential;
+- causal verification;
+- independent reproduction;
+- independent patched reproduction;
+- `finding_gate: READY`.
+
+This milestone materially expands the Solidity generalization evidence beyond authorization, initialization, transfer/accounting, rounding, and state-transition parity. It is especially important because the mechanism is **cross-contract**: the vulnerable observation is not merely a local state write/read sequence, but a trust-boundary problem involving externally sourced state observed during another component's transition.
+
+The Solidity maturity gate remains open. The next investigation should seek another unfamiliar target and mechanism, preferably one where the existing reasoning surfaces are initially insufficient, while continuing to reject unsupported impact and target-specific hardcoding.
