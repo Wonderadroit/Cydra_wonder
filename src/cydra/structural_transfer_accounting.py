@@ -81,7 +81,7 @@ def generate_transfer_accounting_hypotheses(contract: ContractModel, semantic=()
         if f.visibility not in {"public","external"}: continue
         body=_body(contract,f); amount=_transfer_argument(body)
         credited = bool(amount) and (_credits_requested_amount(body, amount, contract.state_variables) or (bool(f.writes) and re.search(rf"\b{re.escape(amount)}\b", body)))
-        if not body or "transferFrom" not in body or not amount or not credited or _measures_delta(body): continue
+        if not body or not re.search(r"\.(?:safeTransferFrom|transferFrom)\b", body) or not amount or not credited or _measures_delta(body): continue
         iid=f"INV-TRANSFER-ACCOUNTING-{f.name}"
         invariants.append(Invariant(iid,"Internal credit for an inbound token transfer must equal the actual token balance delta received, not merely the requested transfer amount.","inbound transfer topology plus accounting write",0.78))
         hypotheses.append(Hypothesis(f"H-TRANSFER-ACCOUNTING-{f.name}",f"{f.name} may credit the requested token amount even when the token delivers less, allowing internal accounting to exceed assets actually received.",iid,f.name,"authorized caller able to supply a token with non-standard transfer semantics",f"recorded credit exceeds the contract's actual token balance increase after transfer",evidence_ids=(f"E-MODEL-{f.name}",)))
