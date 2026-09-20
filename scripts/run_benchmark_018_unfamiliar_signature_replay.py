@@ -27,6 +27,7 @@ PATCHED = Path("benchmarks/018_signature_replay/SignatureReplayTargetPatched.sol
 def clone_target(destination: Path) -> Path:
     subprocess.run(("git", "clone", "--recurse-submodules", "--no-tags", TARGET_REPO, str(destination)), check=True)
     ethos = destination / "ethos"
+    subprocess.run(("git", "-C", str(ethos), "fetch", "origin", TARGET_REF), check=True)
     subprocess.run(("git", "-C", str(ethos), "checkout", "--detach", TARGET_REF), check=True)
     return ethos / TARGET_PATH
 
