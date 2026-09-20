@@ -221,3 +221,21 @@ def plan_guard_parity_experiment(hypothesis: Hypothesis) -> Experiment:
         base.target_function,
         base.steps,
     )
+
+
+
+def plan_idempotency_experiment(hypothesis: Hypothesis) -> Experiment:
+    return Experiment(
+        experiment_id=f"X-{hypothesis.hypothesis_id}",
+        hypothesis_id=hypothesis.hypothesis_id,
+        action=(
+            f"Execute {hypothesis.target_function} with the same record identifier repeated in one batch "
+            "and assert that one logical record cannot release value twice; repeat against the patched target."
+        ),
+        discriminates=(
+            "the same record releases value more than once",
+            "the record can be consumed only once",
+        ),
+        cost=2.0,
+        planned_inputs=("0", "0"),
+    )
