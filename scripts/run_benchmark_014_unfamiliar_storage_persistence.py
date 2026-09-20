@@ -72,7 +72,7 @@ struct Edge { Node from; Node to; bool acknowledged; bytes data; }
         """pragma solidity ^0.8.24;
 import {Node, Edge} from "src/shared/Common.sol";
 interface IOpenGraph {
-    function createEdge(Node calldata, Node calldata, bytes calldata) external returns (Edge memory);
+    event NodeTouched(Node node, bytes data);\n    event EdgeCreated(Edge edge, bytes data);\n    function createEdge(Node memory, Node memory, bytes calldata) external returns (Edge memory);
 }
 """,
         encoding="utf-8",
