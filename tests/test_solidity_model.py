@@ -236,6 +236,23 @@ def test_writes_only_include_explicit_state_variables(tmp_path: Path) -> None:
     assert inspect.writes == ()
     assert mutate.writes == ("total",)
 
+def test_writes_capture_increment_and_decrement_state_transitions(tmp_path: Path) -> None:
+    path = tmp_path / "Counter.sol"
+    path.write_text(
+        """
+        contract Counter {
+            uint256 public active;
+            function add() external { active++; }
+            function remove() external { active--; }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    add, remove = parse_solidity(path)[0].functions
+    assert add.writes == ("active",)
+    assert remove.writes == ("active",)
+
 def test_state_predicates_caller_only_regression(tmp_path: Path) -> None:
     path = tmp_path / "CallerOnly.sol"
     path.write_text(
