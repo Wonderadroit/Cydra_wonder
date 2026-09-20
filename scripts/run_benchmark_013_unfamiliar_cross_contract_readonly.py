@@ -209,7 +209,8 @@ def run_side(target_source: Path, patched: bool, label: str):
             )
             test.write_text(text, encoding="utf-8")
         result = run_foundry_test(root, test, label, label)
-        require_executed(result)
+        if not result.executed:
+            raise RuntimeError("UNMEASURABLE: " + json.dumps(result.__dict__, default=str))
         if patched and result.status == "FAIL" and "CYDRA_READONLY_GUARD" in (result.stdout + result.stderr):
             result = replace(result, status="PASS", tests_failed=0)
         return result
