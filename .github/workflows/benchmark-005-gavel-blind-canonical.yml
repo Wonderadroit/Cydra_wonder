@@ -55,7 +55,7 @@ jobs:
             --target-ref bfb5086eb7915d2dc90f52fd761d54bc2806847d \
             --target-path '${{ matrix.target_path }}' \
             --target-project . \
-            --classes initialization authorization arithmetic \
+            --classes initialization authorization arithmetic state \
             --freeze "blind-artifacts/${{ matrix.target_path }}"
 
       - name: Print blind class coverage
