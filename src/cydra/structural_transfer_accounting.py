@@ -23,38 +23,8 @@ def _body(contract, function):
     return ""
 
 def _transfer_argument(body):
-    for match in re.finditer(r"\.(?:safeTransferFrom|transferFrom)\s*\(", body):
-        opening = body.find("(", match.start())
-        depth = 0
-        closing = None
-        for index in range(opening, len(body)):
-            if body[index] == "(":
-                depth += 1
-            elif body[index] == ")":
-                depth -= 1
-                if depth == 0:
-                    closing = index
-                    break
-        if closing is None:
-            continue
-        args_text = body[opening + 1:closing]
-        parts = []
-        current = []
-        depth = 0
-        for char in args_text:
-            if char in "([{":
-                depth += 1
-            elif char in ")]}":
-                depth = max(0, depth - 1)
-            if char == "," and depth == 0:
-                parts.append("".join(current).strip())
-                current = []
-            else:
-                current.append(char)
-        parts.append("".join(current).strip())
-        if len(parts) >= 3 and re.fullmatch(r"[A-Za-z_]\w*", parts[-1]):
-            return parts[-1]
-    return None
+    match = re.search(r"\.(?:safeTransferFrom|transferFrom)\s*\([^;]*,\s*([A-Za-z_]\w*)\s*\)", body)
+    return match.group(1) if match else None
 
 def _credits_requested_amount(body, amount, state_variables=()):
     if not amount:
