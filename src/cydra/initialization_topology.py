@@ -93,6 +93,24 @@ def requires_proxy_initialization(contract_source: str | Path) -> bool:
     return _INITIALIZABLE_MARKER in contract_source and _PROXY_MARKER in contract_source
 
 
+def supports_initializer_disable(contract_source: str | Path) -> bool:
+    """Return whether the reachable target topology exposes _disableInitializers()."""
+    if isinstance(contract_source, Path):
+        try:
+            sources = _reachable_sources(contract_source)
+        except (OSError, RuntimeError):
+            return False
+        for path in sources:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            if re.search(r"\\bfunction\\s+_disableInitializers\\s*\\(", text):
+                return True
+        return False
+    return bool(re.search(r"\\bfunction\\s+_disableInitializers\\s*\\(", contract_source))
+
+
 def adapt_generated_initialization_for_proxy(source: str, target_type: str) -> str:
     """Route initialization through a minimal delegate proxy while preserving msg.sender.
 
