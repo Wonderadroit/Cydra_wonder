@@ -21,6 +21,7 @@ from .reasoning import (
     plan_weighted_average_rounding_experiment,
     plan_guard_parity_experiment,
     plan_temporal_precondition_experiment,
+    plan_idempotency_experiment,
 )
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
@@ -28,6 +29,7 @@ from .structural_rounding import weighted_average_rounding_invariant, generate_w
 from .structural_authorization import generate_structural_access_control_hypotheses
 from .structural_initialization import generate_structural_initialization_hypotheses
 from .structural_guard_parity import generate_guard_parity_hypotheses
+from .structural_idempotency import generate_idempotency_hypotheses
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_guard_parity_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-TEMPORAL-PRECONDITION-"):
         return plan_temporal_precondition_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-IDEMPOTENCY-"):
+        return plan_idempotency_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -179,6 +183,7 @@ def investigate(
         arith = generate_arithmetic_hypotheses(contract)
         rounding = generate_weighted_average_rounding_hypotheses(contract)
         guard_parity = generate_guard_parity_hypotheses(contract, contract_semantic)
+        idempotency = generate_idempotency_hypotheses(contract, contract_semantic)
 
         if auth:
             all_invariants.append(access_control_invariant(contract))
@@ -198,8 +203,9 @@ def investigate(
             surface_invariants.extend(contribution.invariants)
             surface_hypotheses.extend(contribution.hypotheses)
 
-        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *surface_hypotheses)
+        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *idempotency.hypotheses, *surface_hypotheses)
         all_invariants.extend(guard_parity.invariants)
+        all_invariants.extend(idempotency.invariants)
         all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
