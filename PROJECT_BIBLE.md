@@ -493,3 +493,27 @@ The benchmark is successful only when:
 - the finding gate has sufficient evidence and impact assessment.
 
 This milestone does not justify adding The Graph-specific names, ratios, or exploit sequences to the reasoning engine. A failure on another rounding mechanism must be diagnosed as a new general capability gap before code is changed.
+
+## 33. Historical backtest milestone — sibling postcondition parity
+
+A subsequent historical investigation demonstrated another general reasoning capability: a security-relevant postcondition may be enforced by several sibling state-changing transitions while a newly added transition silently omits it.
+
+The implemented capability is class-neutral. It:
+- observes postcondition/guard calls in externally callable state-changing siblings;
+- identifies a shared state surface between guarded peers and an unguarded transition;
+- forms a hypothesis about the missing postcondition rather than naming a vulnerability class;
+- plans a discriminating state-reducing experiment;
+- executes vulnerable and patched counterparts; and
+- sends the differential evidence through the canonical causal-verification and finding gate.
+
+The benchmark fixture is an extracted historical representation of the Euler EToken guard gap. The vulnerable provenance is pinned to the Euler legacy repository commit that introduced `donateToReserves`; the patched counterpart represents the documented post-incident restoration of `checkLiquidity(account)`. This fixture is explicitly recorded as an extracted historical regression, not as a claim that the current Euler repository master is the patched source.
+
+The successful run demonstrated:
+- blind structural hypothesis: `donateToReserves may return after mutating shared state without enforcing the postcondition observed in sibling transitions`;
+- vulnerable execution: FAIL;
+- patched execution: PASS;
+- canonical verification: SUPPORTED;
+- causal verification: VERIFIED;
+- finding gate: READY.
+
+This milestone must not become an Euler-specific detector. The next unfamiliar target must determine whether sibling postcondition parity generalizes beyond the historical extraction.
