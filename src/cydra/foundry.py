@@ -244,9 +244,22 @@ def _initializer_argument(
         length = "1" if "." in base else "0"
         return f"new {base}[]({length})", None
     if parameter_type.startswith("address"):
-        return ("payable(address(0))" if parameter_type == "address payable" else "address(0)"), None
+        return ("payable(address(0xA11CE))" if parameter_type == "address payable" else "address(0xA11CE)"), None
     if parameter_type.startswith(("uint", "int")):
-        return "0", None
+        if parameter_type.startswith("uint") and contract_model is not None:
+            try:
+                source = Path(contract_model.source).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                source = ""
+            if source:
+                epoch_match = re.search(
+                    rf"\\b{re.escape(parameter.name)}\\s*>\\s*block\\.timestamp[\\s\\S]{{0,300}}?\\b{re.escape(parameter.name)}\\s*%\\s*(\\d+)\\s*==\\s*0",
+                    source,
+                )
+                if epoch_match:
+                    epoch = epoch_match.group(1)
+                    return f"((block.timestamp / {epoch}) + 2) * {epoch}", None
+        return "1", None
     if parameter_type == "bool":
         return "false", None
     if parameter_type == "string":
