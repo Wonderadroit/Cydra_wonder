@@ -185,7 +185,8 @@ contract DcntEth {
         target_function="setRouter",
     )
     output = generate_blind_authorization_test_from_experiment(
-        hypothesis, experiment, "../DcntEth.sol", "DcntEth", tmp_path / "generated.t.sol", model
+        hypothesis, experiment, "../DcntEth.sol", "DcntEth", tmp_path / "generated.t.sol", model,
+        creation_bytecode="6000",
     )
     rendered = output.read_text(encoding="utf-8")
     assert "CydraBlindAuthorizationStateView(target).router()" in rendered
