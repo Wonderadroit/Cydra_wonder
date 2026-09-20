@@ -540,3 +540,21 @@ The historical revisions are taken from The Graph contracts repository around co
 This milestone is evidence that CYDRA can independently derive a non-trivial arithmetic invariant, select a discriminating fractional boundary, execute the historical vulnerable and patched implementations, and promote the result through causal verification. It does not justify hard-coding The Graph's function names or exploit answer.
 
 The next development step remains unfamiliar-target testing. If another target fails, diagnose the missing general capability rather than adding a target-specific rule.
+
+
+## 35. Historical backtest milestone — temporal precondition / call-order reasoning
+
+An unfamiliar historical security pattern has now completed the blind differential finding path: a security-relevant precondition can be checked only after an external state-changing call, allowing that call sequence to alter the predicate and make the check succeed retroactively.
+
+The capability is class-neutral. It observes externally callable state-changing functions, detects an external-call-before-precondition topology, forms a temporal invariant, plans an experiment around the predicate changing during the transition, and validates vulnerable versus patched behavior through the canonical causal path.
+
+The historical source pattern is derived from the OpenZeppelin TimelockController vulnerability disclosed in 2021. OpenZeppelin's post-mortem describes the vulnerable ordering in `executeBatch`: calls were executed before the final readiness check, allowing an unprepared batch to schedule itself during execution and become ready; the fix added a readiness check before execution while retaining the post-execution check. This benchmark uses an extracted minimal regression fixture representing that causal shape rather than embedding OpenZeppelin's names or exploit sequence in CYDRA.
+
+Successful blind benchmark 010 evidence:
+- blind hypothesis: `execute may make an external state-changing call before checking a security-relevant precondition, allowing the call sequence to change the predicate and satisfy it retroactively`;
+- vulnerable execution: FAIL;
+- patched execution: PASS;
+- canonical causal verification: VERIFIED;
+- finding gate: READY.
+
+This milestone demonstrates a fourth materially different blind discovery mechanism after authorization, arithmetic rounding, and sibling postcondition parity. It must not become a TimelockController-specific detector. The next unfamiliar target must test whether temporal precondition reasoning generalizes beyond the extracted fixture.
