@@ -33,3 +33,17 @@ contract Target {
 """,
     )
     assert generate_structural_initialization_hypotheses(contract) == ()
+
+def test_initialize_named_entrypoint_is_found_without_initializer_modifier(tmp_path):
+    contract = _parse(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract Target {
+    address owner;
+    function initialise(address account) external { owner = account; }
+}
+""",
+    )
+    hypotheses = generate_structural_initialization_hypotheses(contract)
+    assert [item.target_function for item in hypotheses] == ["initialise"]
+    assert hypotheses[0].evidence_ids == ("E-LIFECYCLE-NAME-initialise",)
