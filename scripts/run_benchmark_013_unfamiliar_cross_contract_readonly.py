@@ -171,7 +171,7 @@ contract CallbackReceiver {
 contract CrossContractTest {
     function testTransientObservation() public {
         BaseOracle base = new BaseOracle();
-        BalancerPairOracle oracle = new BalancerPairOracle(base,address(0x999),2);
+        BalancerPairOracle oracle = new BalancerPairOracle(base);
         MockVault vault = new MockVault(address(0));
         MockPool pool = new MockPool(address(vault));
         vault.setPool(address(pool));
