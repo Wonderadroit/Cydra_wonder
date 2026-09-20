@@ -19,7 +19,7 @@ def _body(contract: ContractModel, function: FunctionModel) -> str:
     except (OSError, UnicodeError):
         return ""
     marker = re.search(
-        rf"\bfunction\s+{re.escape(function.name)}\s*\([^)]*\)[^{]*\{{",
+        rf"\bfunction\s+{re.escape(function.name)}\s*\([^)]*\)[^{{]*\{{",
         source,
     )
     if not marker:
