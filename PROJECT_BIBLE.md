@@ -1206,3 +1206,46 @@ The result demonstrates another generalizable reasoning/execution surface — **
 Important boundary: this milestone demonstrates that CYDRA can independently derive and causally verify the execution-domain invariant from the preserved target source. It does **not** claim a newly discovered production vulnerability in Ethos until CYDRA executes the actual target dependency graph or another independently reproducible target implementation with equivalent semantics.
 
 The Solidity maturity gate remains open. The next cycle should prioritize an unfamiliar target that can be executed directly, so the same signature-domain reasoning can be tested without a source-snapshot boundary.
+
+
+## 59. Unfamiliar single-use signed authorization — blind causal finding on a directly executable target
+
+A seventh materially distinct mechanism has now completed the full causal/reproduction finding gate on an unfamiliar target whose **actual pinned repository and dependency graph were executed**: a valid signed claim can be submitted repeatedly because the claim path records a per-minter consumption marker but does not reject the already-consumed state before recording it again.
+
+Target:
+- repository: https://github.com/code-423n4/2024-08-phi.git;
+- pinned revision: 2465e04364b759c721f1a0aebace69920411f8aa;
+- source: src/PhiFactory.sol;
+- blind target function: signatureClaim;
+- related helper discovered from the target topology: _validateAndUpdateClaimState.
+
+The new reasoning surface is class-neutral. It identifies a signed state-changing entry point, follows its claim-state helper, observes a persistent boolean/mapping consumption marker being written, and asks whether the same marker is checked and rejected before the write. It does not encode Phi, signatureClaim, artMinted, credMinted, or the historical answer.
+
+The blind campaign completed:
+
+**Target → System Model → Single-Use Authorization Invariant → Blind Hypothesis → Experiment → Actual Target Execution → Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+
+Observed dedicated CI run #4 (run ID 35538206816, artifact ID 10613118546):
+- blind hypothesis: H-SIGNATURE-REUSE-signatureClaim;
+- invariant: INV-SIGNATURE-REUSE-signatureClaim;
+- the blind hypothesis bound to the observed _validateAndUpdateClaimState consumption-marker topology;
+- vulnerable execution: executed=true, tests_run=1, tests_failed=1; the exact same signed authorization was accepted twice;
+- patched causal control: the target source was changed only to reject an already-consumed artMinted state with the target's existing AddressAlreadyMinted error;
+- patched execution: executed=true, tests_run=1, tests_failed=0;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction verification: VERIFIED;
+- finding gate: READY.
+
+The executable test used the real Phi claim setup from the pinned repository, generated one valid signed claim, submitted that exact authorization twice, and required the second submission to be rejected. On the vulnerable source the second claim succeeded and the security assertion failed. On the patched control the second claim reverted and the test passed.
+
+This milestone is stronger than Milestone 58 on target provenance: it does not use a preserved source snapshot or a synthetic standalone authorization fixture. CYDRA cloned the pinned Phi repository, initialized its dependencies, installed the repository's declared npm dependencies, compiled the real Solidity project, and executed the generated test against that dependency graph. The patched version is still a causal control, not a claim that the historical production remediation was exactly that edit.
+
+The benchmark also caught and repaired two implementation blockers before reaching READY: the reasoning test initially lacked an explicit recover topology, and the target repository required npm-installed @prb/test dependencies for its existing test harness. The final run was green only after both were resolved.
+
+This milestone expands the demonstrated Solidity reasoning surface into **single-use signed authorization / consumption-state enforcement**, distinct from execution-domain signature binding. It also demonstrates that CYDRA can connect cryptographic authorization evidence to persistent application state and then verify the resulting lifecycle invariant against a real unfamiliar project.
+
+Boundary: the benchmark proves the demonstrated invariant violation in the pinned historical Phi source and its causal reproduction. It does not independently assign severity beyond the tested unauthorized repeated claim transition, and it does not generalize the result to all signature-based systems without evidence.
+
+The Solidity maturity gate remains open. The next cycle should deliberately seek a materially different mechanism and unfamiliar target, while preserving direct execution, blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
