@@ -43,6 +43,11 @@ def _side(source: Path, hypothesis, experiment: Experiment, label: str):
             experiment=experiment,
         )
         result = run_foundry_test(root, test, experiment.experiment_id, label)
+        diagnostics = Path("artifacts")
+        diagnostics.mkdir(parents=True, exist_ok=True)
+        (diagnostics / f"{label}.json").write_text(
+            json.dumps(result.__dict__, indent=2, default=str), encoding="utf-8"
+        )
         require_executed(result)
         return result
 
