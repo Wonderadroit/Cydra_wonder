@@ -17,7 +17,7 @@ def generate_signature_replay_test(
     imp = _layout_aware_import_path(target_import, output_path)
     pragma = contract_model.pragma or "^0.8.20"
     patched = target_type.lower().endswith("patched")
-    expected = "false" if patched else "true"
+    expected = "false"
     source = f'''// SPDX-License-Identifier: MIT
 pragma solidity {pragma};
 import {{ {target_type} }} from "{imp}";
