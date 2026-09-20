@@ -78,9 +78,8 @@ def clone_target(destination: Path) -> Path:
         ("git", "-C", str(destination), "submodule", "update", "--init", "--recursive"),
         check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
-    subprocess.run(
-        # The historical Canto target is a Foundry repository; do not assume npm
-        # is present or mutate the dependency graph unnecessarily.
+    # The historical Canto target is a Foundry repository; do not assume npm
+    # is present or mutate the dependency graph unnecessarily.
     return destination
 
 
