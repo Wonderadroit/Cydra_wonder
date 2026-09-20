@@ -135,7 +135,7 @@ def run_side(label: str, patched: bool) -> ExecutionResult:
             patch_target(root / TARGET_PATH)
         test = write_test(root)
         completed = subprocess.run(
-            ("forge", "test", "--match-path", "test/CydraTransferAccounting.t.sol", "--match-test", "testInboundCreditMatchesActualReceived", "-vv"),
+            ("forge", "test", "--root", ".", "--match-contract", "CydraTransferAccountingTest", "--match-test", "testInboundCreditMatchesActualReceived", "-vv"),
             cwd=root / "registries",
             text=True,
             capture_output=True,
