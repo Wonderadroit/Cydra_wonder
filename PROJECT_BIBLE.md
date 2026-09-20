@@ -580,3 +580,25 @@ Successful blind benchmark 011 evidence:
 During validation, CYDRA exposed and the benchmark repaired two generic execution weaknesses rather than hiding them with target-specific exceptions: the semantic model did not expose a nested mapping write even though source topology showed it, and the execution harness initially selected the first parsed contract rather than the contract containing the hypothesized function. The detector was made tolerant of qualified/enum state assignments, and the execution path now binds to the contract that actually owns the target function. The benchmark also preserves executable diagnostics as CI artifacts for provenance.
 
 This milestone is evidence that CYDRA can derive and prove a non-obvious repeated-record/idempotency failure mechanism on an unfamiliar historical target. It does not justify adding Mt Pelerin-specific names or exploit answers. The next unfamiliar target must test whether idempotency reasoning generalizes beyond this extracted fixture.
+
+
+## 37. Historical backtest milestone — transient read-only state during external callbacks
+
+An unfamiliar historical mechanism has now completed the blind differential finding path: a state-changing transition can expose an intermediate state through an externally callable view while an external callback is executing, allowing a consumer to treat a transient value as settled state.
+
+The capability is class-neutral. It observes externally callable state-changing transitions that write a multi-variable state surface and perform an external value transfer, then compares that surface with externally callable view functions that derive values from the same state. If the view has no observed lock protecting it during the transition, CYDRA forms a hypothesis that the view may expose an inconsistent intermediate value during the callback. The reasoning does not encode Curve, Balancer, LP-token names, oracle names, or the historical exploit sequence.
+
+The historical pattern is represented by an extracted regression fixture based on the documented Curve read-only-reentrancy problem. ChainSecurity reported that Curve's `get_virtual_price` could be manipulated by reentering it during liquidity removal, because the pool could be observed in an incompletely updated state. The benchmark uses only the causal pattern as a learning target, not the historical answer.
+
+Successful blind benchmark 012 evidence:
+- blind hypothesis: the public view may observe an inconsistent intermediate state when called during the external callback of the state-changing transition;
+- discriminating experiment: a receiver reenters the view during the value-transfer callback and compares that observation with the settled value;
+- vulnerable execution: FAIL, because the callback-time view returned the transient value;
+- patched execution: PASS, because the view was protected while the transition was incomplete;
+- canonical causal cycle: completed successfully;
+- causal verification: VERIFIED;
+- finding gate: READY.
+
+The first CI attempt reached the full benchmark but failed after the detector regression test, so the benchmark output was preserved and the workflow was rerun. The repaired run completed successfully, including the actual Foundry differential path. No target-specific exception was added.
+
+This milestone is evidence that CYDRA can reason about a cross-function transient-state/trust-boundary failure that differs materially from authorization, arithmetic rounding, sibling guard parity, temporal ordering, and repeated-record idempotency. The next unfamiliar target must test whether this transient-state reasoning generalizes beyond the extracted fixture.
