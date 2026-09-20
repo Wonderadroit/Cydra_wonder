@@ -4,9 +4,9 @@ from cydra.initialization_shapes import render_initialization_test_body
 from cydra.models import FunctionModel
 
 
-def _function(*, authorization=(), state=()):
+def _function(*, name="initialize", authorization=(), state=()):
     return FunctionModel(
-        name="initialize",
+        name=name,
         visibility="external",
         modifiers=(),
         writes=(),
@@ -44,18 +44,21 @@ def test_state_only_uses_lifecycle_shape():
     assert "vm.prank" not in body
 
 
-def test_neither_uses_direct_fallback_and_logs_undetermined(caplog):
+def test_unclassified_initializer_uses_generic_mutation_probe(caplog):
     with caplog.at_level(logging.WARNING, logger="cydra.initialization_shapes"):
         body = render_initialization_test_body(
-            _function(),
+            _function(name="initialise"),
             "target",
-            "address(0xA11CE)",
-            "params",
+            "0xA11CE",
+            "false, 0, 0, address(0xCAFE)",
         )
-    assert "target.initialize(params);" in body
-    assert "vm.prank" not in body
-    assert "vm.expectRevert" not in body
-    assert "shape undetermined" in caplog.text
+    assert "address unauthorized = address(0xA11CE);" in body
+    assert "vm.record();" in body
+    assert "vm.prank(unauthorized);" in body
+    assert "try target.initialise(false, 0, 0, address(0xCAFE));" in body
+    assert "vm.accesses(address(target))" in body
+    assert "assertGt(writes.length, 0" in body
+    assert "shape undetermined; using generic mutation probe" in caplog.text
 
 
 def test_both_prioritizes_unauthorized_caller_shape():
@@ -71,3 +74,13 @@ def test_both_prioritizes_unauthorized_caller_shape():
     assert "vm.prank(unauthorized);" in body
     assert "vm.expectRevert();" in body
     assert body.count("target.initialize(tokenStub);") == 1
+
+
+def test_initialise_spelling_is_preserved():
+    body = render_initialization_test_body(
+        _function(name="initialise", authorization=("msg.sender != owner",)),
+        "target",
+        "0xA11CE",
+        "false, 0, 0, address(0xCAFE)",
+    )
+    assert "target.initialise(false, 0, 0, address(0xCAFE));" in body
