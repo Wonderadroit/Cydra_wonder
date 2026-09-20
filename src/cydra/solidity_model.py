@@ -480,7 +480,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
             visibility_match = re.search(r"\b(public|external|internal|private)\b", signature_tail)
             visibility = visibility_match.group(1) if visibility_match else "unspecified"
             write_candidates = re.findall(
-                r"\b(\w+)\s*(?:\[[^]]+\])?\s*(?:=(?!=)|\+=|-=|\*=|/=|%=)",
+                r"\b(\w+)\s*(?:\[[^]]+\])?\s*(?:=(?!=)|\+=|-=|\*=|/=|%=|\+\+|--)",
                 body,
             )
             # ``writes`` is a system-model fact, not a list of every local
