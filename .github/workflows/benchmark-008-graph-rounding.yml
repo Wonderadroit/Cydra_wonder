@@ -1,4 +1,5 @@
 name: benchmark-008-graph-rounding
+# CI validation: execute the complete historical blind differential backtest
 
 on:
   workflow_dispatch:
