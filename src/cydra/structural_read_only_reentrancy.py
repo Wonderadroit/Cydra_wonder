@@ -170,7 +170,7 @@ def generate_cross_contract_read_only_reentrancy_hypotheses(
             re.I,
         ))
         has_combination = bool(re.search(
-            r"[/\\*]|return\\s*\\(",
+            r"[/ *]|return\s*\(",
             body,
         ))
         if not (has_state_vector and has_supply_or_rate and has_combination):
