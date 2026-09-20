@@ -78,7 +78,6 @@ def write_test(root: Path) -> Path:
 pragma solidity ^0.8.25;
 
 import {StakingToken} from "../contracts/staking/StakingToken.sol";
-import "../contracts/staking/StakingBase.sol";
 
 contract FeeTransferToken {
     mapping(address => uint256) public balanceOf;
@@ -103,6 +102,24 @@ contract FeeTransferToken {
 
 contract ActivityCheckerProbe {}
 
+struct LocalStakingParams {
+    bytes32 metadataHash;
+    uint256 maxNumServices;
+    uint256 rewardsPerSecond;
+    uint256 minStakingDeposit;
+    uint256 minNumStakingPeriods;
+    uint256 maxNumInactivityPeriods;
+    uint256 livenessPeriod;
+    uint256 timeForEmissions;
+    uint256 numAgentInstances;
+    uint256[] agentIds;
+    uint256 threshold;
+    bytes32 configHash;
+    bytes32 proxyHash;
+    address serviceRegistry;
+    address activityChecker;
+}
+
 contract CydraTransferAccountingTest {
     StakingToken internal target;
     FeeTransferToken internal token;
@@ -112,12 +129,18 @@ contract CydraTransferAccountingTest {
         target = new StakingToken();
         ActivityCheckerProbe activityChecker = new ActivityCheckerProbe();
 
-        uint256[] memory agentIds;
-        StakingParams memory params = StakingParams(
+        uint256[] memory agentIds = new uint256[](0);
+        LocalStakingParams memory params = LocalStakingParams(
             bytes32(uint256(1)), 1, 1, 2, 1, 1, 1, 1, 1,
             agentIds, 0, bytes32(0), bytes32(uint256(1)), address(1), address(activityChecker)
         );
-        target.initialize(params, address(1), address(token));
+        bytes4 selector = bytes4(keccak256(
+            "initialize((bytes32,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256[],uint256,bytes32,bytes32,address,address),address,address)"
+        ));
+        (bool initialized, ) = address(target).call(
+            abi.encodeWithSelector(selector, params, address(1), address(token))
+        );
+        require(initialized, "initialize failed");
         token.mint(address(this), 1000);
         token.approve(address(target), 1000);
     }
