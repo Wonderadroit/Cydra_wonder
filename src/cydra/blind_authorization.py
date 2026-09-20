@@ -7,6 +7,37 @@ from .planned_call import render_function_call
 from .authorization_runtime import security_assertion_marker
 
 
+def _constructor_argument(parameter) -> str:
+    parameter_type = parameter.type.strip()
+    base = parameter_type.split()[0].rstrip("[]")
+    if parameter_type.endswith("[]"):
+        return f"new {base}[](0)"
+    if parameter_type == "address payable":
+        return "payable(address(0x1001))"
+    if base == "address":
+        return "address(0x1001)"
+    if base == "bool":
+        return "false"
+    if base.startswith(("uint", "int")):
+        return "0"
+    if base == "string":
+        return '""'
+    if base == "bytes":
+        return "bytes("")"
+    if base.startswith("bytes") and base[5:].isdigit():
+        return f"{base}(0)"
+    # Legacy Solidity permits explicit address-to-contract/interface conversion.
+    # This keeps the renderer target-generic without importing a modern test library.
+    return f"{base}(address(0x1001))"
+
+
+def _constructor_arguments(contract_model: ContractModel) -> str:
+    constructor = contract_model.constructor
+    if constructor is None:
+        return ""
+    return ", ".join(_constructor_argument(parameter) for parameter in constructor.parameters)
+
+
 def generate_blind_authorization_test_from_experiment(
     hypothesis: Hypothesis,
     experiment: Experiment,
@@ -17,9 +48,9 @@ def generate_blind_authorization_test_from_experiment(
 ) -> Path:
     """Render a one-sided authorization invariant test from the canonical plan.
 
-    No patched target, benchmark answer, or target-specific function name is
-    supplied. The model and planned ABI vector are the only target-specific
-    inputs.
+    The renderer is intentionally independent of forge-std so historical Solidity
+    targets can be tested even when their compiler pragma predates current forge-std.
+    No patched target, benchmark answer, or target-specific function name is supplied.
     """
     if hypothesis.invariant_id != "INV-AUTH-001":
         raise ValueError(
@@ -40,37 +71,39 @@ def generate_blind_authorization_test_from_experiment(
 
     call = render_function_call(experiment, function)
     arguments = call.removeprefix(f"target.{function.name}(").removesuffix(");")
-    signature_types = ",".join(parameter.type.split()[0] for parameter in function.parameters)
+    constructor_arguments = _constructor_arguments(contract_model)
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     marker = security_assertion_marker()
 
+    deployment = (
+        f"new {target_type}({constructor_arguments})"
+        if constructor_arguments
+        else f"new {target_type}()"
+    )
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Experiment: {experiment.experiment_id}
 // One-sided invariant test: no patched target or benchmark answer is imported.
-import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
 
-contract CydraBlindAuthorizationTest is Test {{
+contract CydraBlindAuthorizationTest {{
     {target_type} internal target;
-    address internal attacker = address(0xBEEF);
 
     function setUp() public {{
-        target = new {target_type}();
+        target = {deployment};
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
-        vm.prank(attacker);
         (bool ok,) = address(target).call(
             abi.encodeWithSignature(
-                "{function.name}({signature_types})",
+                "{function.name}({','.join(parameter.type.split()[0] for parameter in function.parameters)})",
                 {arguments}
             )
         );
-        assertTrue(
+        require(
             !ok,
             "{marker}: unauthorized caller successfully invoked protected administrative operation"
         );
