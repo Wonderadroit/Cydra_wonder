@@ -2,6 +2,10 @@ name: CYDRA unfamiliar cross-contract read-only backtest
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/run_benchmark_013_unfamiliar_cross_contract_readonly.py"
+      - "src/cydra/structural_read_only_reentrancy.py"
   push:
     branches: [main]
     paths:
