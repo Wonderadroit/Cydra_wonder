@@ -59,6 +59,8 @@ def _run_side(source: Path, hypothesis, label: str):
         execution = run_foundry_test(
             root, generated, f"X-{hypothesis.hypothesis_id}", label
         )
+        if not execution.executed:
+            raise RuntimeError(f"Foundry experiment {execution.experiment_id} failed before test execution\\nSTDOUT:\\n{execution.stdout}\\nSTDERR:\\n{execution.stderr}")
         require_executed(execution)
         return execution
 
