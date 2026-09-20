@@ -52,10 +52,34 @@ def _credits_requested_amount(body, amount, state_variables=()):
     }
     if not aliases:
         return False
-    return any(
-        re.search(rf"\b{re.escape(state)}\s*=\s*{re.escape(alias)}\b", body)
-        for state in state_variables
+
+    # The Solidity model may not yet include inherited state variables. Recover
+    # only the narrow local-to-state flow needed here: a declared local alias is
+    # assigned into a non-local variable. This is still syntax/data-flow evidence;
+    # it does not assign semantics to arbitrary identifiers.
+    local_variables = {
+        match.group(1)
+        for match in re.finditer(
+            r"\b(?:uint(?:8|16|32|64|128|256)?|int(?:8|16|32|64|128|256)?|address|bool|bytes(?:[1-9]|[12][0-9]|3[0-2])?)\s+([A-Za-z_]\w*)\s*=",
+            body,
+        )
+    }
+    inferred_state_targets = {
+        match.group(1)
         for alias in aliases
+        for match in re.finditer(
+            rf"\b([A-Za-z_]\w*)\s*=\s*{re.escape(alias)}\b",
+            body,
+        )
+        if match.group(1) not in local_variables and match.group(1) != alias
+    }
+    return bool(
+        any(
+            re.search(rf"\b{re.escape(state)}\s*=\s*{re.escape(alias)}\b", body)
+            for state in state_variables
+            for alias in aliases
+        )
+        or inferred_state_targets
     )
 
 def _measures_delta(body):
