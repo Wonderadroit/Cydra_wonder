@@ -36,7 +36,7 @@ def _has_cross_contract_report_gap(source: str) -> tuple[str, str] | None:
     blocks = dict(_contract_blocks(source))
     for vault_name, body in blocks.items():
         call = re.search(
-            r"(?P<var>\w+)\s*=\s*(?P<callee>\w+)\.\w+\s*\([^;]*\)\s*;\s*(?:accountedAssets|totalAssets|assets)\s*\+=\s*(?P=var)\s*;",
+            r"(?:\w+\s+)?(?P<var>\w+)\s*=\s*(?P<callee>\w+)\.\w+\s*\([^;]*\)\s*;\s*(?:accountedAssets|totalAssets|assets)\s*\+=\s*(?P=var)\s*;",
             body,
             re.S,
         )
