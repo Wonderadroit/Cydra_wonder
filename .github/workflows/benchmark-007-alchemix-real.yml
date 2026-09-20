@@ -20,6 +20,11 @@ jobs:
       - name: Install CYDRA
         run: python -m pip install -e .
 
+      - name: Install legacy target dependencies
+        working-directory: /tmp
+        run: |
+          echo "Dependencies are installed by the backtest runner after cloning the target."
+
       - name: Real historical authorization backtest
         env:
           PYTHONPATH: src
