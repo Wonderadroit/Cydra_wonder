@@ -44,7 +44,7 @@ contract CydraRoundingHarness {{
     }}
 }}
 
-contract CydraWeightedAverageRoundingTest {
+contract CydraWeightedAverageRoundingTest {{
     CydraRoundingHarness internal target;
 
     function setUp() public {{
