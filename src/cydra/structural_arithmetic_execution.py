@@ -6,6 +6,7 @@ import re
 
 from .models import ContractModel, Experiment, Hypothesis
 from .planned_call import render_function_arguments
+from .foundry import _layout_aware_import_path
 
 
 @dataclass(frozen=True)
@@ -222,7 +223,7 @@ def generate_structural_arithmetic_security_test(
         raise ValueError("arithmetic security execution requires one target parameter")
 
     pragma = contract_model.pragma or "^0.8.20"
-    target_import = target_import
+    target_import = _layout_aware_import_path(target_import, output_path)
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
