@@ -173,7 +173,6 @@ def main() -> int:
         result = investigate(
             source,
             target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_PATH}",
-            reasoning_surfaces=(generate_transfer_accounting_hypotheses,),
         )
         hypotheses = [h for h in result.hypotheses if h.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-")]
         if len(hypotheses) != 1:
