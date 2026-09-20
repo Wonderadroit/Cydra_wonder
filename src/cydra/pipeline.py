@@ -23,6 +23,7 @@ from .reasoning import (
     plan_temporal_precondition_experiment,
     plan_idempotency_experiment,
     plan_read_only_reentrancy_experiment,
+    plan_transfer_accounting_experiment,
 )
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
@@ -32,6 +33,7 @@ from .structural_initialization import generate_structural_initialization_hypoth
 from .structural_guard_parity import generate_guard_parity_hypotheses
 from .structural_idempotency import generate_idempotency_hypotheses
 from .structural_read_only_reentrancy import generate_read_only_reentrancy_hypotheses
+from .structural_transfer_accounting import generate_transfer_accounting_hypotheses
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_idempotency_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-READONLY-REENTRANCY-"):
         return plan_read_only_reentrancy_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-"):
+        return plan_transfer_accounting_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -189,6 +193,7 @@ def investigate(
         guard_parity = generate_guard_parity_hypotheses(contract, contract_semantic)
         idempotency = generate_idempotency_hypotheses(contract, contract_semantic)
         readonly = generate_read_only_reentrancy_hypotheses(contract, contract_semantic)
+        transfer_accounting = generate_transfer_accounting_hypotheses(contract, contract_semantic)
 
         if auth:
             all_invariants.append(access_control_invariant(contract))
@@ -208,10 +213,11 @@ def investigate(
             surface_invariants.extend(contribution.invariants)
             surface_hypotheses.extend(contribution.hypotheses)
 
-        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *idempotency.hypotheses, *readonly.hypotheses, *surface_hypotheses)
+        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *idempotency.hypotheses, *readonly.hypotheses, *transfer_accounting.hypotheses, *surface_hypotheses)
         all_invariants.extend(guard_parity.invariants)
         all_invariants.extend(idempotency.invariants)
         all_invariants.extend(readonly.invariants)
+        all_invariants.extend(transfer_accounting.invariants)
         all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
