@@ -167,6 +167,11 @@ def main() -> int:
             "hypothesis_id": hid,
             "target_function_id": fid,
             "binding_status": "bound",
+            "experiment_binding": {
+                "hypothesis_id": hid,
+                "observation_id": f"observation:{oid}",
+                "target_function_id": fid,
+            },
         }))
         model.add_edge(Edge(iid, "informs", hid, {}))
         model.add_edge(Edge(f"observation:{oid}", "tests", hid, {}))
