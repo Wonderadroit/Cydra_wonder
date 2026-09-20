@@ -850,3 +850,31 @@ The canonical CI research loop now executes this unfamiliar historical target af
 The result of this campaign must be recorded only after the blind execution artifacts are inspected. A generated hypothesis or measured execution is not itself a confirmed finding. The finding gate still requires causal evidence and reproducibility.
 
 This campaign is evidence for the maturity gate only if CYDRA independently produces and validates the relevant security conclusion without historical-answer leakage. A failure is equally valuable when it identifies the next demonstrated generalization blocker.
+
+
+### 47. Unfamiliar initializer execution — adversarial dependency probing
+
+The Stader campaign exposed a second execution-layer generalization gap after lifecycle discovery was repaired.
+
+A guarded address input cannot always be tested with an arbitrary nonzero EOA. If the target subsequently calls a method on that address, the EOA has no code and the experiment may revert before the hypothesized state transition is observable. That is an execution-input artifact, not evidence that the hypothesis is false.
+
+The generic initialization surface therefore now:
+- recognizes the guarded address as a dependency boundary;
+- deploys a minimal CydraInitializerDependencyProbe with a fallback returning a valid static word;
+- substitutes the deployed probe for the conservative zero-address replacement when the target requires a nonzero address;
+- keeps the probe target-agnostic rather than naming Stader, getAdmin, or the historical exploit;
+- records successful state mutation as the security assertion failure for an arbitrary-caller lifecycle hypothesis;
+- treats revert/no-execution as non-confirmation;
+- binds storage-access observation to the renderer-selected target variable rather than a hard-coded target name.
+
+This is an important distinction in the maturity gate:
+
+**Input validity is not the same as environmental validity.**
+
+An experiment must provide enough adversarial environment for the target's own mechanism to execute, while remaining class-neutral and without importing the historical answer.
+
+### 48. Research-loop CI validation
+
+The canonical Solidity research workflow now also runs for pull requests in addition to main pushes, manual dispatch, and the daily schedule. This makes changes to the blind research machinery subject to the same durable regression/research path before merge.
+
+A workflow being configured is not equivalent to a successful run. CI status and research artifacts must be inspected before a campaign result is counted as evidence.
