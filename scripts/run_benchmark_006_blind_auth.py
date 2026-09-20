@@ -26,6 +26,12 @@ def main() -> int:
     parser.add_argument("--target-ref", required=True)
     parser.add_argument("--target-path", required=True)
     parser.add_argument("--target-project", required=True)
+    parser.add_argument(
+        "--supplemental-file",
+        action="append",
+        default=[],
+        help="Copy a target-relative file from another git ref using path@ref, for historical build repairs.",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -36,6 +42,20 @@ def main() -> int:
         subprocess.run(("git", "-C", str(checkout), "checkout", "--detach", args.target_ref), check=True)
         project = checkout / args.target_project
         source = checkout / args.target_path
+        for supplemental in args.supplemental_file:
+            try:
+                relative_path, supplemental_ref = supplemental.rsplit("@", 1)
+            except ValueError as exc:
+                raise SystemExit(f"Invalid supplemental file {supplemental!r}; expected path@ref") from exc
+            blob = subprocess.run(
+                ("git", "-C", str(checkout), "show", f"{supplemental_ref}:{relative_path}"),
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout
+            destination = checkout / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(blob, encoding="utf-8")
         if (project / "package.json").exists():
             subprocess.run(
                 ("npm", "install", "--legacy-peer-deps", "--ignore-scripts", "--no-audit", "--no-fund"),
