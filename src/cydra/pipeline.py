@@ -173,7 +173,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces or ())
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
@@ -203,7 +203,6 @@ def investigate(
         readonly = generate_read_only_reentrancy_hypotheses(contract, contract_semantic)
         transfer_accounting = generate_transfer_accounting_hypotheses(contract, contract_semantic)
         redemption_rounding = generate_redemption_rounding_hypotheses(contract, contract_semantic)
-        cross_contract_economic = generate_cross_contract_economic_hypotheses(contract, contract_semantic)
 
         if auth:
             all_invariants.append(access_control_invariant(contract))
@@ -223,13 +222,12 @@ def investigate(
             surface_invariants.extend(contribution.invariants)
             surface_hypotheses.extend(contribution.hypotheses)
 
-        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *idempotency.hypotheses, *readonly.hypotheses, *transfer_accounting.hypotheses, *redemption_rounding.hypotheses, *cross_contract_economic.hypotheses, *surface_hypotheses)
+        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *idempotency.hypotheses, *readonly.hypotheses, *transfer_accounting.hypotheses, *redemption_rounding.hypotheses, *surface_hypotheses)
         all_invariants.extend(guard_parity.invariants)
         all_invariants.extend(idempotency.invariants)
         all_invariants.extend(readonly.invariants)
         all_invariants.extend(transfer_accounting.invariants)
         all_invariants.extend(redemption_rounding.invariants)
-        all_invariants.extend(cross_contract_economic.invariants)
         all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
