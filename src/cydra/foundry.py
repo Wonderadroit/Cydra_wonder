@@ -253,7 +253,7 @@ def _initializer_argument(
                 source = ""
             if source:
                 epoch_match = re.search(
-                    rf"\\b{re.escape(parameter.name)}\\s*>\\s*block\\.timestamp[\\s\\S]{{0,300}}?\\b{re.escape(parameter.name)}\\s*%\\s*(\\d+)\\s*==\\s*0",
+                    rf"\b{re.escape(parameter.name)}\s*>\s*block\.timestamp[\s\S]{0,300}?\b{re.escape(parameter.name)}\s*%\s*(\d+)\s*==\s*0",
                     source,
                 )
                 if epoch_match:
