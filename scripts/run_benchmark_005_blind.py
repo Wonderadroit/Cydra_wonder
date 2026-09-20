@@ -122,6 +122,50 @@ def _initializer_zero_guarded_addresses(contract, function_name: str) -> tuple[i
     return tuple(guarded)
 
 
+def _initializer_numeric_argument_replacements(contract, function_name: str) -> dict[int, str]:
+    """Return generic ABI-safe boundary values from simple initializer guards."""
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return {}
+    signature = re.search(
+        rf"\bfunction\s+{re.escape(function_name)}\s*\(([^)]*)\)[^{{;]*\{{",
+        source,
+        re.MULTILINE,
+    )
+    if signature is None:
+        return {}
+    raw_parameters = [item.strip() for item in signature.group(1).split(",") if item.strip()]
+    body = _function_body(source, function_name)
+    replacements: dict[int, str] = {}
+    for index, raw in enumerate(raw_parameters):
+        tokens = raw.split()
+        if len(tokens) < 2 or not tokens[0].startswith(("uint", "int")):
+            continue
+        name = tokens[-1]
+        positive_guard = (
+            re.search(rf"\b{re.escape(name)}\s*>\s*0\b", body)
+            or re.search(rf"\b0\s*<\s*{re.escape(name)}\b", body)
+        )
+        if positive_guard:
+            replacements[index] = "1"
+        time_guard = re.search(
+            rf"\b{re.escape(name)}\s*>\s*block\.timestamp\b.*?\b{re.escape(name)}\s*%\s*(\w+)\s*==\s*0",
+            body,
+            re.DOTALL,
+        )
+        if time_guard:
+            constant = time_guard.group(1)
+            value_match = re.search(
+                rf"\b{re.escape(constant)}\s*=\s*(\d+)\s*;",
+                source,
+            )
+            if value_match:
+                epoch = value_match.group(1)
+                replacements[index] = f"((block.timestamp / {epoch}) + 2) * {epoch}"
+    return replacements
+
+
 def _harden_generated_initializer_arguments(generated: Path, contract, function_name: str) -> None:
     guarded = _initializer_zero_guarded_addresses(contract, function_name)
     if not guarded:
@@ -135,6 +179,9 @@ def _harden_generated_initializer_arguments(generated: Path, contract, function_
     for index in guarded:
         if index < len(arguments) and arguments[index] in {"address(0)", "payable(address(0))"}:
             arguments[index] = "address(0xCAFE)" if arguments[index] == "address(0)" else "payable(address(0xCAFE))"
+    for index, replacement in _initializer_numeric_argument_replacements(contract, function_name).items():
+        if index < len(arguments) and arguments[index] == "0":
+            arguments[index] = replacement
     rewritten = ", ".join(arguments)
     rewritten = re.sub(r"(?<![A-Za-z0-9_])address\(0xCAFE\)", "address(cydraDependency)", rewritten)
     rewritten = re.sub(r"(?<![A-Za-z0-9_])payable\(address\(0xCAFE\)\)", "payable(address(cydraDependency))", rewritten)
