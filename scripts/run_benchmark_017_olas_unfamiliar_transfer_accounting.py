@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -131,6 +132,11 @@ def run_side(label: str, patched: bool) -> ExecutionResult:
     with tempfile.TemporaryDirectory(prefix=f"cydra-olas-transfer-{label}-") as tmp:
         root = Path(tmp) / "target"
         clone_target(root)
+        # Isolate the causal regression from unrelated historical test fixtures.
+        # The target repository contains test files with optional audit-time
+        # dependencies that are irrelevant to StakingToken's production path.
+        for relative in ("registries/test", "registries/contracts/test"):
+            shutil.rmtree(root / relative, ignore_errors=True)
         if patched:
             patch_target(root / TARGET_PATH)
         test = write_test(root)
