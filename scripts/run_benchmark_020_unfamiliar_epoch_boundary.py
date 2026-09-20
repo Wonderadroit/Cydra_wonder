@@ -57,7 +57,7 @@ contract CydraEpochBoundaryTest is Test {
         vm.roll(150_000);
         ledger.update_market(market);
 
-        uint256 observed = ledger.marketInfo(market).accCantoPerShare;
+        (uint128 observed, , ) = ledger.marketInfo(market);
         uint256 expected = 150_000e18;
         assertEq(observed, expected, "epoch-boundary accounting mismatch");
     }
