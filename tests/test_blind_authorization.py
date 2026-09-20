@@ -135,3 +135,59 @@ def test_blind_auth_renderer_handles_legacy_constructor_and_no_forge_std(tmp_pat
     assert 'import {Test} from "forge-std/Test.sol";' not in source
     assert "type(Legacy).creationCode" in source
     assert "abi.encode(IERC20(address(0x1001)), AlEth(address(0x1001)), address(0x1001), address(0x1001))" in source
+
+
+def test_blind_auth_renderer_asserts_modeled_public_state(tmp_path: Path):
+    source = tmp_path / "DcntEth.sol"
+    source.write_text(
+        """pragma solidity ^0.8.13;
+contract DcntEth {
+    address public router;
+    constructor(address endpoint) {}
+    function setRouter(address _router) public {
+        router = _router;
+    }
+}
+""",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "DcntEth",
+        str(source),
+        (
+            FunctionModel(
+                "setRouter",
+                "public",
+                (),
+                ("router",),
+                (),
+                5,
+                (ParameterModel("_router", "address"),),
+            ),
+        ),
+        pragma="^0.8.13",
+    )
+    hypothesis = Hypothesis(
+        "H-AUTH-setRouter",
+        "setRouter may permit an unauthorized caller to mutate privileged state.",
+        "INV-AUTH-001",
+        "setRouter",
+        "arbitrary external caller",
+        "administrative state mutation",
+    )
+    experiment = Experiment(
+        "X-H-AUTH-setRouter",
+        hypothesis.hypothesis_id,
+        "call",
+        ("violation", "preservation"),
+        1.0,
+        planned_inputs=("address(0xCAFE)",),
+        target_function="setRouter",
+    )
+    output = generate_blind_authorization_test_from_experiment(
+        hypothesis, experiment, "../DcntEth.sol", "DcntEth", tmp_path / "generated.t.sol", model
+    )
+    rendered = output.read_text(encoding="utf-8")
+    assert "target.router()" in rendered
+    assert "beforeState" in rendered
+    assert "unauthorized caller mutated modeled administrative state" in rendered
