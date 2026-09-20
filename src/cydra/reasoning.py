@@ -203,6 +203,17 @@ def plan_redemption_rounding_experiment(hypothesis: Hypothesis) -> Experiment:
         target_function=hypothesis.target_function,
     )
 
+def plan_cross_contract_economic_experiment(hypothesis: Hypothesis) -> Experiment:
+    return Experiment(
+        experiment_id=f"X-{hypothesis.hypothesis_id}",
+        hypothesis_id=hypothesis.hypothesis_id,
+        action=f"Trigger {hypothesis.target_function}, then compare internal accounting with the receiving contract's actual asset balance.",
+        discriminates=("reported amount exceeds delivered assets", "internal accounting remains backed by delivered assets"),
+        cost=3.0,
+        planned_inputs=("100",),
+        target_function=hypothesis.target_function,
+    )
+
 def plan_transfer_accounting_experiment(hypothesis: Hypothesis) -> Experiment:
     return Experiment(
         experiment_id=f"X-{hypothesis.hypothesis_id}",
