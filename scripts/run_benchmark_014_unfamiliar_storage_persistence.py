@@ -186,6 +186,8 @@ def _run_side(target: Path, patched: bool, label: str):
         root = Path(tmp) / "project"
         test = _write_harness(target, root, patched)
         result = run_foundry_test(root, test, label, label)
+        if not result.executed:
+            print(json.dumps({"foundry_diagnostic": result.__dict__}, indent=2, default=str))
         require_executed(result)
         return result
 
