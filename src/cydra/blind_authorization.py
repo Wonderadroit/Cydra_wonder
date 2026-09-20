@@ -103,6 +103,35 @@ def generate_blind_authorization_test_from_experiment(
     marker = security_assertion_marker()
     signature_types = ",".join(parameter.type.split()[0] for parameter in function.parameters)
 
+    # Prefer a direct state-preservation assertion when the written state has a
+    # simple public getter. This keeps the experiment class-neutral while testing
+    # the actual modeled effect rather than merely expecting a revert.
+    state_getter = None
+    state_type = None
+    try:
+        source_text = Path(contract_model.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        source_text = ""
+    for written in function.writes:
+        match = re.search(
+            rf"\\b(address(?:\\s+payable)?|bool|uint\\d*|int\\d*)\\s+public\\s+{re.escape(written)}\\s*;",
+            source_text,
+        )
+        if match:
+            state_type = match.group(1).strip()
+            state_getter = written
+            break
+
+    if state_getter is not None:
+        state_snapshot = f"        {state_type} beforeState = target.{state_getter}();"
+        success_assertion = f'''        require(
+            target.{state_getter}() == beforeState,
+            "{marker}: unauthorized caller mutated modeled administrative state"
+        );'''
+    else:
+        state_snapshot = ""
+        success_assertion = ""
+
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -124,16 +153,22 @@ contract CydraBlindAuthorizationTest {{
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
+{state_snapshot}
         (bool ok,) = target.call(
             abi.encodeWithSignature(
                 "{function.name}({signature_types})",
                 {arguments}
             )
         );
-        require(
-            !ok,
-            "{marker}: unauthorized caller successfully invoked protected administrative operation"
-        );
+        if (state_getter == None) {{
+            require(
+                !ok,
+                "{marker}: unauthorized caller successfully invoked protected administrative operation"
+            );
+        }} else {{
+            require(ok, "{marker}: authorization call reverted before invariant observation");
+{success_assertion}
+        }}
     }}
 }}
 '''
