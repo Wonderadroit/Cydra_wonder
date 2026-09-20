@@ -211,6 +211,31 @@ def test_constructor_nested_cast_derives_and_resolves_target_interface(tmp_path:
     ]
 
 
+def test_writes_only_include_explicit_state_variables(tmp_path: Path) -> None:
+    path = tmp_path / "Writes.sol"
+    path.write_text(
+        """
+        contract Writes {
+            uint256 public total;
+            function inspect(uint256 amount) external view returns (uint256) {
+                uint256 localValue = amount;
+                localValue = localValue + 1;
+                return total + localValue;
+            }
+            function mutate(uint256 amount) external {
+                uint256 localValue = amount;
+                total = localValue;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    inspect, mutate = contract.functions
+    assert inspect.writes == ()
+    assert mutate.writes == ("total",)
+
 def test_state_predicates_caller_only_regression(tmp_path: Path) -> None:
     path = tmp_path / "CallerOnly.sol"
     path.write_text(
