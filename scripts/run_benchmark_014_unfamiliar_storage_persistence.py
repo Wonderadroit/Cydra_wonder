@@ -24,7 +24,7 @@ TARGET_SOURCE = "wallflower-contract-v2/src/graph/TitlesGraph.sol"
 
 def _clone(root: Path) -> Path:
     checkout = root / "target"
-    subprocess.run(["git", "clone", "--quiet", "--no-checkout", TARGET_REPO, str(checkout)], check=True)
+    subprocess.run(["git", "clone", "--quiet", "--no-tags", "--no-checkout", TARGET_REPO, str(checkout)], check=True)
     subprocess.run(["git", "-C", str(checkout), "checkout", "--quiet", TARGET_REF], check=True)
     source = checkout / TARGET_SOURCE
     if not source.exists():
