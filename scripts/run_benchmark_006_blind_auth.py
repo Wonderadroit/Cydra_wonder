@@ -140,11 +140,18 @@ def _apply_auth_control(source, function_name, modifier):
 def _patched_auth_test(generated,destination):
     s=generated.read_text(encoding="utf-8")
     patched, count = re.subn(
-        r'assertTrue\(ok,\s*"[^"]*"\);',
+        r'require\(ok,\s*"[^"]*"\);',
         "if (!ok) return;",
         s,
         count=1,
     )
+    if count == 0:
+        patched, count = re.subn(
+            r'require\(\s*!ok,\s*"[^"]*"\s*\);',
+            "if (!ok) return;",
+            s,
+            count=1,
+        )
     if count != 1:
         raise RuntimeError("authorization assertion marker missing")
     destination.write_text(patched,encoding="utf-8")
