@@ -78,7 +78,7 @@ def write_test(root: Path) -> Path:
 pragma solidity ^0.8.25;
 
 import {StakingToken} from "../contracts/staking/StakingToken.sol";
-import {StakingParams} from "../contracts/staking/StakingBase.sol";
+import "../contracts/staking/StakingBase.sol";
 
 contract FeeTransferToken {
     mapping(address => uint256) public balanceOf;
