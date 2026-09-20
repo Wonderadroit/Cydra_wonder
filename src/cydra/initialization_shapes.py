@@ -44,7 +44,7 @@ def _lifecycle_shape(function_model: FunctionModel, target_var: str, initialize_
 def _fallback_shape(function_model: FunctionModel, target_var: str, unauthorized_addr: str, initialize_args_str: str) -> str:
     """Probe an unclassified lifecycle entrypoint for unauthorized state mutation."""
     LOGGER.warning("shape undetermined; using generic mutation probe")
-    call = _call(function_model, target_var, initialize_args_str)
+    call = f"{target_var}.{function_model.name}({initialize_args_str})"
     return (
         "function testInitializationInterfaceIsCallable() public {\n"
         f"    address unauthorized = address({unauthorized_addr});\n"
