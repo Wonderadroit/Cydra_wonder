@@ -239,3 +239,21 @@ def plan_idempotency_experiment(hypothesis: Hypothesis) -> Experiment:
         cost=2.0,
         planned_inputs=("0", "0"),
     )
+
+
+def plan_read_only_reentrancy_experiment(hypothesis: Hypothesis) -> Experiment:
+    return Experiment(
+        experiment_id=f"X-{hypothesis.hypothesis_id}",
+        hypothesis_id=hypothesis.hypothesis_id,
+        action=(
+            f"Trigger {hypothesis.target_function} from a receiver that calls the related view "
+            "during the external callback, then compare the callback observation with the settled value."
+        ),
+        discriminates=(
+            "the view returns a materially inconsistent intermediate value",
+            "the view is unavailable or protected while the state transition is incomplete",
+        ),
+        cost=3.0,
+        planned_inputs=("10",),
+        target_function=hypothesis.target_function,
+    )
