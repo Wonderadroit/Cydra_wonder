@@ -114,6 +114,7 @@ def test_blind_auth_renderer_handles_legacy_constructor_and_no_forge_std(tmp_pat
                 ParameterModel("_governance", "address"),
                 ParameterModel("_sentinel", "address"),
             ),
+            20,
         ),
         pragma="^0.6.12",
     )
