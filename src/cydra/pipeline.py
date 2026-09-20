@@ -20,6 +20,7 @@ from .reasoning import (
     plan_initialization_experiment,
     plan_weighted_average_rounding_experiment,
     plan_guard_parity_experiment,
+    plan_temporal_precondition_experiment,
 )
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
@@ -68,6 +69,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
     }
     if hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
         return plan_guard_parity_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-TEMPORAL-PRECONDITION-"):
+        return plan_temporal_precondition_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
