@@ -174,7 +174,7 @@ abstract contract UUPSUpgradeable {
     return generate_storage_persistence_test(
         hypothesis,
         contract,
-        "../src/graph/TitlesGraph.sol",
+        "../../src/graph/TitlesGraph.sol",
         "TitlesGraph",
         out,
         experiment=experiment,
