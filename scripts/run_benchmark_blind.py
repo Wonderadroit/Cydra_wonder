@@ -24,14 +24,24 @@ from cydra.foundry import (
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.pipeline import investigate
 from cydra.planned_foundry import generate_authorization_test_from_experiment
-from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment
+from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment, plan_guard_parity_experiment
 from cydra.sequence_foundry import generate_sequence_test_from_experiment
 from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
+from cydra.guard_parity_execution import generate_guard_parity_test
 
-SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state"}
+SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
 
 CLASS_CAPABILITIES = {
+    "guard_parity": {
+        "extract": True,
+        "generate_hypothesis": True,
+        "plan_experiment": True,
+        "generate_foundry": True,
+        "execute_blind": True,
+        "classify_blind": False,
+        "classify_block_reason": "guard-parity differential classification requires a patched counterpart",
+    },
     "state": {
         "extract": True,
         "generate_hypothesis": True,
@@ -268,6 +278,23 @@ def _run_initialization(project: Path, hypothesis, experiment, contract) -> dict
     }
 
 
+
+def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+    generated = generate_guard_parity_test(
+        hypothesis, experiment=experiment, contract_model=contract,
+        target_import=_target_import(contract, project), target_type=contract.name,
+        output_path=output,
+    )
+    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    require_executed(execution)
+    return {
+        "generated_path": str(generated),
+        "execution": execution,
+        "classification": "NOT_REACHED",
+        "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
+    }
+
 def run_layers(result, project: Path, classes: tuple[str, ...]):
     experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
     statuses: list[dict[str, Any]] = []
@@ -278,6 +305,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...]):
         class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
         if class_name is None and hypothesis.invariant_id.startswith("INV-STATE-"):
             class_name = "state"
+        if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
+            class_name = "guard_parity"
         if class_name is None or class_name not in classes:
             continue
         capability = CLASS_CAPABILITIES[class_name]
@@ -306,6 +335,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...]):
                 run = _run_state(project, hypothesis, experiment, contract)
             elif class_name == "initialization":
                 run = _run_initialization(project, hypothesis, experiment, contract)
+            elif class_name == "guard_parity":
+                run = _run_guard_parity(project, hypothesis, experiment, contract)
             else:
                 raise AssertionError(f"Unhandled supported class: {class_name}")
         except Exception as error:
@@ -397,6 +428,8 @@ def _environment_provenance(root: Path, project: Path) -> tuple[dict[str, Any], 
 def _blind_planner(hypothesis):
     if hypothesis.invariant_id.startswith("INV-STATE-"):
         return plan_cross_function_state_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
+        return plan_guard_parity_experiment(hypothesis)
     planners = {
         "INV-AUTH-001": plan_access_control_experiment,
         "INV-INIT-001": plan_initialization_experiment,
