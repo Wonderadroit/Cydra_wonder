@@ -132,6 +132,15 @@ def generate_blind_authorization_test_from_experiment(
         state_snapshot = ""
         success_assertion = ""
 
+    if state_getter is None:
+        call_body = f'''        require(
+            !ok,
+            "{marker}: unauthorized caller successfully invoked protected administrative operation"
+        );'''
+    else:
+        call_body = f'''        require(ok, "{marker}: authorization call reverted before invariant observation");
+{success_assertion}'''
+
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
