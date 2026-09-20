@@ -623,3 +623,21 @@ Successful blind benchmark 013 evidence:
 During validation, the execution harness initially exposed two generic runner problems rather than hiding them with target-specific exceptions: the temporary Foundry project lacked the repository's `forge-std` dependency, and the benchmark renderer had temporary diagnostic syntax that was corrected. The final renderer uses only Solidity's native `require`, keeping the extracted regression dependency-free. The benchmark then completed with pytest, Foundry execution on both historical sides, causal verification, and finding-gate promotion all successful.
 
 This milestone is evidence that CYDRA can reason about an asset/accounting conservation boundary that differs materially from authorization, arithmetic rounding, sibling guard parity, temporal ordering, repeated-record idempotency, and transient read-only state. The next unfamiliar target must continue to test transfer/accounting reasoning against a different concrete system before treating the capability as broadly generalized.
+
+## 39. Historical backtest milestone — conservative redemption rounding / empty-market accounting
+
+The next unfamiliar historical investigation after inbound transfer accounting exposed a distinct accounting failure: a withdrawal path can convert a requested asset amount into receipt/share units using integer division and round the required burn down. Under an extreme exchange rate, the one-unit truncation is no longer economically negligible.
+
+The capability is class-neutral. It observes a redemption transition that derives an exchange rate from a supply-backed asset balance, converts a requested asset withdrawal into receipt units by division, and releases assets while the conversion rounds down. It forms the invariant that the required receipt-unit burn must not be below the mathematical ceiling, plans a fractional boundary experiment, and validates vulnerable versus patched behavior through the canonical causal path.
+
+The extracted historical regression represents the causal shape documented in the November 2023 Onyx Protocol incident and the related Compound-v2 empty-market incidents: a near-empty receipt-token market can be given an extreme exchange rate by direct asset inflow, after which redemption rounding can burn fewer receipt units than required. The benchmark intentionally contains no Onyx contract name, exploit sequence, market name, flash-loan choreography, or expected historical answer.
+
+Successful benchmark 014 requires:
+- blind extraction of the redemption-rounding hypothesis;
+- no matching hypothesis on the patched counterpart;
+- executable vulnerable FAIL because the required burn is rounded down;
+- executable patched PASS because the required burn uses the mathematical ceiling;
+- canonical causal verification; and
+- finding-gate readiness.
+
+This milestone is a generalization candidate, not proof that all redemption or share-accounting systems are covered. The next unfamiliar target must determine whether conservative redemption-rounding reasoning transfers to a different concrete accounting system before the capability is treated as broadly generalized.
