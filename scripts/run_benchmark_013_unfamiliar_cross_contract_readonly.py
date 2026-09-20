@@ -234,6 +234,7 @@ def main() -> int:
         if not hypotheses:
             raise SystemExit("No cross-contract transient-state hypothesis extracted")
         hypothesis = hypotheses[0]
+        experiment = next(e for e in investigation.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
 
         vulnerable = run_side(source, False, "blueberry-readonly-vulnerable")
         patched = run_side(source, True, "blueberry-readonly-patched")
