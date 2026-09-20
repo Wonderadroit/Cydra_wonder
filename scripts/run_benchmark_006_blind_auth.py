@@ -20,7 +20,14 @@ _IMPORT_RE = re.compile(r'''\bimport\s+(?:[^\"']+\s+from\s+)?[\"']([^\"']+)[\"']
 
 def _prepare_isolated_foundry_project(target_root: Path, source: Path, destination: Path) -> Path:
     """Copy only the target's local Solidity import closure into a clean Foundry root."""
-    source_root = target_root / "contracts" if (target_root / "contracts").is_dir() else target_root
+    source_root = next(
+        (
+            candidate
+            for candidate in (source.parents)
+            if candidate.name in {"src", "contracts"}
+        ),
+        target_root,
+    )
     src_root = destination / "src"
     src_root.mkdir(parents=True, exist_ok=True)
     test_root = destination / "test" / "generated"
@@ -152,7 +159,14 @@ def main() -> int:
                 package_destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(package_source, package_destination, dirs_exist_ok=True)
 
-        source_root = checkout / "contracts" if (checkout / "contracts").is_dir() else checkout
+        source_root = next(
+            (
+                candidate
+                for candidate in source.parents
+                if candidate.name in {"src", "contracts"}
+            ),
+            project,
+        )
         source_relative = Path(source).relative_to(source_root)
         contract_identifier = f"src/{source_relative}:{Path(source).stem}"
         bytecode_result = subprocess.run(
