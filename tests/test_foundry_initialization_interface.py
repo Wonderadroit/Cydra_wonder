@@ -67,7 +67,7 @@ def test_model_aware_generator_consumes_constructor_and_parameters(tmp_path):
     )
     source = output.read_text(encoding="utf-8")
     assert "new LiquidClawFixture(address(0), address(0), address(0))" in source
-    assert "(bool ok,) = address(target).call(abi.encodeWithSelector(target.initialize.selector, new address[](0), address(0)));" in source
+    assert "(bool ok,) = address(target).call(abi.encodeWithSelector(target.initialize.selector, new address[](0), address(0xA11CE)));" in source
     assert "guardian()" not in source
 
 
