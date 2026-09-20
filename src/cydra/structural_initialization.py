@@ -9,6 +9,7 @@ from .models import ContractModel, Hypothesis
 _FUNCTION_RE = re.compile(r"\bfunction\s+(?P<name>\w+)\s*\([^)]*\)\s*(?P<tail>[^\{;]*)\{", re.MULTILINE)
 _INITIALIZER_MODIFIERS = {"initializer", "reinitializer"}
 _VISIBILITIES = {"public", "external"}
+_LIFECYCLE_NAMES = {"initialize", "initialise", "init"}
 
 
 def _declared_modifiers(contract: ContractModel, function) -> tuple[str, ...]:
@@ -43,8 +44,13 @@ def generate_structural_initialization_hypotheses(contract: ContractModel) -> tu
         if function.visibility not in _VISIBILITIES:
             continue
         modifiers = set(_declared_modifiers(contract, function))
-        if not modifiers.intersection(_INITIALIZER_MODIFIERS):
+        lifecycle_named = function.name.lower() in _LIFECYCLE_NAMES
+        modifier_marked = bool(modifiers.intersection(_INITIALIZER_MODIFIERS))
+        if not (modifier_marked or lifecycle_named):
             continue
+        evidence_id = f"E-MODEL-{function.name}"
+        if lifecycle_named and not modifier_marked:
+            evidence_id = f"E-LIFECYCLE-NAME-{function.name}"
         hypotheses.append(
             Hypothesis(
                 f"H-INIT-{function.name}",
@@ -53,7 +59,7 @@ def generate_structural_initialization_hypotheses(contract: ContractModel) -> tu
                 function.name,
                 "arbitrary external caller",
                 "attacker-controlled initialization or privileged state",
-                evidence_ids=(f"E-MODEL-{function.name}",),
+                evidence_ids=(evidence_id,),
             )
         )
     return tuple(hypotheses)
