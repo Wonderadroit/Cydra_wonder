@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 from cydra.pipeline import investigate
 from cydra.structural_read_only_reentrancy import generate_cross_contract_read_only_reentrancy_hypotheses
-from cydra.canonical_cycle import run_canonical_differential_cycle\nfrom cydra.foundry import run_foundry_test, require_executed
+from cydra.canonical_cycle import run_canonical_differential_cycle
+from cydra.foundry import run_foundry_test, require_executed
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
 from cydra.hypotheses import Hypothesis as CH
 from cydra.system_model import SystemModel, Node, Edge
