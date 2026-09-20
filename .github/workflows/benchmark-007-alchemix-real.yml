@@ -46,3 +46,5 @@ jobs:
             --target-project . \
             --target-npm-dependency @openzeppelin/contracts@3.2.0 \
             --expected-status not_confirmed
+
+# Backtest 007 keeps a patched-target negative control alongside the historical vulnerable run.
