@@ -20,6 +20,7 @@ _IMPORT_RE = re.compile(r'''\bimport\s+(?:[^\"']+\s+from\s+)?[\"']([^\"']+)[\"']
 
 def _prepare_isolated_foundry_project(target_root: Path, source: Path, destination: Path) -> Path:
     """Copy only the target's local Solidity import closure into a clean Foundry root."""
+    source_root = target_root / "contracts" if (target_root / "contracts").is_dir() else target_root
     src_root = destination / "src"
     src_root.mkdir(parents=True, exist_ok=True)
     test_root = destination / "test" / "generated"
@@ -29,7 +30,7 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
     copied: set[Path] = set()
     while pending:
         current = pending.pop()
-        relative = current.relative_to(target_root)
+        relative = current.relative_to(source_root)
         destination_file = src_root / relative
         if current in copied:
             continue
@@ -53,7 +54,15 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
         'src = "src"\n'
         'test = "test"\n'
         'libs = ["lib"]\n'
-        'auto_detect_solc = true\n',
+        'auto_detect_solc = true\n'
+        'remappings = ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"]\n',
+        encoding="utf-8",
+    )
+    hardhat_console = destination / "lib" / "hardhat" / "console.sol"
+    hardhat_console.parent.mkdir(parents=True, exist_ok=True)
+    hardhat_console.write_text("pragma solidity ^0.6.12; library console {}\n", encoding="utf-8")
+    (destination / "remappings.txt").write_text(
+        "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/\n",
         encoding="utf-8",
     )
     return test_root
@@ -138,7 +147,7 @@ def main() -> int:
                 hypothesis,
                 experiment,
                 os.path.relpath(
-                    execution_project / "src" / Path(contract.source).relative_to(checkout),
+                    execution_project / "src" / Path(contract.source).relative_to(checkout / "contracts"),
                     output.parent,
                 ).replace(os.sep, "/"),
                 contract.name,
