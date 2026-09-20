@@ -78,19 +78,59 @@ def _reachable_sources(root: Path) -> tuple[Path, ...]:
     return tuple(ordered)
 
 
+def _contract_inheritance_graph(sources: tuple[Path, ...]) -> dict[str, tuple[Path, tuple[str, ...], str]]:
+    """Build only the contract inheritance graph from the reachable source set."""
+    graph: dict[str, tuple[Path, tuple[str, ...], str]] = {}
+    declaration = re.compile(r"\b(?:abstract\s+)?contract\s+(?P<name>[A-Za-z_]\w*)(?:\s+is\s+(?P<bases>[^\{]+))?\s*\{", re.MULTILINE)
+    for path in sources:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        for match in declaration.finditer(source):
+            body = source[match.end():]
+            depth = 1
+            end = len(body)
+            for index, char in enumerate(body):
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = index
+                        break
+            bases: list[str] = []
+            for raw_base in (match.group("bases") or "").split(","):
+                base_match = re.match(r"\s*([A-Za-z_]\w*)", raw_base)
+                if base_match:
+                    bases.append(base_match.group(1))
+            graph[match.group("name")] = (path, tuple(bases), body[:end])
+    return graph
+
+
 def requires_proxy_initialization(contract_source: str | Path) -> bool:
-    """Return true when the target's reachable initialization topology disables direct initialization."""
+    """Return true when the target contract or an inherited base disables implementation initialization."""
     if isinstance(contract_source, Path):
         try:
             sources = _reachable_sources(contract_source)
         except (OSError, RuntimeError):
             return False
-        for path in sources:
-            try:
-                if _constructor_disables_initializers(path.read_text(encoding="utf-8")):
-                    return True
-            except (OSError, UnicodeError):
+        graph = _contract_inheritance_graph(sources)
+        roots = [name for name, (path, _, _) in graph.items() if path.resolve() == contract_source.resolve()]
+        queue = list(roots)
+        seen: set[str] = set()
+        while queue:
+            name = queue.pop(0)
+            if name in seen:
                 continue
+            seen.add(name)
+            entry = graph.get(name)
+            if entry is None:
+                continue
+            _path, bases, body = entry
+            if _constructor_disables_initializers(body):
+                return True
+            queue.extend(base for base in bases if base not in seen)
         return False
 
     if _constructor_disables_initializers(contract_source):
