@@ -192,6 +192,17 @@ def plan_weighted_average_rounding_experiment(hypothesis: Hypothesis) -> Experim
     )
 
 
+def plan_redemption_rounding_experiment(hypothesis: Hypothesis) -> Experiment:
+    return Experiment(
+        experiment_id=f"X-{hypothesis.hypothesis_id}",
+        hypothesis_id=hypothesis.hypothesis_id,
+        action=f"Execute {hypothesis.target_function} at a fractional asset-to-share boundary and assert the required receipt-unit burn is the mathematical ceiling; repeat against the patched target.",
+        discriminates=("required receipt-unit burn is rounded down", "required receipt-unit burn equals the mathematical ceiling"),
+        cost=2.0,
+        planned_inputs=("3",),
+        target_function=hypothesis.target_function,
+    )
+
 def plan_transfer_accounting_experiment(hypothesis: Hypothesis) -> Experiment:
     return Experiment(
         experiment_id=f"X-{hypothesis.hypothesis_id}",
