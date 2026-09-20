@@ -1,0 +1,61 @@
+name: CYDRA Solidity research loop
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - "benchmarks/**"
+      - "PROJECT_BIBLE.md"
+      - ".github/workflows/cydra-solidity-research.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+concurrency:
+  group: cydra-solidity-research
+  cancel-in-progress: false
+
+jobs:
+  regression-and-historical-backtest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install CYDRA and test runner
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+
+      - name: Run full Python regression suite
+        run: python -m pytest -q
+
+      - name: Run verified unfamiliar-target historical backtest
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_016_olympus_cross_contract_attribution.py
+
+      - name: Publish research result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-solidity-research-${{ github.sha }}
+          path: backtest-artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
