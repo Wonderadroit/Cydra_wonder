@@ -1,0 +1,47 @@
+name: CYDRA unfamiliar storage persistence backtest
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/run_benchmark_014_unfamiliar_storage_persistence.py"
+      - "src/cydra/structural_storage_persistence.py"
+      - "src/cydra/storage_persistence_execution.py"
+      - "tests/test_structural_storage_persistence.py"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/run_benchmark_014_unfamiliar_storage_persistence.py"
+      - "src/cydra/structural_storage_persistence.py"
+      - "src/cydra/storage_persistence_execution.py"
+      - "tests/test_structural_storage_persistence.py"
+
+jobs:
+  storage-persistence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: python -m pip install -e .
+      - name: Python regression
+        env:
+          PYTHONPATH: src
+        run: pytest -q tests/test_structural_storage_persistence.py
+      - name: Unfamiliar historical backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          set -o pipefail
+          mkdir -p backtest-artifacts/storage-persistence
+          python scripts/run_benchmark_014_unfamiliar_storage_persistence.py | tee backtest-artifacts/storage-persistence/result.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unfamiliar-storage-persistence-${{ github.sha }}
+          path: backtest-artifacts/storage-persistence/
+          if-no-files-found: warn
+          retention-days: 30
