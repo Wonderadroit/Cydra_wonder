@@ -51,6 +51,19 @@ jobs:
           PYTHONPATH: src
         run: python scripts/run_benchmark_016_olympus_cross_contract_attribution.py
 
+      - name: Run unfamiliar historical initializer backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p backtest-artifacts/stader-initialization
+          python scripts/run_benchmark_005_blind.py \
+            --target-repo https://github.com/code-423n4/2023-06-stader.git \
+            --target-ref 7566b5a35f32ebd55d3578b8bd05c038feb7d9cc \
+            --target-path contracts/VaultProxy.sol \
+            --target-project . \
+            --classes initialization \
+            --freeze backtest-artifacts/stader-initialization/freeze
+
       - name: Publish research result
         if: always()
         uses: actions/upload-artifact@v4
