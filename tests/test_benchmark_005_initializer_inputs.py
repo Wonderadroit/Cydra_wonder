@@ -29,7 +29,7 @@ def test_blind_initializer_replaces_address_zero_when_target_explicitly_rejects_
 
     runner._harden_generated_initializer_arguments(generated, Contract(source), "initialize")
 
-    assert generated.read_text(encoding="utf-8") == "target.initialize(address(0xCAFE));\n"
+    assert "address(cydraDependency)" in generated.read_text(encoding="utf-8")
 
 
 def test_blind_initializer_preserves_zero_when_no_explicit_zero_guard(tmp_path):
@@ -71,4 +71,43 @@ library UtilLib {
 
     runner._harden_generated_initializer_arguments(generated, Contract(source), "initialize")
 
-    assert generated.read_text(encoding="utf-8") == "target.initialize(address(0xCAFE));\n"
+    assert "address(cydraDependency)" in generated.read_text(encoding="utf-8")
+
+def test_blind_initializer_adds_generic_dependency_probe_for_guarded_address(tmp_path):
+    runner = _runner_module()
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """pragma solidity ^0.8.20;
+contract Target {
+    address config;
+    function initialise(address _staderConfig) external {
+        UtilLib.checkNonZeroAddress(_staderConfig);
+        config = _staderConfig;
+    }
+}
+library UtilLib {
+    function checkNonZeroAddress(address value) internal pure {
+        if (value == address(0)) revert();
+    }
+}
+""",
+        encoding="utf-8",
+    )
+    generated = tmp_path / "generated.t.sol"
+    generated.write_text(
+        """contract CydraInitializationInvariantTest is Test {
+    Target internal target;
+    function setUp() public { target = new Target(); }
+    function testInitializationInterfaceIsCallable() public {
+        target.initialise(address(0));
+    }
+}
+""",
+        encoding="utf-8",
+    )
+    runner._harden_generated_initializer_arguments(generated, Contract(source), "initialise")
+    rendered = generated.read_text(encoding="utf-8")
+    assert "contract CydraInitializerDependencyProbe" in rendered
+    assert "CydraInitializerDependencyProbe internal cydraDependency;" in rendered
+    assert "cydraDependency = new CydraInitializerDependencyProbe();" in rendered
+    assert "target.initialise(address(cydraDependency));" in rendered
