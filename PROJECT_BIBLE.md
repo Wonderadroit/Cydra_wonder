@@ -1078,3 +1078,50 @@ The CI artifact for run #17 records:
 This milestone materially expands the Solidity generalization evidence beyond authorization, initialization, transfer/accounting, rounding, and state-transition parity. It is especially important because the mechanism is **cross-contract**: the vulnerable observation is not merely a local state write/read sequence, but a trust-boundary problem involving externally sourced state observed during another component's transition.
 
 The Solidity maturity gate remains open. The next investigation should seek another unfamiliar target and mechanism, preferably one where the existing reasoning surfaces are initially insufficient, while continuing to reject unsupported impact and target-specific hardcoding.
+
+
+## 56. Unfamiliar TitlesGraph storage-reference persistence — blind causal finding with independent reproduction
+
+A fourth materially different unfamiliar-target mechanism has now completed the full causal/reproduction finding gate: a state-changing helper copies a persistent storage element into a memory return variable and mutates the copy, so the apparent state transition does not persist.
+
+Target:
+- repository: https://github.com/sherlock-audit/2024-04-titles.git;
+- pinned revision: d7f60952df22da00b772db5d3a8272a988546089;
+- source: wallflower-contract-v2/src/graph/TitlesGraph.sol;
+- target function discovered blind: acknowledgeEdge;
+- related helper discovered blind: _setAcknowledged.
+
+The new reasoning surface is class-neutral. It identifies the topology persistent collection element → memory alias → member mutation → externally reachable caller, then proposes the invariant that a successful state-changing operation must persist the modeled state transition across the transaction boundary. It does not encode TitlesGraph, acknowledgeEdge, _setAcknowledged, acknowledged, or the historical answer.
+
+The blind campaign completed:
+
+**Target → System Model → Persistence Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Synthetic Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+
+Observed CI result from the unfamiliar storage-persistence backtest (run #17):
+- blind hypothesis: H-STORAGE-PERSISTENCE-acknowledgeEdge;
+- invariant: INV-STORAGE-PERSISTENCE-acknowledgeEdge;
+- blind execution: one Foundry test executed and failed because the successful acknowledgment did not persist to the target's stored edge;
+- patched causal control: the isolated target source was changed only at the causal reference boundary from Edge memory to Edge storage;
+- patched execution: one Foundry test executed and passed;
+- causal verification: VERIFIED, chain causal:storage-persistence-differential;
+- independent vulnerable reproduction: one fresh Foundry test executed and failed with the same persistence assertion;
+- independent patched reproduction: one fresh Foundry test executed and passed;
+- reproduction verification: VERIFIED;
+- finding gate: READY.
+
+The causal control is explicitly a synthetic control, not a claim that this exact source edit is the historical production remediation. Its purpose is to isolate the causal variable: changing the reference location from memory to storage makes the observed state transition persist.
+
+The final machine-readable artifact records:
+- target repository, pinned revision, and source;
+- blind hypothesis and invariant;
+- vulnerable execution: executed=true, tests_run=1, tests_failed=1;
+- patched execution: executed=true, tests_run=1, tests_failed=0;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction_verified: true;
+- finding_gate: READY.
+
+This milestone materially expands the Solidity generalization evidence into storage-reference semantics / state persistence, a mechanism that the previous reasoning surfaces did not recognize. The result is bounded to the demonstrated persistence violation: acknowledgeEdge can return successfully while the intended acknowledgment state remains unchanged. No broader impact is asserted without additional evidence.
+
+The Solidity maturity gate remains open. The next investigation should continue toward another unfamiliar mechanism, preferably one that initially breaks the current reasoning surfaces, while preserving the same blind, causal, independent-reproduction, and fail-closed finding gate.
