@@ -35,7 +35,7 @@ def _contract_blocks(source: str):
 def _has_cross_contract_report_gap(source: str) -> tuple[str, str] | None:
     blocks = dict(_contract_blocks(source))
     accounting = re.search(
-        r"(?P<type>uint\w*\s+)?(?P<var>reported)\s*=\s*(?P<callee>\w+)\.\w+\s*\([^;]*\)\s*;\s*accountedAssets\s*\+=\s*reported\s*;",
+        r"reported\s*=\s*(?P<callee>\w+)\.\w+\s*\([^;]*\)\s*;\s*accountedAssets\s*\+=\s*reported\s*;",
         source,
         re.S,
     )
