@@ -21,29 +21,36 @@ def _contract_blocks(source: str):
     for m in pattern.finditer(source):
         depth = 0
         end = None
-        for i in range(m.end()-1, len(source)):
-            if source[i] == "{": depth += 1
+        for i in range(m.end() - 1, len(source)):
+            if source[i] == "{":
+                depth += 1
             elif source[i] == "}":
                 depth -= 1
                 if depth == 0:
                     end = i
                     break
         if end is not None:
-            yield m.group(1), source[m.start():end+1]
+            yield m.group(1), source[m.start():end + 1]
 
 def _has_cross_contract_report_gap(source: str) -> tuple[str, str] | None:
     blocks = dict(_contract_blocks(source))
     for vault_name, body in blocks.items():
-        call = re.search(r"\b(\w+)\s+reported\s*=\s*(\w+)\.\w+\s*\(([^;]*)\)\s*;\s*(?:accountedAssets|totalAssets|assets)\s*\+=\s*reported\s*;", body, re.S)
+        call = re.search(
+            r"(?P<var>\w+)\s*=\s*(?P<callee>\w+)\.\w+\s*\([^;]*\)\s*;\s*(?:accountedAssets|totalAssets|assets)\s*\+=\s*(?P=var)\s*;",
+            body,
+            re.S,
+        )
         if not call:
             continue
-        callee = call.group(2)
+        callee = call.group("callee")
         callee_body = blocks.get(callee, "")
         if not callee_body:
             continue
-        if re.search(r"\buint\w*\s+delivered\s*=\s*[^;]+;\s*[^;]*\.transfer\s*\([^;]*delivered[^;]*\)\s*;\s*return\s+\w+\s*;", callee_body, re.S):
-            if re.search(r"\breturn\s+\w+\s*;", callee_body):
-                return vault_name, callee
+        has_delivery = re.search(r"\.transfer\s*\([^;]*\)\s*;", callee_body, re.S)
+        has_report = re.search(r"\breturn\s+\w+\s*;", callee_body)
+        has_intermediate = re.search(r"\b(?:uint\w*\s+)?delivered\s*=\s*[^;]+;", callee_body)
+        if has_delivery and has_report and has_intermediate:
+            return vault_name, callee
     return None
 
 def generate_cross_contract_economic_hypotheses(contract: ContractModel, semantic=()):
@@ -52,18 +59,21 @@ def generate_cross_contract_economic_hypotheses(contract: ContractModel, semanti
     if not gap:
         return CrossContractEconomicContribution((), ())
     vault_name, callee = gap
-    target = next((f for f in contract.functions if f.name.lower().startswith("sync") or f.name.lower().startswith("harvest")), None)
+    target = next(
+        (f for f in contract.functions if f.name.lower().startswith("sync") or f.name.lower().startswith("harvest")),
+        None,
+    )
     if target is None:
         return CrossContractEconomicContribution((), ())
-    iid=f"INV-CROSS-CONTRACT-ECONOMIC-{target.name}"
-    hid=f"H-CROSS-CONTRACT-ECONOMIC-{target.name}"
-    invariant=Invariant(
+    iid = f"INV-CROSS-CONTRACT-ECONOMIC-{target.name}"
+    hid = f"H-CROSS-CONTRACT-ECONOMIC-{target.name}"
+    invariant = Invariant(
         iid,
         "A system's internal asset accounting must not increase by more than the assets actually delivered across a cross-contract boundary.",
         "cross-contract reported-value flow versus delivered-asset flow",
         0.80,
     )
-    hypothesis=Hypothesis(
+    hypothesis = Hypothesis(
         hid,
         f"{target.name} may trust a cross-contract reported asset amount that exceeds the assets actually delivered, allowing internal accounting to become economically unbacked.",
         iid,
