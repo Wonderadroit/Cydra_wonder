@@ -24,7 +24,7 @@ def generate_temporal_precondition_hypotheses(contract, semantic=()):
     inv=[]; hyps=[]
     for f in public:
         body=_body(contract,f)
-        calls=[m.group(0) for m in re.finditer(r"\\b(?:call|_call|_execute|executeCall|externalCall)\\s*\\(",body)]
+        calls=[m.group(0) for m in re.finditer(r"\\b(?:call|_call|_execute|executeCall|externalCall)\\s*\\(|\\bthis\\.\\w+\\s*\\(",body)]
         if not calls: continue
         first_call=min((body.find(x) for x in calls if body.find(x)>=0),default=-1)
         checks=[m for m in re.finditer(r"\\b(?:require|assert)\\s*\\(([^;{}]+)",body) if m.start()>first_call and re.search(r"ready|valid|pending|done|timestamp|state|authorized|enabled",m.group(1),re.I)]
