@@ -115,10 +115,11 @@ interface IBalancerPool {
     (test / "CrossContractReadOnly.t.sol").write_text(
         """pragma solidity 0.8.16;
 import {BalancerPairOracle} from "../src/oracle/curve/StableCurveEthOracle.sol";
+import {IBaseOracle} from "../src/oracle/interfaces/IBaseOracle.sol";
 
 interface ITarget { function getPrice(address) external view returns(uint256); }
 
-contract BaseOracle {
+contract BaseOracle is IBaseOracle {
     function getPrice(address) external pure returns(uint256) { return 1e18; }
 }
 
