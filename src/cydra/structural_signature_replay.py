@@ -40,7 +40,7 @@ def generate_signature_replay_hypotheses(contract: ContractModel, semantic=()):
             continue
         if not re.search(r"validateAndSaveSignature|verifySignature|recover\s*\(", body, re.I):
             continue
-        digest_call = re.search(r"(?P<helper>_?keccakFor[A-Za-z0-9_]+)\s*\(", body)
+        digest_call = re.search(r"(?P<helper>(?:_?keccakFor[A-Za-z0-9_]+|getDigest))\s*\(", body)
         if digest_call:
             digest_body = _body(source, digest_call.group("helper"))
         else:
