@@ -195,7 +195,16 @@ def plan_weighted_average_rounding_experiment(hypothesis: Hypothesis) -> Experim
 def build_evidence(contract: ContractModel, hypotheses: tuple[Hypothesis, ...]) -> tuple[Evidence, ...]:
     return tuple(Evidence(f"E-MODEL-{f.name}", "model", f"Function {f.name} has modifiers={list(_declared_modifiers(contract, f))} and writes={list(f.writes)}.", contract.source, f"line {f.line}") for f in contract.functions)
 
-def plan_temporal_precondition_experiment(hypothesis: Hypothesis) -> Experiment:\n    return _plan_experiment(hypothesis, f"Execute {hypothesis.target_function} with a sequence that causes its external call to mutate the readiness predicate, then assert the precondition cannot become true retroactively; repeat against the patched target.", ("precondition becomes true only after the external call", "precondition is already established before the external call"), 2.0)\n\n\ndef plan_guard_parity_experiment(hypothesis: Hypothesis) -> Experiment:
+def plan_temporal_precondition_experiment(hypothesis: Hypothesis) -> Experiment:
+    return _plan_experiment(
+        hypothesis,
+        f"Execute {hypothesis.target_function} with a sequence that causes its external call to mutate the readiness predicate, then assert the precondition cannot become true retroactively; repeat against the patched target.",
+        ("precondition becomes true only after the external call", "precondition is already established before the external call"),
+        2.0,
+    )
+
+
+def plan_guard_parity_experiment(hypothesis: Hypothesis) -> Experiment:
     base = _plan_experiment(
         hypothesis,
         f"Execute {hypothesis.target_function}(30) after establishing the modeled shared-state position; determine whether the observed sibling postcondition rejects an invalid transition, then repeat against the patched target.",
