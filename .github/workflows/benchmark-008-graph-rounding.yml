@@ -1,0 +1,28 @@
+name: benchmark-008-graph-rounding
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_008_graph_rounding.py"
+      - "tests/test_structural_rounding.py"
+      - ".github/workflows/benchmark-008-graph-rounding.yml"
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Python rounding regression
+        run: pytest -q tests/test_structural_rounding.py
+      - name: Historical Graph rounding backtest
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_008_graph_rounding.py

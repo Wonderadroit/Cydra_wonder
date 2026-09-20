@@ -474,3 +474,22 @@ The next capability should be determined by the next real investigation failure.
 > Guided testing teaches us where we are weak. Blind testing tells us whether we actually learned.
 >
 > The end goal is a personal bug-bounty research instrument that helps its owner find and prove real vulnerabilities—not a commercial product.
+
+
+## 32. Historical backtest milestone — generalized weighted-average rounding
+
+The next demonstrated capability after the Alchemix authorization backtest and the Enzyme trusted-input boundary is structural weighted-average rounding reasoning.
+
+The implementation is permitted because it comes from a real historical investigation blocker, not from a target-specific detector. The capability should recognize a generic four-unsigned-integer weighted-average shape, form a conservative rounding-direction hypothesis, choose a fractional boundary experiment, and validate the result through executable differential evidence.
+
+The Graph historical benchmark is used as a demonstration target. Its repository, historical revision, and patched revision are benchmark inputs; CYDRA's reasoning must discover the candidate from the source model rather than receiving the known vulnerable function, line, exploit sequence, or expected answer.
+
+The benchmark is successful only when:
+- the blind source produces a weighted-average rounding hypothesis;
+- CYDRA creates a concrete fractional boundary experiment;
+- the vulnerable historical source executes and violates the modeled invariant;
+- the patched source executes and satisfies it;
+- the differential evidence passes the canonical causal-verification path; and
+- the finding gate has sufficient evidence and impact assessment.
+
+This milestone does not justify adding The Graph-specific names, ratios, or exploit sequences to the reasoning engine. A failure on another rounding mechanism must be diagnosed as a new general capability gap before code is changed.
