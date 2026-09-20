@@ -54,6 +54,16 @@ def clone_target(repo: str, ref: str, destination: Path) -> None:
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", ref), check=True)
 
 
+def prepare_target_dependencies(project: Path) -> dict[str, Any]:
+    """Install dependencies declared by the target project before generated tests."""
+    commands: list[dict[str, Any]] = []
+    if (project / "package-lock.json").exists():
+        commands.append(capture(project, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"))
+    elif (project / "package.json").exists():
+        commands.append(capture(project, "npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"))
+    return {"commands": commands, "ok": all(item["ok"] for item in commands)}
+
+
 def contract_for(result, hypothesis):
     for contract in result.contracts:
         if any(fn.name == hypothesis.target_function for fn in contract.functions): return contract
@@ -202,6 +212,9 @@ def main() -> int:
         project = checkout / args.target_project
         source = checkout / args.target_path
 
+        dependency_setup = prepare_target_dependencies(project)
+        if not dependency_setup["ok"]:
+            raise RuntimeError(f"target dependency setup failed: {dependency_setup}")
         compiler = compile_state_effects(project, source)
         result = investigate(source, target=f"{args.target_repo}@{args.target_ref}", semantic_evidence=compiler.evidence)
         experiments = {e.hypothesis_id: e for e in result.experiments}
@@ -238,7 +251,7 @@ def main() -> int:
             class_coverage[cls] = {"requested": True, "hypotheses_extracted": extracted, "hypotheses_executed": executed, "status": coverage_status}
 
         build = capture(project, "forge", "build")
-        provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions}
+        provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions, "dependency_setup": dependency_setup}
         classification = {"surface": "initialization-only", "class_coverage": class_coverage, "hypotheses": statuses, "compiler_evidence_status": compiler.status, "semantic_evidence_count": len(compiler.evidence), "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
         execution_human = "\n\n".join(f"{e.experiment_id}: {e.status}\n{e.stdout}\n{e.stderr}" for e in executions)
         compiler_record = {"executed": compiler.executed, "status": compiler.status, "command": compiler.command, "stdout": compiler.stdout, "stderr": compiler.stderr, "build_info_files": compiler.build_info_files, "compiler_versions": compiler.compiler_versions}
