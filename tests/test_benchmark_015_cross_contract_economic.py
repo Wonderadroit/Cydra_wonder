@@ -13,6 +13,6 @@ def test_cross_contract_economic_surface_recognizes_system_invariant():
         root / "benchmarks/015_cross_contract_economic/Target.sol",
         reasoning_surfaces=(generate_cross_contract_economic_hypotheses,),
     )
-    matches=[h for h in result.hypotheses if h.invariant_id.startswith("INV-CROSS-CONTRACT-ECONOMIC-")]
+    contributions=[generate_cross_contract_economic_hypotheses(c) for c in result.contracts]\n    matches=[h for h in result.hypotheses if h.invariant_id.startswith("INV-CROSS-CONTRACT-ECONOMIC-")]\n    assert any(c.hypotheses for c in contributions), [(c.name, len(c.functions)) for c in result.contracts]
     assert len(matches)==1
     assert matches[0].target_function=="syncStrategy"
