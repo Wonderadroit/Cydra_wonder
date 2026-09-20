@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import os
 import subprocess
@@ -108,6 +109,46 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+def _auth_modifier(source):
+    defs = {}
+    for m in re.finditer(r"\bmodifier\s+(\w+)\s*\([^)]*\)\s*\{", source):
+        body=source[m.end():]; depth=1
+        for i,ch in enumerate(body):
+            if ch=="{": depth+=1
+            elif ch=="}":
+                depth-=1
+                if depth==0:
+                    defs[m.group(1)]=body[:i]; break
+    counts={}
+    for m in re.finditer(r"\bfunction\s+\w+\s*\([^)]*\)([^{};]*)\{", source):
+        for tok in re.findall(r"\b[A-Za-z_]\w*\b",m.group(1)):
+            b=defs.get(tok)
+            if b and re.search(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b",b) and re.search(r"\b(?:require|revert|assert)\b",b):
+                counts[tok]=counts.get(tok,0)+1
+    return max(counts,key=counts.get) if counts else None
+
+def _apply_auth_control(source, function_name, modifier):
+    original=source.read_text(encoding="utf-8")
+    pat=re.compile(rf"(\bfunction\s+{re.escape(function_name)}\s*\([^)]*\))([^{{;]*)(\{{)",re.MULTILINE)
+    m=pat.search(original)
+    if not m: raise RuntimeError(f"cannot patch {function_name}")
+    tail=m.group(2)
+    if re.search(rf"\b{re.escape(modifier)}\b",tail): raise RuntimeError("target already has inferred modifier")
+    source.write_text(original[:m.start(2)]+tail+" "+modifier+" "+original[m.end(2):],encoding="utf-8")
+    return original
+
+def _patched_auth_test(generated,destination):
+    s=generated.read_text(encoding="utf-8")
+    marker='require(ok, "CYDRA_SECURITY_ASSERTION: authorization call reverted before invariant observation");'
+    if marker not in s: raise RuntimeError("authorization assertion marker missing")
+    destination.write_text(s.replace(marker,"if (!ok) return;"),encoding="utf-8")
+
+def _json(v):
+    if hasattr(v,"__dict__"): return {k:_json(x) for k,x in v.__dict__.items()}
+    if isinstance(v,(tuple,list)): return [_json(x) for x in v]
+    if isinstance(v,dict): return {str(k):_json(x) for k,x in v.items()}
+    return v
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Blind one-sided authorization backtest.")
     parser.add_argument("--target-repo", required=True)
@@ -115,6 +156,8 @@ def main() -> int:
     parser.add_argument("--target-path", required=True)
     parser.add_argument("--target-project", required=True)
     parser.add_argument("--expected-status", choices=("confirmed", "not_confirmed"), default="confirmed")
+    parser.add_argument("--require-ready", action="store_true")
+    parser.add_argument("--output", type=Path)
     parser.add_argument(
         "--supplemental-file",
         action="append",
@@ -252,6 +295,27 @@ def main() -> int:
             )
             if outcome.benchmark_status != args.expected_status:
                 return 2
+            payload={"target":f"{args.target_repo}@{args.target_ref}:{args.target_path}","hypothesis":_json(hypothesis),"experiment":_json(experiment),"blind_execution":_json(execution),"classification":outcome.benchmark_status,"finding_gate":"CONFIRMED_ONLY"}
+            if args.require_ready and outcome.benchmark_status=="confirmed":
+                source=Path(contract.source); modifier=_auth_modifier(source.read_text(encoding="utf-8"))
+                if modifier is None: print("AUTHORIZATION_CAUSAL_CONTROL_UNAVAILABLE"); return 3
+                original=_apply_auth_control(source,hypothesis.target_function,modifier)
+                try:
+                    patched_test=generated.with_name(generated.stem+"-patched.t.sol"); _patched_auth_test(generated,patched_test)
+                    patched=run_foundry_test(project,patched_test,hypothesis.hypothesis_id+":patched","patched")
+                finally: source.write_text(original,encoding="utf-8")
+                causal=execution.status=="FAIL" and patched.status=="PASS"
+                reproduction=run_foundry_test(project,generated,hypothesis.hypothesis_id+":reproduction","reproduction")
+                original=_apply_auth_control(source,hypothesis.target_function,modifier)
+                try:
+                    repro_test=generated.with_name(generated.stem+"-reproduction-patched.t.sol"); _patched_auth_test(generated,repro_test)
+                    repro_patched=run_foundry_test(project,repro_test,hypothesis.hypothesis_id+":reproduction-patched","reproduction-patched")
+                finally: source.write_text(original,encoding="utf-8")
+                repro= reproduction.status=="FAIL" and repro_patched.status=="PASS"
+                payload.update({"authorization_control":modifier,"patched_execution":_json(patched),"causal_verification":{"state":"verified" if causal else "not_verified","chain_id":"causal:authorization-modifier-differential"},"reproduction_execution":_json(reproduction),"reproduction_patched_execution":_json(repro_patched),"reproduction_verification":{"state":"verified" if repro else "not_verified","chain_id":"reproduction:authorization-modifier-differential"},"finding_gate":"READY" if causal and repro else "NOT_READY"})
+                if not (causal and repro): return 4
+            if args.output:
+                args.output.parent.mkdir(parents=True,exist_ok=True); args.output.write_text(json.dumps(_json(payload),indent=2)+"\n",encoding="utf-8")
         return 0
 
 
