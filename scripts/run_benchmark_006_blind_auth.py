@@ -80,6 +80,7 @@ def main() -> int:
     parser.add_argument("--target-ref", required=True)
     parser.add_argument("--target-path", required=True)
     parser.add_argument("--target-project", required=True)
+    parser.add_argument("--expected-status", choices=("confirmed", "not_confirmed"), default="confirmed")
     parser.add_argument(
         "--supplemental-file",
         action="append",
@@ -191,7 +192,7 @@ def main() -> int:
                 f"{hypothesis.hypothesis_id}: status={execution.status} "
                 f"classification={outcome.benchmark_status} evidence={outcome.evidence.evidence_id}"
             )
-            if outcome.benchmark_status != "confirmed":
+            if outcome.benchmark_status != args.expected_status:
                 return 2
         return 0
 
