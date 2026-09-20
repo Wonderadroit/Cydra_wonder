@@ -34,7 +34,7 @@ def _body(contract: ContractModel, function: FunctionModel) -> str:
 
 
 def _has_status_assignment(body: str) -> bool:
-    return bool(re.search(r"\.[A-Za-z_]\w*\s*=\s*[A-Za-z_]\w*", body))
+    return bool(re.search(r"(?:\.[A-Za-z_]\w*|\[[^\]]+\]\.[A-Za-z_]\w*)\s*=\s*[A-Za-z_][\w.]*", body))
 
 
 def _has_value_transfer(body: str) -> bool:
