@@ -102,7 +102,9 @@ def _initializer_zero_guarded_addresses(contract, function_name: str) -> tuple[i
     guarded: list[int] = []
     for index in sorted(address_parameters):
         name = parameter_names[index]
-        if re.search(rf"\b{re.escape(name)}\s*==\s*address\s*\(\s*0\s*\)", body) or re.search(rf"address\s*\(\s*0\s*\)\s*==\s*\b{re.escape(name)}\b", body):
+        direct_zero_guard = re.search(rf"\b{re.escape(name)}\s*==\s*address\s*\(\s*0\s*\)", body) or re.search(rf"address\s*\(\s*0\s*\)\s*==\s*\b{re.escape(name)}\b", body)
+        helper_zero_guard = re.search(rf"\bcheckNonZeroAddress\s*\(\s*{re.escape(name)}\s*\)", body)
+        if direct_zero_guard or helper_zero_guard:
             guarded.append(index)
     return tuple(guarded)
 
