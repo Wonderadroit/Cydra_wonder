@@ -99,7 +99,20 @@ def canonical_model(hypothesis, contract_name: str):
     return model, CanonicalHypothesis(hypothesis.hypothesis_id, hypothesis.claim, 0.5), observation_id
 
 
-def run_side(checkout: Path, source: Path, hypothesis, experiment, label: str) -> tuple[object, Path]:
+def patched_callable_name(model) -> str:
+    candidates = [
+        function.name
+        for function in model.functions
+        if len(function.parameters) == 4
+        and all(parameter.type.startswith("uint") for parameter in function.parameters)
+        and function.name != "weightedAverage"
+    ]
+    if not candidates:
+        raise RuntimeError("patched target has no structural weighted-average callable")
+    return candidates[0]
+
+
+def run_side(checkout: Path, source: Path, hypothesis, experiment, label: str, callable_name: str | None = None) -> tuple[object, Path]:
     with tempfile.TemporaryDirectory(prefix=f"cydra-rounding-{label}-") as tmp:
         project = make_foundry_project(source, Path(tmp) / "project")
         target_model = parse_solidity(project / "src" / "MathUtils.sol")[0]
@@ -110,6 +123,7 @@ def run_side(checkout: Path, source: Path, hypothesis, experiment, label: str) -
             "MathUtils",
             test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol"),
             experiment=experiment,
+            callable_name=callable_name,
         )
         # Keep the temporary project alive while Foundry executes.
         result = run_foundry_test(project, generated, experiment.experiment_id, label)
@@ -145,7 +159,16 @@ def main() -> int:
 
         vulnerable, _ = run_side(vulnerable_checkout, vulnerable_source, hypothesis, experiment, "graph-vulnerable")
         patched_source = patched_checkout / TARGET_PATH
-        patched, _ = run_side(patched_checkout, patched_source, hypothesis, experiment, "graph-patched")
+        patched_model = parse_solidity(patched_source)[0]
+        patched_name = patched_callable_name(patched_model)
+        patched, _ = run_side(
+            patched_checkout,
+            patched_source,
+            hypothesis,
+            experiment,
+            "graph-patched",
+            callable_name=patched_name,
+        )
 
         model, canonical_hypothesis, observation_id = canonical_model(hypothesis, result.contracts[0].name)
         cycle = run_canonical_differential_cycle(
