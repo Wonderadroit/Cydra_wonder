@@ -185,14 +185,11 @@ def run_side(target_source: Path, patched: bool, label: str) -> dict:
         target = write_harness(target_source, root, patched)
         test = root / "test" / "CrossContractReadOnly.t.sol"
         text = test.read_text(encoding="utf-8")
-        text = text.replace(
-            "        // Vulnerable side must observe the transient half-price.\n"
-            "        // Patched side must revert inside the callback, proving the control.\n"
-            "        if (address(oracle).code.length > 0) {\n"
-            "            // The Python runner classifies the patched guard revert separately.\n"
-            "        }\n",
-            "",
-        )
+        if not patched:
+            text = text.replace(
+                "        vault.begin(address(receiver),address(oracle));",
+                '        vault.begin(address(receiver),address(oracle));\\n        require(receiver.observed() == 5e17, "CYDRA_READONLY_ASSERTION: transient state was not observed");'
+            )
         test.write_text(text, encoding="utf-8")
         result = subprocess.run(
             ["forge", "test", "--match-test", "testTransientObservation", "-vv"],
