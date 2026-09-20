@@ -62,9 +62,9 @@ def write_harness(target_source: Path, root: Path, patched: bool) -> Path:
             "        (address[] memory tokens, uint256[] memory balances, ) = vault",
         )
         target_text = target_text.replace(
-            "interface ICurveLP {",
+            "contract BalancerPairOracle",
             "interface IContextVault { function inContext() external view returns (bool); }\n\n"
-            "interface ICurveLP {",
+            "contract BalancerPairOracle",
         )
         if "CYDRA_READONLY_GUARD" not in target_text:
             raise RuntimeError("patched context guard was not inserted")
