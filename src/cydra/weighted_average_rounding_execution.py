@@ -36,7 +36,6 @@ def generate_weighted_average_rounding_test(
     pragma = contract_model.pragma or "^0.8.20"
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
-import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
 
 contract CydraRoundingHarness {{
@@ -45,7 +44,7 @@ contract CydraRoundingHarness {{
     }}
 }}
 
-contract CydraWeightedAverageRoundingTest is Test {{
+contract CydraWeightedAverageRoundingTest {
     CydraRoundingHarness internal target;
 
     function setUp() public {{
@@ -63,9 +62,9 @@ contract CydraWeightedAverageRoundingTest is Test {{
         uint256 ceilingValue = (numerator + denominator - 1) / denominator;
         uint256 observed = target.callTarget(valueA, weightA, valueB, weightB);
 
-        assertGt(numerator % denominator, 0, "test input must be fractional");
-        assertEq(observed, ceilingValue, "weighted average rounded below conservative ceiling");
-        assertGe(observed, floorValue, "weighted average below floor");
+        require(numerator % denominator > 0, "test input must be fractional");
+        require(observed == ceilingValue, "weighted average rounded below conservative ceiling");
+        require(observed >= floorValue, "weighted average below floor");
     }}
 }}
 '''
