@@ -123,7 +123,7 @@ def initialization_invariant(contract: ContractModel) -> Invariant:
 
 
 def generate_initialization_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
-    initializers = [f for f in contract.functions if f.name in {"initialize", "init"} and f.visibility in {"public", "external"}]
+    initializers = [f for f in contract.functions if f.name.lower() in {"initialize", "initialise", "init"} and f.visibility in {"public", "external"}]
     invariant = initialization_invariant(contract)
     return tuple(Hypothesis(f"H-INIT-{f.name}", f"{f.name} may be callable in the deployed uninitialized state by an arbitrary caller, allowing privileged initialization state to be claimed.", invariant.invariant_id, f.name, "arbitrary external caller", "attacker-controlled initialization or privileged state", evidence_ids=(f"E-MODEL-{f.name}",)) for f in initializers)
 
