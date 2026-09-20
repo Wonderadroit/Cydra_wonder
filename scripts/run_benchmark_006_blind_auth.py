@@ -15,7 +15,7 @@ from cydra.foundry import require_executed, run_foundry_test, test_path_for
 from cydra.pipeline import investigate
 from cydra.reasoning import plan_access_control_experiment
 
-_IMPORT_RE = re.compile(r'''\\bimport\\s+(?:[^\"']+\\s+from\\s+)?[\"']([^\"']+)[\"']\\s*;''')
+_IMPORT_RE = re.compile(r'''\bimport\s+(?:[^\"']+\s+from\s+)?[\"']([^\"']+)[\"']\s*;''')
 
 
 def _prepare_isolated_foundry_project(target_root: Path, source: Path, destination: Path) -> Path:
