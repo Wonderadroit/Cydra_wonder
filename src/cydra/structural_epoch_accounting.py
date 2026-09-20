@@ -42,7 +42,7 @@ def _body(source: str, name: str) -> str:
 
 def _constant_epoch(source: str) -> str | None:
     match = re.search(
-        r"\buint\d*\s+public\s+constant\s+(?P<name>[A-Za-z_]\w*)\s*=\s*(?P<value>\d+)\s*;",
+        r"\buint\d*\s+public\s+constant\s+(?P<name>[A-Za-z_]\w*)\s*=\s*(?P<value>\d[\d_]*)\s*;",
         source,
     )
     return match.group("name") if match else None
