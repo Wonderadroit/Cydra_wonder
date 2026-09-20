@@ -1,0 +1,34 @@
+name: CYDRA unfamiliar cross-contract read-only backtest
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/run_benchmark_013_unfamiliar_cross_contract_readonly.py"
+      - "src/cydra/structural_read_only_reentrancy.py"
+
+jobs:
+  blueberry-cross-contract-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: python -m pip install -e .
+      - name: Run unfamiliar historical Blueberry backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p backtest-artifacts/blueberry-cross-contract-readonly
+          python scripts/run_benchmark_013_unfamiliar_cross_contract_readonly.py | tee backtest-artifacts/blueberry-cross-contract-readonly/result.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blueberry-cross-contract-readonly-${{ github.sha }}
+          path: backtest-artifacts/blueberry-cross-contract-readonly/
+          if-no-files-found: warn
+          retention-days: 30
