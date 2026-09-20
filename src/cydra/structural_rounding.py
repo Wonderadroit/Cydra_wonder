@@ -62,15 +62,15 @@ def weighted_average_rounding_invariant(contract: ContractModel) -> Invariant | 
         return None
     for match in _FUNCTION_RE.finditer(source):
         params = _parameter_names(match.group("parameters"))
-        if len(params) != 4 or not _is_weighted_average(_body(source, match)):
+        function = next(
+            (item for item in contract.functions
+             if item.name == match.group("name")
+             and item.line == source.count("\n", 0, match.start()) + 1),
+            None,
+        )
+        if len(params) != 4 or function is None or not _is_weighted_average(_body(source, match)):
             continue
-        if not all(
-            any(p.name == name and p.type.startswith("uint") for p in next(
-                (f for f in contract.functions if f.name == match.group("name") and f.line == source.count("\n", 0, match.start()) + 1),
-                type("F", (), {"parameters": ()})(),
-            ).parameters)
-            for name in params
-        ):
+        if not all(parameter.type.startswith("uint") for parameter in function.parameters):
             continue
         return Invariant(
             "INV-ROUND-001",
