@@ -85,6 +85,14 @@ def test_initialization_security_assertion_failure_confirms():
     assert "semantics=security_assertion_failure" in outcome.evidence.claim
 
 
+def test_initialization_generic_mutation_assertion_confirms():
+    stdout = "Error: arbitrary initializer call mutated target storage\nError: a == b not satisfied"
+    outcome = classify_initialization_execution(_hypothesis(), _execution("FAIL", failed=1, exit_code=1, stdout=stdout))
+    assert outcome.internal_status == "confirmed"
+    assert outcome.benchmark_status == "confirmed"
+    assert "semantics=security_assertion_failure" in outcome.evidence.claim
+
+
 def test_initialization_guard_revert_does_not_confirm():
     stdout = "[FAIL: InvalidInitialization()] testInitializationInterfaceIsCallable()"
     outcome = classify_initialization_execution(_hypothesis(), _execution("FAIL", failed=1, exit_code=1, stdout=stdout))
