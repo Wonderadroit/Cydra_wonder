@@ -168,22 +168,21 @@ def main() -> int:
             project,
         )
         source_relative = Path(source).relative_to(source_root)
-        contract_identifier = f"src/{source_relative}:{Path(source).stem}"
-        bytecode_result = subprocess.run(
-            ("forge", "inspect", contract_identifier, "bytecode"),
-            cwd=execution_project,
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        creation_bytecode = bytecode_result.stdout.strip().removeprefix("0x")
-
         for hypothesis in hypotheses:
             experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
             contract = next(
                 c for c in result.contracts
                 if any(f.name == hypothesis.target_function for f in c.functions)
             )
+            contract_identifier = f"src/{source_relative}:{contract.name}"
+            bytecode_result = subprocess.run(
+                ("forge", "inspect", contract_identifier, "bytecode"),
+                cwd=execution_project,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            creation_bytecode = bytecode_result.stdout.strip().removeprefix("0x")
             output = test_path_for(execution_project, f"generated/{hypothesis.hypothesis_id}.t.sol")
             generated = generate_blind_authorization_test_from_experiment(
                 hypothesis,
