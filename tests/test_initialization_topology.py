@@ -88,3 +88,67 @@ def test_requires_proxy_does_not_treat_library_function_definition_as_disable_si
         encoding="utf-8",
     )
     assert not requires_proxy_initialization(contracts / "Safe.sol")
+
+
+
+def test_supports_initializer_disable_follows_reachable_definition(tmp_path):
+    root = tmp_path / "target"
+    contracts = root / "contracts"
+    lib = root / "lib" / "openzeppelin-contracts-upgradeable" / "contracts" / "proxy" / "utils"
+    contracts.mkdir(parents=True)
+    lib.mkdir(parents=True)
+    (contracts / "LoanProtocol.sol").write_text(
+        'import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";\n'
+        'contract LoanProtocol is Initializable { function initialize() external initializer {} }\n',
+        encoding="utf-8",
+    )
+    (lib / "Initializable.sol").write_text(
+        "abstract contract Initializable {\n"
+        "    function _disableInitializers() internal {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    from cydra.initialization_topology import supports_initializer_disable
+    assert supports_initializer_disable(contracts / "LoanProtocol.sol")
+
+
+
+def test_requires_proxy_resolves_openzeppelin_from_node_modules(tmp_path):
+    root = tmp_path / "target"
+    contracts = root / "contracts"
+    lib = root / "node_modules" / "@openzeppelin" / "contracts-upgradeable" / "proxy" / "utils"
+    contracts.mkdir(parents=True)
+    lib.mkdir(parents=True)
+    (contracts / "LoanProtocol.sol").write_text(
+        'import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";\n'
+        'contract LoanProtocol is Initializable { function initialize() external initializer {} }\n',
+        encoding="utf-8",
+    )
+    (lib / "Initializable.sol").write_text(
+        "abstract contract Initializable {\n"
+        "    function _disableInitializers() internal {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    from cydra.initialization_topology import supports_initializer_disable
+    assert supports_initializer_disable(contracts / "LoanProtocol.sol")
+
+
+
+def test_requires_proxy_ignores_unrelated_imported_constructor_disable(tmp_path):
+    root = tmp_path / "target"
+    contracts = root / "contracts"
+    contracts.mkdir(parents=True)
+    (contracts / "Target.sol").write_text(
+        'import "./Unrelated.sol";\n'
+        'contract Target { function initialize() external {} }\n',
+        encoding="utf-8",
+    )
+    (contracts / "Unrelated.sol").write_text(
+        "contract Unrelated {\n"
+        "    constructor() { _disableInitializers(); }\n"
+        "    function _disableInitializers() internal {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    assert not requires_proxy_initialization(contracts / "Target.sol")

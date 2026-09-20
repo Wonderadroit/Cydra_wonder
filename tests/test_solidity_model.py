@@ -445,3 +445,25 @@ def test_library_is_modeled_as_a_solidity_source_unit(tmp_path: Path) -> None:
     assert units[0].name == "MathUtils"
     assert units[0].functions[0].name == "weightedAverage"
     assert units[0].functions[0].visibility == "internal"
+
+
+def test_constant_comparisons_are_not_lifecycle_state_predicates(tmp_path: Path) -> None:
+    path = tmp_path / "ConstantGuard.sol"
+    path.write_text(
+        """
+        contract ConstantGuard {
+            uint256 private constant EPOCH = 86400;
+            address public owner;
+            function initialize(uint256 start) external {
+                require(start > block.timestamp && start % EPOCH == 0);
+                owner = msg.sender;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    function = contract.functions[0]
+    assert contract.state_variables == ("owner",)
+    assert function.state_predicates == ()

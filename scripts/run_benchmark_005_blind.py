@@ -17,7 +17,7 @@ from typing import Any
 from cydra.compiler_state import compile_state_effects
 from cydra.foundry import ExecutionResult, generate_initialization_test, require_executed, run_foundry_test, test_path_for
 from cydra.initialization_runtime import classify_initialization_execution
-from cydra.initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
+from cydra.initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization, supports_initializer_disable
 from cydra.pipeline import investigate
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic"}
@@ -208,6 +208,45 @@ contract CydraInitializerDependencyProbe {
     generated.write_text(source, encoding="utf-8")
 
 
+def _apply_synthetic_initializer_lock_patch(source: Path) -> str:
+    """Apply a generic local differential control by disabling implementation initialization."""
+    original = source.read_text(encoding="utf-8")
+    if "_disableInitializers()" in original:
+        raise RuntimeError("initializer lock already present; no synthetic differential patch needed")
+    match = re.search(r"\bconstructor\s*\([^)]*\)[^{;]*\{", original, re.MULTILINE)
+    if match is None:
+        raise RuntimeError("synthetic initializer-lock patch requires a target constructor")
+    body_start = match.end()
+    depth = 1
+    body_end = None
+    for index in range(body_start, len(original)):
+        if original[index] == "{": depth += 1
+        elif original[index] == "}":
+            depth -= 1
+            if depth == 0:
+                body_end = index
+                break
+    if body_end is None:
+        raise RuntimeError("synthetic initializer-lock patch could not close constructor body")
+    patched = original[:body_start] + "\n        _disableInitializers();" + original[body_start:]
+    source.write_text(patched, encoding="utf-8")
+    return original
+
+
+def run_initialization_differential(project: Path, generated: Path, hypothesis, contract, vulnerable: ExecutionResult):
+    if vulnerable.status != "FAIL":
+        return None
+    if not supports_initializer_disable(Path(contract.source)):
+        return None
+    source = Path(contract.source)
+    original = _apply_synthetic_initializer_lock_patch(source)
+    try:
+        patched = run_foundry_test(project, generated, hypothesis.hypothesis_id + ":patched", "patched")
+    finally:
+        source.write_text(original, encoding="utf-8")
+    return patched
+
+
 def run_initialization(project: Path, hypothesis, experiment, contract):
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_initialization_test(hypothesis, target_import(contract, project), contract.name, output, contract_model=contract)
@@ -283,6 +322,30 @@ def main() -> int:
                 generated, execution, outcome = run_initialization(project, hypothesis, experiments[hypothesis.hypothesis_id], contract)
                 status.update(foundry_generated=True, blind_executed=execution.executed, generated_path=str(generated), deployment_topology="proxy" if proxy_topology else "direct", classification=outcome.benchmark_status, internal_status=outcome.internal_status, evidence=_json(outcome.evidence), execution=_json(execution))
                 executions.append(execution); evidence.append(outcome.evidence)
+                if outcome.benchmark_status == "confirmed":
+                    patched = run_initialization_differential(project, generated, hypothesis, contract, execution)
+                    if patched is not None:
+                        status["patched_execution"] = _json(patched)
+                        executions.append(patched)
+                        causal_verified = execution.status == "FAIL" and patched.status == "PASS"
+                        status["causal_verification"] = {"state": "verified" if causal_verified else "not_verified", "chain_id": "causal:initialization-lock-differential", "differential": "synthetic constructor _disableInitializers() control"}
+                        if causal_verified:
+                            reproduction = run_foundry_test(project, generated, hypothesis.hypothesis_id + ":reproduction", "reproduction")
+                            status["reproduction_execution"] = _json(reproduction)
+                            repro_patched = run_initialization_differential(project, generated, hypothesis, contract, reproduction)
+                            if repro_patched is not None:
+                                status["reproduction_patched_execution"] = _json(repro_patched)
+                            reproduction_verified = reproduction.status == "FAIL" and repro_patched is not None and repro_patched.status == "PASS"
+                            status["reproduction_verification"] = {
+                                "state": "verified" if reproduction_verified else "not_verified",
+                                "chain_id": "reproduction:initialization-lock-differential",
+                            }
+                            status["finding_gate"] = "READY" if reproduction_verified else "READY_PENDING_REPRODUCTION"
+                        else:
+                            status["finding_gate"] = "NOT_READY"
+                    else:
+                        status["causal_verification"] = {"state": "not_available", "reason": "generic initializer-lock control not supported by reachable topology"}
+                        status["finding_gate"] = "NOT_READY"
             except Exception as exc:
                 status.update(failure_stage="execution_or_generation", blocked_reason=f"{type(exc).__name__}: {exc}")
             statuses.append(status)

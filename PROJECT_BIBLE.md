@@ -974,3 +974,34 @@ Observed result:
 - historical public reporting was not used during hypothesis generation and is post-run corroboration only.
 
 This is evidence of a blind, reproducible transfer-accounting capability on an unfamiliar Solidity project and materially strengthens the Solidity maturity gate. It does not by itself close the maturity gate; additional unfamiliar targets and materially different mechanisms remain required.
+
+
+## 53. Unfamiliar Morph L2 initializer — blind causal finding with independent reproduction
+
+The Morph L2 historical campaign has now completed the full blind initialization-finding path on the pinned `morph-l2/morph` revision `aa35ed6d1d0bb1e0a38f04dcfb9c5b3203f90604`, using `contracts/contracts/l2/staking/L2Staking.sol` as the source surface. The historical answer was not supplied during hypothesis generation.
+
+The campaign exposed and repaired demonstrated generic blockers rather than adding Morph-specific knowledge:
+- constant/immutable declarations were incorrectly entering mutable lifecycle-state modeling, so a timestamp/epoch constant could select the wrong double-call lifecycle shape instead of the arbitrary-caller initialization probe;
+- generic initializer inputs used zero addresses and zero scalars, which could fail ordinary target preconditions before the hypothesized transition was observable;
+- the generic initializer probe needed to preserve typed ABI encoding while safely treating an ordinary revert as non-confirmation, so the fallback now uses a typed `try/catch` call and observes target storage writes;
+- timestamp/epoch-constrained initializer parameters now receive a generic future, epoch-aligned value when the target source exposes the corresponding `block.timestamp` modulo guard;
+- the finding gate now requires an independent fresh vulnerable execution and patched control reproduction after the first causal differential succeeds.
+
+The resulting blind chain completed:
+
+**Target → System Model → Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Patched Control → Causal Verification → Independent Reproduction → Finding Gate**
+
+Observed result from CI research run #109:
+- blind hypothesis: `H-INIT-initialize`;
+- invariant: `INV-INIT-001` — initialization must not allow an arbitrary caller to claim privileged initialization state after deployment;
+- compiler-backed semantic evidence: 366 records;
+- vulnerable blind execution: one Foundry test executed and failed because the arbitrary initializer call mutated 2 target storage slots;
+- patched control: one Foundry test executed and passed after a synthetic constructor `_disableInitializers()` control was applied;
+- causal verification: `VERIFIED`, chain `causal:initialization-lock-differential`;
+- independent reproduction: vulnerable execution failed with the same 2-storage-write assertion and the reproduced patched control passed;
+- reproduction verification: `VERIFIED`, chain `reproduction:initialization-lock-differential`;
+- finding gate: **READY**.
+
+The exact target revision and all raw execution/provenance evidence are preserved in the CI research artifact. The finding is bounded to the demonstrated initialization-state control failure; the artifact does not claim impact beyond what the executed invariant and causal differential establish.
+
+This milestone is materially stronger evidence for Solidity generalization because the target was unfamiliar, the hypothesis was generated blind, the execution required generic input/environment handling, the causal control was synthetic rather than a supplied historical patch, and the result survived an independent reproduction. It does not close the Solidity maturity gate; another unfamiliar target and a materially different mechanism are still required.

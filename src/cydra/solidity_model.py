@@ -284,6 +284,11 @@ def _state_variables(contract_body: str) -> tuple[str, ...]:
         type_token = match.group("type").split()[0]
         if type_token in _STATE_DECLARATION_KEYWORDS:
             continue
+        # Constants and immutables are not mutable lifecycle state. Treating
+        # their comparisons as state predicates can select a lifecycle
+        # experiment merely because a constant appears in an input guard.
+        if re.search(r"\b(?:constant|immutable)\b", statement):
+            continue
         name = match.group("name")
         if name not in variables:
             variables.append(name)

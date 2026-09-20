@@ -39,16 +39,21 @@ def _resolve_import(source_path: Path, import_path: str) -> Path | None:
             return direct.resolve()
 
         lib = ancestor / "lib"
+        node_modules = ancestor / "node_modules"
         upgradeable_prefix = "@openzeppelin/contracts-upgradeable/"
         if import_path.startswith(upgradeable_prefix):
-            candidate = lib / "openzeppelin-contracts-upgradeable" / "contracts" / import_path[len(upgradeable_prefix):]
-            if candidate.exists():
-                return candidate.resolve()
+            relative = import_path[len(upgradeable_prefix):]
+            for base in (lib / "openzeppelin-contracts-upgradeable" / "contracts", node_modules / "@openzeppelin" / "contracts-upgradeable"):
+                candidate = base / relative
+                if candidate.exists():
+                    return candidate.resolve()
         contracts_prefix = "@openzeppelin/contracts/"
         if import_path.startswith(contracts_prefix):
-            candidate = lib / "openzeppelin-contracts" / "contracts" / import_path[len(contracts_prefix):]
-            if candidate.exists():
-                return candidate.resolve()
+            relative = import_path[len(contracts_prefix):]
+            for base in (lib / "openzeppelin-contracts" / "contracts", node_modules / "@openzeppelin" / "contracts"):
+                candidate = base / relative
+                if candidate.exists():
+                    return candidate.resolve()
     return None
 
 
@@ -73,8 +78,68 @@ def _reachable_sources(root: Path) -> tuple[Path, ...]:
     return tuple(ordered)
 
 
+def _contract_inheritance_graph(sources: tuple[Path, ...]) -> dict[str, tuple[Path, tuple[str, ...], str]]:
+    """Build only the contract inheritance graph from the reachable source set."""
+    graph: dict[str, tuple[Path, tuple[str, ...], str]] = {}
+    declaration = re.compile(r"\b(?:abstract\s+)?contract\s+(?P<name>[A-Za-z_]\w*)(?:\s+is\s+(?P<bases>[^\{]+))?\s*\{", re.MULTILINE)
+    for path in sources:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        for match in declaration.finditer(source):
+            body = source[match.end():]
+            depth = 1
+            end = len(body)
+            for index, char in enumerate(body):
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = index
+                        break
+            bases: list[str] = []
+            for raw_base in (match.group("bases") or "").split(","):
+                base_match = re.match(r"\s*([A-Za-z_]\w*)", raw_base)
+                if base_match:
+                    bases.append(base_match.group(1))
+            graph[match.group("name")] = (path, tuple(bases), body[:end])
+    return graph
+
+
 def requires_proxy_initialization(contract_source: str | Path) -> bool:
-    """Return true when the target's reachable initialization topology disables direct initialization."""
+    """Return true when the target contract or an inherited base disables implementation initialization."""
+    if isinstance(contract_source, Path):
+        try:
+            sources = _reachable_sources(contract_source)
+        except (OSError, RuntimeError):
+            return False
+        graph = _contract_inheritance_graph(sources)
+        roots = [name for name, (path, _, _) in graph.items() if path.resolve() == contract_source.resolve()]
+        queue = list(roots)
+        seen: set[str] = set()
+        while queue:
+            name = queue.pop(0)
+            if name in seen:
+                continue
+            seen.add(name)
+            entry = graph.get(name)
+            if entry is None:
+                continue
+            _path, bases, body = entry
+            if _constructor_disables_initializers(body):
+                return True
+            queue.extend(base for base in bases if base not in seen)
+        return False
+
+    if _constructor_disables_initializers(contract_source):
+        return True
+    return _INITIALIZABLE_MARKER in contract_source and _PROXY_MARKER in contract_source
+
+
+def supports_initializer_disable(contract_source: str | Path) -> bool:
+    """Return whether the reachable target topology exposes _disableInitializers()."""
     if isinstance(contract_source, Path):
         try:
             sources = _reachable_sources(contract_source)
@@ -82,15 +147,13 @@ def requires_proxy_initialization(contract_source: str | Path) -> bool:
             return False
         for path in sources:
             try:
-                if _constructor_disables_initializers(path.read_text(encoding="utf-8")):
-                    return True
+                text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeError):
                 continue
+            if "_disableInitializers(" in text:
+                return True
         return False
-
-    if _constructor_disables_initializers(contract_source):
-        return True
-    return _INITIALIZABLE_MARKER in contract_source and _PROXY_MARKER in contract_source
+    return bool("_disableInitializers(" in contract_source)
 
 
 def adapt_generated_initialization_for_proxy(source: str, target_type: str) -> str:

@@ -55,7 +55,8 @@ def test_unclassified_initializer_uses_generic_mutation_probe(caplog):
     assert "address unauthorized = address(0xA11CE);" in body
     assert "vm.record();" in body
     assert "vm.prank(unauthorized);" in body
-    assert "target.initialise(false, 0, 0, address(0xCAFE));" in body
+    assert "target.initialise(false, 0, 0, address(0xCAFE));" not in body
+    assert "try target.initialise(false, 0, 0, address(0xCAFE)) { } catch { }" in body
     assert "vm.accesses(address(target))" in body
     assert "assertEq(writes.length, 0" in body
     assert "shape undetermined; using generic mutation probe" in caplog.text
@@ -102,5 +103,5 @@ def test_fallback_binds_access_probe_to_selected_target_variable():
         state_predicates=(),
     )
     body = render_initialization_test_body(function, "vault", "0xA11CE", "")
-    assert "vault.initialise();" in body
+    assert "try vault.initialise(" in body
     assert "vm.accesses(address(vault))" in body

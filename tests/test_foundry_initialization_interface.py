@@ -67,7 +67,7 @@ def test_model_aware_generator_consumes_constructor_and_parameters(tmp_path):
     )
     source = output.read_text(encoding="utf-8")
     assert "new LiquidClawFixture(address(0), address(0), address(0))" in source
-    assert "target.initialize(new address[](0), address(0));" in source
+    assert "try target.initialize(new address[](0), address(0xA11CE)) { } catch { }" in source
     assert "guardian()" not in source
 
 
@@ -97,7 +97,7 @@ def test_planned_inputs_override_initializer_fallback_arguments(tmp_path):
         experiment=experiment,
     )
     source = output.read_text(encoding="utf-8")
-    assert "target.initialize(7, address(0xCAFE));" in source
+    assert "try target.initialize(7, address(0xCAFE)) { } catch { }" in source
     assert "target.initialize(0, address(0));" not in source
 
 
@@ -170,7 +170,7 @@ def test_model_aware_generator_qualifies_and_imports_inherited_custom_type(tmp_p
     declaration_pos = source.index("IMinter.AirdropParams memory parameter0;")
     assert function_body_start < declaration_pos < function_body_end
     assert "Minter.AirdropParams memory parameter0;" not in source.replace("IMinter.AirdropParams memory parameter0;", "")
-    assert "target.initialize(parameter0);" in source
+    assert "try target.initialize(parameter0) { } catch { }" in source
     assert "target.guardian()" not in source
 
 
@@ -213,3 +213,37 @@ def test_legacy_generator_path_is_unchanged_without_model(tmp_path):
     assert "new WormholeInitializationFixture();" in source
     assert "abi.encodeWithSelector(target.initialize.selector, attacker)" in source
     assert "target.guardian() != attacker" in source
+
+
+def test_initializer_probe_avoids_zero_values_for_generic_scalar_preconditions(tmp_path):
+    from cydra.foundry import generate_initialization_test
+    model = _model(
+        "SimpleInitializer",
+        (),
+        (ParameterModel("owner", "address"), ParameterModel("amount", "uint256")),
+    )
+    output = generate_initialization_test(_hypothesis(), "../src/SimpleInitializer.sol", "SimpleInitializer", tmp_path / "generated.t.sol", contract_model=model)
+    source = output.read_text(encoding="utf-8")
+    assert "address(0xA11CE)" in source
+    assert "address(0)" not in source
+    assert "try target.initialize(" in source
+
+
+def test_initializer_probe_synthesizes_aligned_future_timestamp(tmp_path):
+    from cydra.foundry import generate_initialization_test
+    path = tmp_path / "TimedInitializer.sol"
+    path.write_text('''
+        contract TimedInitializer {
+            uint256 public rewardStartTime;
+            function initialize(uint256 rewardStartTime) external {
+                require(rewardStartTime > block.timestamp);
+                require(rewardStartTime % 86400 == 0);
+                rewardStartTime = rewardStartTime;
+            }
+        }
+    ''', encoding="utf-8")
+    model = _model("TimedInitializer", (), (ParameterModel("rewardStartTime", "uint256"),))
+    model = ContractModel(**{**model.__dict__, "source": str(path)})
+    output = generate_initialization_test(_hypothesis(), "../src/TimedInitializer.sol", "TimedInitializer", tmp_path / "generated.t.sol", contract_model=model)
+    source = output.read_text(encoding="utf-8")
+    assert "((block.timestamp / 86400) + 2) * 86400" in source
