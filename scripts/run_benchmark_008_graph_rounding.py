@@ -9,11 +9,9 @@ from pathlib import Path
 
 from cydra.canonical_cycle import run_canonical_differential_cycle
 from cydra.foundry import require_executed, run_foundry_test, test_path_for
-from cydra.finding import Finding
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
 from cydra.hypotheses import Hypothesis as CanonicalHypothesis
 from cydra.impact import ImpactAssessment, ImpactLevel
-from cydra.models import Evidence
 from cydra.pipeline import investigate
 from cydra.solidity_model import parse_solidity
 from cydra.system_model import Edge, Node, SystemModel
