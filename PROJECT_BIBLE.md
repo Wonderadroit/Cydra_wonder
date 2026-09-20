@@ -693,3 +693,121 @@ The benchmark fixture is an extracted causal regression from the real historical
 
 The next step after this benchmark is to use the learned attribution capability on another unfamiliar target and determine whether the reasoning generalizes without relying on Olympus-specific names or token-hook assumptions.
 
+
+## 42. Solidity maturity gate before ecosystem expansion
+
+CYDRA must not move to another programming language or smart-contract ecosystem merely because that ecosystem is strategically interesting.
+
+The immediate priority is to determine whether the Solidity/EVM reasoning stack is genuinely capable of taking an unfamiliar authorized Solidity project and driving it through the complete research loop end to end:
+
+**Target discovery/environment → system understanding → invariant discovery → hypothesis generation → discriminating experiment → execution → evidence → causal verification → reproducible finding.**
+
+“Solidified” does not mean that every Solidity vulnerability class is implemented. It means the architecture and reasoning loop have demonstrated meaningful generalization across unfamiliar projects and mechanisms rather than only extracted benchmark fixtures.
+
+Before declaring Solidity sufficiently mature, CYDRA should seek repeated blind end-to-end results on genuinely unfamiliar historical or authorized Solidity targets with materially different system structures and failure mechanisms. The tests should include cases where existing extractors do not immediately recognize the mechanism.
+
+The maturity decision must be evidence-driven. Passing CI, increasing benchmark count, or adding more named detectors is not sufficient.
+
+Evidence supporting the Solidity maturity gate should include, where practical:
+- successful blind findings on unfamiliar targets;
+- successful transfer of capabilities across different concrete mechanisms;
+- meaningful system-model construction on projects CYDRA did not previously know;
+- ability to recover from extraction/modeling/execution failures without target-specific hardcoding;
+- negative controls and patched counterparts where available;
+- reproducible causal findings;
+- documented misses showing what remains outside the current generalization envelope.
+
+Until this gate is satisfied, Solidity/EVM remains the primary development frontier.
+
+## 43. Future cross-ecosystem direction — Solana/Rust
+
+Solana/Rust is a planned future expansion, but it is explicitly deferred until the Solidity maturity gate provides sufficient evidence.
+
+The goal is not to create a second collection of language-specific vulnerability detectors. CYDRA should preserve one reasoning core and add ecosystem-specific system-model/evidence adapters.
+
+The future architecture is:
+
+**CYDRA reasoning core → ecosystem adapter → system/evidence model → invariant/hypothesis/experiment reasoning → causal verification → finding**
+
+The common reasoning abstractions should include, where the target supports them:
+- authorization and authority boundaries;
+- asset/economic conservation;
+- state transitions and lifecycle;
+- temporal/call-order constraints;
+- cross-component trust;
+- callback/reentrancy-like state exposure;
+- accounting and attribution;
+- identity and authority relationships.
+
+The Solana/Rust adapter must model the actual semantics of the ecosystem rather than translating Solidity concepts mechanically. Important Solana-specific structures include programs, instructions, accounts, account ownership, signers, PDAs, account constraints, CPIs, and program-derived authority.
+
+Historical Solana/Rust vulnerabilities may be used as blind learning targets under the same anti-overfitting doctrine. A known historical answer must remain hidden from CYDRA during hypothesis generation.
+
+The first Solana/Rust milestone should be one demonstrated blind end-to-end finding on an unfamiliar historical or authorized target. Expansion should then follow the same:
+
+**Guided → Diagnose → Fix → Guided Retest → Blind → Diagnose → Fix → Blind Retest → New Target**
+
+cycle.
+
+This section is a roadmap, not permission to begin speculative Solana infrastructure while Solidity generalization remains unproven.
+
+## 44. GitHub-native research execution
+
+GitHub Actions is the preferred persistent execution environment for CYDRA's repeatable research and backtesting workloads.
+
+The phone/chat session is a control and reasoning interface; the repository and CI are the durable execution surface. A local development environment is not required for every investigation.
+
+A CI research run should be able to:
+1. identify the exact target/version;
+2. load and validate the research contract;
+3. enforce authorization, scope, permitted environment, and exclusions;
+4. establish the declared and observed toolchain;
+5. build the system model;
+6. generate and rank hypotheses;
+7. select and execute experiments within the authorized environment;
+8. preserve raw evidence and provenance;
+9. perform causal verification and adversarial review;
+10. emit a machine-readable research result and artifacts.
+
+CI must remain fail-closed around authorization and scope. CYDRA must not infer permission from technical reachability.
+
+The Project Bible should treat a research contract as the machine-readable boundary for a campaign. At minimum it should represent:
+- target repository, deployed program/contract, or exact target identifier;
+- exact commit/version where applicable;
+- authorization basis;
+- included scope;
+- excluded scope;
+- permitted environments and prohibited actions;
+- required proof/PoC constraints;
+- competition start/end or program timing where applicable;
+- research budget/time limits;
+- toolchain/environment requirements;
+- output/submission constraints.
+
+For live competitions or bug-bounty programs, the research contract must be created from the current program rules and scope. Rules are interpreted before experiments begin, and human review remains responsible for confirming that the campaign is authorized.
+
+ChatGPT may act as the on-demand research interpreter/controller: it can inspect current program rules when asked, translate them into a research contract, interpret CI evidence, diagnose failures, and choose the next research question. It is not assumed to be a permanently running daemon inside GitHub Actions.
+
+GitHub Actions may provide scheduled or manually dispatched execution, but persistent automation does not remove the authorization, scope, human-review, or finding-gate requirements.
+
+The preferred operational loop is:
+
+**Research rules/scope → Research Contract → CYDRA CI → Evidence/Result artifacts → ChatGPT interpretation → next authorized investigation**
+
+A CI run that merely reports “no finding” must not be treated as proof that the target is secure. The result must distinguish no candidate, insufficient evidence, execution/model failure, rejected hypothesis, and confirmed finding.
+
+## 45. Current priority decision
+
+The current priority is **not** Solana/Rust implementation.
+
+The current priority is to prove whether CYDRA can pick up unfamiliar Solidity projects and repeatedly complete the full reasoning loop to real findings without being told the historical answer.
+
+Therefore the next work should be selected from the next unfamiliar Solidity investigation:
+
+**Backtest unfamiliar target → observe failure or finding → diagnose the exact blocker → implement only the demonstrated general capability → retest → blind → record evidence in the Project Bible → repeat.**
+
+Do not add speculative Solidity architecture simply to reach a larger feature list. Do not move to another ecosystem merely because the current benchmark suite is large.
+
+The transition to Solana/Rust becomes justified only after the evidence says the Solidity core is sufficiently generalized, or after a deliberate Project Bible decision changes this priority.
+
+The success criterion remains practical: CYDRA should become capable of taking an unfamiliar authorized Solidity project and doing useful end-to-end security research rather than merely recognizing known patterns.
