@@ -32,7 +32,7 @@ contract CydraIdempotencyTest {{
     function setUp() public {{ target = new {target_type}(); }}
 
     function testRepeatedRecordCannotReleaseValueTwice() public {{
-        uint256 beforeBalance = ICydraToken(target.token()).balanceOf(address(this));
+        uint256 beforeBalance = ICydraToken(address(target.token())).balanceOf(address(this));
         uint256[] memory ids = new uint256[](2);
         ids[0] = 0;
         ids[1] = 0;
