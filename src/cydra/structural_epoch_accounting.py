@@ -81,7 +81,18 @@ def _source_functions(source: str) -> tuple[tuple[str, str, str], ...]:
     ):
         visibility_match = re.search(r"\b(public|external|internal|private)\b", match.group("tail"))
         visibility = visibility_match.group(1) if visibility_match else "unspecified"
-        body = _body(source, match.group("name"))
+        opening = match.end() - 1
+        depth = 0
+        end = None
+        for index in range(opening, len(source)):
+            if source[index] == "{":
+                depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = index
+                    break
+        body = source[opening + 1:end] if end is not None else ""
         found.append((match.group("name"), visibility, body))
     return tuple(found)
 
