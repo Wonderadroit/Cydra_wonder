@@ -17,7 +17,7 @@ def test_memory_alias_storage_mutation_generates_hypothesis(tmp_path):
     source = tmp_path / "Target.sol"
     source.write_text(
         """
-        struct Item { bool active; }
+        contract Target {\n        contract Target {\n        struct Item { bool active; }
         mapping(uint256 => Item) public items;
 
         function update(uint256 id) external {
