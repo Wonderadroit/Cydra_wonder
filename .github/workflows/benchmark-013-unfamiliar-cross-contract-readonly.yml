@@ -27,6 +27,7 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
+          set -o pipefail
           mkdir -p backtest-artifacts/blueberry-cross-contract-readonly
           python scripts/run_benchmark_013_unfamiliar_cross_contract_readonly.py | tee backtest-artifacts/blueberry-cross-contract-readonly/result.json
       - if: always()
