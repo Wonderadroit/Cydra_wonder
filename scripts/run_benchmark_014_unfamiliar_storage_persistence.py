@@ -158,11 +158,7 @@ abstract contract UUPSUpgradeable {
     )
 
     contract = parse_solidity(src / "graph/TitlesGraph.sol")[0]
-    contribution = generate_storage_persistence_hypotheses(contract)
-    if not contribution.hypotheses:
-        raise RuntimeError("storage-persistence reasoning did not find the target mechanism")
-    hypothesis = contribution.hypotheses[0]
-    experiment = Experiment(
+    experiment = Experiment
         "EXP-STORAGE-PERSISTENCE-" + hypothesis.target_function,
         hypothesis.hypothesis_id,
         "invoke the successful state transition and inspect the same storage element after the call",
