@@ -51,7 +51,7 @@ def _fallback_shape(function_model: FunctionModel, target_var: str, unauthorized
         "    vm.record();\n"
         "    vm.prank(unauthorized);\n"
         f"    try {call} {{\n"
-        "        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(target));\n"
+        "        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address({target_var}));\n"
         "        reads;\n"
         "        assertEq(writes.length, 0, \"arbitrary initializer call mutated target storage\");\n"
         "    } catch {\n"
