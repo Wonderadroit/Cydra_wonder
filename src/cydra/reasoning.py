@@ -203,6 +203,18 @@ def plan_redemption_rounding_experiment(hypothesis: Hypothesis) -> Experiment:
         target_function=hypothesis.target_function,
     )
 
+def plan_cross_contract_attribution_experiment(hypothesis: Hypothesis) -> Experiment:
+    return Experiment(
+        experiment_id=f"X-{hypothesis.hypothesis_id}",
+        hypothesis_id=hypothesis.hypothesis_id,
+        action=f"Trigger {hypothesis.target_function} with a requested repayment while the token transfer invokes an independent inflow, then compare the requested amount with the accounting reduction.",
+        discriminates=("accounting reduction exceeds the requested repayment", "accounting reduction is bounded by the requested repayment"),
+        cost=3.0,
+        planned_inputs=("100",),
+        target_function=hypothesis.target_function,
+    )
+
+
 def plan_cross_contract_economic_experiment(hypothesis: Hypothesis) -> Experiment:
     return Experiment(
         experiment_id=f"X-{hypothesis.hypothesis_id}",

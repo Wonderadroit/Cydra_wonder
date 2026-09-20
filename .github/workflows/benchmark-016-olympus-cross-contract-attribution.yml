@@ -1,0 +1,30 @@
+name: Benchmark 016 — Olympus cross-contract attribution
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "benchmarks/016_olympus_cross_contract_attribution/**"
+      - "scripts/run_benchmark_016_olympus_cross_contract_attribution.py"
+      - "tests/test_benchmark_016_olympus_cross_contract_attribution.py"
+      - ".github/workflows/benchmark-016-olympus-cross-contract-attribution.yml"
+
+jobs:
+  benchmark-016:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install Python package
+        run: python -m pip install -e .
+      - name: Install test runner
+        run: python -m pip install pytest
+      - name: Run benchmark unit tests
+        run: python -m pytest -q tests/test_benchmark_016_olympus_cross_contract_attribution.py
+      - name: Run historical blind backtest
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_016_olympus_cross_contract_attribution.py

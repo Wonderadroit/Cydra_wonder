@@ -26,6 +26,7 @@ from .reasoning import (
     plan_transfer_accounting_experiment,
     plan_redemption_rounding_experiment,
     plan_cross_contract_economic_experiment,
+    plan_cross_contract_attribution_experiment,
 )
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
@@ -38,6 +39,7 @@ from .structural_read_only_reentrancy import generate_read_only_reentrancy_hypot
 from .structural_transfer_accounting import generate_transfer_accounting_hypotheses
 from .structural_redemption_rounding import generate_redemption_rounding_hypotheses
 from .structural_cross_contract_economic import generate_cross_contract_economic_hypotheses
+from .structural_cross_contract_attribution import generate_cross_contract_attribution_hypotheses
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_redemption_rounding_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-CROSS-CONTRACT-ECONOMIC-"):
         return plan_cross_contract_economic_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-CROSS-CONTRACT-ATTRIBUTION-"):
+        return plan_cross_contract_attribution_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -173,7 +177,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []

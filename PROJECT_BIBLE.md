@@ -667,3 +667,29 @@ This benchmark establishes all three requested discovery dimensions together:
 The fixture is an extracted causal regression rather than a claim that this exact code existed in a named production protocol. Public incident research shows that cross-scope accounting isolation is a real failure mode in shared DeFi systems; for example, the May 2024 Predy Finance incident involved cross-pair liquidity theft caused by accounting scope and post-callback validation failures. The public analysis reports that funds belonging to other pairs could be moved during a callback while an aggregate balance check still appeared healthy. This source is post-run contextual validation, not an input to CYDRA's blind hypothesis generation.
 
 This milestone is stronger than merely adding another detector: the project explicitly measured an extractor blind spot, generalized the reasoning at the system/economic level, executed a vulnerable/patched differential, and promoted the causal result through the normal finding gate. The next step is to transfer this reasoning to a genuinely unfamiliar historical target rather than treating Benchmark 015 itself as proof of universal cross-contract coverage.
+
+## 41. Historical backtest milestone — cross-contract balance-delta attribution
+
+The next unfamiliar historical investigation moved beyond the existing inbound-transfer accounting rule. Olympus DAO's historical treasury repayment path already measured the receiving balance delta correctly, but the delta itself could be contaminated by an unrelated cross-contract inflow occurring during the external token transfer.
+
+The new class-neutral reasoning surface recognizes the broader pattern: a state-changing function snapshots an asset balance, performs an external token transfer, derives a balance delta, and uses that delta to reduce caller-specific accounting without bounding the reduction by the caller-requested transfer. The invariant is that unrelated assets delivered during the external call must not be attributed to the caller's payment.
+
+The historical target is the Olympus DAO contest repository at commit `549b96bcf8b97807738572605f6b1e26b33ef411`, specifically `src/modules/TRSRY.sol`. CYDRA receives only the historical source during hypothesis generation. The public Code4rena finding is kept as post-run contextual verification rather than blind guidance.
+
+Benchmark 016 proved all of the following in CI:
+- legacy reasoning surfaces alone do not produce the cross-contract attribution hypothesis;
+- the new surface independently extracts `repayLoan` and forms the attribution invariant;
+- the discriminating experiment requests a 100-unit repayment while a callback causes an unrelated 50-unit inflow;
+- the vulnerable causal regression reduces debt by the full 150-unit balance delta;
+- the patched counterpart bounds the reduction to the requested 100 units;
+- canonical causal verification reaches VERIFIED; and
+- the finding gate reaches READY.
+
+The dedicated Benchmark 016 workflow completed successfully after the generic execution harness was corrected to use a non-underflowing 200-unit debt baseline. The final vulnerable execution was measurable and FAIL; the patched execution was measurable and PASS.
+
+This is deliberately different from Benchmark 013. Benchmark 013 asks whether the receiver measures the actual balance delta at all. Benchmark 016 asks whether a measured delta can be safely attributed to the caller when another contract can change the same balance during the external call.
+
+The benchmark fixture is an extracted causal regression from the real historical Olympus source, not a claim that the fixture itself was the production deployment. The external Code4rena report documents M-23 as a cross-contract reentrancy/accounting issue in `repayLoan` and records the confirmed minimal remediation as bounding `received` by `amount_`. This external material is verification after the blind run, not an input to hypothesis generation.
+
+The next step after this benchmark is to use the learned attribution capability on another unfamiliar target and determine whether the reasoning generalizes without relying on Olympus-specific names or token-hook assumptions.
+
