@@ -37,8 +37,12 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
     copied: set[Path] = set()
     while pending:
         current = pending.pop()
-        relative = current.relative_to(source_root)
-        destination_file = src_root / relative
+        try:
+            relative = current.relative_to(source_root)
+            destination_file = src_root / relative
+        except ValueError:
+            relative = current.relative_to(target_root)
+            destination_file = destination / "src" / relative
         if current in copied:
             continue
         copied.add(current)
@@ -72,13 +76,17 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
             if dependency.is_file() and dependency not in copied:
                 pending.append(dependency)
 
+    remapping_lines = ['@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/']
+    for prefix, destination_path in remappings:
+        remapping_lines.append(f"{prefix}=src/{destination_path}")
+    remapping_literal = ", ".join(repr(item) for item in remapping_lines)
     (destination / "foundry.toml").write_text(
         '[profile.default]\n'
         'src = "src"\n'
         'test = "test"\n'
         'libs = ["lib"]\n'
         'auto_detect_solc = true\n'
-        'remappings = ["@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/"]\n',
+        f"remappings = [{remapping_literal}]\n",
         encoding="utf-8",
     )
     hardhat_console = destination / "lib" / "hardhat" / "console.sol"
