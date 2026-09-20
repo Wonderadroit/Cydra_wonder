@@ -40,13 +40,7 @@ def generate_signature_replay_hypotheses(contract: ContractModel, semantic=()):
             continue
         if not re.search(r"validateAndSaveSignature|verifySignature|recover\s*\(", body, re.I):
             continue
-        digest_call = re.search(r"(?:keccak256|_hashTypedDataV4)\s*\([^;]+\)", body, re.S)
-        if not digest_call:
-            continue
-        digest = digest_call.group(0)
-        if re.search(r"block\.chainid|chainid|address\s*\(\s*this\s*\)", digest, re.I):
-            continue
-        iid = f"INV-SIGNATURE-REPLAY-{f.name}"
+        digest_call = re.search(r"(?P<helper>_?keccakFor[A-Za-z0-9_]+)\\s*\\(", body)\n        if digest_call:\n            digest_body = _body(source, digest_call.group("helper"))\n        else:\n            digest_match = re.search(r"(?:keccak256|_hashTypedDataV4)\\s*\\([^;]+\\)", body, re.S)\n            if not digest_match:\n                continue\n            digest_body = digest_match.group(0)\n        if re.search(r"block\\.chainid|chainid|address\\s*\\(\\s*this\\s*\\)", digest_body, re.I):\n            continue\n        iid = f"INV-SIGNATURE-REPLAY-{f.name}"
         invariants.append(Invariant(iid, "A signed authorization must be bound to the intended execution domain so a valid signature cannot authorize the same action in another deployment or chain.", "signature authorization / domain separation topology", 0.82))
         hypotheses.append(Hypothesis(f"H-SIGNATURE-REPLAY-{f.name}", f"{f.name} may accept a valid signature outside its intended execution domain because the signed message is not observed to bind chain or contract context.", iid, f.name, "attacker who obtains a valid authorized signature", "the same signed authorization is accepted by another deployment or chain with equivalent signer and message inputs", evidence_ids=(f"E-MODEL-{f.name}",)))
     return SignatureReplayContribution(tuple(invariants), tuple(hypotheses))
