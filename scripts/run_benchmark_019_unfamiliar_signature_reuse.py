@@ -40,6 +40,7 @@ def clone_target(destination: Path) -> Path:
         text=True,
     )
     subprocess.run(("git", "-C", str(destination), "submodule", "update", "--init", "--recursive"), check=True)
+    subprocess.run(("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"), cwd=destination, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     return destination
 
 
