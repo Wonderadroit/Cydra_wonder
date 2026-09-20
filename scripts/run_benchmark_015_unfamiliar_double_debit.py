@@ -88,7 +88,7 @@ contract TapiocaDoubleDebitHarness {{
 
     function testDoubleDebit() external {{
         uint256 beforeBalance = userBalance;
-        buyCollateral(10);
+        this.buyCollateral(10);
         require(debt == 10, "CYDRA_SECURITY_ASSERTION: debt mismatch");
         require(marketCollateral == 10, "CYDRA_SECURITY_ASSERTION: market collateral mismatch");
         require(userCollateral == 10, "CYDRA_SECURITY_ASSERTION: accounting mismatch");
