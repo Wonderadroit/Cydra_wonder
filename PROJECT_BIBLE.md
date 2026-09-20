@@ -298,7 +298,6 @@ CYDRA must preserve:
 - tool-routing failures;
 - reasoning failures;
 - benchmark cases.
-
 ## 22. Security boundaries
 
 CYDRA is a research engine for authorized security work. It must not be designed around unauthorized access, credential theft, persistence, evasion, destructive exploitation, or indiscriminate scanning.
@@ -598,7 +597,6 @@ Successful blind benchmark 012 evidence:
 - canonical causal cycle: completed successfully;
 - causal verification: VERIFIED;
 - finding gate: READY.
-
 The first CI attempt reached the full benchmark but failed after the detector regression test, so the benchmark output was preserved and the workflow was rerun. The repaired run completed successfully, including the actual Foundry differential path. No target-specific exception was added.
 
 This milestone is evidence that CYDRA can reason about a cross-function transient-state/trust-boundary failure that differs materially from authorization, arithmetic rounding, sibling guard parity, temporal ordering, and repeated-record idempotency. The next unfamiliar target must test whether this transient-state reasoning generalizes beyond the extracted fixture.
@@ -897,7 +895,6 @@ The campaign therefore treats generation correctness as part of the causal resea
 A renderer failure is a pipeline/generalization failure, not evidence against the hypothesis and never a finding.
 
 ## 50. Research CI must execute the triggering revision
-
 The Solidity research workflow previously declared a pull-request trigger but explicitly checked out `main`. That meant a pull-request validation run could execute the already-merged baseline instead of the proposed research changes.
 
 The workflow now checks out `github.sha`, so push, manual, scheduled, and pull-request executions test the revision that triggered the run.
@@ -1005,3 +1002,36 @@ Observed result from CI research run #109:
 The exact target revision and all raw execution/provenance evidence are preserved in the CI research artifact. The finding is bounded to the demonstrated initialization-state control failure; the artifact does not claim impact beyond what the executed invariant and causal differential establish.
 
 This milestone is materially stronger evidence for Solidity generalization because the target was unfamiliar, the hypothesis was generated blind, the execution required generic input/environment handling, the causal control was synthetic rather than a supplied historical patch, and the result survived an independent reproduction. It does not close the Solidity maturity gate; another unfamiliar target and a materially different mechanism are still required.
+
+## 54. Unfamiliar Alchemix authorization — blind causal finding with independent reproduction
+
+The real historical Alchemix authorization campaign has now completed the full blind authorization path on the pinned Alchemix Protocol revision `0261dd5a23c63aaa354d56f506701a6fa79cfe1f`, using `contracts/AlchemistEth.sol` as the source surface. The historical answer was not supplied during hypothesis generation.
+
+The campaign required and demonstrated several generic execution capabilities rather than a target-specific Alchemix detector:
+- authorization reasoning identified `setWhitelist` as an externally callable state-mutating administrative surface with no observed authorization modifier;
+- the blind runner inferred an authorization control from observed modifier semantics and selected `onlyGov` from the target's sibling-function usage, rather than hard-coding the modifier name;
+- the causal control is applied to the same isolated Foundry source tree that the generated blind test imports, preserving the vulnerable-versus-control differential;
+- the generated authorization assertion renderer is handled generically for both success-gated and revert-gated authorization assertions;
+- the finding gate requires both a first causal differential and a fresh vulnerable/patched reproduction before `READY`;
+- the CI workflow was corrected to execute the exact command arguments and to preserve the machine-readable result artifact.
+
+The resulting blind chain completed:
+
+**Target → System Model → Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+
+Observed result from the real Alchemix CI campaign (run #301):
+- blind hypothesis: `H-AUTH-setWhitelist`;
+- invariant: `INV-AUTH-001` — an arbitrary external caller must not mutate privileged authorization/configuration state;
+- blind execution: one Foundry test executed and failed because an unauthorized caller successfully invoked the modeled administrative operation;
+- blind classification: `confirmed`;
+- inferred causal authorization control: `onlyGov`;
+- patched execution: one Foundry test executed and passed after the inferred authorization modifier was applied;
+- causal verification: `VERIFIED`, chain `causal:authorization-modifier-differential`;
+- independent vulnerable reproduction: one fresh Foundry test executed and failed with the same authorization assertion;
+- independent patched reproduction: one fresh Foundry test executed and passed;
+- reproduction verification: `VERIFIED`, chain `reproduction:authorization-modifier-differential`;
+- finding gate: **READY**.
+
+The machine-readable CI artifact records the exact historical target, hypothesis, experiment, execution results, inferred control, causal verification, reproduction verification, and `finding_gate: READY`. The result is bounded to the demonstrated missing-authorization state-transition claim and does not infer impact beyond the executed invariant.
+
+This milestone materially strengthens the Solidity generalization gate because it is a genuinely unfamiliar target and a materially different mechanism from the earlier Morph/Olas initialization and transfer-accounting findings. The hypothesis was generated from the target's observed model, the causal control was inferred from sibling authorization semantics, and the result survived independent vulnerable/patched reproduction. It still does not mean arbitrary Solidity research is solved; the next priority remains another unfamiliar mechanism and continued adversarial generalization.
