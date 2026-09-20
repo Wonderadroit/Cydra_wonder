@@ -90,7 +90,7 @@ def _attach_input_plan(
     function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
     bound = experiment
     if function is not None:
-        vector = plan_parameter_inputs(
+        vector = experiment.planned_inputs or plan_parameter_inputs(
             function.parameters,
             constraints,
             function_name=function.name,
