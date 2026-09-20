@@ -246,7 +246,7 @@ def main() -> int:
                 coverage_status = "capability_gap"
             class_coverage[cls] = {"requested": True, "hypotheses_extracted": extracted, "hypotheses_executed": executed, "status": coverage_status}
 
-        build = capture(project, "forge", "build")
+        build = {"command": ["forge", "build"], "exit_code": None, "stdout": "", "stderr": "", "ok": None, "skipped": True, "reason": "state topology diagnostic does not require a full target build"}
         provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions}
         classification = {"surface": "compiler-backed-planned-execution", "class_coverage": class_coverage, "hypotheses": statuses, "compiler_evidence_status": compiler.status, "semantic_evidence_count": len(compiler.evidence), "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
         execution_human = "\n\n".join(f"{e.experiment_id}: {e.status}\n{e.stdout}\n{e.stderr}" for e in executions)
