@@ -16,6 +16,8 @@ from typing import Any
 
 from cydra.compiler_state import compile_state_effects
 from cydra.foundry import ExecutionResult, generate_initialization_test, require_executed, run_foundry_test, test_path_for
+from cydra.blind_authorization import generate_blind_authorization_test_from_experiment
+from cydra.authorization_runtime import classify_authorization_blind_execution
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
 from cydra.pipeline import investigate
@@ -50,7 +52,7 @@ def capture(cwd: Path, *args: str) -> dict[str, Any]:
 
 
 def clone_target(repo: str, ref: str, destination: Path) -> None:
-    subprocess.run(("git", "clone", "--no-tags", repo, str(destination)), check=True)
+    subprocess.run(("git", "clone", "--no-tags", "--recurse-submodules", repo, str(destination)), check=True)
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", ref), check=True)
 
 
@@ -59,6 +61,10 @@ def prepare_target_dependencies(project: Path) -> dict[str, Any]:
     commands: list[dict[str, Any]] = []
     if (project / "package-lock.json").exists():
         commands.append(capture(project, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"))
+    elif (project / "pnpm-lock.yaml").exists():
+        commands.append(capture(project, "corepack", "pnpm", "install", "--frozen-lockfile", "--ignore-scripts"))
+    elif (project / "yarn.lock").exists():
+        commands.append(capture(project, "corepack", "yarn", "install", "--ignore-scripts"))
     elif (project / "package.json").exists():
         commands.append(capture(project, "npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"))
     return {"commands": commands, "ok": all(item["ok"] for item in commands)}
@@ -223,10 +229,27 @@ def main() -> int:
             cls = INVARIANT_CLASS.get(hypothesis.invariant_id, "other")
             if cls not in classes: continue
             status = {"hypothesis_id": hypothesis.hypothesis_id, "class": cls, "extracted": True, "hypothesis_generated": True, "experiment_planned": hypothesis.hypothesis_id in experiments, "foundry_generated": False, "blind_executed": False, "classification": "NOT_REACHED"}
-            if cls != "initialization":
-                status["classification"] = "NOT_REACHED"
-                status["blocked_reason"] = "Benchmark 005 current executable blind surface is initialization-only; non-initialization classes are recorded as capability gaps, not silently skipped."
-                statuses.append(status); continue
+            try:
+                contract = contract_for(result, hypothesis)
+                experiment = experiments[hypothesis.hypothesis_id]
+                if cls == "initialization":
+                    proxy_topology = requires_proxy_initialization(Path(contract.source))
+                    generated, execution, outcome = run_initialization(project, hypothesis, experiment, contract)
+                    status.update(foundry_generated=True, blind_executed=execution.executed, generated_path=str(generated), deployment_topology="proxy" if proxy_topology else "direct", classification=outcome.benchmark_status, internal_status=outcome.internal_status, evidence=_json(outcome.evidence), execution=_json(execution))
+                elif cls == "authorization":
+                    generated = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+                    generate_blind_authorization_test_from_experiment(hypothesis, experiment, target_import(contract, project), contract.name, generated, contract)
+                    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+                    outcome = classify_authorization_blind_execution(hypothesis, execution)
+                    status.update(foundry_generated=True, blind_executed=execution.executed, generated_path=str(generated), deployment_topology="direct", classification=outcome.benchmark_status, internal_status=outcome.internal_status, evidence=_json(outcome.evidence), execution=_json(execution))
+                else:
+                    status["classification"] = "NOT_REACHED"
+                    status["blocked_reason"] = "Benchmark 005 arithmetic execution is not yet generalized; recorded as capability gap."
+                    statuses.append(status); continue
+                executions.append(execution); evidence.append(outcome.evidence)
+            except Exception as exc:
+                status.update(failure_stage="execution_or_generation", blocked_reason=f"{type(exc).__name__}: {exc}")
+            statuses.append(status); continue
             try:
                 contract = contract_for(result, hypothesis)
                 proxy_topology = requires_proxy_initialization(Path(contract.source))
