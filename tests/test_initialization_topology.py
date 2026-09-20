@@ -110,3 +110,25 @@ def test_supports_initializer_disable_follows_reachable_definition(tmp_path):
     )
     from cydra.initialization_topology import supports_initializer_disable
     assert supports_initializer_disable(contracts / "LoanProtocol.sol")
+
+
+
+def test_requires_proxy_resolves_openzeppelin_from_node_modules(tmp_path):
+    root = tmp_path / "target"
+    contracts = root / "contracts"
+    lib = root / "node_modules" / "@openzeppelin" / "contracts-upgradeable" / "proxy" / "utils"
+    contracts.mkdir(parents=True)
+    lib.mkdir(parents=True)
+    (contracts / "LoanProtocol.sol").write_text(
+        'import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";\n'
+        'contract LoanProtocol is Initializable { function initialize() external initializer {} }\n',
+        encoding="utf-8",
+    )
+    (lib / "Initializable.sol").write_text(
+        "abstract contract Initializable {\n"
+        "    function _disableInitializers() internal {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    from cydra.initialization_topology import supports_initializer_disable
+    assert supports_initializer_disable(contracts / "LoanProtocol.sol")
