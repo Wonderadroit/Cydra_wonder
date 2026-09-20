@@ -64,7 +64,7 @@ def generate_cross_contract_economic_hypotheses(contract: ContractModel, semanti
     if not gap:
         return CrossContractEconomicContribution((), ())
     vault_name, callee = gap
-    source_function = re.search(
+    if contract.name != vault_name:\n        return CrossContractEconomicContribution((), ())\n    source_function = re.search(
         r"function\s+(\w+)\s*\([^)]*\)[^{]*\{[^}]*reported\s*=\s*\w+\.\w+",
         source,
         re.S,
