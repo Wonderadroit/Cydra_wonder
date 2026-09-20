@@ -32,7 +32,7 @@ def main():
  if not hs: raise SystemExit("No temporal precondition hypothesis extracted")
  h=hs[0];e=next(x for x in result.experiments if x.hypothesis_id==h.hypothesis_id)
  vr=side(v,h,e,"temporal-vulnerable");pr=side(p,h,e,"temporal-patched")
- m=SystemModel();cid=f"contract:{result.contracts[0].name}";fid=f"function:{result.contracts[0].name}:{h.target_function}";iid=f"invariant:{h.invariant_id}";hid=f"hypothesis:{h.hypothesis_id}";oid="observation:temporal-precondition"
+ m=SystemModel();cid=f"contract:{result.contracts[0].name}";fid=f"function:{result.contracts[0].name}:{h.target_function}";iid=f"invariant:{h.invariant_id}";hid=f"hypothesis:{h.hypothesis_id}";oid="temporal-precondition"
  m.add_node(Node(cid,"contract",result.contracts[0].name,{}));m.add_node(Node(fid,"function",h.target_function,{}));m.add_node(Node(iid,"invariant",h.claim,{"status":"inferred"}));m.add_node(Node(hid,"hypothesis",h.claim,{"belief":0.5}));m.add_node(Node(oid,"observation","precondition-before-external-call",{"status":"planned"}));m.add_edge(Edge(iid,"informs",hid,{}));m.add_edge(Edge(oid,"tests",hid,{}))
  cyc=run_canonical_differential_cycle(m,hypothesis=CH(h.hypothesis_id,h.claim,0.5),observation_id=oid,vulnerable=vr,patched=pr,outcome_id="temporal-precondition-differential")
  impact=ImpactAssessment(ImpactLevel.HIGH,"timelocked operation execution boundary","A precondition intended to prevent premature execution can become true during the same transition because an external call mutates the readiness state.","caller can reach the transition; callee can affect readiness state",cyc.causal_verification.evidence_ids)
