@@ -152,7 +152,8 @@ def main() -> int:
                 package_destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(package_source, package_destination, dirs_exist_ok=True)
 
-        source_relative = Path(source).relative_to(checkout / "contracts")
+        source_root = checkout / "contracts" if (checkout / "contracts").is_dir() else checkout
+        source_relative = Path(source).relative_to(source_root)
         contract_identifier = f"src/{source_relative}:{Path(source).stem}"
         bytecode_result = subprocess.run(
             ("forge", "inspect", contract_identifier, "bytecode"),
@@ -174,7 +175,7 @@ def main() -> int:
                 hypothesis,
                 experiment,
                 os.path.relpath(
-                    execution_project / "src" / Path(contract.source).relative_to(checkout / "contracts"),
+                    execution_project / "src" / Path(contract.source).relative_to(source_root),
                     output.parent,
                 ).replace(os.sep, "/"),
                 contract.name,
