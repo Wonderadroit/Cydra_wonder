@@ -114,6 +114,7 @@ interface IBalancerPool {
     )
     (test / "CrossContractReadOnly.t.sol").write_text(
         """pragma solidity 0.8.16;
+import {StableCurveEthOracle} from "../src/oracle/curve/StableCurveEthOracle.sol";
 
 interface ITarget { function getPrice(address) external view returns(uint256); }
 
