@@ -151,6 +151,17 @@ def main() -> int:
                 package_destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(package_source, package_destination, dirs_exist_ok=True)
 
+        source_relative = Path(source).relative_to(checkout / "contracts")
+        contract_identifier = f"src/{source_relative}:{Path(source).stem}"
+        bytecode_result = subprocess.run(
+            ("forge", "inspect", contract_identifier, "bytecode"),
+            cwd=execution_project,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        creation_bytecode = bytecode_result.stdout.strip().removeprefix("0x")
+
         for hypothesis in hypotheses:
             experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
             contract = next(
@@ -168,6 +179,7 @@ def main() -> int:
                 contract.name,
                 output,
                 contract,
+                creation_bytecode=creation_bytecode,
             )
             execution = run_foundry_test(execution_project, generated, experiment.experiment_id, "blind")
             print("EXECUTION_STATUS", execution.status, "exit=", execution.exit_code, "tests=", execution.tests_run, "failed=", execution.tests_failed)
