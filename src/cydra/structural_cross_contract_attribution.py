@@ -50,6 +50,8 @@ def _has_external_inflow_attribution_gap(body: str) -> bool:
     )
     if not (snapshot and transfer and received):
         return False
+    if received.group("before") != snapshot.group("before"):
+        return False
     variable = received.group("received")
     subtracts_received = bool(re.search(rf"\b\w+(?:\[[^;]+\])?\s*-=\s*{re.escape(variable)}\s*;", normalized))
     if not subtracts_received:
