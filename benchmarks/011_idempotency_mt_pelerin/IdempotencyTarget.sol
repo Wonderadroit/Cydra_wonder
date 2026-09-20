@@ -28,9 +28,11 @@ contract IdempotencyTarget {
 
     IdempotencyToken public token;
     uint256 public amount;
+    address public owner;
     mapping(uint256 => OnHoldTransfer) public onHoldTransfers;
 
     constructor() {
+        owner = msg.sender;
         amount = 100;
         token = new IdempotencyToken(address(this), amount * 2);
         onHoldTransfers[0] = OnHoldTransfer(token, Decision.ON_HOLD, address(this), amount);
@@ -45,7 +47,7 @@ contract IdempotencyTarget {
         skipMinBoundaryUpdate;
         for (uint256 i = 0; i < transfers.length; i++) {
             OnHoldTransfer memory transferRecord = onHoldTransfers[transfers[i]];
-            require(transferRecord.from == address(this), "UR07");
+            require(transferRecord.from == owner, "UR07");
             onHoldTransfers[transfers[i]].decision = Decision.CANCEL;
             require(transferRecord.token.transfer(msg.sender, transferRecord.amount), "UR08");
         }
