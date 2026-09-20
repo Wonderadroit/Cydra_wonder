@@ -329,7 +329,20 @@ def main() -> int:
                         executions.append(patched)
                         causal_verified = execution.status == "FAIL" and patched.status == "PASS"
                         status["causal_verification"] = {"state": "verified" if causal_verified else "not_verified", "chain_id": "causal:initialization-lock-differential", "differential": "synthetic constructor _disableInitializers() control"}
-                        status["finding_gate"] = "READY_PENDING_REPRODUCTION" if causal_verified else "NOT_READY"
+                        if causal_verified:
+                            reproduction = run_foundry_test(project, generated, hypothesis.hypothesis_id + ":reproduction", "reproduction")
+                            status["reproduction_execution"] = _json(reproduction)
+                            repro_patched = run_initialization_differential(project, generated, hypothesis, contract, reproduction)
+                            if repro_patched is not None:
+                                status["reproduction_patched_execution"] = _json(repro_patched)
+                            reproduction_verified = reproduction.status == "FAIL" and repro_patched is not None and repro_patched.status == "PASS"
+                            status["reproduction_verification"] = {
+                                "state": "verified" if reproduction_verified else "not_verified",
+                                "chain_id": "reproduction:initialization-lock-differential",
+                            }
+                            status["finding_gate"] = "READY" if reproduction_verified else "READY_PENDING_REPRODUCTION"
+                        else:
+                            status["finding_gate"] = "NOT_READY"
                     else:
                         status["causal_verification"] = {"state": "not_available", "reason": "generic initializer-lock control not supported by reachable topology"}
                         status["finding_gate"] = "NOT_READY"
