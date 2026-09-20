@@ -54,7 +54,7 @@ def _run_side(source: Path, hypothesis, label: str):
         generated = generate_cross_contract_attribution_test(
             hypothesis,
             test_path_for(root, "generated/CydraCrossContractAttributionTest.t.sol"),
-            f"../src/{source.name}",
+            f"../../src/{source.name}",
         )
         execution = run_foundry_test(
             root, generated, f"X-{hypothesis.hypothesis_id}", label
