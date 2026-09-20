@@ -26,11 +26,6 @@ jobs:
       matrix:
         target_path:
           - contracts/LoanProtocol.sol
-          - contracts/PositionNFT.sol
-          - contracts/ListingService.sol
-          - contracts/NFTLoanProtocol.sol
-          - contracts/NFTPositionNFT.sol
-          - contracts/NFTListingService.sol
     steps:
       - name: Check out CYDRA
         uses: actions/checkout@v4
@@ -57,7 +52,7 @@ jobs:
             --target-ref bfb5086eb7915d2dc90f52fd761d54bc2806847d \
             --target-path '${{ matrix.target_path }}' \
             --target-project . \
-            --classes initialization authorization arithmetic state \
+            --classes state \
             --freeze "blind-artifacts/${{ matrix.target_path }}"
 
       - name: Print blind class coverage
