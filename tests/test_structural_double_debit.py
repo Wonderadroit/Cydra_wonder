@@ -9,13 +9,15 @@ def _planner(h):
 
 def _fixture():
     return """
-    function buy(address from, uint256 amount) external {
-        vault.withdraw(address(this), executor, amount);
-        executor.getCollateral(amount);
-        _addCollateral(from, amount);
-    }
-    function _addCollateral(address from, uint256 amount) internal {
-        token.transferFrom(from, address(this), amount);
+    contract Target {
+        function buy(address from, uint256 amount) external {
+            vault.withdraw(address(this), executor, amount);
+            executor.getCollateral(amount);
+            _addCollateral(from, amount);
+        }
+        function _addCollateral(address from, uint256 amount) internal {
+            token.transferFrom(from, address(this), amount);
+        }
     }
     """
 
