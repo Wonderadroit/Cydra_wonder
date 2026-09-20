@@ -114,7 +114,7 @@ interface IBalancerPool {
     )
     (test / "CrossContractReadOnly.t.sol").write_text(
         """pragma solidity 0.8.16;
-import {StableCurveEthOracle} from "../src/oracle/curve/StableCurveEthOracle.sol";
+import {BalancerPairOracle} from "../src/oracle/curve/StableCurveEthOracle.sol";
 
 interface ITarget { function getPrice(address) external view returns(uint256); }
 
@@ -171,7 +171,7 @@ contract CallbackReceiver {
 contract CrossContractTest {
     function testTransientObservation() public {
         BaseOracle base = new BaseOracle();
-        StableCurveEthOracle oracle = new StableCurveEthOracle(base,address(0x999),2);
+        BalancerPairOracle oracle = new BalancerPairOracle(base,address(0x999),2);
         MockVault vault = new MockVault(address(0));
         MockPool pool = new MockPool(address(vault));
         vault.setPool(address(pool));
