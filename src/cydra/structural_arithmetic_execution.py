@@ -172,3 +172,82 @@ contract CydraArithmeticInvariantTest is Test {{
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding="utf-8")
     return path
+
+
+def generate_structural_arithmetic_security_test(
+    hypothesis: Hypothesis,
+    contract_model: ContractModel,
+    target_import: str,
+    target_type: str,
+    output_path: str | Path,
+    experiment: Experiment | None = None,
+) -> Path:
+    """Generate a one-sided security assertion for the derived arithmetic invariant.
+
+    The test deliberately contains no vulnerable/patched comparison.  It asks whether
+    the target itself satisfies the independently derived exact-floor invariant, so
+    vulnerable and control executions can be classified by the shared causal cycle.
+    """
+    if hypothesis.invariant_id != "INV-ARITH-001":
+        raise ValueError(
+            f"Unsupported invariant for structural arithmetic security execution: {hypothesis.invariant_id}"
+        )
+    if experiment is not None and experiment.hypothesis_id != hypothesis.hypothesis_id:
+        raise ValueError(
+            f"experiment/hypothesis mismatch: {experiment.hypothesis_id} != {hypothesis.hypothesis_id}"
+        )
+
+    shape = extract_positive_offset_division(contract_model, hypothesis.target_function)
+    if shape is None:
+        raise ValueError(
+            "structural arithmetic security execution requires a supported "
+            "one-parameter positive-offset division"
+        )
+
+    if experiment is not None and experiment.planned_inputs:
+        boundary_value = _planned_arithmetic_input(
+            experiment, contract_model, hypothesis.target_function
+        )
+    else:
+        boundary = choose_boundary_input(shape)
+        if boundary is None:
+            raise ValueError("could not find a discriminating boundary input")
+        boundary_value = str(boundary)
+
+    function = next(
+        (item for item in contract_model.functions if item.name == hypothesis.target_function),
+        None,
+    )
+    if function is None or len(function.parameters) != 1:
+        raise ValueError("arithmetic security execution requires one target parameter")
+
+    pragma = contract_model.pragma or "^0.8.20"
+    target_import = target_import
+    source = f'''// SPDX-License-Identifier: UNLICENSED
+pragma solidity {pragma};
+// Hypothesis: {hypothesis.hypothesis_id}
+// Security invariant derived from the structural arithmetic reasoning surface.
+// No patched target or benchmark answer is consulted by this test.
+import {{Test}} from "forge-std/Test.sol";
+import {{ {target_type} }} from "{target_import}";
+
+contract CydraArithmeticSecurityTest is Test {{
+    {target_type} internal target;
+
+    function setUp() public {{
+        target = new {target_type}();
+    }}
+
+    function testArithmeticInvariant() public {{
+        uint256 input = {boundary_value};
+        uint256 observed = target.{shape.function_name}(input);
+        uint256 exactFloor = (input * {shape.multiplier}) / {shape.divisor};
+
+        assertLe(observed, exactFloor, "derived arithmetic invariant violated");
+    }}
+}}
+'''
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8")
+    return path
