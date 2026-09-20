@@ -934,3 +934,16 @@ The current evidence proves a real causal initialization-state violation on the 
 This milestone is stronger evidence for the Solidity maturity gate because the hypothesis was generated on an unfamiliar project and the experiment was materialized and executed without historical-answer leakage. It is not evidence that Solidity generalization is complete.
 
 The canonical research artifacts for the successful run must remain the provenance source for this milestone.
+ 
+
+Causal verification record:
+- blind hypothesis: `H-INIT-initialise`;
+- blind experiment: `X-H-INIT-initialise`;
+- compiler semantic evidence: `initialise` writes `owner`;
+- blind execution: one Foundry test, one failure, six target storage writes;
+- attacker-controlled dependency behavior: the generated probe returns the attacker address from the initializer's `getAdmin()` dependency;
+- target code causal chain: `initialise` → `staderConfig.getAdmin()` → `owner`;
+- reproducibility: the same result was reproduced in CI on the PR run and again on merged `main` run #35;
+- finding gate: **READY** for the bounded initialization/privilege-takeover claim.
+
+The public historical Stader finding is external corroboration discovered only after the blind campaign; it is not part of CYDRA's blind evidence or hypothesis-generation context.
