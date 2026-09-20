@@ -24,12 +24,6 @@ PATCHED_REF = "25d07528b1107682674bfe0bed56523238fcacb1"
 TARGET_PATH = "packages/contracts/contracts/staking/libs/MathUtils.sol"
 
 
-def git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ("git", *args), cwd=cwd, text=True, capture_output=True, check=True
-    ).stdout.strip()
-
-
 def clone(repo: str, ref: str, destination: Path) -> None:
     subprocess.run(("git", "clone", "--no-tags", "--filter=blob:none", repo, str(destination)), check=True)
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", ref), check=True)
