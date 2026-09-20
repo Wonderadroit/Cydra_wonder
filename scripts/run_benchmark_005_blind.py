@@ -182,7 +182,12 @@ def main() -> int:
         project = checkout / args.target_project
         source = checkout / args.target_path
 
-        compiler = compile_state_effects(project, source)
+        # State-topology diagnosis does not require compiler AST; keep this extraction
+        # experiment independent from the expensive target compiler profile.
+        compiler = compile_state_effects(project, source) if "state" not in classes else type("StateCompiler", (), {
+            "evidence": (), "constraints": (), "status": "parser_only", "compiler_versions": (),
+            "executed": False, "command": (), "stdout": "", "stderr": "", "build_info_files": ()
+        })()
         from cydra.reasoning import plan_access_control_experiment, plan_initialization_experiment, plan_arithmetic_experiment
         def blind_planner(hypothesis):
             if hypothesis.invariant_id.startswith("INV-STATE-"):
