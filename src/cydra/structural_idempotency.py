@@ -69,7 +69,7 @@ def generate_idempotency_hypotheses(
     invariants: list[Invariant] = []
     hypotheses: list[Hypothesis] = []
     for function in contract.functions:
-        if function.visibility not in {"public", "external"} or not function.writes:
+        if function.visibility not in {"public", "external"}:
             continue
         body = _body(contract, function)
         if not (_has_repeated_input_loop(body) and _has_status_assignment(body) and _has_value_transfer(body)):
