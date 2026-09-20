@@ -39,16 +39,21 @@ def _resolve_import(source_path: Path, import_path: str) -> Path | None:
             return direct.resolve()
 
         lib = ancestor / "lib"
+        node_modules = ancestor / "node_modules"
         upgradeable_prefix = "@openzeppelin/contracts-upgradeable/"
         if import_path.startswith(upgradeable_prefix):
-            candidate = lib / "openzeppelin-contracts-upgradeable" / "contracts" / import_path[len(upgradeable_prefix):]
-            if candidate.exists():
-                return candidate.resolve()
+            relative = import_path[len(upgradeable_prefix):]
+            for base in (lib / "openzeppelin-contracts-upgradeable" / "contracts", node_modules / "@openzeppelin" / "contracts-upgradeable"):
+                candidate = base / relative
+                if candidate.exists():
+                    return candidate.resolve()
         contracts_prefix = "@openzeppelin/contracts/"
         if import_path.startswith(contracts_prefix):
-            candidate = lib / "openzeppelin-contracts" / "contracts" / import_path[len(contracts_prefix):]
-            if candidate.exists():
-                return candidate.resolve()
+            relative = import_path[len(contracts_prefix):]
+            for base in (lib / "openzeppelin-contracts" / "contracts", node_modules / "@openzeppelin" / "contracts"):
+                candidate = base / relative
+                if candidate.exists():
+                    return candidate.resolve()
     return None
 
 
