@@ -1,0 +1,27 @@
+name: CYDRA Backtest 007 — real Alchemix historical authorization
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  real-alchemix-authorization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Install CYDRA
+        run: python -m pip install -e .
+
+      - name: Real historical authorization backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_benchmark_006_blind_auth.py             --target-repo https://github.com/alchemix-finance/alchemix-protocol.git             --target-ref 0261dd5a23c63aaa354d56f506701a6fa79cfe1f             --target-path contracts/AlchemistEth.sol             --target-project .
