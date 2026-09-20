@@ -24,9 +24,20 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
+          set +e
           python scripts/run_benchmark_006_blind_auth.py \
             --target-repo https://github.com/enzymefinance/protocol.git \
             --target-ref 1b95ec53cbd816386a79098c5b1e64685e6456e2 \
             --target-path contracts/release/infrastructure/gas-relayer/GasRelayPaymasterLib.sol \
             --target-project . \
-            --target-npm-dependency @openzeppelin/contracts@3.4.2
+            --target-npm-dependency @openzeppelin/contracts@3.4.2 2>&1 | tee enzyme-backtest.log
+          status=${PIPESTATUS[0]}
+          echo "BACKTEST_EXIT_STATUS=$status"
+          exit $status
+      - name: Upload diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: enzyme-backtest-diagnostic
+          path: enzyme-backtest.log
+          if-no-files-found: warn
