@@ -12,6 +12,9 @@ on:
       - "PROJECT_BIBLE.md"
       - ".github/workflows/cydra-solidity-research.yml"
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   schedule:
     - cron: "17 3 * * *"
 
