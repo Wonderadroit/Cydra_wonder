@@ -25,7 +25,9 @@ def side(src,h,e,label):
         target=next(c for c in cs if any(f.name==h.target_function for f in c.functions))
         tp=test_path_for(root,f"generated/{h.hypothesis_id}.t.sol")
         generated=generate_transfer_accounting_test(h,target,f"../src/{src.name}",target.name,"FeeTransferToken",tp,experiment=e)
-        result=run_foundry_test(root,generated,e.experiment_id,label)\n        if not result.executed: print(json.dumps(result.__dict__,indent=2,default=str))\n        require_executed(result); return result
+        result=run_foundry_test(root,generated,e.experiment_id,label)
+        if not result.executed: print(json.dumps(result.__dict__,indent=2,default=str))
+        require_executed(result); return result
 def main():
     root=Path(__file__).resolve().parents[1]
     r=investigate(root/V,target="historical fee-on-transfer accounting extracted regression",reasoning_surfaces=(generate_transfer_accounting_hypotheses,),experiment_planner=plan_transfer_accounting_experiment)
