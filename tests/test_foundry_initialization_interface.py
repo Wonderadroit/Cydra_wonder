@@ -67,7 +67,7 @@ def test_model_aware_generator_consumes_constructor_and_parameters(tmp_path):
     )
     source = output.read_text(encoding="utf-8")
     assert "new LiquidClawFixture(address(0), address(0), address(0))" in source
-    assert "target.initialize(new address[](0), address(0));" in source
+    assert "try target.initialize(new address[](0), address(0)) {" in source
     assert "guardian()" not in source
 
 
@@ -97,7 +97,7 @@ def test_planned_inputs_override_initializer_fallback_arguments(tmp_path):
         experiment=experiment,
     )
     source = output.read_text(encoding="utf-8")
-    assert "target.initialize(7, address(0xCAFE));" in source
+    assert "try target.initialize(7, address(0xCAFE)) {" in source
     assert "target.initialize(0, address(0));" not in source
 
 
@@ -170,7 +170,7 @@ def test_model_aware_generator_qualifies_and_imports_inherited_custom_type(tmp_p
     declaration_pos = source.index("IMinter.AirdropParams memory parameter0;")
     assert function_body_start < declaration_pos < function_body_end
     assert "Minter.AirdropParams memory parameter0;" not in source.replace("IMinter.AirdropParams memory parameter0;", "")
-    assert "target.initialize(parameter0);" in source
+    assert "try target.initialize(parameter0) {" in source
     assert "target.guardian()" not in source
 
 
