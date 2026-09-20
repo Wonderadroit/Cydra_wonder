@@ -878,3 +878,31 @@ An experiment must provide enough adversarial environment for the target's own m
 The canonical Solidity research workflow now also runs for pull requests in addition to main pushes, manual dispatch, and the daily schedule. This makes changes to the blind research machinery subject to the same durable regression/research path before merge.
 
 A workflow being configured is not equivalent to a successful run. CI status and research artifacts must be inspected before a campaign result is counted as evidence.
+
+
+## 49. Unfamiliar initializer dependency probing — runner validation checkpoint
+
+The Stader initializer campaign exposed one additional execution-layer defect after the target-agnostic dependency probe was added: the generated-test substitution regex for replacing the conservative zero-address placeholder with the local dependency probe was over-escaped. The reasoning capability itself was correct, but the renderer could not reliably materialize the intended input.
+
+The repair corrected the substitution patterns without adding any Stader-specific condition.
+
+This is a useful distinction for the maturity gate:
+
+**A generalized hypothesis can still fail at experiment materialization.**
+
+The campaign therefore treats generation correctness as part of the causal research path:
+
+**Hypothesis → planned input → rendered experiment → executable target path → observed state change → causal conclusion.**
+
+A renderer failure is a pipeline/generalization failure, not evidence against the hypothesis and never a finding.
+
+## 50. Research CI must execute the triggering revision
+
+The Solidity research workflow previously declared a pull-request trigger but explicitly checked out `main`. That meant a pull-request validation run could execute the already-merged baseline instead of the proposed research changes.
+
+The workflow now checks out `github.sha`, so push, manual, scheduled, and pull-request executions test the revision that triggered the run.
+
+This is required for research evidence provenance: a reported green regression or backtest artifact must correspond to the exact CYDRA source revision being evaluated.
+
+The available GitHub connector currently does not expose the workflow-run listing needed to inspect the resulting Actions logs/artifacts directly. Therefore a configured workflow is not counted as an observed research result until its execution artifacts can be inspected.
+
