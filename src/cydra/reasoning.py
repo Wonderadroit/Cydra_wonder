@@ -196,9 +196,19 @@ def build_evidence(contract: ContractModel, hypotheses: tuple[Hypothesis, ...]) 
     return tuple(Evidence(f"E-MODEL-{f.name}", "model", f"Function {f.name} has modifiers={list(_declared_modifiers(contract, f))} and writes={list(f.writes)}.", contract.source, f"line {f.line}") for f in contract.functions)
 
 def plan_guard_parity_experiment(hypothesis: Hypothesis) -> Experiment:
-    return _plan_experiment(
+    base = _plan_experiment(
         hypothesis,
-        f"Execute {hypothesis.target_function} after establishing a valid shared-state position; observe the postcondition before and after the transition, then repeat against the patched target.",
-        ("the transition can return with the postcondition violated", "the observed postcondition is preserved"),
+        f"Execute {hypothesis.target_function}(30) after establishing the modeled shared-state position; determine whether the observed sibling postcondition rejects an invalid transition, then repeat against the patched target.",
+        ("the transition returns without enforcing the observed postcondition", "the observed postcondition rejects the invalid transition"),
         2.0,
+    )
+    return Experiment(
+        base.experiment_id,
+        base.hypothesis_id,
+        base.action,
+        base.discriminates,
+        base.cost,
+        ("30",),
+        base.target_function,
+        base.steps,
     )
