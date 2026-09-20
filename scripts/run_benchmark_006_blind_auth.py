@@ -76,7 +76,7 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
             if dependency.is_file() and dependency not in copied:
                 pending.append(dependency)
 
-    remapping_lines = ['@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/']
+    remapping_lines = []
     for prefix, destination_path in remappings:
         remapping_lines.append(f"{prefix}=src/{destination_path}")
     remapping_literal = ", ".join(repr(item) for item in remapping_lines)
