@@ -947,3 +947,30 @@ Causal verification record:
 - finding gate: **READY** for the bounded initialization/privilege-takeover claim.
 
 The public historical Stader finding is external corroboration discovered only after the blind campaign; it is not part of CYDRA's blind evidence or hypothesis-generation context.
+
+## 52. Unfamiliar Olas transfer-accounting — blind end-to-end finding
+
+The Olas historical campaign is the next unfamiliar-project generalization result after the Stader initializer and Olympus cross-contract campaigns. The target was the historical Olas repository at commit `3ce502ec8b475885b90668e617f3983cea3ae29f`, with `registries/contracts/staking/StakingToken.sol` as the source surface. The historical answer was kept out of hypothesis generation.
+
+The campaign exposed and repaired only demonstrated generic blockers:
+- inherited accounting state (`balance` and `availableRewards`) was absent from the lightweight target model, so the reasoning surface was generalized to recover a local-alias → state-addition → state-assignment flow directly from observed source dataflow;
+- the execution gate checked `transferFrom` case-sensitively and therefore missed `safeTransferFrom`; the gate now recognizes both generic inbound transfer forms;
+- the campaign runner duplicated the already-built-in transfer-accounting reasoning surface when explicitly injecting it, so the blind harness now uses the canonical pipeline once;
+- the target's unrelated historical test fixtures had optional Gnosis Safe dependencies, so the causal regression isolates the production path from unrelated target tests;
+- the injected causal test uses an ABI-compatible local tuple and target-agnostic initialization dependencies rather than relying on the target's global struct declaration.
+
+The resulting blind chain completed:
+
+**Target → System Model → Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Patched Execution → Causal Verification → Finding Gate**
+
+Observed result:
+- blind hypothesis: `H-TRANSFER-ACCOUNTING-deposit`;
+- invariant: internal credit for an inbound token transfer must equal the actual token balance delta received, not merely the requested amount;
+- experiment: `X-H-TRANSFER-ACCOUNTING-deposit`, using a 100-unit deposit boundary;
+- vulnerable execution: 1 Foundry test executed and failed the accounting assertion because the contract credited the requested 100 while the fee-on-transfer test token delivered 90;
+- patched execution: 1 Foundry test executed and passed after the patched target bounded the credited amount to the actual received balance delta;
+- causal verification: `VERIFIED`, chain `causal:olas-transfer-accounting-differential`;
+- finding gate: **READY**;
+- historical public reporting was not used during hypothesis generation and is post-run corroboration only.
+
+This is evidence of a blind, reproducible transfer-accounting capability on an unfamiliar Solidity project and materially strengthens the Solidity maturity gate. It does not by itself close the maturity gate; additional unfamiliar targets and materially different mechanisms remain required.
