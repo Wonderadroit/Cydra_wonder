@@ -103,5 +103,5 @@ def test_fallback_binds_access_probe_to_selected_target_variable():
         state_predicates=(),
     )
     body = render_initialization_test_body(function, "vault", "0xA11CE", "")
-    assert "(bool ok,) = address(vault).call(abi.encodeWithSelector(vault.initialise.selector));" in body
+    assert "(bool ok,) = address(vault).call(abi.encodeWithSelector(vault.initialise.selector," in body
     assert "vm.accesses(address(vault))" in body
