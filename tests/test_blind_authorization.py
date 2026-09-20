@@ -188,7 +188,7 @@ contract DcntEth {
         hypothesis, experiment, "../DcntEth.sol", "DcntEth", tmp_path / "generated.t.sol", model
     )
     rendered = output.read_text(encoding="utf-8")
-    assert "CydraBlindAuthorizationStateView(target).router()" in renderedrendered
+    assert "CydraBlindAuthorizationStateView(target).router()" in rendered
     assert "interface CydraBlindAuthorizationStateView" in rendered
     assert "beforeState" in rendered
     assert "unauthorized caller mutated modeled administrative state" in rendered
