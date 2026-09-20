@@ -811,3 +811,21 @@ Do not add speculative Solidity architecture simply to reach a larger feature li
 The transition to Solana/Rust becomes justified only after the evidence says the Solidity core is sufficiently generalized, or after a deliberate Project Bible decision changes this priority.
 
 The success criterion remains practical: CYDRA should become capable of taking an unfamiliar authorized Solidity project and doing useful end-to-end security research rather than merely recognizing known patterns.
+
+### Current CI execution state — 2026-09-20
+
+The canonical `main` branch now contains `.github/workflows/cydra-solidity-research.yml`.
+
+This workflow provides the durable GitHub-native Solidity research loop:
+- runs on pushes to `main`;
+- supports manual `workflow_dispatch`;
+- runs on a daily UTC schedule;
+- serializes research runs with concurrency control;
+- installs the CYDRA package, pytest, and Foundry on the GitHub-hosted runner;
+- runs the full Python regression suite;
+- reruns the verified unfamiliar-target Olympus cross-contract attribution backtest;
+- uploads backtest artifacts for later interpretation.
+
+The workflow is an execution surface, not evidence that arbitrary targets are secure. Its historical backtest is a regression anchor for the already demonstrated finding capability.
+
+The Solidity maturity gate remains open. The next evidence must come from additional genuinely unfamiliar targets and from reducing the gap between benchmark-specific execution harnesses and generic target execution. A green regression run therefore means **the demonstrated capability still works**, not **Solidity research is complete**.
