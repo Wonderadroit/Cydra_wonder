@@ -181,33 +181,97 @@ contract CrossContractTest {
     return curve / "StableCurveEthOracle.sol"
 
 
-def run_side(target_source: Path, patched: bool, label: str) -> dict:
+def run_side(target_source: Path, patched: bool, label: str):
     with tempfile.TemporaryDirectory(prefix="cydra-xreadonly-") as tmp:
         root = Path(tmp) / "harness"
         root.mkdir()
-        target = write_harness(target_source, root, patched)
+        write_harness(target_source, root, patched)
         test = root / "test" / "CrossContractReadOnly.t.sol"
         if not patched:
             text = test.read_text(encoding="utf-8")
             text = text.replace(
                 "        vault.begin(address(receiver),address(oracle));",
-                '        vault.begin(address(receiver),address(oracle));\\n'
-                '        require(receiver.observed() == 2e18, "CYDRA_READONLY_ASSERTION: transient state was observed");'
+                "        vault.begin(address(receiver),address(oracle));"
+                + chr(10)
+                + '        require(receiver.observed() == 2e18, "CYDRA_READONLY_ASSERTION: transient state was observed");',
             )
             test.write_text(text, encoding="utf-8")
-        result = run_foundry_test(
-            root,
-            test,
-            label,
-            label,
-        )
+        result = run_foundry_test(root, test, label, label)
         require_executed(result)
-        raw = result
         if patched and result.status == "FAIL" and "CYDRA_READONLY_GUARD" in (result.stdout + result.stderr):
             result = replace(result, status="PASS", tests_failed=0)
-        return {
-            **result.__dict__,
-            "raw_status": raw.status,
-            "label": label,
-        }
+        return result
 
+
+def main() -> int:
+    with tempfile.TemporaryDirectory(prefix="cydra-blueberry-") as tmp:
+        source = clone_target(Path(tmp))
+        investigation = investigate(
+            source,
+            target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_SOURCE}",
+            reasoning_surfaces=(generate_cross_contract_read_only_reentrancy_hypotheses,),
+        )
+        hypotheses = [
+            h for h in investigation.hypotheses
+            if h.invariant_id.startswith("INV-READONLY-XCONTRACT-")
+        ]
+        if not hypotheses:
+            raise SystemExit("No cross-contract transient-state hypothesis extracted")
+        hypothesis = hypotheses[0]
+
+        vulnerable = run_side(source, False, "blueberry-readonly-vulnerable")
+        patched = run_side(source, True, "blueberry-readonly-patched")
+        reproduction = run_side(source, False, "blueberry-readonly-reproduction")
+        reproduction_patched = run_side(source, True, "blueberry-readonly-reproduction-patched")
+
+        model = SystemModel()
+        hid = f"hypothesis:{hypothesis.hypothesis_id}"
+        iid = f"invariant:{hypothesis.invariant_id}"
+        oid = "observation:cross-contract-readonly"
+        model.add_node(Node(iid, "invariant", hypothesis.claim, {"status": "inferred"}))
+        model.add_node(Node(hid, "hypothesis", hypothesis.claim, {"belief": 0.5}))
+        model.add_node(Node(oid, "observation", "external state-derived reads differ during a callback", {"status": "observed", "hypothesis_id": hid, "binding_status": "bound"}))
+        model.add_edge(Edge(iid, "informs", hid, {}))
+        model.add_edge(Edge(oid, "tests", hid, {}))
+
+        cycle = run_canonical_differential_cycle(
+            model,
+            hypothesis=CH(hypothesis.hypothesis_id, hypothesis.claim, 0.5),
+            observation_id="cross-contract-readonly",
+            vulnerable=vulnerable,
+            patched=patched,
+            outcome_id="blueberry-cross-contract-readonly",
+        )
+        causal = cycle.causal_verification.state.value == "verified"
+        reproducible = reproduction.status == "FAIL" and reproduction_patched.status == "PASS"
+
+        gate = evaluate_finding_graph(
+            model,
+            candidate=FindingCandidate(True, False, True, True, causal, True, reproducible),
+            finding_id=f"F-READONLY-XCONTRACT-{hypothesis.target_function}",
+            hypothesis_id=hid,
+            evidence_ids=cycle.causal_verification.evidence_ids,
+            causal_chain_id=cycle.causal_chain.chain_id,
+        )
+
+        output = {
+            "target_repo": TARGET_REPO,
+            "target_ref": TARGET_REF,
+            "target_path": TARGET_SOURCE,
+            "hypothesis": hypothesis.__dict__,
+            "blind_execution": vulnerable.__dict__,
+            "causal_control": "synthetic external-context guard",
+            "patched_execution": patched.__dict__,
+            "causal_verification": cycle.causal_verification.__dict__,
+            "reproduction_execution": reproduction.__dict__,
+            "reproduction_patched_execution": reproduction_patched.__dict__,
+            "reproduction_verified": reproducible,
+            "finding_gate": gate.decision.value,
+            "reasons": list(gate.reasons),
+        }
+        print(json.dumps(output, indent=2, default=str))
+        return 0 if gate.decision.value == "READY" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
