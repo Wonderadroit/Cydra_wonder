@@ -35,7 +35,7 @@ def _contract_blocks(source: str):
 def _has_cross_contract_report_gap(source: str) -> tuple[str, str] | None:
     blocks = dict(_contract_blocks(source))
     accounting = re.search(
-        r"(?P<type>uint\\w*\\s+)?(?P<var>reported)\\s*=\\s*(?P<callee>\\w+)\\.\\w+\\s*\\([^;]*\\)\\s*;\\s*accountedAssets\\s*\\+=\\s*reported\\s*;",
+        r"(?P<type>uint\w*\s+)?(?P<var>reported)\s*=\s*(?P<callee>\w+)\.\w+\s*\([^;]*\)\s*;\s*accountedAssets\s*\+=\s*reported\s*;",
         source,
         re.S,
     )
@@ -46,9 +46,9 @@ def _has_cross_contract_report_gap(source: str) -> tuple[str, str] | None:
     callee_body = blocks.get(callee, "")
     if not caller or not callee_body:
         return None
-    has_delivery = bool(re.search(r"\\.transfer\\s*\\([^;]*\\)\\s*;", callee_body, re.S))
-    has_report = bool(re.search(r"\\breturn\\s+\\w+\\s*;", callee_body))
-    has_intermediate = bool(re.search(r"\\b(?:uint\\w*\\s+)?delivered\\s*=\\s*[^;]+;", callee_body))
+    has_delivery = bool(re.search(r"\.transfer\s*\([^;]*\)\s*;", callee_body, re.S))
+    has_report = bool(re.search(r"\breturn\s+\w+\s*;", callee_body))
+    has_intermediate = bool(re.search(r"\b(?:uint\w*\s+)?delivered\s*=\s*[^;]+;", callee_body))
     if has_delivery and has_report and has_intermediate:
         return caller, callee
     return None
