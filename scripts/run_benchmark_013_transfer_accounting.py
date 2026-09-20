@@ -26,7 +26,6 @@ def side(src,h,e,label):
         tp=test_path_for(root,f"generated/{h.hypothesis_id}.t.sol")
         generated=generate_transfer_accounting_test(h,target,f"../src/{src.name}",target.name,"FeeTransferToken",tp,experiment=e)
         result=run_foundry_test(root,generated,e.experiment_id,label)
-        if not result.executed: print(json.dumps(result.__dict__,indent=2,default=str))
         require_executed(result); return result
 def main():
     root=Path(__file__).resolve().parents[1]
