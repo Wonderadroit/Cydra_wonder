@@ -64,7 +64,9 @@ jobs:
             --target-path contracts/AlchemistEth.sol \\
             --target-project . \\
             --supplemental-file contracts/interfaces/IWETH9.sol@master \\
-            --target-npm-dependency @openzeppelin/contracts@3.2.0
+            --target-npm-dependency @openzeppelin/contracts@3.2.0 \\
+            --require-ready \\
+            --output backtest-artifacts/alchemix-authorization/result.json
 
       - name: Run unfamiliar historical initializer backtest
         env:
