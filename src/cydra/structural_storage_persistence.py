@@ -50,7 +50,7 @@ def _memory_return(contract: ContractModel, function: FunctionModel) -> bool:
     except (OSError, UnicodeError):
         return False
     marker = re.search(
-        rf"\bfunction\s+{re.escape(function.name)}\s*\([^)]*\)[^{]*\{{",
+        rf"\bfunction\s+{re.escape(function.name)}\s*\([^)]*\)[^{{]*\{{",
         source,
     )
     if not marker:
