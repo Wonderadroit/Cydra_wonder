@@ -5,6 +5,8 @@ from pathlib import Path
 import os
 import subprocess
 import tempfile
+import re
+import shutil
 
 from cydra.authorization_runtime import classify_authorization_blind_execution
 from cydra.blind_authorization import generate_blind_authorization_test_from_experiment
@@ -12,6 +14,49 @@ from cydra.compiler_state import compile_state_effects
 from cydra.foundry import require_executed, run_foundry_test, test_path_for
 from cydra.pipeline import investigate
 from cydra.reasoning import plan_access_control_experiment
+
+_IMPORT_RE = re.compile(r'''\\bimport\\s+(?:[^\"']+\\s+from\\s+)?[\"']([^\"']+)[\"']\\s*;''')
+
+
+def _prepare_isolated_foundry_project(target_root: Path, source: Path, destination: Path) -> Path:
+    """Copy only the target's local Solidity import closure into a clean Foundry root."""
+    src_root = destination / "src"
+    src_root.mkdir(parents=True, exist_ok=True)
+    test_root = destination / "test" / "generated"
+    test_root.mkdir(parents=True, exist_ok=True)
+
+    pending = [source]
+    copied: set[Path] = set()
+    while pending:
+        current = pending.pop()
+        relative = current.relative_to(target_root)
+        destination_file = src_root / relative
+        if current in copied:
+            continue
+        copied.add(current)
+        destination_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(current, destination_file)
+
+        text = current.read_text(encoding="utf-8")
+        for imported in _IMPORT_RE.findall(text):
+            if imported.startswith("."):
+                dependency = (current.parent / imported).resolve()
+            elif imported.startswith("contracts/"):
+                dependency = (target_root / imported).resolve()
+            else:
+                continue
+            if dependency.is_file() and dependency not in copied:
+                pending.append(dependency)
+
+    (destination / "foundry.toml").write_text(
+        '[profile.default]\n'
+        'src = "src"\n'
+        'test = "test"\n'
+        'libs = ["lib"]\n'
+        'auto_detect_solc = true\n',
+        encoding="utf-8",
+    )
+    return test_root
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -56,14 +101,6 @@ def main() -> int:
             destination = checkout / relative_path
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(blob, encoding="utf-8")
-        if (project / "package.json").exists():
-            subprocess.run(
-                ("npm", "install", "--legacy-peer-deps", "--ignore-scripts", "--no-audit", "--no-fund"),
-                cwd=project,
-                check=True,
-            )
-        subprocess.run(("forge", "install", "foundry-rs/forge-std", "--no-commit"), cwd=project, check=True)
-
         compiler = compile_state_effects(project, source)
         result = investigate(
             source,
@@ -82,22 +119,33 @@ def main() -> int:
             print("INVARIANTS", [item.__dict__ for item in result.invariants])
             raise SystemExit("blind authorization backtest produced no authorization hypothesis")
 
+        execution_project = Path(temp) / "execution-project"
+        _prepare_isolated_foundry_project(checkout, source, execution_project)
+        subprocess.run(
+            ("forge", "install", "openzeppelin/openzeppelin-contracts@v3.2.0", "--no-commit"),
+            cwd=execution_project,
+            check=True,
+        )
+
         for hypothesis in hypotheses:
             experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
             contract = next(
                 c for c in result.contracts
                 if any(f.name == hypothesis.target_function for f in c.functions)
             )
-            output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+            output = test_path_for(execution_project, f"generated/{hypothesis.hypothesis_id}.t.sol")
             generated = generate_blind_authorization_test_from_experiment(
                 hypothesis,
                 experiment,
-                os.path.relpath(Path(contract.source), output.parent).replace(os.sep, "/"),
+                os.path.relpath(
+                    execution_project / "src" / Path(contract.source).relative_to(checkout),
+                    output.parent,
+                ).replace(os.sep, "/"),
                 contract.name,
                 output,
                 contract,
             )
-            execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+            execution = run_foundry_test(execution_project, generated, experiment.experiment_id, "blind")
             print("EXECUTION_STATUS", execution.status, "exit=", execution.exit_code, "tests=", execution.tests_run, "failed=", execution.tests_failed)
             print(execution.stdout)
             print(execution.stderr)
