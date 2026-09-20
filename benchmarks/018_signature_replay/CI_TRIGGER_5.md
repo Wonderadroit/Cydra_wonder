@@ -1,0 +1,1 @@
+Trigger marker for the dependency-free Foundry harness.
