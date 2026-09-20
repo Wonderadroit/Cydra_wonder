@@ -93,7 +93,7 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
     hardhat_console.parent.mkdir(parents=True, exist_ok=True)
     hardhat_console.write_text("pragma solidity ^0.6.12; library console {}\n", encoding="utf-8")
     (destination / "remappings.txt").write_text(
-        "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/\n",
+        "\n".join(remapping_lines) + "\n",
         encoding="utf-8",
     )
     return test_root
