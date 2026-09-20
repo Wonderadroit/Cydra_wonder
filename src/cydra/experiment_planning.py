@@ -50,8 +50,8 @@ def bind_experiment(
         )
     if not target_function.strip():
         raise ValueError("experiment target function must not be empty")
-    if planned_inputs and experiment.planned_inputs:
-        raise ValueError("experiment already has planned inputs")
+    if planned_inputs and experiment.planned_inputs and tuple(planned_inputs) != tuple(experiment.planned_inputs):
+        raise ValueError("conflicting experiment planned inputs")
     if experiment.target_function is not None and experiment.target_function != target_function:
         raise ValueError(
             f"experiment target mismatch: {experiment.target_function} != {target_function}"
