@@ -7,7 +7,7 @@ from .interface_resolver import ResolvedInterface, resolve_interface
 from .models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
 
 
-_CONTRACT_RE = re.compile(r"\bcontract\s+(?P<name>\w+)(?:\s+is\s+(?P<inherits>[^\{]+))?")
+_CONTRACT_RE = re.compile(r"\b(?:contract|library)\s+(?P<name>\w+)(?:\s+is\s+(?P<inherits>[^\{]+))?")
 _PRAGMA_SOLIDITY_RE = re.compile(r"pragma\s+solidity\s+([^;]+);", re.MULTILINE)
 _FUNCTION_RE = re.compile(
     r"\bfunction\s+(\w+)\s*\(([^)]*)\)\s*([^\{;]*)\{", re.MULTILINE
