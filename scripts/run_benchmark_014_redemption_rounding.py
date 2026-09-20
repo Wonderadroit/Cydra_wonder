@@ -32,7 +32,7 @@ def canonical_model(hypothesis, contract_name):
     model=SystemModel()
     cid=f"contract:{contract_name}"; fid=f"function:{contract_name}:{hypothesis.target_function}"
     iid=f"invariant:{hypothesis.invariant_id}"; hid=f"hypothesis:{hypothesis.hypothesis_id}"
-    oid=f"observation:OBS-REDEMPTION-{contract_name}"
+    oid=f"OBS-REDEMPTION-{contract_name}"
     model.add_node(Node(cid,"contract",contract_name,{"provenance":"solidity_model"}))
     model.add_node(Node(fid,"function",hypothesis.target_function,{"contract":contract_name,"provenance":"solidity_model"}))
     model.add_node(Node(iid,"invariant", "Required share burn must round conservatively for requested withdrawals.",{"status":"inferred","confidence":0.78,"provenance":"structural redemption-rounding reasoning"}))
