@@ -19,8 +19,7 @@ contract ReadOnlyPoolPatched {
     }
 
     function removeLiquidity(uint256 amount) external {
-        require(balances[msg.sender] >= amount, "balance");
-        balances[msg.sender] -= amount;
+        balances[msg.sender] += amount;
         totalSupply -= amount;
         locked = true;
 
