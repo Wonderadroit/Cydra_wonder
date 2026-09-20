@@ -32,6 +32,16 @@ jobs:
           PYTHONPATH: src
         run: |
           python scripts/run_benchmark_006_blind_auth.py             --target-repo https://github.com/Wonderadroit/Cydra_wonder.git             --target-ref main             --target-path benchmarks/alchemix_missing_access_control/foundry/src/Target.sol             --target-project benchmarks/alchemix_missing_access_control/foundry
+      - name: Blind unfamiliar authorization target
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_benchmark_006_blind_auth.py \
+            --target-repo https://github.com/decentxyz/decent-bridge.git \
+            --target-ref 7f90fd4489551b69c20d11eeecb17a3f564afb18 \
+            --target-path src/DcntEth.sol \
+            --target-project .
+
       - name: Blind negative control
         env:
           PYTHONPATH: src

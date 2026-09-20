@@ -37,8 +37,12 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
     copied: set[Path] = set()
     while pending:
         current = pending.pop()
-        relative = current.relative_to(source_root)
-        destination_file = src_root / relative
+        try:
+            relative = current.relative_to(source_root)
+            destination_file = src_root / relative
+        except ValueError:
+            relative = current.relative_to(target_root)
+            destination_file = destination / "src" / relative
         if current in copied:
             continue
         copied.add(current)
@@ -46,30 +50,53 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
         shutil.copy2(current, destination_file)
 
         text = current.read_text(encoding="utf-8")
+        remappings = []
+        remappings_file = target_root / "remappings.txt"
+        if remappings_file.exists():
+            for line in remappings_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                prefix, destination_path = line.split("=", 1)
+                remappings.append((prefix, destination_path))
         for imported in _IMPORT_RE.findall(text):
             if imported.startswith("."):
                 dependency = (current.parent / imported).resolve()
             elif imported.startswith("contracts/"):
                 dependency = (target_root / imported).resolve()
             else:
-                continue
+                dependency = None
+                for prefix, destination_path in sorted(remappings, key=lambda item: len(item[0]), reverse=True):
+                    if imported.startswith(prefix):
+                        suffix = imported[len(prefix):]
+                        dependency = (target_root / destination_path / suffix).resolve()
+                        break
+                if dependency is None:
+                    continue
             if dependency.is_file() and dependency not in copied:
                 pending.append(dependency)
 
+    remapping_lines = []
+    for prefix, destination_path in remappings:
+        # Remapped dependencies under node_modules live at the Foundry root;
+        # source-tree dependencies copied by the closure live under src/.
+        remapped_root = "node_modules" if destination_path.startswith("node_modules/") else "src"
+        remapping_lines.append(f"{prefix}={remapped_root}/{destination_path}")
+    remapping_literal = ", ".join(repr(item) for item in remapping_lines)
     (destination / "foundry.toml").write_text(
         '[profile.default]\n'
         'src = "src"\n'
         'test = "test"\n'
         'libs = ["lib"]\n'
         'auto_detect_solc = true\n'
-        'remappings = ["@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/"]\n',
+        f"remappings = [{remapping_literal}]\n",
         encoding="utf-8",
     )
     hardhat_console = destination / "lib" / "hardhat" / "console.sol"
     hardhat_console.parent.mkdir(parents=True, exist_ok=True)
     hardhat_console.write_text("pragma solidity ^0.6.12; library console {}\n", encoding="utf-8")
     (destination / "remappings.txt").write_text(
-        "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/\n",
+        "\n".join(remapping_lines) + "\n",
         encoding="utf-8",
     )
     return test_root
@@ -105,7 +132,7 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="cydra-blind-auth-") as temp:
         checkout = Path(temp) / "target"
-        subprocess.run(("git", "clone", "--no-tags", args.target_repo, str(checkout)), check=True)
+        subprocess.run(("git", "clone", "--no-tags", "--recurse-submodules", args.target_repo, str(checkout)), check=True)
         subprocess.run(("git", "-C", str(checkout), "fetch", "--no-tags", "origin", args.target_ref), check=True)
         subprocess.run(("git", "-C", str(checkout), "checkout", "--detach", args.target_ref), check=True)
         project = checkout / args.target_project
@@ -180,8 +207,13 @@ def main() -> int:
                 cwd=execution_project,
                 text=True,
                 capture_output=True,
-                check=True,
             )
+            if bytecode_result.returncode != 0:
+                raise RuntimeError(
+                    "isolated target compilation failed before authorization execution"
+                    f"\\nSTDOUT:\\n{bytecode_result.stdout}"
+                    f"\\nSTDERR:\\n{bytecode_result.stderr}"
+                )
             creation_bytecode = bytecode_result.stdout.strip().removeprefix("0x")
             output = test_path_for(execution_project, f"generated/{hypothesis.hypothesis_id}.t.sol")
             generated = generate_blind_authorization_test_from_experiment(
