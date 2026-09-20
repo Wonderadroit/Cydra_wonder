@@ -54,6 +54,16 @@ def clone_target(repo: str, ref: str, destination: Path) -> None:
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", ref), check=True)
 
 
+def prepare_target_dependencies(project: Path) -> dict[str, Any]:
+    """Install dependencies declared by the target project before generated tests."""
+    commands: list[dict[str, Any]] = []
+    if (project / "package-lock.json").exists():
+        commands.append(capture(project, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"))
+    elif (project / "package.json").exists():
+        commands.append(capture(project, "npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"))
+    return {"commands": commands, "ok": all(item["ok"] for item in commands)}
+
+
 def contract_for(result, hypothesis):
     for contract in result.contracts:
         if any(fn.name == hypothesis.target_function for fn in contract.functions): return contract
@@ -139,12 +149,12 @@ contract CydraInitializerDependencyProbe {
 }
 '''
         source = source.replace("contract CydraInitializationInvariantTest is Test {", probe + "\ncontract CydraInitializationInvariantTest is Test {", 1)
-        target_decl = re.search(r"    ([A-Za-z_]\\w*) internal target;", source)
-        if target_decl is None:
-            raise ValueError("generated initialization test has no target declaration")
-        target_decl_text = target_decl.group(0)
-        source = source.replace(target_decl_text, target_decl_text + "\n    CydraInitializerDependencyProbe internal cydraDependency;", 1)
-        source = source.replace("    function setUp() public {\n", "    function setUp() public {\n        cydraDependency = new CydraInitializerDependencyProbe();\n", 1)
+        target_decl = re.search(r"(?m)^\s*([A-Za-z_]\w*)\s+internal\s+target\s*;", source)
+        if target_decl is not None:
+            target_decl_text = target_decl.group(0)
+            source = source.replace(target_decl_text, target_decl_text + "\n    CydraInitializerDependencyProbe internal cydraDependency;", 1)
+            setup_pattern = re.compile(r"(function\s+setUp\s*\([^)]*\)\s*(?:external|public|internal|private)?\s*\{)")
+            source = setup_pattern.sub(r"\1\n        cydraDependency = new CydraInitializerDependencyProbe();", source, count=1)
     generated.write_text(source, encoding="utf-8")
 
 
@@ -155,7 +165,6 @@ def run_initialization(project: Path, hypothesis, experiment, contract):
     if requires_proxy_initialization(Path(contract.source)):
         generated.write_text(adapt_generated_initialization_for_proxy(generated.read_text(encoding="utf-8"), contract.name), encoding="utf-8")
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
-    require_executed(execution)
     outcome = classify_initialization_execution(hypothesis, execution)
     return generated, execution, outcome
 
@@ -203,6 +212,9 @@ def main() -> int:
         project = checkout / args.target_project
         source = checkout / args.target_path
 
+        dependency_setup = prepare_target_dependencies(project)
+        if not dependency_setup["ok"]:
+            raise RuntimeError(f"target dependency setup failed: {dependency_setup}")
         compiler = compile_state_effects(project, source)
         result = investigate(source, target=f"{args.target_repo}@{args.target_ref}", semantic_evidence=compiler.evidence)
         experiments = {e.hypothesis_id: e for e in result.experiments}
@@ -219,7 +231,7 @@ def main() -> int:
                 contract = contract_for(result, hypothesis)
                 proxy_topology = requires_proxy_initialization(Path(contract.source))
                 generated, execution, outcome = run_initialization(project, hypothesis, experiments[hypothesis.hypothesis_id], contract)
-                status.update(foundry_generated=True, blind_executed=True, generated_path=str(generated), deployment_topology="proxy" if proxy_topology else "direct", classification=outcome.benchmark_status, internal_status=outcome.internal_status, evidence=_json(outcome.evidence))
+                status.update(foundry_generated=True, blind_executed=execution.executed, generated_path=str(generated), deployment_topology="proxy" if proxy_topology else "direct", classification=outcome.benchmark_status, internal_status=outcome.internal_status, evidence=_json(outcome.evidence), execution=_json(execution))
                 executions.append(execution); evidence.append(outcome.evidence)
             except Exception as exc:
                 status.update(failure_stage="execution_or_generation", blocked_reason=f"{type(exc).__name__}: {exc}")
@@ -239,7 +251,7 @@ def main() -> int:
             class_coverage[cls] = {"requested": True, "hypotheses_extracted": extracted, "hypotheses_executed": executed, "status": coverage_status}
 
         build = capture(project, "forge", "build")
-        provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions}
+        provenance = {"runner_commit": runner_commit, "runner_file_blob": runner_blob, "target_repo": args.target_repo, "target_ref": args.target_ref, "target_checkout_commit": git(checkout, "rev-parse", "HEAD"), "timestamp_utc": datetime.now(timezone.utc).isoformat(), "python_version": sys.version, "platform": platform.platform(), "ci_run_id": args.ci_run_id, "compiler_evidence_status": compiler.status, "compiler_versions": compiler.compiler_versions, "dependency_setup": dependency_setup}
         classification = {"surface": "initialization-only", "class_coverage": class_coverage, "hypotheses": statuses, "compiler_evidence_status": compiler.status, "semantic_evidence_count": len(compiler.evidence), "taxonomy": {"confirmed": "independently confirmed initialization candidate", "not_confirmed": "executed candidate did not confirm", "rule_gap": "relevant invariant/class absent from extraction", "pipeline_gap": "hypothesis generated but execution/classification could not complete", "capability_gap": "class outside current blind executable surface", "no_candidate_extracted": "requested class produced no hypothesis under the current reasoning rules"}}
         execution_human = "\n\n".join(f"{e.experiment_id}: {e.status}\n{e.stdout}\n{e.stderr}" for e in executions)
         compiler_record = {"executed": compiler.executed, "status": compiler.status, "command": compiler.command, "stdout": compiler.stdout, "stderr": compiler.stderr, "build_info_files": compiler.build_info_files, "compiler_versions": compiler.compiler_versions}

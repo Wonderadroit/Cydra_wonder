@@ -44,19 +44,16 @@ def _lifecycle_shape(function_model: FunctionModel, target_var: str, initialize_
 def _fallback_shape(function_model: FunctionModel, target_var: str, unauthorized_addr: str, initialize_args_str: str) -> str:
     """Probe an unclassified lifecycle entrypoint for unauthorized state mutation."""
     LOGGER.warning("shape undetermined; using generic mutation probe")
-    call = _call(function_model, target_var, initialize_args_str)
+    call = f"{target_var}.{function_model.name}({initialize_args_str})"
     return (
         "function testInitializationInterfaceIsCallable() public {\n"
         f"    address unauthorized = address({unauthorized_addr});\n"
         "    vm.record();\n"
         "    vm.prank(unauthorized);\n"
-        f"    try {call} {{\n"
-        f"        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address({target_var}));\n"
-        "        reads;\n"
-        "        assertEq(writes.length, 0, \"arbitrary initializer call mutated target storage\");\n"
-        "    } catch {\n"
-        "        return;\n"
-        "    }\n"
+        f"    {call};\n"
+        f"    (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address({target_var}));\n"
+        "    reads;\n"
+        "    assertEq(writes.length, 0, \"arbitrary initializer call mutated target storage\");\n"
         "}"
     )
 

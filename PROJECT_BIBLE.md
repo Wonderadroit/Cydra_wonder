@@ -906,3 +906,31 @@ This is required for research evidence provenance: a reported green regression o
 
 The available GitHub connector currently does not expose the workflow-run listing needed to inspect the resulting Actions logs/artifacts directly. Therefore a configured workflow is not counted as an observed research result until its execution artifacts can be inspected.
 
+
+## 51. Unfamiliar Stader initializer — first blind end-to-end security result
+
+The Stader unfamiliar-target campaign has now completed the generic initialization reasoning and execution path on the pinned VaultProxy.sol revision 7566b5a35f32ebd55d3578b8bd05c038feb7d9cc.
+
+The important result is a blind security-relevant state-transition observation, not merely a generated hypothesis:
+
+- compiler-backed semantic evidence succeeded;
+- CYDRA independently generated H-INIT-initialise from the unfamiliar target;
+- the experiment was rendered and executed by Foundry;
+- an arbitrary caller successfully reached initialise;
+- the generic storage-access assertion observed 6 target storage writes;
+- the execution therefore failed the invariant that an arbitrary caller must not be able to claim initialization state;
+- the canonical initialization classifier promoted the hypothesis to confirmed;
+- the same CI research run was rerun successfully, reproducing the result.
+
+The campaign also exposed and repaired three generic blockers before reaching this result:
+1. target-project npm dependencies were absent from the temporary checkout;
+2. the generic fallback initializer renderer emitted invalid try ...; { Solidity;
+3. the runtime classifier did not recognize the generic initializer-mutation assertion emitted by the renderer.
+
+None of these repairs add Stader-specific names, selectors, exploit sequences, or historical answers.
+
+The current evidence proves a real causal initialization-state violation on the historical target. It does not yet claim the complete historical impact or declare the final finding gate READY. The next step is adversarial causal verification of the security/economic consequence using the target's own dependency boundary, followed by an independent reproduction. If that impact cannot be demonstrated generically, the result remains a confirmed invariant violation rather than a fully promoted finding.
+
+This milestone is stronger evidence for the Solidity maturity gate because the hypothesis was generated on an unfamiliar project and the experiment was materialized and executed without historical-answer leakage. It is not evidence that Solidity generalization is complete.
+
+The canonical research artifacts for the successful run must remain the provenance source for this milestone.
