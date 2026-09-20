@@ -1,12 +1,12 @@
 from __future__ import annotations
 from pathlib import Path
-from .models import Hypothesis, Experiment
+from .models import Hypothesis
 
 def generate_cross_contract_economic_test(hypothesis: Hypothesis, output: Path, target_import: str) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(f'''// SPDX-License-Identifier: MIT
+    content = f"""// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "{{target_import}}";
+import "{target_import}";
 
 contract CydraCrossContractEconomicTest {{
     function testCrossContractBacking() public {{
@@ -21,5 +21,6 @@ contract CydraCrossContractEconomicTest {{
         require(vault.accountedAssets() <= asset.balanceOf(address(vault)), "accounting exceeds actual backing");
     }}
 }}
-'''.format(target_import=target_import), encoding="utf-8")
+"""
+    output.write_text(content, encoding="utf-8")
     return output
