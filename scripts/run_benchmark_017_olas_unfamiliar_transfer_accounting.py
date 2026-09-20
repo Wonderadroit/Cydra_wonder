@@ -77,7 +77,8 @@ def write_test(root: Path) -> Path:
     path.write_text("""// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {StakingToken, StakingParams} from "../contracts/staking/StakingToken.sol";
+import {StakingToken} from "../contracts/staking/StakingToken.sol";
+import {StakingParams} from "../contracts/staking/StakingBase.sol";
 
 contract FeeTransferToken {
     mapping(address => uint256) public balanceOf;
@@ -100,6 +101,8 @@ contract FeeTransferToken {
     }
 }
 
+contract ActivityCheckerProbe {}
+
 contract CydraTransferAccountingTest {
     StakingToken internal target;
     FeeTransferToken internal token;
@@ -107,11 +110,12 @@ contract CydraTransferAccountingTest {
     function setUp() public {
         token = new FeeTransferToken();
         target = new StakingToken();
+        ActivityCheckerProbe activityChecker = new ActivityCheckerProbe();
 
         uint256[] memory agentIds;
         StakingParams memory params = StakingParams(
             bytes32(uint256(1)), 1, 1, 2, 1, 1, 1, 1, 1,
-            agentIds, 0, bytes32(0), bytes32(0), address(1), address(1)
+            agentIds, 0, bytes32(0), bytes32(uint256(1)), address(1), address(activityChecker)
         );
         target.initialize(params, address(1), address(token));
         token.mint(address(this), 1000);
