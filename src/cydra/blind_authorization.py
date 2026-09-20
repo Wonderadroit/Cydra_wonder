@@ -77,10 +77,10 @@ def generate_blind_authorization_test_from_experiment(
     path.parent.mkdir(parents=True, exist_ok=True)
     marker = security_assertion_marker()
 
-    deployment = (
-        f"new {target_type}({constructor_arguments})"
+    constructor_encoding = (
+        f"abi.encode({constructor_arguments})"
         if constructor_arguments
-        else f"new {target_type}()"
+        else "abi.encode()"
     )
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
@@ -93,7 +93,13 @@ contract CydraBlindAuthorizationTest {{
     {target_type} internal target;
 
     function setUp() public {{
-        target = {deployment};
+        bytes memory init = abi.encodePacked(type({target_type}).creationCode, {constructor_encoding});
+        address deployed;
+        assembly {{
+            deployed := create(0, add(init, 32), mload(init))
+        }}
+        require(deployed != address(0), "CYDRA target deployment failed");
+        target = {target_type}(deployed);
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
