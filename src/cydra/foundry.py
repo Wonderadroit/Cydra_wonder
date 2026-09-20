@@ -236,7 +236,11 @@ def _initializer_argument(
         return runtime_arguments[parameter.name], None
     parameter_type = parameter.type.strip()
     if parameter_type.endswith("[]"):
-        return f"new {parameter_type[:-2]}[](0)", None
+        # A zero-length array is often rejected by real initializers as an
+        # invalid boundary. For struct/custom arrays, one zero-initialized
+        # element is a generic valid-shape probe; no target-specific field is
+        # invented.
+        return f"new {parameter_type[:-2]}[](1)", None
     if parameter_type.startswith("address"):
         return ("payable(address(0))" if parameter_type == "address payable" else "address(0)"), None
     if parameter_type.startswith(("uint", "int")):
@@ -534,6 +538,26 @@ def _model_initialization_source(
         )
     pragma = contract_model.pragma or "^0.8.20"
 
+    # Preserve source-defined custom type namespaces used by initializer
+    # parameters (for example Types.StakerInfo[]) in the generated test.
+    source_text = _source_text(contract_model)
+    custom_namespaces = {
+        parameter.type.split(".", 1)[0]
+        for parameter in function.parameters
+        if "." in parameter.type
+    }
+    custom_imports: list[str] = []
+    for namespace in sorted(custom_namespaces):
+        match = re.search(
+            rf'import\s*\{{\s*{re.escape(namespace)}\s*\}}\s*from\s*"([^"]+)"\s*;',
+            source_text,
+        )
+        if match:
+            custom_imports.append(
+                f'import {{ {namespace} }} from "{_layout_aware_import_path(match.group(1), output_path or "generated.t.sol")}";'
+            )
+    custom_import_text = "\n".join(custom_imports)
+
     factory_method = "\n    function voter() external view returns (address) { return address(this); }" if factory_context else ""
     derived_by_source: dict[str, list[tuple[str, object]]] = {}
     for source_interface, source_method, target_interface in derived_interface_casts:
@@ -582,6 +606,7 @@ pragma solidity {pragma};
 // come from ContractModel/FunctionModel. Runtime dependencies are real local stubs.
 import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
+{custom_import_text}
 {stub_source}
 contract CydraInitializationInvariantTest is Test {{
     {target_type} internal target;
