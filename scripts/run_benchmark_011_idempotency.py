@@ -33,7 +33,11 @@ def _side(source: Path, hypothesis, experiment: Experiment, label: str):
     with tempfile.TemporaryDirectory(prefix="cydra-idempotency-") as temp:
         root = Path(temp) / "project"
         _project(source, root)
-        model = parse_solidity(root / "src" / source.name)[0]
+        contracts = parse_solidity(root / "src" / source.name)
+        model = next(
+            contract for contract in contracts
+            if any(function.name == hypothesis.target_function for function in contract.functions)
+        )
         test = generate_idempotency_test(
             hypothesis,
             model,
@@ -71,13 +75,14 @@ def main() -> int:
     patched = _side(P, hypothesis, experiment, "idempotency-patched")
 
     model = SystemModel()
-    contract_id = f"contract:{result.contracts[0].name}"
+    target_contract = next(c for c in result.contracts if any(f.name == hypothesis.target_function for f in c.functions))
+    contract_id = f"contract:{target_contract.name}"
     function_id = f"function:{result.contracts[0].name}:{hypothesis.target_function}"
     invariant_id = f"invariant:{hypothesis.invariant_id}"
     hypothesis_id = f"hypothesis:{hypothesis.hypothesis_id}"
     observation_id = "idempotency-record-reuse"
 
-    model.add_node(Node(contract_id, "contract", result.contracts[0].name, {}))
+    model.add_node(Node(contract_id, "contract", target_contract.name, {}))
     model.add_node(Node(function_id, "function", hypothesis.target_function, {}))
     model.add_node(Node(invariant_id, "invariant", hypothesis.claim, {"status": "inferred"}))
     model.add_node(Node(hypothesis_id, "hypothesis", hypothesis.claim, {"belief": 0.5}))
