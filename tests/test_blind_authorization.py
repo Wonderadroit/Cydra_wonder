@@ -132,4 +132,5 @@ def test_blind_auth_renderer_handles_legacy_constructor_and_no_forge_std(tmp_pat
     source = output.read_text(encoding="utf-8")
     assert "pragma solidity ^0.6.12;" in source
     assert 'import {Test} from "forge-std/Test.sol";' not in source
-    assert "new Legacy(IERC20(address(0x1001)), AlEth(address(0x1001)), address(0x1001), address(0x1001))" in source
+    assert "type(Legacy).creationCode" in source
+    assert "abi.encode(IERC20(address(0x1001)), AlEth(address(0x1001)), address(0x1001), address(0x1001))" in source
