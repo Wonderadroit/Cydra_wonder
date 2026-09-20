@@ -105,10 +105,10 @@ def supports_initializer_disable(contract_source: str | Path) -> bool:
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeError):
                 continue
-            if re.search(r"\\bfunction\\s+_disableInitializers\\s*\\(", text):
+            if "_disableInitializers(" in text:
                 return True
         return False
-    return bool(re.search(r"\\bfunction\\s+_disableInitializers\\s*\\(", contract_source))
+    return bool("_disableInitializers(" in contract_source)
 
 
 def adapt_generated_initialization_for_proxy(source: str, target_type: str) -> str:
