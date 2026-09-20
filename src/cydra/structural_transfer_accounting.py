@@ -53,33 +53,23 @@ def _credits_requested_amount(body, amount, state_variables=()):
     if not aliases:
         return False
 
-    # The Solidity model may not yet include inherited state variables. Recover
-    # only the narrow local-to-state flow needed here: a declared local alias is
-    # assigned into a non-local variable. This is still syntax/data-flow evidence;
-    # it does not assign semantics to arbitrary identifiers.
-    local_variables = {
-        match.group(1)
+    # Recover the two-step accounting flow without requiring inherited state
+    # variables to be present in the lightweight contract model:
+    #   local = state + requestedAmount;
+    #   state = local;
+    #
+    # The state identifier is derived from the observed data-flow itself. This
+    # does not assign semantics to arbitrary names and remains class-neutral.
+    source_targets = {
+        (match.group(1), match.group(2))
         for match in re.finditer(
-            r"\b(?:uint(?:8|16|32|64|128|256)?|int(?:8|16|32|64|128|256)?|address|bool|bytes(?:[1-9]|[12][0-9]|3[0-2])?)\s+([A-Za-z_]\w*)\s*=",
+            rf"\b([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*\+\s*{amount_name}\b",
             body,
         )
     }
-    inferred_state_targets = {
-        match.group(1)
-        for alias in aliases
-        for match in re.finditer(
-            rf"\b([A-Za-z_]\w*)\s*=\s*{re.escape(alias)}\b",
-            body,
-        )
-        if match.group(1) not in local_variables and match.group(1) != alias
-    }
-    return bool(
-        any(
-            re.search(rf"\b{re.escape(state)}\s*=\s*{re.escape(alias)}\b", body)
-            for state in state_variables
-            for alias in aliases
-        )
-        or inferred_state_targets
+    return any(
+        re.search(rf"\b{re.escape(state)}\s*=\s*{re.escape(alias)}\b", body)
+        for alias, state in source_targets
     )
 
 def _measures_delta(body):
