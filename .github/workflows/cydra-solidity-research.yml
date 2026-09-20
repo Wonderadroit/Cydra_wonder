@@ -74,6 +74,13 @@ jobs:
           mkdir -p backtest-artifacts/olas-transfer-accounting
           python scripts/run_benchmark_017_olas_unfamiliar_transfer_accounting.py             --output backtest-artifacts/olas-transfer-accounting
 
+      - name: Run unfamiliar Morph L2 implementation-initialization backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p backtest-artifacts/morph-initialization
+          python scripts/run_benchmark_005_blind.py             --target-repo https://github.com/morph-l2/morph.git             --target-ref aa35ed6d1d0bb1e0a38f04dcfb9c5b3203f90604             --target-path contracts/contracts/l2/staking/L2Staking.sol             --target-project contracts             --classes initialization             --freeze backtest-artifacts/morph-initialization/freeze
+
       - name: Publish research result
         if: always()
         uses: actions/upload-artifact@v4
