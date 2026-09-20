@@ -45,6 +45,13 @@ def main() -> int:
         experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
         contract = next(c for c in result.contracts if any(f.name == hypothesis.target_function for f in c.functions))
         output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+        bytecode = subprocess.run(
+            ("forge", "inspect", f"src/SafeTarget.sol:{contract.name}", "bytecode"),
+            cwd=project,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip().removeprefix("0x")
         generated = generate_blind_authorization_test_from_experiment(
             hypothesis,
             experiment,
@@ -52,6 +59,7 @@ def main() -> int:
             contract.name,
             output,
             contract,
+            creation_bytecode=bytecode,
         )
         execution = run_foundry_test(project, generated, experiment.experiment_id, "blind-negative")
         require_executed(execution)
