@@ -48,6 +48,12 @@ def main() -> int:
         )
         hypotheses = [h for h in result.hypotheses if h.invariant_id == "INV-AUTH-001"]
         if not hypotheses:
+            print("NO_AUTH_HYPOTHESIS")
+            for contract in result.contracts:
+                print("CONTRACT", contract.name, "functions=", len(contract.functions))
+                for function in contract.functions:
+                    print("FUNCTION", function.name, "visibility=", function.visibility, "modifiers=", function.modifiers, "writes=", function.writes)
+            print("INVARIANTS", [item.__dict__ for item in result.invariants])
             raise SystemExit("blind authorization backtest produced no authorization hypothesis")
 
         for hypothesis in hypotheses:
