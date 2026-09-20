@@ -64,14 +64,16 @@ def generate_cross_contract_economic_hypotheses(contract: ContractModel, semanti
     if not gap:
         return CrossContractEconomicContribution((), ())
     vault_name, callee = gap
-    target = next(
-        (f for f in contract.functions if f.name.lower().startswith("sync") or f.name.lower().startswith("harvest")),
-        None,
+    source_function = re.search(
+        r"function\\s+(\\w+)\\s*\\([^)]*\\)[^{]*\\{[^}]*reported\\s*=\\s*\\w+\\.\\w+",
+        source,
+        re.S,
     )
-    if target is None:
+    target_name = source_function.group(1) if source_function else None
+    if target_name is None:
         return CrossContractEconomicContribution((), ())
-    iid = f"INV-CROSS-CONTRACT-ECONOMIC-{target.name}"
-    hid = f"H-CROSS-CONTRACT-ECONOMIC-{target.name}"
+    iid = f"INV-CROSS-CONTRACT-ECONOMIC-{target_name}"
+    hid = f"H-CROSS-CONTRACT-ECONOMIC-{target_name}"
     invariant = Invariant(
         iid,
         "A system's internal asset accounting must not increase by more than the assets actually delivered across a cross-contract boundary.",
@@ -82,7 +84,7 @@ def generate_cross_contract_economic_hypotheses(contract: ContractModel, semanti
         hid,
         f"{target.name} may trust a cross-contract reported asset amount that exceeds the assets actually delivered, allowing internal accounting to become economically unbacked.",
         iid,
-        target.name,
+        target_name,
         "callee reports an amount different from the asset amount actually delivered",
         "internal accounted assets exceed the receiving contract's actual asset balance after synchronization",
         evidence_ids=(f"E-CROSS-CONTRACT-{vault_name}-{callee}",),
