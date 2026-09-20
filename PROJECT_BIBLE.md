@@ -829,3 +829,24 @@ This workflow provides the durable GitHub-native Solidity research loop:
 The workflow is an execution surface, not evidence that arbitrary targets are secure. Its historical backtest is a regression anchor for the already demonstrated finding capability.
 
 The Solidity maturity gate remains open. The next evidence must come from additional genuinely unfamiliar targets and from reducing the gap between benchmark-specific execution harnesses and generic target execution. A green regression run therefore means **the demonstrated capability still works**, not **Solidity research is complete**.
+
+## 46. Unfamiliar-target execution campaign — initializer generalization
+
+The first post-maturity-gate execution campaign now deliberately targets a materially unfamiliar Solidity project rather than another CYDRA fixture.
+
+The campaign target is the historical Stader Labs contest repository at commit `7566b5a35f32ebd55d3578b8bd05c038feb7d9cc`, with `contracts/VaultProxy.sol` as the initial source surface. The historical finding is not supplied to CYDRA during hypothesis generation.
+
+This campaign exposed a concrete generalization gap before execution: CYDRA recognized `initialize` and `init`, but not the equivalent Solidity entrypoint spelling `initialise`. It also had an execution-input blind spot when a nonzero-address precondition was expressed through the common `checkNonZeroAddress(parameter)` helper rather than a direct comparison.
+
+The demonstrated repairs were kept class-neutral:
+- initialization reasoning recognizes `initialize`, `initialise`, and `init` without naming a target;
+- the initialization renderer preserves the discovered function identity instead of hard-coding `initialize`;
+- an unclassified initializer receives a generic arbitrary-caller mutation probe that treats a revert as safe execution rather than a finding;
+- initializer input hardening recognizes the common nonzero-address helper form in addition to direct zero-address predicates;
+- regressions cover both the spelling variation and helper-based input constraint.
+
+The canonical CI research loop now executes this unfamiliar historical target after the existing Olympus regression and preserves the resulting artifacts.
+
+The result of this campaign must be recorded only after the blind execution artifacts are inspected. A generated hypothesis or measured execution is not itself a confirmed finding. The finding gate still requires causal evidence and reproducibility.
+
+This campaign is evidence for the maturity gate only if CYDRA independently produces and validates the relevant security conclusion without historical-answer leakage. A failure is equally valuable when it identifies the next demonstrated generalization blocker.
