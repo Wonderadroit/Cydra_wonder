@@ -46,13 +46,29 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
         shutil.copy2(current, destination_file)
 
         text = current.read_text(encoding="utf-8")
+        remappings = []
+        remappings_file = target_root / "remappings.txt"
+        if remappings_file.exists():
+            for line in remappings_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                prefix, destination_path = line.split("=", 1)
+                remappings.append((prefix, destination_path))
         for imported in _IMPORT_RE.findall(text):
             if imported.startswith("."):
                 dependency = (current.parent / imported).resolve()
             elif imported.startswith("contracts/"):
                 dependency = (target_root / imported).resolve()
             else:
-                continue
+                dependency = None
+                for prefix, destination_path in sorted(remappings, key=lambda item: len(item[0]), reverse=True):
+                    if imported.startswith(prefix):
+                        suffix = imported[len(prefix):]
+                        dependency = (target_root / destination_path / suffix).resolve()
+                        break
+                if dependency is None:
+                    continue
             if dependency.is_file() and dependency not in copied:
                 pending.append(dependency)
 
@@ -105,7 +121,7 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="cydra-blind-auth-") as temp:
         checkout = Path(temp) / "target"
-        subprocess.run(("git", "clone", "--no-tags", args.target_repo, str(checkout)), check=True)
+        subprocess.run(("git", "clone", "--no-tags", "--recurse-submodules", args.target_repo, str(checkout)), check=True)
         subprocess.run(("git", "-C", str(checkout), "fetch", "--no-tags", "origin", args.target_ref), check=True)
         subprocess.run(("git", "-C", str(checkout), "checkout", "--detach", args.target_ref), check=True)
         project = checkout / args.target_project
