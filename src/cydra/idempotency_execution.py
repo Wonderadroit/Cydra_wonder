@@ -40,7 +40,7 @@ contract CydraIdempotencyTest {{
         bool reverted;
         try target.{hypothesis.target_function}(address(0xBEEF), ids, true) {{ }} catch {{ reverted = true; }}
 
-        uint256 afterBalance = ICydraToken(target.token()).balanceOf(address(this));
+        uint256 afterBalance = ICydraToken(address(target.token())).balanceOf(address(this));
         if (reverted) {{
             require(true, "patched target should reject the repeated record");
         }} else {{
