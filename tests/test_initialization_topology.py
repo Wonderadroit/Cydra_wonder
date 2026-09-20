@@ -132,3 +132,23 @@ def test_requires_proxy_resolves_openzeppelin_from_node_modules(tmp_path):
     )
     from cydra.initialization_topology import supports_initializer_disable
     assert supports_initializer_disable(contracts / "LoanProtocol.sol")
+
+
+
+def test_requires_proxy_ignores_unrelated_imported_constructor_disable(tmp_path):
+    root = tmp_path / "target"
+    contracts = root / "contracts"
+    contracts.mkdir(parents=True)
+    (contracts / "Target.sol").write_text(
+        'import "./Unrelated.sol";\n'
+        'contract Target { function initialize() external {} }\n',
+        encoding="utf-8",
+    )
+    (contracts / "Unrelated.sol").write_text(
+        "contract Unrelated {\n"
+        "    constructor() { _disableInitializers(); }\n"
+        "    function _disableInitializers() internal {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    assert not requires_proxy_initialization(contracts / "Target.sol")
