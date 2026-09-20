@@ -114,7 +114,7 @@ def generate_blind_authorization_test_from_experiment(
         source_text = ""
     for written in function.writes:
         match = re.search(
-            rf"\\b(address(?:\\s+payable)?|bool|uint\\d*|int\\d*)\\s+public\\s+{re.escape(written)}\\s*;",
+            rf"\b(address(?:\s+payable)?|bool|uint\d*|int\d*)\s+public\s+{re.escape(written)}\s*;",
             source_text,
         )
         if match:
