@@ -68,6 +68,24 @@ def _boundary_shape(body: str, epoch_name: str) -> bool:
     )
 
 
+
+
+def _source_functions(source: str) -> tuple[tuple[str, str, str], ...]:
+    """Fallback function inventory from source when the lightweight model misses one."""
+    found: list[tuple[str, str, str]] = []
+    for match in re.finditer(
+        r"\bfunction\s+(?P<name>[A-Za-z_]\w*)\s*\([^)]*\)\s*"
+        r"(?P<tail>[^\{;]*)\{",
+        source,
+        re.S,
+    ):
+        visibility_match = re.search(r"\b(public|external|internal|private)\b", match.group("tail"))
+        visibility = visibility_match.group(1) if visibility_match else "unspecified"
+        body = _body(source, match.group("name"))
+        found.append((match.group("name"), visibility, body))
+    return tuple(found)
+
+
 def generate_epoch_accounting_hypotheses(
     contract: ContractModel, semantic=()
 ) -> EpochAccountingContribution:
@@ -78,15 +96,18 @@ def generate_epoch_accounting_hypotheses(
 
     invariants: list[Invariant] = []
     hypotheses: list[Hypothesis] = []
-    for function in contract.functions:
-        if function.visibility not in {"public", "external"}:
+    candidates = [(function.name, function.visibility, _body(source, function.name)) for function in contract.functions]
+    known = {name for name, _visibility, _body_text in candidates}
+    candidates.extend(item for item in _source_functions(source) if item[0] not in known)
+
+    for function_name, visibility, body in candidates:
+        if visibility not in {"public", "external"}:
             continue
-        body = _body(source, function.name)
         if not body or not _boundary_shape(body, epoch_name):
             continue
 
-        iid = f"INV-EPOCH-ACCOUNTING-{function.name}"
-        hid = f"H-EPOCH-ACCOUNTING-{function.name}"
+        iid = f"INV-EPOCH-ACCOUNTING-{function_name}"
+        hid = f"H-EPOCH-ACCOUNTING-{function_name}"
         invariants.append(
             Invariant(
                 iid,
@@ -100,7 +121,7 @@ def generate_epoch_accounting_hypotheses(
                 hid,
                 f"{function.name} may apply one epoch's configured accounting rate across a boundary because its segment end is derived as the current position plus the full epoch size rather than the next aligned epoch boundary.",
                 iid,
-                function.name,
+                function_name,
                 "an external caller able to trigger the state-accounting transition after an unaligned prior checkpoint",
                 "the accumulated reward/accounting state differs from the sum of the configured per-epoch rates over the actual block intervals",
                 evidence_ids=(f"E-MODEL-{function.name}",),
