@@ -123,8 +123,8 @@ def _harden_generated_initializer_arguments(generated: Path, contract, function_
         if index < len(arguments) and arguments[index] in {"address(0)", "payable(address(0))"}:
             arguments[index] = "address(0xCAFE)" if arguments[index] == "address(0)" else "payable(address(0xCAFE))"
     rewritten = ", ".join(arguments)
-    rewritten = re.sub(r"(?<![A-Za-z0-9_])address\\(0xCAFE\\)", "address(cydraDependency)", rewritten)
-    rewritten = re.sub(r"(?<![A-Za-z0-9_])payable\\(address\\(0xCAFE\\)\\)", "payable(address(cydraDependency))", rewritten)
+    rewritten = re.sub(r"(?<![A-Za-z0-9_])address\(0xCAFE\)", "address(cydraDependency)", rewritten)
+    rewritten = re.sub(r"(?<![A-Za-z0-9_])payable\(address\(0xCAFE\)\)", "payable(address(cydraDependency))", rewritten)
     source = source[:match.start(2)] + rewritten + source[match.end(2):]
     if "contract CydraInitializerDependencyProbe" not in source:
         probe = '''
