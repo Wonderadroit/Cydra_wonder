@@ -34,23 +34,23 @@ def _contract_blocks(source: str):
 
 def _has_cross_contract_report_gap(source: str) -> tuple[str, str] | None:
     blocks = dict(_contract_blocks(source))
-    for vault_name, body in blocks.items():
-        call = re.search(
-            r"(?:\w+\s+)?(?P<var>\w+)\s*=\s*(?P<callee>\w+)\.\w+\s*\([^;]*\)\s*;\s*(?:accountedAssets|totalAssets|assets)\s*\+=\s*(?P=var)\s*;",
-            body,
-            re.S,
-        )
-        if not call:
-            continue
-        callee = call.group("callee")
-        callee_body = blocks.get(callee, "")
-        if not callee_body:
-            continue
-        has_delivery = re.search(r"\.transfer\s*\([^;]*\)\s*;", callee_body, re.S)
-        has_report = re.search(r"\breturn\s+\w+\s*;", callee_body)
-        has_intermediate = re.search(r"\b(?:uint\w*\s+)?delivered\s*=\s*[^;]+;", callee_body)
-        if has_delivery and has_report and has_intermediate:
-            return vault_name, callee
+    accounting = re.search(
+        r"(?P<type>uint\\w*\\s+)?(?P<var>reported)\\s*=\\s*(?P<callee>\\w+)\\.\\w+\\s*\\([^;]*\\)\\s*;\\s*accountedAssets\\s*\\+=\\s*reported\\s*;",
+        source,
+        re.S,
+    )
+    if not accounting:
+        return None
+    callee = accounting.group("callee")
+    caller = next((name for name, body in blocks.items() if accounting.group(0) in body), None)
+    callee_body = blocks.get(callee, "")
+    if not caller or not callee_body:
+        return None
+    has_delivery = bool(re.search(r"\\.transfer\\s*\\([^;]*\\)\\s*;", callee_body, re.S))
+    has_report = bool(re.search(r"\\breturn\\s+\\w+\\s*;", callee_body))
+    has_intermediate = bool(re.search(r"\\b(?:uint\\w*\\s+)?delivered\\s*=\\s*[^;]+;", callee_body))
+    if has_delivery and has_report and has_intermediate:
+        return caller, callee
     return None
 
 def generate_cross_contract_economic_hypotheses(contract: ContractModel, semantic=()):
