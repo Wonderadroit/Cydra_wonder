@@ -138,6 +138,16 @@ def generate_arithmetic_hypotheses(contract: ContractModel) -> tuple[Hypothesis,
     return _generate(contract)
 
 
+def weighted_average_rounding_invariant(contract: ContractModel) -> Invariant | None:
+    from .structural_rounding import weighted_average_rounding_invariant as _detect
+    return _detect(contract)
+
+
+def generate_weighted_average_rounding_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
+    from .structural_rounding import generate_weighted_average_rounding_hypotheses as _generate
+    return _generate(contract)
+
+
 def plan_access_control_experiment(hypothesis: Hypothesis) -> Experiment:
     return _plan_experiment(
         hypothesis,
@@ -162,6 +172,23 @@ def plan_arithmetic_experiment(hypothesis: Hypothesis) -> Experiment:
         f"Execute {hypothesis.target_function} with an arithmetic boundary input and assert the observed output equals the exact floor reference value; repeat against the patched version.",
         ("observed quote exceeds the exact floor", "observed quote equals the exact floor"),
         1.0,
+    )
+
+
+def plan_weighted_average_rounding_experiment(hypothesis: Hypothesis) -> Experiment:
+    return Experiment(
+        experiment_id=f"X-{hypothesis.hypothesis_id}",
+        hypothesis_id=hypothesis.hypothesis_id,
+        action=(
+            f"Execute {hypothesis.target_function} with positive weighted-average inputs "
+            "(100, 2, 99, 1) and assert the result is at least the mathematical ceiling."
+        ),
+        discriminates=(
+            "weighted average rounds below its mathematical ceiling",
+            "weighted average reaches the mathematical ceiling",
+        ),
+        cost=1.0,
+        planned_inputs=("100", "2", "99", "1"),
     )
 
 
