@@ -1172,3 +1172,37 @@ The final machine-readable CI artifact records:
 This milestone expands the Solidity generalization evidence into **fund-flow provenance / duplicate economic charging**, distinct from transfer accounting, storage persistence, authorization, initialization, and transient read-only state. The result is bounded to the demonstrated double-charge invariant; broader financial impact is not asserted without additional evidence.
 
 The Solidity maturity gate remains open. The next investigation should continue against an unfamiliar mechanism that is not reducible to an already-covered surface, while preserving blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and fail-closed finding gates.
+
+
+## 58. Unfamiliar execution-domain signature replay — blind causal finding with independent reproduction
+
+A sixth materially different mechanism has completed the canonical causal/reproduction gate as a **source-derived execution-domain differential**: a signature authorization whose digest does not bind the deployment or chain context can be accepted by a second deployment, while a domain-bound control rejects the same authorization.
+
+Target-derived source:
+- repository: https://github.com/sherlock-audit/2024-10-ethos-network.git;
+- source path: ethos/packages/contracts/contracts/EthosAttestation.sol;
+- blind target function: createAttestation;
+- target-derived topology: createAttestation → digest helper → validateAndSaveSignature.
+
+The reasoning surface is class-neutral. It identifies signature verification combined with a digest helper and checks whether the observed signed message binds execution-domain context such as chainid or address(this). It does not encode the historical issue or expected answer.
+
+The executable differential uses an isolated source-derived control because the public audit repository's nested Ethos source revision is not independently checkout-able as a top-level repository ref. The target source is preserved in the benchmark as a source snapshot; therefore this milestone is **not** treated as equivalent to the pinned historical-source milestones.
+
+Observed CI result (latest dedicated signature-replay run):
+- blind hypothesis: H-SIGNATURE-REPLAY-createAttestation;
+- invariant: INV-SIGNATURE-REPLAY-createAttestation;
+- vulnerable execution: executed=true, tests_run=1, tests_failed=1;
+- patched execution: executed=true, tests_run=1, tests_failed=0;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction verification: VERIFIED;
+- finding gate: READY.
+
+The initial harness mistake was caught by the differential itself: the first version asserted that vulnerable replay should succeed, causing both controls to PASS and the gate to remain UNRESOLVED. The harness was corrected so the security invariant is expressed as a failure condition on replay; the next run produced the required FAIL/PASS differential and VERIFIED causal chain.
+
+The result demonstrates another generalizable reasoning/execution surface — **signature-domain binding / authorization replay** — distinct from authorization topology, initialization, transfer/accounting, rounding, transient cross-contract state, storage-reference persistence, and duplicate economic charging.
+
+Important boundary: this milestone demonstrates that CYDRA can independently derive and causally verify the execution-domain invariant from the preserved target source. It does **not** claim a newly discovered production vulnerability in Ethos until CYDRA executes the actual target dependency graph or another independently reproducible target implementation with equivalent semantics.
+
+The Solidity maturity gate remains open. The next cycle should prioritize an unfamiliar target that can be executed directly, so the same signature-domain reasoning can be tested without a source-snapshot boundary.
