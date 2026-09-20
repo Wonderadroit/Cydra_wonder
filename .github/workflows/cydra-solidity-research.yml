@@ -67,6 +67,19 @@ jobs:
             --classes initialization \
             --freeze backtest-artifacts/stader-initialization/freeze
 
+      - name: Run unfamiliar historical authorization backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p backtest-artifacts/decent-authorization
+          python scripts/run_benchmark_005_blind.py \
+            --target-repo https://github.com/decentxyz/decent-bridge.git \
+            --target-ref 7f90fd4489551b69c20d11eeecb17a3f564afb18 \
+            --target-path src/DcntEth.sol \
+            --target-project . \
+            --classes authorization \
+            --freeze backtest-artifacts/decent-authorization/freeze
+
       - name: Publish research result
         if: always()
         uses: actions/upload-artifact@v4
