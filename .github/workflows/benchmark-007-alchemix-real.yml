@@ -24,4 +24,4 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          python scripts/run_benchmark_006_blind_auth.py             --target-repo https://github.com/alchemix-finance/alchemix-protocol.git             --target-ref 0261dd5a23c63aaa354d56f506701a6fa79cfe1f             --target-path contracts/AlchemistEth.sol             --target-project .             --supplemental-file contracts/interfaces/IWETH9.sol@master
+          python scripts/run_benchmark_006_blind_auth.py             --target-repo https://github.com/alchemix-finance/alchemix-protocol.git             --target-ref 0261dd5a23c63aaa354d56f506701a6fa79cfe1f             --target-path contracts/AlchemistEth.sol             --target-project .             --supplemental-file contracts/interfaces/IWETH9.sol@master             --target-npm-dependency @openzeppelin/contracts@3.2.0
