@@ -17,8 +17,7 @@ contract ReadOnlyPool {
     }
 
     function removeLiquidity(uint256 amount) external {
-        require(balances[msg.sender] >= amount, "balance");
-        balances[msg.sender] -= amount;
+        balances[msg.sender] += amount;
         totalSupply -= amount;
 
         (bool ok,) = msg.sender.call{value: amount}("");
