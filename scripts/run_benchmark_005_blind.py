@@ -123,7 +123,25 @@ def _harden_generated_initializer_arguments(generated: Path, contract, function_
         if index < len(arguments) and arguments[index] in {"address(0)", "payable(address(0))"}:
             arguments[index] = "address(0xCAFE)" if arguments[index] == "address(0)" else "payable(address(0xCAFE))"
     rewritten = ", ".join(arguments)
-    generated.write_text(source[:match.start(2)] + rewritten + source[match.end(2):], encoding="utf-8")
+    rewritten = re.sub(r"(?<![A-Za-z0-9_])address\\(0xCAFE\\)", "address(cydraDependency)", rewritten)
+    rewritten = re.sub(r"(?<![A-Za-z0-9_])payable\\(address\\(0xCAFE\\)\\)", "payable(address(cydraDependency))", rewritten)
+    source = source[:match.start(2)] + rewritten + source[match.end(2):]
+    if "contract CydraInitializerDependencyProbe" not in source:
+        probe = '''
+contract CydraInitializerDependencyProbe {
+    fallback() external payable {
+        assembly {
+            mstore(0x00, 0x000000000000000000000000a11ce00000000000000000000000000000000)
+            return(0x00, 0x20)
+        }
+    }
+    receive() external payable {}
+}
+'''
+        source = source.replace("contract CydraInitializationInvariantTest is Test {", probe + "\ncontract CydraInitializationInvariantTest is Test {", 1)
+        source = source.replace("    {contract} internal target;".format(contract=contract.name), "    {contract} internal target;\n    CydraInitializerDependencyProbe internal cydraDependency;".format(contract=contract.name), 1)
+        source = source.replace("    function setUp() public {\n", "    function setUp() public {\n        cydraDependency = new CydraInitializerDependencyProbe();\n", 1)
+    generated.write_text(source, encoding="utf-8")
 
 
 def run_initialization(project: Path, hypothesis, experiment, contract):
