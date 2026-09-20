@@ -4,7 +4,6 @@ from pathlib import Path
 
 from .foundry import _layout_aware_import_path
 from .models import ContractModel, Experiment, Hypothesis
-from .planned_call import render_function_arguments
 
 
 def generate_weighted_average_rounding_test(
