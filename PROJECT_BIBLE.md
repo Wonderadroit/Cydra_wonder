@@ -558,3 +558,25 @@ Successful blind benchmark 010 evidence:
 - finding gate: READY.
 
 This milestone demonstrates a fourth materially different blind discovery mechanism after authorization, arithmetic rounding, and sibling postcondition parity. It must not become a TimelockController-specific detector. The next unfamiliar target must test whether temporal precondition reasoning generalizes beyond the extracted fixture.
+
+
+## 36. Historical backtest milestone — repeated-record idempotency / value release
+
+An unfamiliar historical mechanism has now completed the blind differential finding path: a user-controlled batch can repeat the same state-record identifier, and a value-releasing transition can consume that record more than once when it does not enforce the record's required pre-state before the side effect.
+
+The capability is class-neutral. It observes externally callable state-changing batch functions that iterate over supplied record identifiers, mutate per-record state, release value, and lack an observed pre-state guard. It forms an idempotency invariant, plans a repeated-record experiment, and validates vulnerable versus patched behavior through the canonical causal path. The detector does not encode Mt Pelerin, `cancelOnHoldTransfers`, the historical exploit sequence, or the expected answer.
+
+The historical regression represents the documented Mt Pelerin 2022 double-transaction issue, where repeated transaction identifiers could cause the same value to be released repeatedly and the fix added a check that the transfer was still on hold. The benchmark is an extracted historical regression, not a claim about the current target repository.
+
+Successful blind benchmark 011 evidence:
+- blind hypothesis: the state record may be processed repeatedly because the value-releasing transition lacks an observed pre-state guard;
+- discriminating experiment: the same record identifier is supplied twice in one batch;
+- vulnerable execution: FAIL because the same record releases value more than once;
+- patched execution: PASS because the repeated record is rejected before the second release;
+- canonical causal cycle: completed successfully;
+- causal verification: VERIFIED;
+- finding gate: READY.
+
+During validation, CYDRA exposed and the benchmark repaired two generic execution weaknesses rather than hiding them with target-specific exceptions: the semantic model did not expose a nested mapping write even though source topology showed it, and the execution harness initially selected the first parsed contract rather than the contract containing the hypothesized function. The detector was made tolerant of qualified/enum state assignments, and the execution path now binds to the contract that actually owns the target function. The benchmark also preserves executable diagnostics as CI artifacts for provenance.
+
+This milestone is evidence that CYDRA can derive and prove a non-obvious repeated-record/idempotency failure mechanism on an unfamiliar historical target. It does not justify adding Mt Pelerin-specific names or exploit answers. The next unfamiliar target must test whether idempotency reasoning generalizes beyond this extracted fixture.
