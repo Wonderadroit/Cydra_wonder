@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -19,17 +18,13 @@ from cydra.structural_signature_replay import generate_signature_replay_hypothes
 from cydra.system_model import Edge, Node, SystemModel
 
 TARGET_REPO = "https://github.com/sherlock-audit/2024-10-ethos-network.git"
-TARGET_REF = "946e931acc97167a9bd932d02b9420cdf37a701e"
+TARGET_REF = "main-source-snapshot"
 TARGET_PATH = "ethos/packages/contracts/contracts/EthosAttestation.sol"
 VULNERABLE = Path("benchmarks/018_signature_replay/SignatureReplayTarget.sol")
 PATCHED = Path("benchmarks/018_signature_replay/SignatureReplayTargetPatched.sol")
 
-def clone_target(destination: Path) -> Path:
-    subprocess.run(("git", "clone", "--recurse-submodules", "--no-tags", TARGET_REPO, str(destination)), check=True)
-    ethos = destination / "ethos"
-    subprocess.run(("git", "-C", str(ethos), "fetch", "origin", TARGET_REF), check=True)
-    subprocess.run(("git", "-C", str(ethos), "checkout", "--detach", TARGET_REF), check=True)
-    return ethos / TARGET_PATH
+def load_target(root: Path) -> Path:
+    return root / "benchmarks/018_signature_replay/EthosAttestationTargetSnapshot.sol"
 
 def run_fixture(source: Path, hypothesis, experiment, label: str):
     with tempfile.TemporaryDirectory(prefix="cydra-signature-domain-") as tmp:
@@ -89,19 +84,18 @@ def main() -> int:
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
 
-    with tempfile.TemporaryDirectory(prefix="cydra-ethos-target-") as tmp:
-        target = clone_target(Path(tmp) / "target")
-        result = investigate(
-            target,
-            target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_PATH}",
-            reasoning_surfaces=(generate_signature_replay_hypotheses,),
-            experiment_planner=plan_signature_replay_experiment,
-        )
-        hypotheses = [h for h in result.hypotheses if h.invariant_id.startswith("INV-SIGNATURE-REPLAY-")]
-        if len(hypotheses) != 1:
-            raise SystemExit(f"expected one blind signature-replay hypothesis, got {len(hypotheses)}")
-        hypothesis = hypotheses[0]
-        experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
+    target = load_target(root)
+    result = investigate(
+        target,
+        target=f"{TARGET_REPO}@main:{TARGET_PATH}",
+        reasoning_surfaces=(generate_signature_replay_hypotheses,),
+        experiment_planner=plan_signature_replay_experiment,
+    )
+    hypotheses = [h for h in result.hypotheses if h.invariant_id.startswith("INV-SIGNATURE-REPLAY-")]
+    if len(hypotheses) != 1:
+        raise SystemExit(f"expected one blind signature-replay hypothesis, got {len(hypotheses)}")
+    hypothesis = hypotheses[0]
+    experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
 
     vulnerable = run_fixture(root / VULNERABLE, hypothesis, experiment, "signature-vulnerable")
     patched = run_fixture(root / PATCHED, hypothesis, experiment, "signature-patched")
