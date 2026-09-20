@@ -139,7 +139,7 @@ contract CydraInitializerDependencyProbe {
 }
 '''
         source = source.replace("contract CydraInitializationInvariantTest is Test {", probe + "\ncontract CydraInitializationInvariantTest is Test {", 1)
-        source = source.replace("    {contract} internal target;".format(contract=contract.name), "    {contract} internal target;\n    CydraInitializerDependencyProbe internal cydraDependency;".format(contract=contract.name), 1)
+        target_decl = re.search(r"    ([A-Za-z_]\\w*) internal target;", source)\n        if target_decl is None:\n            raise ValueError("generated initialization test has no target declaration")\n        target_decl_text = target_decl.group(0)\n        source = source.replace(target_decl_text, target_decl_text + "\\n    CydraInitializerDependencyProbe internal cydraDependency;", 1)
         source = source.replace("    function setUp() public {\n", "    function setUp() public {\n        cydraDependency = new CydraInitializerDependencyProbe();\n", 1)
     generated.write_text(source, encoding="utf-8")
 
