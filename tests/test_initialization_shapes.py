@@ -56,7 +56,7 @@ def test_unclassified_initializer_uses_generic_mutation_probe(caplog):
     assert "vm.record();" in body
     assert "vm.prank(unauthorized);" in body
     assert "target.initialise(false, 0, 0, address(0xCAFE));" not in body
-    assert "(bool ok,) = address(target).call(abi.encodeWithSelector(target.initialise.selector, false, 0, 0, address(0xCAFE)));" in body
+    assert "try target.initialise(false, 0, 0, address(0xCAFE)) { } catch { }" in body
     assert "vm.accesses(address(target))" in body
     assert "assertTrue(!ok || writes.length == 0" in body
     assert "shape undetermined; using generic mutation probe" in caplog.text
