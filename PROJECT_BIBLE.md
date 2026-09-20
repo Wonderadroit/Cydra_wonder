@@ -641,3 +641,29 @@ Successful benchmark 014 requires:
 - finding-gate readiness.
 
 This milestone is a generalization candidate, not proof that all redemption or share-accounting systems are covered. The next unfamiliar target must determine whether conservative redemption-rounding reasoning transfers to a different concrete accounting system before the capability is treated as broadly generalized.
+
+
+## 40. Historical-style discovery milestone — cross-contract economic conservation
+
+The next discovery-validation step deliberately began with a mechanism outside the existing extractor set. A three-contract asset/strategy/vault regression was first run with the prior reasoning surfaces only, and CYDRA produced no hypothesis. This negative result is preserved as the rule-set gap that justified the new capability.
+
+The new class-neutral surface reasons across a contract boundary: one contract reports an asset amount, another contract delivers the underlying assets, and the receiving system adds the reported amount to internal accounting. CYDRA forms the system invariant that internal accounting must not increase by more than assets actually delivered across the boundary.
+
+The discriminating experiment triggers the synchronization, then compares the receiving vault's internal accounted assets with the actual asset balance held by the vault.
+
+Successful Benchmark 015 evidence:
+- prior extractors alone: no hypothesis;
+- new blind cross-contract economic surface: one hypothesis;
+- vulnerable execution: FAIL because the strategy reports 100 while delivering 90 and the vault records 200 against 190 actual assets;
+- patched execution: PASS because the strategy reports the delivered 90 and accounting remains backed;
+- canonical causal verification: VERIFIED;
+- finding gate: READY.
+
+This benchmark establishes all three requested discovery dimensions together:
+1. cross-contract accounting violation;
+2. economic invariant violation; and
+3. a mechanism initially unrecognized by CYDRA's existing extractors.
+
+The fixture is an extracted causal regression rather than a claim that this exact code existed in a named production protocol. Public incident research shows that cross-scope accounting isolation is a real failure mode in shared DeFi systems; for example, the May 2024 Predy Finance incident involved cross-pair liquidity theft caused by accounting scope and post-callback validation failures. The public analysis reports that funds belonging to other pairs could be moved during a callback while an aggregate balance check still appeared healthy. This source is post-run contextual validation, not an input to CYDRA's blind hypothesis generation.
+
+This milestone is stronger than merely adding another detector: the project explicitly measured an extractor blind spot, generalized the reasoning at the system/economic level, executed a vulnerable/patched differential, and promoted the causal result through the normal finding gate. The next step is to transfer this reasoning to a genuinely unfamiliar historical target rather than treating Benchmark 015 itself as proof of universal cross-contract coverage.
