@@ -423,3 +423,25 @@ def test_nested_mapping_writes_are_attributed_to_state_variable(tmp_path: Path) 
     function = contract.functions[0]
     assert contract.state_variables == ("approvals",)
     assert function.writes == ("approvals",)
+
+
+def test_library_is_modeled_as_a_solidity_source_unit(tmp_path: Path) -> None:
+    path = tmp_path / "MathUtils.sol"
+    path.write_text(
+        """
+        library MathUtils {
+            function weightedAverage(uint256 valueA, uint256 weightA, uint256 valueB, uint256 weightB)
+                internal pure returns (uint256)
+            {
+                return valueA + valueB;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    units = parse_solidity(path)
+    assert len(units) == 1
+    assert units[0].name == "MathUtils"
+    assert units[0].functions[0].name == "weightedAverage"
+    assert units[0].functions[0].visibility == "internal"
