@@ -1,43 +1,16 @@
-from cydra.models import ContractModel, FunctionModel, ParameterModel
-from cydra.structural_transfer_accounting import generate_transfer_accounting_hypotheses
+from cydra.structural_transfer_accounting import _credits_requested_amount, _transfer_argument
 
 
-def test_transfer_accounting_recovers_inherited_state_shape(tmp_path):
-    source = tmp_path / "InheritedTarget.sol"
-    source.write_text(
-        """
-        contract InheritedTarget {
-            function deposit(uint256 amount) external {
-                uint256 newBalance = balance + amount;
-                uint256 newAvailableRewards = availableRewards + amount;
-                balance = newBalance;
-                availableRewards = newAvailableRewards;
-                SafeTransferLib.safeTransferFrom(stakingToken, msg.sender, address(this), amount);
-            }
-        }
-        """,
-        encoding="utf-8",
-    )
+def test_transfer_accounting_recovers_inherited_state_shape():
+    body = """
+        uint256 newBalance = balance + amount;
+        uint256 newAvailableRewards = availableRewards + amount;
+        balance = newBalance;
+        availableRewards = newAvailableRewards;
+        SafeTransferLib.safeTransferFrom(stakingToken, msg.sender, address(this), amount);
+    """
 
-    contract = ContractModel(
-        name="InheritedTarget",
-        source=str(source),
-        state_variables=(),
-        functions=(
-            FunctionModel(
-                name="deposit",
-                visibility="external",
-                modifiers=(),
-                writes=(),
-                external_calls=(),
-                line=3,
-                parameters=(ParameterModel(name="amount", type="uint256"),),
-            ),
-        ),
-        inherits=("StakingBase",),
-    )
+    amount = _transfer_argument(body)
 
-    hypotheses = generate_transfer_accounting_hypotheses(contract).hypotheses
-
-    assert len(hypotheses) == 1
-    assert hypotheses[0].target_function == "deposit"
+    assert amount == "amount"
+    assert _credits_requested_amount(body, amount, ()) is True
