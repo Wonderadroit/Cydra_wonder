@@ -49,20 +49,22 @@ def _constant_epoch(source: str) -> str | None:
 
 
 def _boundary_shape(body: str, epoch_name: str) -> bool:
-    compact = re.sub(r"\s+", "", body)
+    normalized = re.sub(r"\s+", " ", body)
     # Detect a bucket derived from i followed by a segment end expressed as
     # i + EPOCH. The two expressions are not equivalent when i is already
-    # inside an epoch.
+    # inside an epoch. Preserve token boundaries while normalizing whitespace;
+    # removing all whitespace would merge the declaration type and identifier
+    # (e.g. "uint256 epoch" -> "uint256epoch") and defeat identifier matching.
     return bool(
         re.search(
-            rf"\b[A-Za-z_]\w*\s*=\([^;]*?/\b{re.escape(epoch_name)}\)\*\b{re.escape(epoch_name)}\b",
-            compact,
+            rf"\b[A-Za-z_]\w*\s*=\s*\([^;]*?/\s*\b{re.escape(epoch_name)}\b\s*\)\s*\*\s*\b{re.escape(epoch_name)}\b",
+            normalized,
         )
         and re.search(
-            rf"\b[A-Za-z_]\w*\s*=\b[A-Za-z_]\w*\+\b{re.escape(epoch_name)}\b",
-            compact,
+            rf"\b[A-Za-z_]\w*\s*=\s*[A-Za-z_]\w*\s*\+\s*\b{re.escape(epoch_name)}\b",
+            normalized,
         )
-        and re.search(r"Math\.min\([^)]*,[^)]*\)-[A-Za-z_]\w*", compact),
+        and re.search(r"Math\.min\s*\([^)]*,[^)]*\)\s*-\s*[A-Za-z_]\w*", normalized),
     )
 
 
