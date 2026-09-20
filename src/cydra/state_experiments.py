@@ -35,7 +35,7 @@ def plan_cross_function_state_experiment(
         hypothesis,
         (
             f"Execute {peer}({first_input}) then "
-            f"{hypothesis.target_function}({second_input}) as an arbitrary external caller; "
+            f"{hypothesis.target_function}({second_input}) as a reachable caller; "
             "observe the modeled shared state before, between, and after transitions; "
             "repeat the identical ordered sequence against the patched target."
         ),
