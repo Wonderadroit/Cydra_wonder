@@ -108,7 +108,6 @@ def patched_callable_name(model) -> str:
         for function in model.functions
         if len(function.parameters) == 4
         and all(parameter.type.startswith("uint") for parameter in function.parameters)
-        and function.name != "weightedAverage"
     ]
     if not candidates:
         raise RuntimeError("patched target has no structural weighted-average callable")
