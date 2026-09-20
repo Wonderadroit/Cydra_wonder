@@ -251,14 +251,12 @@ def _initializer_argument(
                 source = Path(contract_model.source).read_text(encoding="utf-8")
             except (OSError, UnicodeError):
                 source = ""
-            if source:
-                epoch_match = re.search(
-                    rf"\b{re.escape(parameter.name)}\s*>\s*block\.timestamp[\s\S]{0,300}?\b{re.escape(parameter.name)}\s*%\s*(\d+)\s*==\s*0",
-                    source,
-                )
-                if epoch_match:
-                    epoch = epoch_match.group(1)
-                    return f"((block.timestamp / {epoch}) + 2) * {epoch}", None
+            if source and ("time" in parameter.name.lower() or "timestamp" in parameter.name.lower()):
+                if "block.timestamp" in source:
+                    epoch_match = re.search(r"%\s*(\d+)\s*==\s*0", source)
+                    if epoch_match:
+                        epoch = epoch_match.group(1)
+                        return f"((block.timestamp / {epoch}) + 2) * {epoch}", None
         return "1", None
     if parameter_type == "bool":
         return "false", None
