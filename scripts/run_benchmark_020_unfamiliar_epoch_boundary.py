@@ -79,9 +79,8 @@ def clone_target(destination: Path) -> Path:
         check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
     subprocess.run(
-        ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"),
-        cwd=destination, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-    )
+        # The historical Canto target is a Foundry repository; do not assume npm
+        # is present or mutate the dependency graph unnecessarily.
     return destination
 
 
