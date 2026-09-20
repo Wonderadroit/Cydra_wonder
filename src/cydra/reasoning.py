@@ -192,6 +192,18 @@ def plan_weighted_average_rounding_experiment(hypothesis: Hypothesis) -> Experim
     )
 
 
+def plan_transfer_accounting_experiment(hypothesis: Hypothesis) -> Experiment:
+    return Experiment(
+        experiment_id=f"X-{hypothesis.hypothesis_id}",
+        hypothesis_id=hypothesis.hypothesis_id,
+        action=f"Transfer a boundary amount through {hypothesis.target_function}, then compare the credited internal amount with the actual token balance delta received.",
+        discriminates=("internal credit exceeds actual received assets", "internal credit equals actual received assets"),
+        cost=2.0,
+        planned_inputs=("100",),
+        target_function=hypothesis.target_function,
+    )
+
+
 def build_evidence(contract: ContractModel, hypotheses: tuple[Hypothesis, ...]) -> tuple[Evidence, ...]:
     return tuple(Evidence(f"E-MODEL-{f.name}", "model", f"Function {f.name} has modifiers={list(_declared_modifiers(contract, f))} and writes={list(f.writes)}.", contract.source, f"line {f.line}") for f in contract.functions)
 

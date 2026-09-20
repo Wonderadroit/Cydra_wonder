@@ -1,0 +1,15 @@
+name: benchmark-013-transfer-accounting
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: pip install -e . pytest
+      - run: pytest -q tests/test_transfer_accounting.py
+      - run: python scripts/run_benchmark_013_transfer_accounting.py
