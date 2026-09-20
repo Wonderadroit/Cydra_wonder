@@ -185,6 +185,18 @@ def main() -> int:
                 package_destination = execution_project / "node_modules" / "@openzeppelin" / "contracts"
                 package_destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(package_source, package_destination, dirs_exist_ok=True)
+                # Foundry does not search npm's node_modules tree by default.
+                # Historical Alchemix imports use the package prefix directly,
+                # so add the deterministic remapping in the isolated project.
+                foundry_toml = execution_project / "foundry.toml"
+                remapping = "@openzeppelin/=node_modules/@openzeppelin/"
+                current = foundry_toml.read_text(encoding="utf-8")
+                current = current.replace(
+                    'remappings = [',
+                    'remappings = [' + repr(remapping) + ', ',
+                    1,
+                )
+                foundry_toml.write_text(current, encoding="utf-8")
 
         source_root = next(
             (
