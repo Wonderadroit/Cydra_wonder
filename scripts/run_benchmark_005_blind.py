@@ -155,7 +155,6 @@ def run_initialization(project: Path, hypothesis, experiment, contract):
     if requires_proxy_initialization(Path(contract.source)):
         generated.write_text(adapt_generated_initialization_for_proxy(generated.read_text(encoding="utf-8"), contract.name), encoding="utf-8")
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
-    require_executed(execution)
     outcome = classify_initialization_execution(hypothesis, execution)
     return generated, execution, outcome
 
@@ -219,7 +218,7 @@ def main() -> int:
                 contract = contract_for(result, hypothesis)
                 proxy_topology = requires_proxy_initialization(Path(contract.source))
                 generated, execution, outcome = run_initialization(project, hypothesis, experiments[hypothesis.hypothesis_id], contract)
-                status.update(foundry_generated=True, blind_executed=True, generated_path=str(generated), deployment_topology="proxy" if proxy_topology else "direct", classification=outcome.benchmark_status, internal_status=outcome.internal_status, evidence=_json(outcome.evidence))
+                status.update(foundry_generated=True, blind_executed=execution.executed, generated_path=str(generated), deployment_topology="proxy" if proxy_topology else "direct", classification=outcome.benchmark_status, internal_status=outcome.internal_status, evidence=_json(outcome.evidence), execution=_json(execution))
                 executions.append(execution); evidence.append(outcome.evidence)
             except Exception as exc:
                 status.update(failure_stage="execution_or_generation", blocked_reason=f"{type(exc).__name__}: {exc}")
