@@ -878,3 +878,6 @@ An experiment must provide enough adversarial environment for the target's own m
 The canonical Solidity research workflow now also runs for pull requests in addition to main pushes, manual dispatch, and the daily schedule. This makes changes to the blind research machinery subject to the same durable regression/research path before merge.
 
 A workflow being configured is not equivalent to a successful run. CI status and research artifacts must be inspected before a campaign result is counted as evidence.
+
+
+<!-- CI probe: pull-request research-loop validation. -->
