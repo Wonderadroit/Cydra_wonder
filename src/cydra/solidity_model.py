@@ -479,7 +479,12 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
             )
             visibility_match = re.search(r"\b(public|external|internal|private)\b", signature_tail)
             visibility = visibility_match.group(1) if visibility_match else "unspecified"
-            writes = tuple(sorted(set(re.findall(r"\b(\w+)\s*(?:\[[^]]+\])?\s*(?:=(?!=)|\+=|-=|\*=|/=|%=)", body))))
+            write_candidates = re.findall(
+                r"\b(\w+)\s*(?:\[[^]]+\])?\s*(?:=(?!=)|\+=|-=|\*=|/=|%=|\+\+|--)",
+                body,
+            )
+            # State-model writes are explicit contract-state transitions, not local assignments.
+            writes = tuple(sorted(set(name for name in write_candidates if name in state_variables)))
             external_calls = tuple(sorted(set(re.findall(r"\b(\w+)\.(\w+)\s*\(", body))))
             functions.append(
                 FunctionModel(
