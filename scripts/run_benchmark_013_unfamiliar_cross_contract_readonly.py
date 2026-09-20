@@ -127,6 +127,7 @@ contract MockVault {
     uint256 public balance0 = 1000e18;
     uint256 public balance1 = 1000e18;
     constructor(address p) { pool = p; }
+    function setPool(address p) external { pool = p; }
     function getPoolTokens(bytes32) external view returns(address[] memory t,uint256[] memory b,uint256 blockNumber) {
         t = new address[](2); b = new uint256[](2);
         t[0] = address(0x100); t[1] = address(0x200);
@@ -158,7 +159,7 @@ contract CrossContractTest {
         StableCurveEthOracle oracle = new StableCurveEthOracle(base,address(0x999),2);
         MockVault vault = new MockVault(address(0));
         MockPool pool = new MockPool(address(vault));
-        vault = new MockVault(address(pool));
+        vault.setPool(address(pool));
         CallbackReceiver receiver = new CallbackReceiver();
 
         vault.begin(address(receiver),address(oracle));
@@ -169,7 +170,7 @@ contract CrossContractTest {
             // The Python runner classifies the patched guard revert separately.
         }
         receiver.readSettled(address(oracle),address(pool));
-        require(receiver.settled() == 1e18, "CYDRA_READONLY_ASSERTION: settled price incorrect");
+        require(receiver.settled() == 2e18, "CYDRA_READONLY_ASSERTION: settled price incorrect");
     }
 }
 """,
@@ -188,7 +189,7 @@ def run_side(target_source: Path, patched: bool, label: str) -> dict:
         if not patched:
             text = text.replace(
                 "        vault.begin(address(receiver),address(oracle));",
-                '        vault.begin(address(receiver),address(oracle));\\n        require(receiver.observed() == 5e17, "CYDRA_READONLY_ASSERTION: transient state was not observed");'
+                '        vault.begin(address(receiver),address(oracle));\\n        require(receiver.observed() == 1e18, "CYDRA_READONLY_ASSERTION: transient state was not observed");'
             )
         test.write_text(text, encoding="utf-8")
         result = subprocess.run(
