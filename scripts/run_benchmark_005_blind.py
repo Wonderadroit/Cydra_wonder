@@ -210,35 +210,8 @@ def main() -> int:
             if cls not in classes: continue
             status = {"hypothesis_id": hypothesis.hypothesis_id, "class": cls, "extracted": True, "hypothesis_generated": True, "experiment_planned": hypothesis.hypothesis_id in experiments, "foundry_generated": False, "blind_executed": False, "classification": "NOT_REACHED"}
             if cls == "state":
-                if state_executed >= state_execution_budget:
-                    status["classification"] = "NOT_REACHED"
-                    status["blocked_reason"] = "state blind diagnostic execution budget exhausted after one representative hypothesis"
-                    statuses.append(status)
-                    continue
-                try:
-                    contract = contract_for(result, hypothesis)
-                    generated = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
-                    generated = generate_sequence_test_from_experiment(
-                        hypothesis,
-                        experiments[hypothesis.hypothesis_id],
-                        target_import(contract, project),
-                        contract.name,
-                        generated,
-                        contract,
-                    )
-                    execution = run_foundry_test(project, generated, experiments[hypothesis.hypothesis_id].experiment_id, "blind")
-                    require_executed(execution)
-                    status.update(
-                        foundry_generated=True,
-                        blind_executed=True,
-                        generated_path=str(generated),
-                        classification="NOT_REACHED",
-                        blocked_reason="state sequence execution is measured, but no independently verified relation classifier exists yet",
-                    )
-                    executions.append(execution)
-                    state_executed += 1
-                except Exception as exc:
-                    status.update(failure_stage="execution_or_generation", blocked_reason=f"{type(exc).__name__}: {exc}")
+                status["classification"] = "NOT_REACHED"
+                status["blocked_reason"] = "state candidate extraction is measured first; execution is deferred until an independently verified relation classifier exists"
                 statuses.append(status)
                 continue
             if cls != "initialization":
