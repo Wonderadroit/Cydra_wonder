@@ -15,6 +15,7 @@ def generate_weighted_average_rounding_test(
     output_path: str | Path,
     *,
     experiment: Experiment | None = None,
+    callable_name: str | None = None,
 ) -> Path:
     if hypothesis.invariant_id != "INV-ROUND-001":
         raise ValueError("unsupported invariant for weighted-average rounding execution")
@@ -41,7 +42,7 @@ import {{ {target_type} }} from "{target_import}";
 
 contract CydraRoundingHarness {{
     function callTarget(uint256 a, uint256 b, uint256 c, uint256 d) external pure returns (uint256) {{
-        return {target_type}.{hypothesis.target_function}(a, b, c, d);
+        return {target_type}.{callable_name or hypothesis.target_function}(a, b, c, d);
     }}
 }}
 
