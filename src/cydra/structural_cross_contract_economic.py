@@ -82,7 +82,7 @@ def generate_cross_contract_economic_hypotheses(contract: ContractModel, semanti
     )
     hypothesis = Hypothesis(
         hid,
-        f"{target.name} may trust a cross-contract reported asset amount that exceeds the assets actually delivered, allowing internal accounting to become economically unbacked.",
+        f"{target_name} may trust a cross-contract reported asset amount that exceeds the assets actually delivered, allowing internal accounting to become economically unbacked.",
         iid,
         target_name,
         "callee reports an amount different from the asset amount actually delivered",
