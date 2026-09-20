@@ -83,7 +83,18 @@ def canonical_model(hypothesis, contract_name: str):
         f"observation:{observation_id}",
         "observation",
         f"Execute {hypothesis.target_function} with a fractional weighted-average boundary.",
-        {"status": "planned", "target_function_id": function_id, "binding_status": "bound", "provenance": "structural rounding experiment"},
+        {
+            "status": "planned",
+            "target_function_id": function_id,
+            "binding_status": "bound",
+            "experiment_binding": {
+                "hypothesis_id": hypothesis_id,
+                "observation_id": f"observation:{observation_id}",
+                "target_function_id": function_id,
+            },
+            "provenance": "structural rounding experiment",
+        },
+
     ))
     model.add_edge(Edge(invariant_id, "informs", hypothesis_id, {"provenance": "structural rounding reasoning"}))
     model.add_edge(Edge(f"observation:{observation_id}", "targets", invariant_id, {"provenance": "structural rounding reasoning"}))
