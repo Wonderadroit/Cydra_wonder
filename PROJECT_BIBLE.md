@@ -676,7 +676,7 @@ The new class-neutral reasoning surface recognizes the broader pattern: a state-
 
 The historical target is the Olympus DAO contest repository at commit `549b96bcf8b97807738572605f6b1e26b33ef411`, specifically `src/modules/TRSRY.sol`. CYDRA receives only the historical source during hypothesis generation. The public Code4rena finding is kept as post-run contextual verification rather than blind guidance.
 
-Benchmark 016 must prove:
+Benchmark 016 proved all of the following in CI:
 - legacy reasoning surfaces alone do not produce the cross-contract attribution hypothesis;
 - the new surface independently extracts `repayLoan` and forms the attribution invariant;
 - the discriminating experiment requests a 100-unit repayment while a callback causes an unrelated 50-unit inflow;
@@ -684,6 +684,8 @@ Benchmark 016 must prove:
 - the patched counterpart bounds the reduction to the requested 100 units;
 - canonical causal verification reaches VERIFIED; and
 - the finding gate reaches READY.
+
+The dedicated Benchmark 016 workflow completed successfully after the generic execution harness was corrected to use a non-underflowing 200-unit debt baseline. The final vulnerable execution was measurable and FAIL; the patched execution was measurable and PASS.
 
 This is deliberately different from Benchmark 013. Benchmark 013 asks whether the receiver measures the actual balance delta at all. Benchmark 016 asks whether a measured delta can be safely attributed to the caller when another contract can change the same balance during the external call.
 
