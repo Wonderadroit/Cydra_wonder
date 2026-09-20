@@ -23,7 +23,7 @@ def _body(contract, function):
     return ""
 
 def _transfer_argument(body):
-    m=re.search(r"\.transferFrom\s*\(\s*[^,]+\s*,\s*[^,]+\s*,\s*([A-Za-z_]\w*)\s*\)",body)
+    m=re.search(r"\.(?:safeTransferFrom|transferFrom)\s*\(\s*[^,]+\s*,\s*[^,]+\s*,\s*([A-Za-z_]\w*)\s*\)",body)
     return m.group(1) if m else None
 
 def _credits_requested_amount(body, amount):
