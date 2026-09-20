@@ -602,3 +602,24 @@ Successful blind benchmark 012 evidence:
 The first CI attempt reached the full benchmark but failed after the detector regression test, so the benchmark output was preserved and the workflow was rerun. The repaired run completed successfully, including the actual Foundry differential path. No target-specific exception was added.
 
 This milestone is evidence that CYDRA can reason about a cross-function transient-state/trust-boundary failure that differs materially from authorization, arithmetic rounding, sibling guard parity, temporal ordering, and repeated-record idempotency. The next unfamiliar target must test whether this transient-state reasoning generalizes beyond the extracted fixture.
+
+
+## 38. Historical backtest milestone — inbound transfer accounting / actual balance delta
+
+An unfamiliar accounting mechanism has now completed the blind differential finding path: a receiving contract can credit a requested token amount even though the token's transfer semantics deliver less than requested, causing internal liabilities to exceed assets actually received.
+
+The capability is class-neutral. It observes externally callable state-changing functions that perform an inbound `transferFrom` and then credit accounting state with the requested transfer argument without observing a pre/post token balance delta. It forms an invariant that internal credit must equal the actual received balance delta, plans a boundary transfer experiment, and validates vulnerable versus patched behavior through the canonical causal path. The detector does not encode a named protocol, token, historical exploit, or expected answer.
+
+The historical regression represents the documented fee-on-transfer accounting pattern observed across multiple DeFi incidents and audit findings: the receiving contract records the requested amount while the token delivers less, creating an accounting mismatch that can make later redemptions undercollateralized. Public security analysis documents the standard mitigation as measuring the receiving contract's token balance before and after the transfer and crediting the delta. This benchmark is an extracted causal regression, not a claim about any current production repository.
+
+Successful blind benchmark 013 evidence:
+- blind hypothesis: `deposit may credit the requested token amount even when the token delivers less, allowing internal accounting to exceed assets actually received`;
+- discriminating experiment: transfer 100 units through `deposit` and compare internal credit with the actual token balance held by the receiver;
+- vulnerable execution: FAIL because 100 units were credited while only 90 units arrived;
+- patched execution: PASS because the patched path credited the measured received amount;
+- canonical causal verification: VERIFIED;
+- finding gate: READY.
+
+During validation, the execution harness initially exposed two generic runner problems rather than hiding them with target-specific exceptions: the temporary Foundry project lacked the repository's `forge-std` dependency, and the benchmark renderer had temporary diagnostic syntax that was corrected. The final renderer uses only Solidity's native `require`, keeping the extracted regression dependency-free. The benchmark then completed with pytest, Foundry execution on both historical sides, causal verification, and finding-gate promotion all successful.
+
+This milestone is evidence that CYDRA can reason about an asset/accounting conservation boundary that differs materially from authorization, arithmetic rounding, sibling guard parity, temporal ordering, repeated-record idempotency, and transient read-only state. The next unfamiliar target must continue to test transfer/accounting reasoning against a different concrete system before treating the capability as broadly generalized.
