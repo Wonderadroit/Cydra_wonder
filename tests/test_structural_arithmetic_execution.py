@@ -208,3 +208,32 @@ contract RenamedTarget {
             tmp_path / "wrong-target.t.sol",
             experiment=_experiment(target_function="other"),
         )
+
+
+def test_security_generator_uses_derived_invariant_without_patched_target(tmp_path: Path):
+    model = _model(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract RenamedTarget {
+    function calculate(uint256 amount) external pure returns (uint256) {
+        return (amount * 10 + 9) / 7;
+    }
+}
+""",
+    )
+    from cydra.structural_arithmetic_execution import generate_structural_arithmetic_security_test
+
+    path = generate_structural_arithmetic_security_test(
+        _hypothesis(),
+        model,
+        "../Target.sol",
+        "RenamedTarget",
+        tmp_path / "security.t.sol",
+        experiment=_experiment(),
+    )
+    source = path.read_text(encoding="utf-8")
+    assert "assertLe(observed, exactFloor" in source
+    assert "PatchedTarget" not in source
+    assert "vulnerableValue" not in source
+    assert "calculate(777)" not in source
+    assert "uint256 input = 777;" in source
