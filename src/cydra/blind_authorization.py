@@ -160,15 +160,7 @@ contract CydraBlindAuthorizationTest {{
                 {arguments}
             )
         );
-        if (state_getter == None) {{
-            require(
-                !ok,
-                "{marker}: unauthorized caller successfully invoked protected administrative operation"
-            );
-        }} else {{
-            require(ok, "{marker}: authorization call reverted before invariant observation");
-{success_assertion}
-        }}
+{call_body}
     }}
 }}
 '''
