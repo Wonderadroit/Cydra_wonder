@@ -140,7 +140,7 @@ def _apply_auth_control(source, function_name, modifier):
 def _patched_auth_test(generated,destination):
     s=generated.read_text(encoding="utf-8")
     patched, count = re.subn(
-        r'assertTrue\\(ok,\\s*"[^"]*"\\);',
+        r'assertTrue\(ok,\s*"[^"]*"\);',
         "if (!ok) return;",
         s,
         count=1,
