@@ -67,6 +67,13 @@ jobs:
             --classes initialization \
             --freeze backtest-artifacts/stader-initialization/freeze
 
+      - name: Run unfamiliar Olas transfer-accounting backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p backtest-artifacts/olas-transfer-accounting
+          python scripts/run_benchmark_017_olas_unfamiliar_transfer_accounting.py             --output backtest-artifacts/olas-transfer-accounting
+
       - name: Publish research result
         if: always()
         uses: actions/upload-artifact@v4
