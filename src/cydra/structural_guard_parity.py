@@ -3,7 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from .models import ContractModel, FunctionModel, Hypothesis, Invariant
-from .pipeline import ReasoningContribution
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class GuardParityContribution:
+    invariants: tuple[Invariant, ...]
+    hypotheses: tuple[Hypothesis, ...]
 
 
 def _body(contract: ContractModel, function: FunctionModel) -> str | None:
@@ -40,7 +46,7 @@ def _postcondition_calls(contract: ContractModel, function: FunctionModel) -> tu
     return tuple(calls)
 
 
-def generate_guard_parity_hypotheses(contract: ContractModel, semantic=()) -> ReasoningContribution:
+def generate_guard_parity_hypotheses(contract: ContractModel, semantic=()) -> GuardParityContribution:
     """Find externally callable state transitions that miss an observed peer postcondition.
 
     The detector is class-neutral: it learns a postcondition from sibling state-changing
@@ -50,7 +56,7 @@ def generate_guard_parity_hypotheses(contract: ContractModel, semantic=()) -> Re
     public = tuple(f for f in contract.functions if f.visibility in {"public", "external"} and f.writes)
     guarded = tuple(f for f in public if _postcondition_calls(contract, f))
     if not guarded:
-        return ReasoningContribution((), ())
+        return GuardParityContribution((), ())
 
     invariants: list[Invariant] = []
     hypotheses: list[Hypothesis] = []
@@ -87,4 +93,4 @@ def generate_guard_parity_hypotheses(contract: ContractModel, semantic=()) -> Re
             )
         )
 
-    return ReasoningContribution(tuple(invariants), tuple(hypotheses))
+    return GuardParityContribution(tuple(invariants), tuple(hypotheses))
