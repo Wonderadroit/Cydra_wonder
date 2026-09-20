@@ -182,8 +182,22 @@ def require_frozen_source() -> None:
 
 
 def clone_target(repo: str, ref: str, destination: Path) -> None:
-    subprocess.run(("git", "clone", "--no-tags", repo, str(destination)), check=True)
+    subprocess.run(("git", "clone", "--no-tags", "--recurse-submodules", repo, str(destination)), check=True)
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", ref), check=True)
+
+
+def prepare_target_project(project: Path) -> None:
+    """Materialize declared JavaScript dependencies without target-specific knowledge."""
+    package = project / "package.json"
+    if not package.exists():
+        return
+    if (project / "yarn.lock").exists():
+        command = ("yarn", "install", "--frozen-lockfile", "--ignore-scripts")
+    elif (project / "package-lock.json").exists():
+        command = ("npm", "ci", "--ignore-scripts")
+    else:
+        command = ("npm", "install", "--ignore-scripts")
+    subprocess.run(command, cwd=project, check=True)
 
 
 def _contract_for_hypothesis(result, hypothesis):
@@ -461,6 +475,7 @@ def main() -> int:
         project = checkout / args.target_project
         source = checkout / args.target_path
 
+        prepare_target_project(project)
         compiler_evidence: CompilerEvidenceResult = compile_state_effects(project, source)
         surfaces = (generate_cross_function_state_hypotheses,) if "state" in classes else ()
         result = investigate(
