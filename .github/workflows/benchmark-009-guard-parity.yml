@@ -1,0 +1,25 @@
+name: benchmark-009-guard-parity
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_009_guard_parity.py"
+      - "benchmarks/009_guard_parity_euler/**"
+      - "tests/test_guard_parity*.py"
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install CYDRA
+        run: python -m pip install -e . pytest
+      - name: Python guard-parity regression
+        run: pytest -q tests/test_guard_parity.py tests/test_guard_parity_execution.py
+      - name: Historical guard-parity backtest
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_009_guard_parity.py
