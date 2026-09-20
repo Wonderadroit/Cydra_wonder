@@ -44,3 +44,4 @@ def main():
     print(json.dumps({"hypothesis":h.__dict__,"experiment":e.__dict__,"vulnerable":v.__dict__,"patched":p.__dict__,"causal":cycle.causal_verification.__dict__,"finding_gate":gate.decision.value,"reasons":list(gate.reasons)},indent=2,default=str))
     return 0 if gate.decision.value=="READY" else 1
 if __name__=="__main__": raise SystemExit(main())
+
