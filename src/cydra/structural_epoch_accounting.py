@@ -119,12 +119,12 @@ def generate_epoch_accounting_hypotheses(
         hypotheses.append(
             Hypothesis(
                 hid,
-                f"{function.name} may apply one epoch's configured accounting rate across a boundary because its segment end is derived as the current position plus the full epoch size rather than the next aligned epoch boundary.",
+                f"{function_name} may apply one epoch's configured accounting rate across a boundary because its segment end is derived as the current position plus the full epoch size rather than the next aligned epoch boundary.",
                 iid,
                 function_name,
                 "an external caller able to trigger the state-accounting transition after an unaligned prior checkpoint",
                 "the accumulated reward/accounting state differs from the sum of the configured per-epoch rates over the actual block intervals",
-                evidence_ids=(f"E-MODEL-{function.name}",),
+                evidence_ids=(f"E-MODEL-{function_name}",),
             )
         )
 
