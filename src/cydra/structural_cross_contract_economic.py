@@ -46,8 +46,8 @@ def _has_cross_contract_report_gap(source: str) -> tuple[str, str] | None:
     if not caller:
         return None
     caller_body = blocks[caller]
-    declaration = re.search(rf"\b(\w+)\s+{re.escape(callee_var)}\s*;", caller_body)
-    callee = declaration.group(1) if declaration else callee_var
+    declaration = re.search(rf"\b(?P<type>\w+)\s+(?:\w+\s+)*?{re.escape(callee_var)}\s*;", caller_body)
+    callee = declaration.group("type") if declaration else callee_var
     callee_body = blocks.get(callee, "")
     if not caller or not callee_body:
         return None
