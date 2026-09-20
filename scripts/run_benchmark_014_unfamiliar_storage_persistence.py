@@ -45,6 +45,11 @@ def _write_harness(target: Path, root: Path, patched: bool) -> Path:
         p.mkdir(parents=True, exist_ok=True)
 
     text = target.read_text(encoding="utf-8")
+    original_contract = parse_solidity(target)[0]
+    contribution = generate_storage_persistence_hypotheses(original_contract)
+    if not contribution.hypotheses:
+        raise RuntimeError("storage-persistence reasoning did not find the target mechanism")
+    hypothesis = contribution.hypotheses[0]
     if patched:
         old = """function _setAcknowledged(bytes32 edgeId_, bytes calldata data_, bool acknowledged_)
         internal
@@ -158,7 +163,7 @@ abstract contract UUPSUpgradeable {
     )
 
     contract = parse_solidity(src / "graph/TitlesGraph.sol")[0]
-    experiment = Experiment
+    experiment = Experiment(
         "EXP-STORAGE-PERSISTENCE-" + hypothesis.target_function,
         hypothesis.hypothesis_id,
         "invoke the successful state transition and inspect the same storage element after the call",
