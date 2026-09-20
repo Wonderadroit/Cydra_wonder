@@ -177,7 +177,27 @@ def main() -> int:
         )
         hypotheses = [h for h in result.hypotheses if h.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-")]
         if len(hypotheses) != 1:
-            raise SystemExit(f"expected one blind transfer-accounting hypothesis, got {len(hypotheses)}")
+            from cydra.structural_transfer_accounting import _body as transfer_body, _transfer_argument, _credits_requested_amount
+            diagnostics = []
+            for contract in result.contracts:
+                for function in contract.functions:
+                    body = transfer_body(contract, function)
+                    amount = _transfer_argument(body)
+                    diagnostics.append({
+                        "contract": contract.name,
+                        "function": function.name,
+                        "visibility": function.visibility,
+                        "writes": function.writes,
+                        "state_variables": contract.state_variables,
+                        "body_has_transferFrom": "transferFrom" in body,
+                        "amount": amount,
+                        "credited": _credits_requested_amount(body, amount, contract.state_variables),
+                        "body_excerpt": body[:1200],
+                    })
+            raise SystemExit(
+                f"expected one blind transfer-accounting hypothesis, got {len(hypotheses)}; "
+                f"diagnostics={json.dumps(diagnostics, default=str)}"
+            )
         hypothesis = hypotheses[0]
         experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
 
