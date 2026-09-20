@@ -203,11 +203,18 @@ def main() -> int:
         )
         experiments = {e.hypothesis_id: e for e in result.experiments}
         statuses, executions, evidence = [], [], []
+        state_execution_budget = 1
+        state_executed = 0
         for hypothesis in result.hypotheses:
-            cls = INVARIANT_CLASS.get(hypothesis.invariant_id, "other")
+            cls = INVARIANT_CLASS.get(hypothesis.invariant_id, "state" if hypothesis.invariant_id.startswith("INV-STATE-") else "other")
             if cls not in classes: continue
             status = {"hypothesis_id": hypothesis.hypothesis_id, "class": cls, "extracted": True, "hypothesis_generated": True, "experiment_planned": hypothesis.hypothesis_id in experiments, "foundry_generated": False, "blind_executed": False, "classification": "NOT_REACHED"}
             if cls == "state":
+                if state_executed >= state_execution_budget:
+                    status["classification"] = "NOT_REACHED"
+                    status["blocked_reason"] = "state blind diagnostic execution budget exhausted after one representative hypothesis"
+                    statuses.append(status)
+                    continue
                 try:
                     contract = contract_for(result, hypothesis)
                     generated = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
@@ -229,6 +236,7 @@ def main() -> int:
                         blocked_reason="state sequence execution is measured, but no independently verified relation classifier exists yet",
                     )
                     executions.append(execution)
+                    state_executed += 1
                 except Exception as exc:
                     status.update(failure_stage="execution_or_generation", blocked_reason=f"{type(exc).__name__}: {exc}")
                 statuses.append(status)
