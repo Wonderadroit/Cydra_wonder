@@ -37,7 +37,7 @@ def canonical_model(hypothesis, contract_name):
     model.add_node(Node(fid,"function",hypothesis.target_function,{"contract":contract_name,"provenance":"solidity_model"}))
     model.add_node(Node(iid,"invariant", "Required share burn must round conservatively for requested withdrawals.",{"status":"inferred","confidence":0.78,"provenance":"structural redemption-rounding reasoning"}))
     model.add_node(Node(hid,"hypothesis",hypothesis.claim,{"belief":0.5,"state":"unresolved","invariant_id":iid,"provenance":"structural redemption-rounding reasoning"}))
-    model.add_node(Node(f"observation:{oid}","observation","Execute the withdrawal at a fractional share boundary.",{"status":"planned","provenance":"structural redemption-rounding experiment"}))
+    model.add_node(Node(f"observation:{oid}","observation","Execute the withdrawal at a fractional share boundary.",{"status":"planned","hypothesis_id":hid,"target_function_id":fid,"binding_status":"bound","experiment_binding":{"hypothesis_id":hid,"observation_id":f"observation:{oid}","target_function_id":fid},"provenance":"structural redemption-rounding experiment"}))
     model.add_edge(Edge(iid,"informs",hid,{"provenance":"structural redemption-rounding reasoning"}))
     model.add_edge(Edge(f"observation:{oid}","targets",iid,{"provenance":"structural redemption-rounding reasoning"}))
     model.add_edge(Edge(f"observation:{oid}","tests",hid,{"provenance":"structural redemption-rounding reasoning"}))
