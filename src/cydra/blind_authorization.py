@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from .models import ContractModel, Experiment, Hypothesis
 from .planned_call import render_function_call
@@ -103,6 +104,38 @@ def generate_blind_authorization_test_from_experiment(
     marker = security_assertion_marker()
     signature_types = ",".join(parameter.type.split()[0] for parameter in function.parameters)
 
+    # If the target function writes a simple public state variable, assert that
+    # state is unchanged after the arbitrary-caller call. This is stronger than
+    # requiring a revert and remains target-agnostic.
+    state_getter = None
+    state_type = None
+    try:
+        source_text = Path(contract_model.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        source_text = ""
+    for written in function.writes:
+        match = re.search(
+            rf"\b(address(?:\s+payable)?|bool|uint\d*|int\d*)\s+public\s+{re.escape(written)}\s*;",
+            source_text,
+        )
+        if match:
+            state_type = match.group(1).strip()
+            state_getter = written
+            break
+    if state_getter is not None:
+        state_snapshot = f"        {state_type} beforeState = target.{state_getter}();"
+        call_assertion = f'''        require(ok, "{security_assertion_marker()}: authorization call reverted before invariant observation");
+        require(
+            target.{state_getter}() == beforeState,
+            "{security_assertion_marker()}: unauthorized caller mutated modeled administrative state"
+        );'''
+    else:
+        state_snapshot = ""
+        call_assertion = f'''        require(
+            !ok,
+            "{security_assertion_marker()}: unauthorized caller successfully invoked protected administrative operation"
+        );'''
+
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -124,16 +157,14 @@ contract CydraBlindAuthorizationTest {{
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
+{state_snapshot}
         (bool ok,) = target.call(
             abi.encodeWithSignature(
                 "{function.name}({signature_types})",
                 {arguments}
             )
         );
-        require(
-            !ok,
-            "{marker}: unauthorized caller successfully invoked protected administrative operation"
-        );
+{call_assertion}
     }}
 }}
 '''
