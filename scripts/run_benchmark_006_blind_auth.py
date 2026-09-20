@@ -55,7 +55,7 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
         'test = "test"\n'
         'libs = ["lib"]\n'
         'auto_detect_solc = true\n'
-        'remappings = ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"]\n',
+        'remappings = ["@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/"]\n',
         encoding="utf-8",
     )
     hardhat_console = destination / "lib" / "hardhat" / "console.sol"
