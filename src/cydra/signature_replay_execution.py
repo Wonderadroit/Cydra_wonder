@@ -16,7 +16,7 @@ def generate_signature_replay_test(
         raise ValueError("unsupported invariant")
     imp = _layout_aware_import_path(target_import, output_path)
     pragma = contract_model.pragma or "^0.8.20"
-    patched = "patched" in str(output_path).lower()
+    patched = target_type.lower().endswith("patched")
     expected = "false" if patched else "true"
     source = f'''// SPDX-License-Identifier: MIT
 pragma solidity {pragma};
