@@ -86,6 +86,12 @@ def main() -> int:
         default=[],
         help="Copy a target-relative file from another git ref using path@ref, for historical build repairs.",
     )
+    parser.add_argument(
+        "--target-npm-dependency",
+        action="append",
+        default=[],
+        help="Install an npm package into the historical target before bounded execution.",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -128,13 +134,22 @@ def main() -> int:
             print("INVARIANTS", [item.__dict__ for item in result.invariants])
             raise SystemExit("blind authorization backtest produced no authorization hypothesis")
 
+        for dependency in args.target_npm_dependency:
+            subprocess.run(
+                ("npm", "install", dependency, "--no-save", "--ignore-scripts", "--no-audit", "--no-fund"),
+                cwd=project,
+                check=True,
+            )
+
         execution_project = Path(temp) / "execution-project"
         _prepare_isolated_foundry_project(checkout, source, execution_project)
-        subprocess.run(
-            ("forge", "install", "openzeppelin/openzeppelin-contracts@v3.2.0", "--no-git"),
-            cwd=execution_project,
-            check=True,
-        )
+        for dependency in args.target_npm_dependency:
+            package_name = dependency.split("@", 1)[0] if not dependency.startswith("@") else dependency.rsplit("@", 1)[0]
+            if package_name == "@openzeppelin/contracts":
+                package_source = project / "node_modules" / "@openzeppelin" / "contracts"
+                package_destination = execution_project / "node_modules" / "@openzeppelin" / "contracts"
+                package_destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(package_source, package_destination, dirs_exist_ok=True)
 
         for hypothesis in hypotheses:
             experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
