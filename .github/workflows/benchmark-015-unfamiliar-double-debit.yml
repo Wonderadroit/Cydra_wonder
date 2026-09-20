@@ -1,0 +1,45 @@
+name: CYDRA unfamiliar double debit backtest
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/run_benchmark_015_unfamiliar_double_debit.py"
+      - "src/cydra/structural_double_debit.py"
+      - "tests/test_structural_double_debit.py"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/run_benchmark_015_unfamiliar_double_debit.py"
+      - "src/cydra/structural_double_debit.py"
+      - "tests/test_structural_double_debit.py"
+
+jobs:
+  double-debit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: python -m pip install -e . pytest
+      - name: Python regression
+        env:
+          PYTHONPATH: src
+        run: pytest -q tests/test_structural_double_debit.py
+      - name: Unfamiliar historical backtest
+        env:
+          PYTHONPATH: src
+        run: |
+          set -o pipefail
+          mkdir -p backtest-artifacts/double-debit
+          python scripts/run_benchmark_015_unfamiliar_double_debit.py | tee backtest-artifacts/double-debit/result.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unfamiliar-double-debit-${{ github.sha }}
+          path: backtest-artifacts/double-debit/
+          if-no-files-found: warn
+          retention-days: 30
