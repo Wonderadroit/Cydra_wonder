@@ -12,7 +12,7 @@ def test_weighted_average_rounding_surface_discovers_internal_library_function(t
             function weightedAverage(uint256 valueA, uint256 weightA, uint256 valueB, uint256 weightB)
                 internal pure returns (uint256)
             {
-                return valueA * weightA + valueB * weightB / (weightA + weightB);
+                return valueA.mul(weightA).add(valueB.mul(weightB)).div(weightA.add(weightB));
             }
         }
         """,
