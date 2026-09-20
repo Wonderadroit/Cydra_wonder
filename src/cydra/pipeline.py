@@ -18,9 +18,11 @@ from .reasoning import (
     plan_access_control_experiment,
     plan_arithmetic_experiment,
     plan_initialization_experiment,
+    plan_weighted_average_rounding_experiment,
 )
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
+from .structural_rounding import weighted_average_rounding_invariant, generate_weighted_average_rounding_hypotheses
 from .structural_authorization import generate_structural_access_control_hypotheses
 from .structural_initialization import generate_structural_initialization_hypotheses
 
@@ -60,6 +62,7 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         "INV-AUTH-001": plan_access_control_experiment,
         "INV-INIT-001": plan_initialization_experiment,
         "INV-ARITH-001": plan_arithmetic_experiment,
+        "INV-ROUND-001": plan_weighted_average_rounding_experiment,
     }
     try:
         planner = planners[hypothesis.invariant_id]
@@ -167,6 +170,7 @@ def investigate(
             generate_structural_initialization_hypotheses(contract),
         )
         arith = generate_arithmetic_hypotheses(contract)
+        rounding = generate_weighted_average_rounding_hypotheses(contract)
 
         if auth:
             all_invariants.append(access_control_invariant(contract))
@@ -175,6 +179,9 @@ def investigate(
         arithmetic_invariant = arithmetic_rounding_invariant(contract)
         if arith and arithmetic_invariant is not None:
             all_invariants.append(arithmetic_invariant)
+        rounding_invariant = weighted_average_rounding_invariant(contract)
+        if rounding and rounding_invariant is not None:
+            all_invariants.append(rounding_invariant)
 
         surface_invariants: list[Invariant] = []
         surface_hypotheses: list[Hypothesis] = []
@@ -183,7 +190,7 @@ def investigate(
             surface_invariants.extend(contribution.invariants)
             surface_hypotheses.extend(contribution.hypotheses)
 
-        hypotheses = (*auth, *init, *arith, *surface_hypotheses)
+        hypotheses = (*auth, *init, *arith, *rounding, *surface_hypotheses)
         all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
