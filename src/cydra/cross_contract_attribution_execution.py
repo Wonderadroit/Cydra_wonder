@@ -19,7 +19,7 @@ contract CydraCrossContractAttributionTest {{
         MockHookToken token = new MockHookToken(100);
         OlympusTreasury treasury = new OlympusTreasury();
 
-        treasury.seedDebt(token, address(this), 100);
+        treasury.seedDebt(token, address(this), 200);
         token.configureHook(address(treasury), 50);
 
         treasury.repayLoan(token, 100);
