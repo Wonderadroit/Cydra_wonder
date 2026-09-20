@@ -84,3 +84,23 @@ def test_initialise_spelling_is_preserved():
         "false, 0, 0, address(0xCAFE)",
     )
     assert "target.initialise(false, 0, 0, address(0xCAFE));" in body
+
+
+def test_fallback_binds_access_probe_to_selected_target_variable():
+    from cydra.initialization_shapes import render_initialization_test_body
+    from cydra.models import FunctionModel
+
+    function = FunctionModel(
+        name="initialise",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
+        parameters=(),
+        authorization_predicates=(),
+        state_predicates=(),
+    )
+    body = render_initialization_test_body(function, "vault", "0xA11CE", "")
+    assert "vault.initialise();" in body
+    assert "vm.accesses(address(vault))" in body
