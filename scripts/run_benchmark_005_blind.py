@@ -139,7 +139,7 @@ contract CydraInitializerDependencyProbe {
 }
 '''
         source = source.replace("contract CydraInitializationInvariantTest is Test {", probe + "\ncontract CydraInitializationInvariantTest is Test {", 1)
-        target_decl = re.search(r"    ([A-Za-z_]\\w*) internal target;", source)
+        target_decl = re.search(r"    ([A-Za-z_]\w*) internal target;", source)
         if target_decl is None:
             raise ValueError("generated initialization test has no target declaration")
         target_decl_text = target_decl.group(0)
