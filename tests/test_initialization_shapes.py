@@ -57,7 +57,7 @@ def test_unclassified_initializer_uses_generic_mutation_probe(caplog):
     assert "vm.prank(unauthorized);" in body
     assert "try target.initialise(false, 0, 0, address(0xCAFE));" in body
     assert "vm.accesses(address(target))" in body
-    assert "assertGt(writes.length, 0" in body
+    assert "assertEq(writes.length, 0" in body
     assert "shape undetermined; using generic mutation probe" in caplog.text
 
 
