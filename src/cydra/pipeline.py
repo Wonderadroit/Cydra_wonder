@@ -68,8 +68,9 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         "INV-ROUND-001": plan_weighted_average_rounding_experiment,
     }
     if hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
-    plan_guard_parity_experiment,
-    plan_temporal_precondition_experiment,
+        return plan_guard_parity_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-TEMPORAL-PRECONDITION-"):
+        return plan_temporal_precondition_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
