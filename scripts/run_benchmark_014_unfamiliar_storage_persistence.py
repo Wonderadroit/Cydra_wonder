@@ -24,7 +24,7 @@ TARGET_SOURCE = "wallflower-contract-v2/src/graph/TitlesGraph.sol"
 
 def _clone(root: Path) -> Path:
     checkout = root / "target"
-    subprocess.run(["git", "clone", "--quiet", "--no-checkout", TARGET_REPO, str(checkout)], check=True)
+    subprocess.run(["git", "clone", "--quiet", "--no-tags", "--no-checkout", TARGET_REPO, str(checkout)], check=True)
     subprocess.run(["git", "-C", str(checkout), "checkout", "--quiet", TARGET_REF], check=True)
     source = checkout / TARGET_SOURCE
     if not source.exists():
@@ -45,6 +45,11 @@ def _write_harness(target: Path, root: Path, patched: bool) -> Path:
         p.mkdir(parents=True, exist_ok=True)
 
     text = target.read_text(encoding="utf-8")
+    original_contract = parse_solidity(target)[0]
+    contribution = generate_storage_persistence_hypotheses(original_contract)
+    if not contribution.hypotheses:
+        raise RuntimeError("storage-persistence reasoning did not find the target mechanism")
+    hypothesis = contribution.hypotheses[0]
     if patched:
         old = """function _setAcknowledged(bytes32 edgeId_, bytes calldata data_, bool acknowledged_)
         internal
@@ -72,7 +77,7 @@ struct Edge { Node from; Node to; bool acknowledged; bytes data; }
         """pragma solidity ^0.8.24;
 import {Node, Edge} from "src/shared/Common.sol";
 interface IOpenGraph {
-    function createEdge(Node calldata, Node calldata, bytes calldata) external returns (Edge memory);
+    event NodeTouched(Node node, bytes data);\n    event EdgeCreated(Edge edge, bytes data);\n    function createEdge(Node memory, Node memory, bytes calldata) external returns (Edge memory);
 }
 """,
         encoding="utf-8",
@@ -158,10 +163,6 @@ abstract contract UUPSUpgradeable {
     )
 
     contract = parse_solidity(src / "graph/TitlesGraph.sol")[0]
-    contribution = generate_storage_persistence_hypotheses(contract)
-    if not contribution.hypotheses:
-        raise RuntimeError("storage-persistence reasoning did not find the target mechanism")
-    hypothesis = contribution.hypotheses[0]
     experiment = Experiment(
         "EXP-STORAGE-PERSISTENCE-" + hypothesis.target_function,
         hypothesis.hypothesis_id,
@@ -174,7 +175,7 @@ abstract contract UUPSUpgradeable {
     return generate_storage_persistence_test(
         hypothesis,
         contract,
-        "../src/graph/TitlesGraph.sol",
+        "../../src/graph/TitlesGraph.sol",
         "TitlesGraph",
         out,
         experiment=experiment,
@@ -186,6 +187,8 @@ def _run_side(target: Path, patched: bool, label: str):
         root = Path(tmp) / "project"
         test = _write_harness(target, root, patched)
         result = run_foundry_test(root, test, label, label)
+        if not result.executed:
+            print(json.dumps({"foundry_diagnostic": result.__dict__}, indent=2, default=str))
         require_executed(result)
         return result
 
