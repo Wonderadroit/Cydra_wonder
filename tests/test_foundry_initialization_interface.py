@@ -213,3 +213,37 @@ def test_legacy_generator_path_is_unchanged_without_model(tmp_path):
     assert "new WormholeInitializationFixture();" in source
     assert "abi.encodeWithSelector(target.initialize.selector, attacker)" in source
     assert "target.guardian() != attacker" in source
+
+
+def test_initializer_probe_avoids_zero_values_for_generic_scalar_preconditions(tmp_path):
+    from cydra.foundry import generate_initialization_test
+    model = _model(
+        "SimpleInitializer",
+        (),
+        (ParameterModel("owner", "address"), ParameterModel("amount", "uint256")),
+    )
+    output = generate_initialization_test(_hypothesis(), "../src/SimpleInitializer.sol", "SimpleInitializer", tmp_path / "generated.t.sol", contract_model=model)
+    source = output.read_text(encoding="utf-8")
+    assert "address(0xA11CE)" in source
+    assert "address(0)" not in source
+    assert "address(target).call" in source
+
+
+def test_initializer_probe_synthesizes_aligned_future_timestamp(tmp_path):
+    from cydra.foundry import generate_initialization_test
+    path = tmp_path / "TimedInitializer.sol"
+    path.write_text('''
+        contract TimedInitializer {
+            uint256 public rewardStartTime;
+            function initialize(uint256 rewardStartTime) external {
+                require(rewardStartTime > block.timestamp);
+                require(rewardStartTime % 86400 == 0);
+                rewardStartTime = rewardStartTime;
+            }
+        }
+    ''', encoding="utf-8")
+    model = _model("TimedInitializer", (), (ParameterModel("rewardStartTime", "uint256"),))
+    model = ContractModel(**{**model.__dict__, "source": str(path)})
+    output = generate_initialization_test(_hypothesis(), "../src/TimedInitializer.sol", "TimedInitializer", tmp_path / "generated.t.sol", contract_model=model)
+    source = output.read_text(encoding="utf-8")
+    assert "((block.timestamp / 86400) + 2) * 86400" in source
