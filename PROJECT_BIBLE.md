@@ -517,3 +517,26 @@ The successful run demonstrated:
 - finding gate: READY.
 
 This milestone must not become an Euler-specific detector. The next unfamiliar target must determine whether sibling postcondition parity generalizes beyond the historical extraction.
+
+
+## 34. Historical backtest milestone — Graph rounding finding reproduced end-to-end
+
+The Graph weighted-average benchmark has now completed the full blind differential finding path after a demonstrated execution-binding failure was repaired.
+
+The blocker was not a reasoning failure: the patched historical revision renamed the structurally equivalent four-uint internal operation from `weightedAverageRoundingUp` to `weightedAverage`, while the runner incorrectly excluded the latter when resolving the patched callable. The fix removed that unjustified exclusion and kept binding structural rather than Graph-specific.
+
+Run evidence on the repaired benchmark:
+- blind hypothesis: `weightedAverage may round a weighted average down when the exact result is fractional, weakening a conservative boundary invariant`;
+- experiment inputs: `(100, 2, 99, 1)`;
+- vulnerable historical execution: FAIL;
+- patched historical execution: PASS;
+- canonical verification: SUPPORTED;
+- causal verification: VERIFIED;
+- impact assessment: HIGH for thawing-period enforcement;
+- finding gate: READY.
+
+The historical revisions are taken from The Graph contracts repository around commit `25d07528b1107682674bfe0bed56523238fcacb1`. The benchmark must be understood as a historical backtest of the exact revisions, not as a statement about the current repository state.
+
+This milestone is evidence that CYDRA can independently derive a non-trivial arithmetic invariant, select a discriminating fractional boundary, execute the historical vulnerable and patched implementations, and promote the result through causal verification. It does not justify hard-coding The Graph's function names or exploit answer.
+
+The next development step remains unfamiliar-target testing. If another target fails, diagnose the missing general capability rather than adding a target-specific rule.
