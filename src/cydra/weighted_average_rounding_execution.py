@@ -20,12 +20,24 @@ def generate_weighted_average_rounding_test(
         raise ValueError("unsupported invariant for weighted-average rounding execution")
     if experiment is not None and experiment.hypothesis_id != hypothesis.hypothesis_id:
         raise ValueError("experiment/hypothesis mismatch")
+
+    # The vulnerable and patched revisions may expose the same structural
+    # operation under different source-level names.  When the caller has
+    # already resolved the patched callable structurally, bind to that name
+    # rather than requiring the vulnerable hypothesis name to exist in the
+    # patched model.  This keeps the execution layer generic: it validates
+    # the callable shape, while the investigation layer remains responsible
+    # for choosing the structural identity.
+    resolved_name = callable_name or hypothesis.target_function
     function = next(
-        (item for item in contract_model.functions if item.name == hypothesis.target_function),
+        (item for item in contract_model.functions if item.name == resolved_name),
         None,
     )
     if function is None or len(function.parameters) != 4:
         raise ValueError("weighted-average execution requires four target parameters")
+    if not all(parameter.type.startswith("uint") for parameter in function.parameters):
+        raise ValueError("weighted-average execution requires four unsigned-integer parameters")
+
     arguments = experiment.planned_inputs if experiment and experiment.planned_inputs else (
         "100", "2", "99", "1"
     )
@@ -40,7 +52,7 @@ import {{ {target_type} }} from "{target_import}";
 
 contract CydraRoundingHarness {{
     function callTarget(uint256 a, uint256 b, uint256 c, uint256 d) external pure returns (uint256) {{
-        return {target_type}.{callable_name or hypothesis.target_function}(a, b, c, d);
+        return {target_type}.{resolved_name}(a, b, c, d);
     }}
 }}
 
