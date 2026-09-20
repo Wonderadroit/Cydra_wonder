@@ -1,0 +1,36 @@
+name: CYDRA unfamiliar epoch-boundary accounting backtest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/cydra/**"
+      - "src/cydra/epoch_accounting_planning.py"
+      - "scripts/run_benchmark_020_unfamiliar_epoch_boundary.py"
+      - "benchmarks/020_epoch_boundary_accounting/**"
+      - "tests/test_structural_epoch_accounting.py"
+      - ".github/workflows/benchmark-020-unfamiliar-epoch-boundary-accounting.yml"
+  pull_request:
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_020_unfamiliar_epoch_boundary.py"
+      - "benchmarks/020_epoch_boundary_accounting/**"
+      - "tests/test_structural_epoch_accounting.py"
+      - ".github/workflows/benchmark-020-unfamiliar-epoch-boundary-accounting.yml"
+  workflow_dispatch:
+
+jobs:
+  epoch-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+      - run: python -m pip install -e . pytest
+      - run: pytest -q tests/test_structural_epoch_accounting.py
+      - run: PYTHONPATH=src python scripts/run_benchmark_020_unfamiliar_epoch_boundary.py --output backtest-artifacts/epoch-boundary
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-020-epoch-boundary
+          path: backtest-artifacts/epoch-boundary/
