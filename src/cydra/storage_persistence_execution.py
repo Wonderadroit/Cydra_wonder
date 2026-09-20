@@ -23,7 +23,7 @@ def generate_storage_persistence_test(
 pragma solidity {pragma};
 
 import {{ {target_type} }} from "{target_import}";
-import {{Node, NodeType, Target}} from "../src/shared/Common.sol";
+import {{Node, NodeType, Target}} from "../../src/shared/Common.sol";
 
 contract CydraStoragePersistenceTest {{
     {target_type} internal target;
