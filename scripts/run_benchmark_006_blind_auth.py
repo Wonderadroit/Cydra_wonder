@@ -32,6 +32,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="cydra-blind-auth-") as temp:
         checkout = Path(temp) / "target"
         subprocess.run(("git", "clone", "--no-tags", args.target_repo, str(checkout)), check=True)
+        subprocess.run(("git", "-C", str(checkout), "fetch", "--no-tags", "origin", args.target_ref), check=True)
         subprocess.run(("git", "-C", str(checkout), "checkout", "--detach", args.target_ref), check=True)
         project = checkout / args.target_project
         source = checkout / args.target_path
