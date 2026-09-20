@@ -297,20 +297,21 @@ def main() -> int:
                 return 2
             payload={"target":f"{args.target_repo}@{args.target_ref}:{args.target_path}","hypothesis":_json(hypothesis),"experiment":_json(experiment),"blind_execution":_json(execution),"classification":outcome.benchmark_status,"finding_gate":"CONFIRMED_ONLY"}
             if args.require_ready and outcome.benchmark_status=="confirmed":
-                source=Path(contract.source); modifier=_auth_modifier(source.read_text(encoding="utf-8"))
+                isolated_source = execution_project / "src" / source_relative
+                modifier=_auth_modifier(isolated_source.read_text(encoding="utf-8"))
                 if modifier is None: print("AUTHORIZATION_CAUSAL_CONTROL_UNAVAILABLE"); return 3
-                original=_apply_auth_control(source,hypothesis.target_function,modifier)
+                original=_apply_auth_control(isolated_source,hypothesis.target_function,modifier)
                 try:
                     patched_test=generated.with_name(generated.stem+"-patched.t.sol"); _patched_auth_test(generated,patched_test)
-                    patched=run_foundry_test(project,patched_test,hypothesis.hypothesis_id+":patched","patched")
-                finally: source.write_text(original,encoding="utf-8")
+                    patched=run_foundry_test(execution_project,patched_test,hypothesis.hypothesis_id+":patched","patched")
+                finally: isolated_source.write_text(original,encoding="utf-8")
                 causal=execution.status=="FAIL" and patched.status=="PASS"
-                reproduction=run_foundry_test(project,generated,hypothesis.hypothesis_id+":reproduction","reproduction")
-                original=_apply_auth_control(source,hypothesis.target_function,modifier)
+                reproduction=run_foundry_test(execution_project,generated,hypothesis.hypothesis_id+":reproduction","reproduction")
+                original=_apply_auth_control(isolated_source,hypothesis.target_function,modifier)
                 try:
                     repro_test=generated.with_name(generated.stem+"-reproduction-patched.t.sol"); _patched_auth_test(generated,repro_test)
-                    repro_patched=run_foundry_test(project,repro_test,hypothesis.hypothesis_id+":reproduction-patched","reproduction-patched")
-                finally: source.write_text(original,encoding="utf-8")
+                    repro_patched=run_foundry_test(execution_project,repro_test,hypothesis.hypothesis_id+":reproduction-patched","reproduction-patched")
+                finally: isolated_source.write_text(original,encoding="utf-8")
                 repro= reproduction.status=="FAIL" and repro_patched.status=="PASS"
                 payload.update({"authorization_control":modifier,"patched_execution":_json(patched),"causal_verification":{"state":"verified" if causal else "not_verified","chain_id":"causal:authorization-modifier-differential"},"reproduction_execution":_json(reproduction),"reproduction_patched_execution":_json(repro_patched),"reproduction_verification":{"state":"verified" if repro else "not_verified","chain_id":"reproduction:authorization-modifier-differential"},"finding_gate":"READY" if causal and repro else "NOT_READY"})
                 if not (causal and repro): return 4
