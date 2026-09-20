@@ -78,7 +78,10 @@ def _prepare_isolated_foundry_project(target_root: Path, source: Path, destinati
 
     remapping_lines = []
     for prefix, destination_path in remappings:
-        remapping_lines.append(f"{prefix}=src/{destination_path}")
+        # Remapped dependencies under node_modules live at the Foundry root;
+        # source-tree dependencies copied by the closure live under src/.
+        remapped_root = "node_modules" if destination_path.startswith("node_modules/") else "src"
+        remapping_lines.append(f"{prefix}={remapped_root}/{destination_path}")
     remapping_literal = ", ".join(repr(item) for item in remapping_lines)
     (destination / "foundry.toml").write_text(
         '[profile.default]\n'
