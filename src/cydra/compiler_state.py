@@ -90,7 +90,22 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
             "forge", "build", "--build-info", "--build-info-path", str(info_path),
             *profile, "--skip", "test", "--skip", "script", "--threads", "1", relative_source,
         )
-        completed = subprocess.run(command, cwd=project_path, text=True, capture_output=True, check=False)
+        compiler_env = os.environ.copy()
+        # Semantic extraction needs compiler AST, not production bytecode optimisation.
+        # Override expensive target-local IR/optimizer settings for the bounded evidence pass.
+        compiler_env.update({
+            "FOUNDRY_VIA_IR": "false",
+            "FOUNDRY_OPTIMIZER": "false",
+            "FOUNDRY_OPTIMIZER_RUNS": "0",
+        })
+        completed = subprocess.run(
+            command,
+            cwd=project_path,
+            env=compiler_env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
         build_files = tuple(sorted(info_path.rglob("*.json")))
         if completed.returncode != 0:
             return CompilerEvidenceResult((), (), True, "compile_failed", command, completed.stdout, completed.stderr, tuple(map(str, build_files)))
