@@ -37,7 +37,7 @@ def canonical_model(h):
     model.add_node(Node(fid,"function","syncStrategy",{"contract":"Vault","provenance":"solidity_model"}))
     model.add_node(Node(iid,"invariant",h.claim,{"status":"inferred","confidence":0.80,"provenance":"cross-contract economic reasoning"}))
     model.add_node(Node(hid,"hypothesis",h.claim,{"belief":0.5,"state":"unresolved","invariant_id":iid,"provenance":"cross-contract economic reasoning"}))
-    model.add_node(Node(f"observation:{oid}","observation","compare internal accounting against actual asset backing after strategy synchronization",{"status":"planned","hypothesis_id":hid,"target_function_id":fid,"binding_status":"bound","experiment_binding":{"hypothesis_id":hid,"observation_id":oid,"target_function_id":fid},"provenance":"cross-contract economic experiment"}))
+    model.add_node(Node(f"observation:{oid}","observation","compare internal accounting against actual asset backing after strategy synchronization",{"status":"planned","hypothesis_id":hid,"target_function_id":fid,"binding_status":"bound","experiment_binding":{"hypothesis_id":hid,"observation_id":f"observation:{oid}","target_function_id":fid},"provenance":"cross-contract economic experiment"}))
     model.add_edge(Edge(iid,"informs",hid,{})); model.add_edge(Edge(f"observation:{oid}","tests",hid,{}))
     return model,CanonicalHypothesis(h.hypothesis_id,h.claim,0.5),oid
 
