@@ -555,8 +555,21 @@ def _model_initialization_source(
             source_text,
         )
         if match:
+            raw_import = match.group(1)
+            source_path = Path(contract_model.source).parent / raw_import
+            project_root = None
+            if output_path is not None:
+                output = Path(output_path)
+                for ancestor in (output.parent, *output.parents):
+                    if (ancestor / "foundry.toml").exists():
+                        project_root = ancestor
+                        break
+            if project_root is not None and source_path.exists():
+                import_path = source_path.resolve().relative_to(project_root.resolve()).as_posix()
+            else:
+                import_path = _layout_aware_import_path(raw_import, output_path or "generated.t.sol")
             custom_imports.append(
-                f'import {{ {namespace} }} from "{_layout_aware_import_path(match.group(1), output_path or "generated.t.sol")}";'
+                f'import {{ {namespace} }} from "{import_path}";'
             )
     custom_import_text = "\n".join(custom_imports)
 
