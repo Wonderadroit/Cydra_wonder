@@ -122,7 +122,7 @@ def main() -> int:
         execution_project = Path(temp) / "execution-project"
         _prepare_isolated_foundry_project(checkout, source, execution_project)
         subprocess.run(
-            ("forge", "install", "openzeppelin/openzeppelin-contracts@v3.2.0", "--no-commit"),
+            ("forge", "install", "openzeppelin/openzeppelin-contracts@v3.2.0", "--no-git"),
             cwd=execution_project,
             check=True,
         )
