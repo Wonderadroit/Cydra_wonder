@@ -112,6 +112,8 @@ def _failure_semantics(execution: ExecutionResult) -> str:
         return "deployment_guard_revert"
     if re.search(r"\[FAIL:\s*(?:.*(?:did not revert|expected revert|assert(?:ion)? failed|assertEq|assertTrue|assertFalse).*)\]", output, re.IGNORECASE):
         return "security_assertion_failure"
+    if "arbitrary initializer call mutated target storage" in output:
+        return "security_assertion_failure"
     return "unclassified_failure"
 
 def classify_initialization_execution(hypothesis: Hypothesis, execution: ExecutionResult) -> InitializationOutcome:
