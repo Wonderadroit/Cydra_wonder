@@ -19,7 +19,7 @@ from .reasoning import (
     plan_arithmetic_experiment,
     plan_initialization_experiment,
     plan_weighted_average_rounding_experiment,
-    plan_guard_parity_experiment,
+    plan_guard_parity_experiment,\n    plan_temporal_precondition_experiment,
 )
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
