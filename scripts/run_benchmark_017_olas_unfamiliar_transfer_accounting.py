@@ -12,7 +12,6 @@ from cydra.foundry import ExecutionResult
 from cydra.hypotheses import Hypothesis as CanonicalHypothesis
 from cydra.impact import ImpactAssessment, ImpactLevel
 from cydra.pipeline import investigate
-from cydra.structural_transfer_accounting import generate_transfer_accounting_hypotheses
 from cydra.system_model import Edge, Node, SystemModel
 
 TARGET_REPO = "https://github.com/code-423n4/2024-05-olas.git"
@@ -136,13 +135,18 @@ def run_side(label: str, patched: bool) -> ExecutionResult:
             patch_target(root / TARGET_PATH)
         test = write_test(root)
         completed = subprocess.run(
-            ("forge", "test", "--match-path", "test/CydraTransferAccounting.t.sol", "-vv"),
+            ("forge", "test", "--match-path", "test/CydraTransferAccounting.t.sol", "--match-test", "testInboundCreditMatchesActualReceived", "-vv"),
             cwd=root / "registries",
             text=True,
             capture_output=True,
         )
         output = completed.stdout + completed.stderr
         failed = completed.returncode != 0
+        if not failed and "Ran 1 test" not in output:
+            raise RuntimeError(
+                f"transfer-accounting test runner did not execute the expected test\n"
+                f"STDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}"
+            )
         if not failed and not patched:
             raise RuntimeError("vulnerable side unexpectedly passed")
         if failed and "accounting exceeds actual token balance" not in output:
