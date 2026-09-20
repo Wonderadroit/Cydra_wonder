@@ -47,22 +47,19 @@ def _stateful_claim_helper(source: str, body: str) -> tuple[str, str] | None:
             continue
         # A state marker is written in the helper, but the helper does not
         # visibly reject the already-marked state before writing it.
-        writes_marker = re.search(
-            r"\[[^\]]+\]\s*=\s*(?:true|1)\s*;",
+        marker = re.search(
+            r"(?P<expr>[A-Za-z_]\w*\s*\[[^\]]+\])\s*=\s*(?:true|1)\s*;",
             helper_body,
             re.I,
         )
-        if not writes_marker:
-            continue
-        marker = re.search(r"(?P<expr>\[[^\]]+\])\s*=\s*(?:true|1)\s*;", helper_body, re.I)
         if not marker:
             continue
         prefix = helper_body[: marker.start()]
-        marker_expr = marker.group("expr")
+        marker_expr = re.sub(r"\s+", "", marker.group("expr"))
         if re.search(
             rf"(?:require|if)\s*\([^)]*{re.escape(marker_expr)}[^)]*(?:true|1)|"
-            rf"\b{re.escape(marker_expr)}\b\s*(?:==|!=)\s*(?:true|1)",
-            prefix,
+            rf"{re.escape(marker_expr)}\s*(?:==|!=)\s*(?:true|1)",
+            re.sub(r"\s+", "", prefix),
             re.I,
         ):
             continue
