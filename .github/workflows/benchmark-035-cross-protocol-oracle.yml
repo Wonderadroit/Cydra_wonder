@@ -1,4 +1,5 @@
 name: Benchmark 035 strict blind cross-protocol oracle
+# Canonical holdout workflow: rerun on every benchmark/harness change.
 
 on:
   pull_request:
