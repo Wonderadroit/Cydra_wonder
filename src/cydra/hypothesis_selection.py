@@ -20,7 +20,11 @@ def _information_score(
     evidence_weight = 1.0 + math.log1p(len(hypothesis.evidence_ids))
     discrimination_weight = max(1, len(experiment.discriminates))
     cost = max(experiment.cost, 0.1)
-    return invariant.confidence * evidence_weight * discrimination_weight / cost
+    # An experiment that has not been concretely parameterized is still useful
+    # as a hypothesis, but it is less actionable than one already bound to
+    # executable inputs. Keep this generic: no vulnerability class is named.
+    actionability = 1.0 if experiment.planned_inputs else 0.5
+    return invariant.confidence * evidence_weight * discrimination_weight * actionability / cost
 
 
 def select_next_hypothesis(
