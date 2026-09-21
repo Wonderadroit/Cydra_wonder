@@ -1,0 +1,34 @@
+name: Benchmark 037 strict blind keeper zero-work incentive
+
+on:
+  pull_request:
+    paths:
+      - "benchmarks/037_keeper_zero_work_incentive/**"
+      - "scripts/run_benchmark_037_keeper_zero_work_incentive.py"
+      - "src/cydra/**"
+      - "tests/test_benchmark_037_keeper_zero_work_incentive.py"
+  push:
+    branches: [main]
+    paths:
+      - "benchmarks/037_keeper_zero_work_incentive/**"
+      - "scripts/run_benchmark_037_keeper_zero_work_incentive.py"
+      - "src/cydra/**"
+
+jobs:
+  benchmark-037:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: pip install -e . pytest
+      - run: pytest -q tests/test_benchmark_037_keeper_zero_work_incentive.py
+      - run: python scripts/run_benchmark_037_keeper_zero_work_incentive.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-037-keeper-zero-work-incentive
+          path: backtest-artifacts/benchmark-037-keeper-zero-work-incentive
