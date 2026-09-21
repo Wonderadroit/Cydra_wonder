@@ -1383,3 +1383,48 @@ The campaign also exposed and fixed a generic Solidity project-root/import-prove
 This is a materially stronger research-loop result than a one-shot benchmark: CYDRA did not need the final vulnerability class or target function to be selected initially, and it used measured evidence to reject its first hypothesis and continue research.
 
 The Solidity maturity gate remains open. The next gate is repetition on additional unfamiliar targets and materially different mechanisms, with the same strict blind boundary and causal/reproduction requirements.
+
+
+## Milestone 67 — strict blind external-call outcome finding (Benchmark 029)
+
+Benchmark 029 added a generic class-neutral reasoning surface for external-call outcome / transition integrity and exercised it against the unfamiliar pinned Nested Finance Withdrawer target.
+
+Target:
+- repository: https://github.com/code-423n4/2022-06-nested.git;
+- pinned revision: b4a153c943d54755711a2f7b80cbbf3a5bb49d76;
+- source: contracts/Withdrawer.sol;
+- blind target function selected by CYDRA: withdraw.
+
+Strict blind boundary:
+- no vulnerability class;
+- no target function;
+- no state surface;
+- no specialized reasoning-surface injection;
+- no custom planner;
+- no exploit sequence;
+- no historical answer.
+
+The normal pipeline independently selected H-EXTERNAL-OUTCOME-withdraw from the pinned source. The hypothesis was then executed against the actual pinned repository and dependency graph.
+
+The first causal harness attempt is retained as a research failure: the generated receiver test could not accept native value and the patched control was initially evaluated against the vulnerable assertion. CYDRA therefore reached UNRESOLVED, and the failure was diagnosed from execution evidence rather than counted as a finding.
+
+The harness was corrected generically:
+- the adversarial receiver now accepts native value;
+- vulnerable execution asserts that value must not be released after a false transferFrom result;
+- patched execution explicitly expects the causal validation revert;
+- the same harness is used for independent vulnerable and patched reproductions.
+
+Final dedicated CI run #7 (run ID 35585078197) completed:
+- blind hypothesis: H-EXTERNAL-OUTCOME-withdraw;
+- vulnerable execution: FAIL;
+- patched causal control: PASS;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- finding gate: READY.
+
+This is a materially different mechanism from the existing accounting, lifecycle, authorization, signature, control-flow, state-persistence, and rounding campaigns: an external dependency can report failure without reverting, and the target must not continue into a subsequent value-releasing transition.
+
+The historical Code4rena report is post-selection corroboration/evaluation context only; it was not supplied to CYDRA during hypothesis generation.
+
+This milestone strengthens the Solidity maturity evidence because the new reasoning surface generalized from a mechanism-level invariant rather than encoding the Nested target's function name, historical exploit sequence, or answer. The Solidity maturity gate remains open. The next campaigns should continue testing materially different unfamiliar mechanisms and, where possible, reduce the need for target-specific causal harness code while preserving the strict blind boundary and fail-closed finding gate.
