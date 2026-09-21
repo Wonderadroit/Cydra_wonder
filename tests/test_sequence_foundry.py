@@ -82,7 +82,7 @@ def test_sequence_renderer_emits_constructor_arguments_for_interface_dependency(
     model = _model()
     model = ContractModel(
         name="SequenceWithConstructor",
-        source=str(tmp_path / "SequenceWithConstructor.sol"),
+        source=str(root / "contracts" / "SequenceWithConstructor.sol"),
         constructor=ConstructorModel(
             (
                 ParameterModel("_accountant", "IVaultAccountant"),
@@ -106,7 +106,6 @@ def test_sequence_renderer_emits_constructor_arguments_for_interface_dependency(
     (root / "contracts" / "interfaces" / "IVaultAccountant.sol").write_text(
         "interface IVaultAccountant {}\n", encoding="utf-8"
     )
-    model.source = str(root / "contracts" / "SequenceWithConstructor.sol")
     output = generate_sequence_test_from_experiment(
         _experiment()[0],
         _experiment()[1],
