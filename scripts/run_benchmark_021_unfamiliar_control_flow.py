@@ -23,7 +23,8 @@ TEST_SOURCE = r"""// SPDX-License-Identifier: BSD-3-Clause
 pragma solidity 0.8.13;
 
 import "forge-std/Test.sol";
-import "../Tokens/Prime/Prime.sol";\nimport "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967Proxy.sol";
+import "../Tokens/Prime/Prime.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract CydraAccessControlManager {
     function isAllowedToCall(address, string memory) external pure returns (bool) {
