@@ -27,9 +27,9 @@ def generate_incentive_liveness_hypotheses(contract: ContractModel, semantic=())
     for f in contract.functions:
         if f.visibility not in {"public","external"}: continue
         body=_body(contract,f.name)
-        if re.search(r"(?:payable\s*\(\s*msg\.sender\s*\)|msg\.sender)\s*(?:\.\s*)?(?:transfer|send|call)",body) and re.search(r"(?:reward|fee|bounty|incentive|payout)",body,re.I):
+        if (re.search(r"(?:payable\s*\(\s*msg\.sender\s*\)|msg\.sender)\s*(?:\.\s*)?(?:transfer|send|call)",body) and re.search(r"(?:reward|fee|bounty|incentive|payout)",body,re.I)) or any(re.search(r"(?:keep|reward|incentive|bounty|payout|fee)", modifier, re.I) for modifier in f.modifiers):
             rewarders.append(f)
-        if re.search(r"(?:request|pending|queue|epoch|job|work)",f.name,re.I) and re.search(r"\+\+|\+=|push\s*\(",body):
+        if (re.search(r"(?:request|pending|queue|epoch|job|work)",f.name,re.I) and re.search(r"\+\+|\+=|push\s*\(",body)) or (re.search(r"\bfor\s*\(",body) and ".length" in body and any(re.search(r"(?:keep|reward|incentive|bounty|payout|fee)", modifier, re.I) for modifier in f.modifiers)):
             triggers.append(f)
     if not rewarders or not triggers: return IncentiveContribution((),())
     for rewarder in rewarders:
