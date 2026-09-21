@@ -57,7 +57,7 @@ import "../Target.sol";
 
 contract C is Test {{
     function test() public {{
-        vm.deal(address(this), 2 ether);
+        vm.deal(address(this), 7 ether);
         {target_type} target = new {target_type}{{value: {constructor_funding}}}();
         uint256 initialBalance = address(this).balance;
         {request}
