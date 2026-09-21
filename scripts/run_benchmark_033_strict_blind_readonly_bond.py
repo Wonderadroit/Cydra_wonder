@@ -127,7 +127,7 @@ def patch_target(root: Path) -> None:
     path = root / TARGET_PATH
     source = path.read_text(encoding="utf-8")
     pattern = r"(function\s+_mintToken\s*\([^)]*\)\s*internal\s*\{\s*)_mint\(to_, tokenId_, amount_\, bytes\(\"\"\)\);\s*(tokenMetadata\[tokenId_\]\.supply\s*\+=\s*amount_;)"
-    replacement = r"\1\2\n        _mint(to_, tokenId_, amount_, bytes(\"\"));"
+    replacement = '\\1\\2\n        _mint(to_, tokenId_, amount_, bytes(""));'
     updated, count = __import__("re").subn(pattern, replacement, source, count=1, flags=__import__("re").S)
     if count != 1:
         raise RuntimeError("read-only reentrancy control insertion point not found")
