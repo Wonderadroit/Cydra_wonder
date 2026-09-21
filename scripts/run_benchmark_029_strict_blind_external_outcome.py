@@ -129,7 +129,7 @@ def clone_target(destination: Path) -> Path:
     )
     return destination
 
-def write_test(root: Path) -> None:
+def write_test(root: Path, label: str) -> None:
     path = root / "contracts" / "test" / "CydraExternalOutcome.t.sol"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(PATCHED_TEST_SOURCE if "patched" in label else VULNERABLE_TEST_SOURCE, encoding="utf-8")
