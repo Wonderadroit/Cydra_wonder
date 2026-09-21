@@ -104,6 +104,9 @@ def setup_foundry(destination: Path) -> Path:
     target_dir = destination / "benchmarks" / "035_cross_protocol_oracle"
     target_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(TARGET_PATH, target_dir / "Target.sol")
+    # The generated Foundry test imports ../Target.sol from test/, so the
+    # benchmark source must also live at the project root.
+    shutil.copy2(TARGET_PATH, destination / "Target.sol")
     return destination
 
 def run_foundry(label: str, patched: bool) -> dict:
