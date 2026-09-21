@@ -219,16 +219,6 @@ def _extract_interface(
     # interface and use them in interface methods. Preserve only declarations
     # at source scope; declarations belonging to a different interface must
     # remain excluded from this interface's provenance.
-    brace_depth = 0
-    line_start = 0
-    top_level_spans: list[tuple[int, int]] = []
-    for index, ch in enumerate(source):
-        if ch == "{":
-            brace_depth += 1
-        elif ch == "}":
-            brace_depth = max(0, brace_depth - 1)
-        if ch == "\n":
-            line_start = index + 1
     for declaration in _DECLARED_TYPE_RE.finditer(source):
         prefix = source[:declaration.start()]
         depth = prefix.count("{") - prefix.count("}")
