@@ -35,8 +35,8 @@ def test_detects_caller_growable_storage_array_on_critical_path(tmp_path: Path):
     assert result.hypotheses[0].potential_impact == "HIGH"
 
 
-def test_does_not_flag_fixed_array():
-    source = Path("/tmp/cydra-fixed-array-test.sol")
+def test_does_not_flag_fixed_array(tmp_path: Path):
+    source = tmp_path / "fixed.sol"
     source.write_text(
         """
         pragma solidity ^0.8.0;
