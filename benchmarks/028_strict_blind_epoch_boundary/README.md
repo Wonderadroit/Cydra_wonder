@@ -35,3 +35,5 @@ A valid success requires:
 7. finding gate is READY.
 
 This is a historical reproduction/backtest, not a claim of a newly discovered production vulnerability.
+## CI validation
+The benchmark is executed in pull-request CI before further changes are accepted.
