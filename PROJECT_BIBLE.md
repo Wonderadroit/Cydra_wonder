@@ -1368,3 +1368,18 @@ PR #123 promoted the already demonstrated control-flow reasoning surface and its
 The strict blind control-flow campaign remains closed as a negative regression experiment. The important remaining blocker is broader research-loop hypothesis selection: after the normal pipeline exposes multiple valid hypotheses, CYDRA currently makes a one-shot score choice and does not yet execute a selected hypothesis, update its belief from the result, and then choose the next discriminating hypothesis. The next development work should address that generic evidence-driven loop rather than special-case control-flow or initialization.
 
 The Solidity maturity gate remains open. This milestone is a deliberate negative result that identifies the next general capability needed for open-ended discovery.
+
+
+## Milestone 66 — evidence-driven iterative blind finding
+
+Benchmark 027 closed the generic research-loop gap identified by Benchmark 026.
+
+Against the pinned unfamiliar Venus Prime target, CYDRA began with a strict blind investigation: no vulnerability class, target function, state surface, reasoning-surface injection, custom planner, exploit sequence, or historical answer. The normal selector first chose the initialization hypothesis. CYDRA executed that selected hypothesis; its measured result was non-confirming/unmeasurable rather than silently treated as success. The generic hypothesis-selection API then excluded that candidate and performed a second selection.
+
+The second selection reached the independent control-flow hypothesis. CYDRA then executed the actual pinned target, applied an isolated causal control, and independently reproduced both vulnerable and patched behavior. Benchmark 027 completed with the causal differential verified and the finding gate READY.
+
+The campaign also exposed and fixed a generic Solidity project-root/import-provenance issue affecting non-Foundry repositories. Repository root detection now recognizes Git/package-based project roots, and generated runtime interface imports preserve the already-resolved source provenance. Full Python regression remained green.
+
+This is a materially stronger research-loop result than a one-shot benchmark: CYDRA did not need the final vulnerability class or target function to be selected initially, and it used measured evidence to reject its first hypothesis and continue research.
+
+The Solidity maturity gate remains open. The next gate is repetition on additional unfamiliar targets and materially different mechanisms, with the same strict blind boundary and causal/reproduction requirements.
