@@ -61,17 +61,40 @@ def _storage_array_names(source: str) -> set[str]:
 
 def _caller_growth_evidence(contract: ContractModel, array_name: str) -> bool:
     source = _source(contract)
-    # A loop is materially more concerning when a public/external entry point can
-    # append to the same storage collection. This is a structural witness, not a
-    # proof of exploitability.
-    return bool(re.search(
-        rf"\b{re.escape(array_name)}\s*(?:\[[^\]]+\])?\s*\.push\s*\(",
-        source,
-    )) and any(
-        fn.visibility in {"public", "external"}
-        and re.search(rf"\b{re.escape(array_name)}\b", _body(source, fn.name))
+    # Growth may be hidden behind internal helpers. Trace the structural call
+    # topology from public/external entry points to any helper that pushes into the
+    # same collection. This remains a witness of attacker-influenced growth, not a
+    # proof that the growth is economically useful.
+    growth_functions = {
+        fn.name
         for fn in contract.functions
-    )
+        if re.search(
+            rf"\b{re.escape(array_name)}\s*(?:\[[^\]]+\])?\s*\.push\s*\(",
+            _body(source, fn.name),
+        )
+    }
+    if not growth_functions:
+        return False
+
+    reachable = {
+        fn.name
+        for fn in contract.functions
+        if fn.visibility in {"public", "external"}
+    }
+    changed = True
+    while changed:
+        changed = False
+        for fn in contract.functions:
+            if fn.name in reachable:
+                continue
+            body = _body(source, fn.name)
+            if any(
+                re.search(rf"\b{re.escape(caller)}\s*\(", body)
+                for caller in reachable
+            ):
+                reachable.add(fn.name)
+                changed = True
+    return bool(growth_functions & reachable)
 
 
 def generate_unbounded_iteration_hypotheses(
