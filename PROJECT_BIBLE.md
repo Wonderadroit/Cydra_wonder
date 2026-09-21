@@ -1355,3 +1355,16 @@ This milestone is materially different from the prior specialized benchmarks bec
 - Target execution used the actual pinned source and dependency versions, with an isolated Foundry harness to avoid unrelated compilation failures elsewhere in the historical repository.
 - This is a reproduced historical benchmark finding, not a claim of a newly discovered production vulnerability.
 - The Solidity maturity gate remains open: this adds another class-hidden blind success, but closure still requires repeated genuinely open-ended campaigns across materially different mechanisms without benchmark-specific detectors being introduced solely for the target.
+
+
+## Milestone 65 — strict blind control-flow selection miss and pipeline exposure
+
+Benchmark 026 was run as an adversarial strict-blind test against the pinned unfamiliar Venus Prime control-flow target. The benchmark supplied no vulnerability class, target function, state surface, reasoning-surface injection, custom planner, exploit sequence, or historical answer. The normal selector instead chose H-INIT-initialize/initialize, so the campaign failed before target execution.
+
+This failure is retained as evidence rather than hidden or repaired by benchmark-specific ranking. Diagnosis showed that the demonstrated generic control-flow reasoning surface existed but was not part of the normal default reasoning surface set. The existing specialized control-flow benchmark was still green, proving the reasoning capability itself; the blind miss was therefore an orchestration/generalization boundary, not a failure of the control-flow detector.
+
+PR #123 promoted the already demonstrated control-flow reasoning surface and its existing planner into the normal class-neutral pipeline. Existing full regression and the specialized control-flow backtest remained green, and the strict blind signature-reuse campaign also remained green after the change.
+
+The strict blind control-flow campaign remains closed as a negative regression experiment. The important remaining blocker is broader research-loop hypothesis selection: after the normal pipeline exposes multiple valid hypotheses, CYDRA currently makes a one-shot score choice and does not yet execute a selected hypothesis, update its belief from the result, and then choose the next discriminating hypothesis. The next development work should address that generic evidence-driven loop rather than special-case control-flow or initialization.
+
+The Solidity maturity gate remains open. This milestone is a deliberate negative result that identifies the next general capability needed for open-ended discovery.
