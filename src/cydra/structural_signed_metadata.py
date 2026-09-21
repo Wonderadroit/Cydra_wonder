@@ -48,8 +48,18 @@ def generate_signed_metadata_hypotheses(
     invariants: list[Invariant] = []
     hypotheses: list[Hypothesis] = []
 
-    for function in contract.functions:
-        body = _body(source, function.name)
+    function_names = [item.name for item in contract.functions]
+    function_names.extend(
+        match.group("name")
+        for match in re.finditer(
+            r"\bfunction\s+(?P<name>[A-Za-z_]\w*)\s*\([^)]*\)[^{{;]*\{",
+            source,
+            re.S,
+        )
+        if match.group("name") not in function_names
+    )
+    for function_name in function_names:
+        body = _body(source, function_name)
         if not body:
             continue
         if not re.search(r"\b(?:signature|sig)\b", body, re.I):
@@ -77,8 +87,8 @@ def generate_signed_metadata_hypotheses(
         if any(re.search(rf"\b{re.escape(name)}\b", digest_region, re.I) for name in metadata_names):
             continue
 
-        iid = f"INV-SIGNED-METADATA-{function.name}"
-        hid = f"H-SIGNED-METADATA-{function.name}"
+        iid = f"INV-SIGNED-METADATA-{function_name}"
+        hid = f"H-SIGNED-METADATA-{function_name}"
         invariants.append(Invariant(
             iid,
             "Authorization metadata that changes signature validity must be cryptographically bound to the signed message.",
@@ -87,14 +97,14 @@ def generate_signed_metadata_hypotheses(
         ))
         hypotheses.append(Hypothesis(
             hid,
-            f"{function.name} may accept authorization metadata that was not authenticated by the signer because the recovered digest is derived from a base authorization hash without the observed validity metadata.",
+            f"{function_name} may accept authorization metadata that was not authenticated by the signer because the recovered digest is derived from a base authorization hash without the observed validity metadata.",
             iid,
             function.name,
             "a caller or relayer who can preserve a valid signature while changing the unauthenticated metadata",
             "the authorization can remain valid outside the signer's intended metadata constraints",
             evidence_ids=(
-                f"E-MODEL-SIGNED-METADATA-{function.name}",
-                f"E-DIGEST-BASE-ONLY-{function.name}",
+                f"E-MODEL-SIGNED-METADATA-{function_name}",
+                f"E-DIGEST-BASE-ONLY-{function_name}",
             ),
         ))
 
