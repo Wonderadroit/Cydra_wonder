@@ -14,8 +14,8 @@ from cydra.pipeline import investigate
 from cydra.system_model import Edge, Node, SystemModel
 from cydra.solidity_model import parse_solidity
 
-from scripts.run_benchmark_005_blind import run_initialization
-from scripts.run_benchmark_021_unfamiliar_control_flow import (
+from run_benchmark_005_blind import run_initialization
+from run_benchmark_021_unfamiliar_control_flow import (
     TARGET_REPO,
     TARGET_REF,
     TARGET_PATH,
