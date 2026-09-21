@@ -1,0 +1,162 @@
+name: CYDRA Solidity maturity gate closure campaign
+# Milestone 75 closure validation: full campaign must remain reproducible on the final head.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/run_benchmark_025_strict_blind_signature_reuse.py"
+      - "scripts/run_benchmark_027_iterative_blind_control_flow.py"
+      - "scripts/run_benchmark_029_strict_blind_external_outcome.py"
+      - "scripts/run_benchmark_030_strict_blind_type_domain.py"
+      - "scripts/run_benchmark_031_strict_blind_resource_authorization.py"
+      - "scripts/run_benchmark_032_strict_blind_callback_state_order.py"
+      - "scripts/run_benchmark_033_strict_blind_readonly_bond.py"
+      - "scripts/run_benchmark_034_open_ended_research_loop.py"
+      - "scripts/run_benchmark_035_cross_protocol_oracle.py"
+      - "scripts/run_benchmark_036_incentive_state_divergence.py"
+      - "scripts/run_benchmark_037_keeper_zero_work_incentive.py"
+      - "scripts/run_benchmark_038_multi_finding_blind.py"
+      - "benchmarks/038_multi_finding_blind/**"
+      - ".github/workflows/cydra-maturity-gate-closure.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cydra-maturity-gate-closure
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  regression-and-multi-finding:
+    name: Regression + multi-finding proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Full regression
+        run: python -m pytest -q
+      - name: Multi-finding and impact-priority regression
+        run: |
+          python -m pytest -q             tests/test_impact_priority.py             tests/test_research_loop.py             tests/test_severity.py
+
+  strict-blind-campaigns:
+    name: Strict-blind ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    env:
+      PYTHONPATH: .
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: benchmark-025-signature-reuse
+            command: python scripts/run_benchmark_025_strict_blind_signature_reuse.py --output backtest-artifacts/benchmark-025
+          - name: benchmark-027-iterative-control-flow
+            command: python scripts/run_benchmark_027_iterative_blind_control_flow.py --output backtest-artifacts/benchmark-027
+          - name: benchmark-029-external-outcome
+            command: python scripts/run_benchmark_029_strict_blind_external_outcome.py --output backtest-artifacts/benchmark-029
+          - name: benchmark-030-type-domain
+            command: python scripts/run_benchmark_030_strict_blind_type_domain.py
+          - name: benchmark-031-resource-authorization
+            command: python scripts/run_benchmark_031_strict_blind_resource_authorization.py
+          - name: benchmark-032-callback-state-order
+            command: python scripts/run_benchmark_032_strict_blind_callback_state_order.py
+          - name: benchmark-033-readonly-reentrancy
+            command: python scripts/run_benchmark_033_strict_blind_readonly_bond.py
+          - name: benchmark-034-open-ended-loop
+            command: python scripts/run_benchmark_034_open_ended_research_loop.py --output backtest-artifacts/benchmark-034
+          - name: benchmark-035-cross-protocol-oracle
+            command: python scripts/run_benchmark_035_cross_protocol_oracle.py
+          - name: benchmark-036-incentive-state-divergence
+            command: python scripts/run_benchmark_036_incentive_state_divergence.py
+          - name: benchmark-037-zero-work-incentive
+            command: python scripts/run_benchmark_037_keeper_zero_work_incentive.py
+          - name: benchmark-038-multi-finding
+            command: python scripts/run_benchmark_038_multi_finding_blind.py --output backtest-artifacts/benchmark-038
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: oven-sh/setup-bun@v2
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Run campaign
+        shell: bash
+        run: |
+          set +e
+          mkdir -p backtest-artifacts/campaign-status
+          ${{ matrix.command }}
+          rc=$?
+          printf '{"benchmark":"${{ matrix.name }}","exit_code":%s}\n' "$rc" > "backtest-artifacts/campaign-status/result.json"
+          exit 0
+      - name: Upload campaign evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maturity-${{ matrix.name }}
+          path: backtest-artifacts/
+          if-no-files-found: warn
+
+  close-gate:
+    name: Evaluate maturity gate
+    runs-on: ubuntu-latest
+    needs:
+      - regression-and-multi-finding
+      - strict-blind-campaigns
+    if: always()
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: maturity-*
+          path: maturity-artifacts
+          merge-multiple: false
+      - name: Evaluate all closure requirements
+        shell: bash
+        run: |
+          set -e
+          failures=0
+          echo "=== CYDRA Solidity maturity gate closure campaign ==="
+          echo "Regression job: ${{ needs.regression-and-multi-finding.result }}"
+          if [ "${{ needs.regression-and-multi-finding.result }}" != "success" ]; then
+            echo "FAIL: full regression or multi-finding requirement"
+            failures=$((failures+1))
+          fi
+          for f in maturity-artifacts/maturity-*/campaign-status/result.json; do
+            [ -f "$f" ] || continue
+            cat "$f"
+            rc=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["exit_code"])' "$f")
+            if [ "$rc" != "0" ]; then
+              failures=$((failures+1))
+            fi
+          done
+          expected=12
+          observed=$(find maturity-artifacts -path '*/campaign-status/result.json' -type f | wc -l)
+          echo "Observed campaign result manifests: $observed / $expected"
+          if [ "$observed" -ne "$expected" ]; then
+            echo "FAIL: not all strict-blind campaigns produced a result manifest"
+            failures=$((failures+1))
+          fi
+          if [ "$failures" -ne 0 ]; then
+            echo "MATURITY GATE: OPEN — $failures requirement(s) failed."
+            exit 1
+          fi
+          echo "MATURITY GATE: CANDIDATE PASS — all scheduled closure requirements completed successfully."
