@@ -29,7 +29,7 @@ contract CydraResourceAuthorizationTest is Test {
     address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
     V3Utils v3utils;
     function setUp() external {
-        vm.createSelectFork(vm.envOr("CYDRA_FORK_RPC", "https://eth.llamarpc.com"), 15489169);
+        vm.createSelectFork("__CYDRA_FORK_RPC__", 15489169);
         v3utils = new V3Utils(NPM, EX0x, UNIVERSAL_ROUTER, PERMIT2);
     }
     function _instructions(address attacker, uint128 liquidity) internal view returns (V3Utils.Instructions memory) {
@@ -68,7 +68,13 @@ def clone_target(destination: Path) -> Path:
     return destination
 
 def write_test(root: Path):
-    p=root/"test"/"CydraResourceAuthorization.t.sol"; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(TEST_SOURCE,encoding="utf-8")
+    rpc = os.environ.get("CYDRA_FORK_RPC", "https://eth.llamarpc.com")
+    if '"' in rpc or "\\n" in rpc or "\\r" in rpc:
+        raise RuntimeError("invalid CYDRA_FORK_RPC value")
+    source = TEST_SOURCE.replace("__CYDRA_FORK_RPC__", rpc)
+    p=root/"test"/"CydraResourceAuthorization.t.sol"
+    p.parent.mkdir(parents=True,exist_ok=True)
+    p.write_text(source,encoding="utf-8")
 
 def patch_target(root: Path):
     p=root/TARGET_PATH; s=p.read_text(encoding="utf-8")
