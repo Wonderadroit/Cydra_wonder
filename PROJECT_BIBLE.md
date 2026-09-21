@@ -1440,10 +1440,34 @@ Evidence on main commit b586cc66f62a3b1e0d0c745ac22c9e1a3efecf81 includes:
 - Benchmark 030 strict blind type-domain reachability: blind selection of H-TYPE-DOMAIN-reRoll-tokenId; vulnerable FAIL; causal control PASS; causal verification VERIFIED; independent vulnerable FAIL; independent patched PASS; finding gate READY.
 - Benchmark 022 open-ended blind regression: blind selection of H-SIGNED-METADATA-_validateSignature; vulnerable FAIL; patched PASS; causal verification VERIFIED; independent reproduction verified; finding gate READY.
 - The canonical Solidity research workflow completed successfully with the full Python regression suite, the verified unfamiliar-target historical backtest, real Alchemix authorization, Stader initialization, Olas transfer-accounting, and Morph initialization backtests all completing successfully. The Olas and cross-contract historical runs reached a READY finding gate with causal verification.
-- The strict-blind epoch-boundary campaign remains a retained negative result: its one-shot selector chose H-INTENT-PARITY-whiteListLendingMarket instead of the epoch hypothesis. This is not hidden or relabeled as success. It identifies a remaining research limitation in one-shot hypothesis selection when multiple high-confidence hypotheses coexist.
+- The strict-blind epoch-boundary campaign initially remained a retained negative result because its one-shot selector chose H-INTENT-PARITY-whiteListLendingMarket instead of the epoch hypothesis. That negative result is preserved as the pre-loop baseline rather than erased. After the generic evidence-driven research loop was applied, the same blind campaign independently selected H-EPOCH-ACCOUNTING-update_market, executed it against the pinned target, reproduced the causal differential, and reached READY.
 
 This establishes the practical end result required by the project: CYDRA is no longer only an architecture or benchmark framework; the merged system has demonstrated reproducible blind finding production on unfamiliar Solidity targets.
 
 The broader Solidity maturity/generalization gate remains open. Future work should improve the generic evidence-driven research loop, reduce benchmark-specific harness assumptions, and test additional unfamiliar targets. No future benchmark should be accepted merely because a specialized detector was made to select its historical answer.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 69 — generic research-loop recovery of the retained blind miss
+
+Benchmark 028 was rerun after the class-neutral evidence-driven research loop became mainline. This was a held-out regression of the exact one-shot selector failure documented in Milestone 68; no selector score, vulnerability-class hint, target function, state surface, historical answer, or benchmark-specific reasoning surface was added to the blind context.
+
+The blind investigation initially generated multiple competing hypotheses. The generic loop selected a non-executable hypothesis when appropriate, recorded the observation as UNMEASURABLE rather than treating it as success, and fed that evidence back into hypothesis selection. The next selection reached the epoch-boundary accounting hypothesis:
+
+- hypothesis: H-EPOCH-ACCOUNTING-update_market;
+- invariant: INV-EPOCH-ACCOUNTING-update_market;
+- target: pinned Canto LendingLedger.sol at revision 5e0d6f1f981993f83d0db862bcf1b2a49bb6ff50;
+- vulnerable execution: FAIL, with the observed accounting value 100000000000000000000000 versus the piecewise expected 150000000000000000000000;
+- patched causal control: PASS;
+- causal differential: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction verification: true;
+- finding gate: READY.
+
+The artifact is from the actual strict-blind CI run #37 (run ID 35596000527). Full Python regression also passed in the same job.
+
+This is important evidence about the research loop itself: the previously retained selector miss was recovered by executing and learning from the first hypothesis rather than by changing selector scoring or teaching the system the historical answer. The original one-shot miss remains preserved as a negative baseline, while the iterative run demonstrates evidence-driven recovery.
+
+Boundary: Benchmark 028 remains a bounded historical campaign and does not establish arbitrary open-ended discovery. The next maturity work should therefore continue on a genuinely unfamiliar target/mechanism and test whether the generic loop produces the same kind of recovery and finding-gate evidence without a benchmark-specific execution binding.
