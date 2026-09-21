@@ -1428,3 +1428,22 @@ This is a materially different mechanism from the existing accounting, lifecycle
 The historical Code4rena report is post-selection corroboration/evaluation context only; it was not supplied to CYDRA during hypothesis generation.
 
 This milestone strengthens the Solidity maturity evidence because the new reasoning surface generalized from a mechanism-level invariant rather than encoding the Nested target's function name, historical exploit sequence, or answer. The Solidity maturity gate remains open. The next campaigns should continue testing materially different unfamiliar mechanisms and, where possible, reduce the need for target-specific causal harness code while preserving the strict blind boundary and fail-closed finding gate.
+
+## Milestone 68 — operational end result: repeated blind causal findings on main
+
+After Benchmark 030, the merged main commit was exercised by the canonical Solidity research workflow and the open-ended blind workflow.
+
+The operational end result is now demonstrated: CYDRA can take an unfamiliar pinned Solidity target through system modeling, class-neutral hypothesis generation, experiment selection, real Foundry execution, causal differential verification, and finding-gate evaluation, producing a reproducible finding without being handed the historical vulnerability class or answer.
+
+Evidence on main commit b586cc66f62a3b1e0d0c745ac22c9e1a3efecf81 includes:
+
+- Benchmark 030 strict blind type-domain reachability: blind selection of H-TYPE-DOMAIN-reRoll-tokenId; vulnerable FAIL; causal control PASS; causal verification VERIFIED; independent vulnerable FAIL; independent patched PASS; finding gate READY.
+- Benchmark 022 open-ended blind regression: blind selection of H-SIGNED-METADATA-_validateSignature; vulnerable FAIL; patched PASS; causal verification VERIFIED; independent reproduction verified; finding gate READY.
+- The canonical Solidity research workflow completed successfully with the full Python regression suite, the verified unfamiliar-target historical backtest, real Alchemix authorization, Stader initialization, Olas transfer-accounting, and Morph initialization backtests all completing successfully. The Olas and cross-contract historical runs reached a READY finding gate with causal verification.
+- The strict-blind epoch-boundary campaign remains a retained negative result: its one-shot selector chose H-INTENT-PARITY-whiteListLendingMarket instead of the epoch hypothesis. This is not hidden or relabeled as success. It identifies a remaining research limitation in one-shot hypothesis selection when multiple high-confidence hypotheses coexist.
+
+This establishes the practical end result required by the project: CYDRA is no longer only an architecture or benchmark framework; the merged system has demonstrated reproducible blind finding production on unfamiliar Solidity targets.
+
+The broader Solidity maturity/generalization gate remains open. Future work should improve the generic evidence-driven research loop, reduce benchmark-specific harness assumptions, and test additional unfamiliar targets. No future benchmark should be accepted merely because a specialized detector was made to select its historical answer.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
