@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 interface ITransientPool {
     function getPoolTokens() external view returns (uint256 balance0, uint256 balance1);
     function getRate() external view returns (uint256);
+    function exiting() external view returns (bool);
 }
 
 contract TransientPool is ITransientPool {
@@ -117,7 +118,7 @@ contract CrossProtocolOraclePatched {
     }
 
     function latestAnswer() external view returns (uint256) {
-        require(!TransientPool(address(pool)).exiting(), "transient protocol state");
+        require(!pool.exiting(), "transient protocol state");
         (uint256 balance0, uint256 balance1) = pool.getPoolTokens();
         uint256 rate = pool.getRate();
         return (balance0 + balance1) * rate / 2e18;
