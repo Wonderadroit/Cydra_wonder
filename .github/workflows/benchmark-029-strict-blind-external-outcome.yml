@@ -3,11 +3,9 @@ name: CYDRA strict blind external-outcome research
 on:
   pull_request:
     paths:
-      - "src/cydra/**"
       - "tests/test_structural_external_outcome.py"
       - "scripts/run_benchmark_029_strict_blind_external_outcome.py"
       - "benchmarks/029_external_outcome/**"
-      - ".github/workflows/benchmark-029-strict-blind-external-outcome.yml"
   workflow_dispatch:
 
 permissions:
@@ -15,6 +13,7 @@ permissions:
 
 jobs:
   strict-blind-external-outcome:
+    if: startsWith(github.head_ref, 'feat/benchmark-029-')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,3 +52,23 @@ jobs:
         with:
           name: benchmark-029-strict-blind-external-outcome
           path: backtest-artifacts/strict-blind-external-outcome/
+  strict-blind-callback-state-order:
+    if: startsWith(github.head_ref, 'feat/benchmark-032-callback-state-order-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: python -m pip install -e . pytest
+      - run: pytest -q tests/test_structural_callback_state_order.py
+      - run: PYTHONPATH=src python scripts/run_benchmark_032_strict_blind_callback_state_order.py --output backtest-artifacts/strict-blind-callback-state-order
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-032-strict-blind-callback-state-order
+          path: backtest-artifacts/strict-blind-callback-state-order/
