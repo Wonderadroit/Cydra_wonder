@@ -275,4 +275,10 @@ def main() -> int:
     return 0 if gate.decision.value == "READY" else 1
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        output = Path("backtest-artifacts/strict-blind-external-outcome")
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "runner_error.json").write_text(json.dumps({"error_type": type(exc).__name__, "error": str(exc)}, indent=2) + "\n", encoding="utf-8")
+        raise
