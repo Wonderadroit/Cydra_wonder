@@ -477,10 +477,16 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
             signature_tail = match.group(3)
             opening = match.end() - 1
             body = _body(contract_source, opening)
+            modifier_tokens = re.findall(r"\b[A-Za-z_]\w*\b", signature_tail)
+            solidity_signature_keywords = {
+                "public", "external", "internal", "private", "view", "pure",
+                "payable", "virtual", "override", "returns", "memory", "calldata",
+                "storage", "immutable", "constant",
+            }
             modifiers = tuple(
                 token
-                for token in re.findall(r"\b[A-Za-z_]\w*\b", signature_tail)
-                if token in {"onlyGov", "onlyOwner", "onlyAdmin", "onlyKeeper", "onlyWhitelisted"}
+                for token in modifier_tokens
+                if token not in solidity_signature_keywords
             )
             visibility_match = re.search(r"\b(public|external|internal|private)\b", signature_tail)
             visibility = visibility_match.group(1) if visibility_match else "unspecified"
