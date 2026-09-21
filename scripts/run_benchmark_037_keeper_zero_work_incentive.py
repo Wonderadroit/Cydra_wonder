@@ -102,6 +102,7 @@ def run_fixture(patched: bool, label: str):
             "tests_run": 1,
             "tests_failed": 0 if process.returncode == 0 else 1,
             "status": "PASS" if process.returncode == 0 else "FAIL",
+            "security_assertion_triggered": "reward paid for zero work" in process.stdout,
             "exit_code": process.returncode,
             "stdout": process.stdout[-12000:],
             "stderr": "",
@@ -211,7 +212,11 @@ def main():
     )
 
     reproduction = (
-        independent_vulnerable["status"] == "FAIL"
+        vulnerable["status"] == "FAIL"
+        and vulnerable["security_assertion_triggered"]
+        and patched["status"] == "PASS"
+        and independent_vulnerable["status"] == "FAIL"
+        and independent_vulnerable["security_assertion_triggered"]
         and independent_patched["status"] == "PASS"
     )
     impact = ImpactAssessment(
