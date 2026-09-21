@@ -145,7 +145,11 @@ def canonical_model(hypothesis):
     model.add_node(Node(f"observation:{observation_id}", "observation",
                         "public tokenMetadata getter observes supply during ERC1155 receiver callback",
                         {"status": "planned", "hypothesis_id": hypothesis_id,
-                         "target_function_id": function_id, "binding_status": "bound"}))
+                         "target_function_id": function_id, "binding_status": "bound",
+                         "experiment_binding": {"hypothesis_id": hypothesis_id,
+                                                "observation_id": f"observation:{observation_id}",
+                                                "target_function_id": function_id,
+                                                "experiment_id": f"experiment:X-{hypothesis.hypothesis_id}"}}))
     model.add_edge(Edge(invariant_id, "informs", hypothesis_id, {}))
     model.add_edge(Edge(f"observation:{observation_id}", "tests", hypothesis_id, {}))
     return model, CanonicalHypothesis(hypothesis.hypothesis_id, hypothesis.claim, 0.5), observation_id
