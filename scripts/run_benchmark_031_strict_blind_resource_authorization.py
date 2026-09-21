@@ -50,8 +50,11 @@ contract CydraResourceAuthorizationTest is Test {
         (bool ok,) = address(v3utils).call(
             abi.encodeWithSelector(V3Utils.execute.selector, TOKEN_ID, _instructions(attacker, liquidityBefore))
         );
-        assertFalse(ok, "unrelated caller executed an approved resource action");
         (,,,,,,, uint128 liquidityAfter,,,,) = NPM.positions(TOKEN_ID);
+        emit log_named_uint("attacker DAI after", DAI.balanceOf(attacker));
+        emit log_named_uint("attacker USDC after", USDC.balanceOf(attacker));
+        emit log_named_uint("position liquidity after", liquidityAfter);
+        assertFalse(ok, "unrelated caller executed an approved resource action");
         assertEq(liquidityAfter, liquidityBefore, "resource changed for unrelated caller");
         assertEq(DAI.balanceOf(attacker), daiBefore, "attacker received DAI");
         assertEq(USDC.balanceOf(attacker), usdcBefore, "attacker received USDC");
