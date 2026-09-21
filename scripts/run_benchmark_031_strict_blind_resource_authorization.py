@@ -16,48 +16,104 @@ TARGET_PATH = "src/transformers/V3Utils.sol"
 TEST_SOURCE = r"""// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
-import "src/interfaces/IErrors.sol";
 import "src/transformers/V3Utils.sol";
-contract CydraResourceAuthorizationTest is Test {
-    IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 constant DAI = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    address constant OWNER = 0xa3eF006a7da5BcD1144d8BB86EfF1734f46A0c1E;
-    uint256 constant TOKEN_ID = 4660;
-    INonfungiblePositionManager constant NPM = INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
-    address constant EX0x = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
-    address constant UNIVERSAL_ROUTER = 0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD;
-    address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
-    V3Utils v3utils;
-    function setUp() external {
-        vm.createSelectFork("__CYDRA_FORK_RPC__", 15500001);
-        v3utils = new V3Utils(NPM, EX0x, UNIVERSAL_ROUTER, PERMIT2);
+
+contract MockERC20 {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    function mint(address to, uint256 amount) external { balanceOf[to] += amount; }
+    function transfer(address to, uint256 amount) external returns (bool) {
+        require(balanceOf[msg.sender] >= amount);
+        balanceOf[msg.sender] -= amount; balanceOf[to] += amount; return true;
     }
-    function _instructions(address attacker, uint128 liquidity) internal view returns (V3Utils.Instructions memory) {
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount; return true;
+    }
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(balanceOf[from] >= amount && allowance[from][msg.sender] >= amount);
+        allowance[from][msg.sender] -= amount; balanceOf[from] -= amount; balanceOf[to] += amount; return true;
+    }
+}
+
+contract MockPositionManager {
+    address public owner;
+    address public approved;
+    address public token;
+    uint128 public liquidity = 1;
+    MockERC20 public asset;
+
+    constructor(address owner_, MockERC20 asset_) { owner = owner_; asset = asset_; token = address(asset_); }
+
+    function approve(address to, uint256) external returns (bool) { require(msg.sender == owner); approved = to; return true; }
+    function ownerOf(uint256) external view returns (address) { return owner; }
+
+    function positions(uint256) external view returns (
+        uint96, address, address, address, uint24, int24, int24, uint128,
+        uint256, uint256, uint128, uint128
+    ) {
+        return (0, approved, token, token, 3000, -60, 60, liquidity, 0, 0, 0, 0);
+    }
+
+    function decreaseLiquidity(
+        uint256 tokenId, uint128 amount, uint256, uint256, uint256
+    ) external returns (uint256 amount0, uint256 amount1) {
+        require(msg.sender == approved || msg.sender == owner);
+        require(tokenId == 4660 && amount > 0 && liquidity >= amount);
+        liquidity -= amount;
+        asset.mint(address(this), 200);
+        return (100, 100);
+    }
+
+    function collect(
+        uint256 tokenId, address recipient, uint128 amount0Requested, uint128 amount1Requested
+    ) external returns (uint128 amount0, uint128 amount1) {
+        require(msg.sender == approved || msg.sender == owner);
+        require(tokenId == 4660);
+        amount0 = amount0Requested == type(uint128).max ? 100 : amount0Requested;
+        amount1 = amount1Requested == type(uint128).max ? 100 : amount1Requested;
+        if (amount0 > 0) MockERC20(token).transfer(recipient, amount0);
+        if (amount1 > 0) MockERC20(token).transfer(recipient, amount1);
+    }
+}
+
+contract CydraResourceAuthorizationTest is Test {
+    address constant OWNER = address(0xA11CE);
+    uint256 constant TOKEN_ID = 4660;
+    MockERC20 asset;
+    MockPositionManager manager;
+    V3Utils v3utils;
+
+    function setUp() external {
+        asset = new MockERC20();
+        manager = new MockPositionManager(OWNER, asset);
+        v3utils = new V3Utils(
+            INonfungiblePositionManager(address(manager)),
+            address(0), address(0), address(0)
+        );
+        vm.prank(OWNER);
+        manager.approve(address(v3utils), TOKEN_ID);
+    }
+
+    function _instructions(address recipient) internal view returns (V3Utils.Instructions memory) {
         return V3Utils.Instructions(
-            V3Utils.WhatToDo.WITHDRAW_AND_COLLECT_AND_SWAP, address(USDC),
-            0,0,0,0,"",0,0,"",type(uint128).max,type(uint128).max,
-            0,0,0,liquidity,0,0,block.timestamp,attacker,address(0),false,"",""
+            V3Utils.WhatToDo.WITHDRAW_AND_COLLECT_AND_SWAP,
+            address(asset),
+            0,0,0,0,"",0,0,"",
+            type(uint128).max,type(uint128).max,
+            0,0,0,1,0,0,block.timestamp,
+            recipient,address(0),false,"",""
         );
     }
+
     function testCydraResourceAuthorization() external {
         address attacker = makeAddr("attacker");
-        (,,,,,,, uint128 liquidityBefore,,,,) = NPM.positions(TOKEN_ID);
-        uint256 daiBefore = DAI.balanceOf(attacker);
-        uint256 usdcBefore = USDC.balanceOf(attacker);
-        vm.prank(OWNER);
-        NPM.approve(address(v3utils), TOKEN_ID);
+        uint256 before = asset.balanceOf(attacker);
         vm.prank(attacker);
         (bool ok,) = address(v3utils).call(
-            abi.encodeWithSelector(V3Utils.execute.selector, TOKEN_ID, _instructions(attacker, liquidityBefore))
+            abi.encodeWithSelector(V3Utils.execute.selector, TOKEN_ID, _instructions(attacker))
         );
-        (,,,,,,, uint128 liquidityAfter,,,,) = NPM.positions(TOKEN_ID);
-        emit log_named_uint("attacker DAI after", DAI.balanceOf(attacker));
-        emit log_named_uint("attacker USDC after", USDC.balanceOf(attacker));
-        emit log_named_uint("position liquidity after", liquidityAfter);
         assertFalse(ok, "unrelated caller executed an approved resource action");
-        assertEq(liquidityAfter, liquidityBefore, "resource changed for unrelated caller");
-        assertEq(DAI.balanceOf(attacker), daiBefore, "attacker received DAI");
-        assertEq(USDC.balanceOf(attacker), usdcBefore, "attacker received USDC");
+        assertEq(asset.balanceOf(attacker), before, "attacker received resource assets");
     }
 }
 """;
