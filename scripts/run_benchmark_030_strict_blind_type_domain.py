@@ -61,10 +61,12 @@ def clone_target(destination: Path) -> Path:
         ("git", "-C", str(destination), "checkout", "--detach", TARGET_REF),
         check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
-    subprocess.run(
-        ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
-        cwd=destination, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-    )
+    forge_std = destination / "lib" / "forge-std"
+    if not forge_std.exists():
+        subprocess.run(
+            ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
+            cwd=destination, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
     return destination
 
 def write_test(root: Path, label: str) -> None:
