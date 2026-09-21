@@ -7,6 +7,6 @@ def plan_incentive_liveness_experiment(hypothesis: Hypothesis) -> Experiment:
         hypothesis_id=hypothesis.hypothesis_id,
         target_function=hypothesis.target_function,
         steps=(),
-        expected_observation=hypothesis.expected_observation,
+        expected_observation=hypothesis.claim,
         rationale="compare caller cost required to manufacture payout-eligible work with the resulting incentive payout",
     )
