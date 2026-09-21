@@ -16,31 +16,32 @@ from cydra.system_model import Edge, Node, SystemModel
 
 TARGET_REPO = "https://github.com/code-423n4/2025-05-blackhole.git"
 TARGET_REF = "92fff849d3b266e609e6d63478c4164d9f608e91"
-TARGET_PATH = "contracts/GenesisPoolManager.sol"
+TARGET_PATH = "contracts/SetterTopNPoolsStrategy.sol"
 
 TEST_SOURCE = r"""// SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
 import "forge-std/Test.sol";
-import {GenesisPoolManager} from "contracts/GenesisPoolManager.sol";
+import {SetterTopNPoolsStrategy} from "contracts/SetterTopNPoolsStrategy.sol";
+
+contract CydraMockAVM {
+    uint256 public topN;
+    address public executor;
+    constructor(uint256 _topN, address _executor) {
+        topN = _topN;
+        executor = _executor;
+    }
+}
 
 contract CydraGuardProgressTest is Test {
-    function testOwnerCanSetNonZeroRouter() public {
-        GenesisPoolManager manager = new GenesisPoolManager();
-        manager.initialize(
-            address(0x1001),
-            address(0x1002),
-            address(0x1003),
-            address(0x1004),
-            address(0x1005),
-            address(0x1006),
-            address(0x1007),
-            address(0x1008)
-        );
-
-        address desiredRouter = address(0xBEEF);
-        manager.setRouter(desiredRouter);
-        assertEq(manager.router(), desiredRouter, "owner should be able to set a valid router");
+    function testOwnerCanSetTopNPools() public {
+        CydraMockAVM avm = new CydraMockAVM(2, address(0xE001));
+        SetterTopNPoolsStrategy strategy =
+            new SetterTopNPoolsStrategy(address(0xD001), address(avm));
+        address[] memory pools = new address[](1);
+        pools[0] = address(0xBEEF);
+        strategy.setTopNPools(pools);
+        assertEq(strategy.topNPools(0), pools[0], "owner should be able to update top pools");
     }
 }
 """
@@ -75,7 +76,7 @@ def run_target(root: Path, label: str) -> dict:
     completed = subprocess.run(
         (
             "forge", "test", "--match-path", "test/autogen/CydraGuardProgress.t.sol",
-            "--match-test", "testOwnerCanSetNonZeroRouter", "-vvv",
+            "--match-test", "testOwnerCanSetTopNPools", "-vvv",
         ),
         cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
@@ -94,8 +95,14 @@ def run_target(root: Path, label: str) -> dict:
 def patch_target(root: Path) -> None:
     path = root / TARGET_PATH
     source = path.read_text(encoding="utf-8")
-    old = 'require(_router == address(0), "ZA");'
-    new = 'require(_router != address(0), "ZA");'
+    old = """modifier onlyExecutor() {
+        require(msg.sender == executor, "Only AVM can call");
+        _;
+    }"""
+    new = """modifier onlyOwnerOrExecutor() {
+        require(msg.sender == owner() || msg.sender == executor, "Unauthorized");
+        _;
+    }"""
     if old not in source:
         raise RuntimeError("guard causal insertion point not found")
     path.write_text(source.replace(old, new, 1), encoding="utf-8")
@@ -103,11 +110,11 @@ def patch_target(root: Path) -> None:
 
 def canonical_model(hypothesis):
     model = SystemModel()
-    contract_id = "contract:GenesisPoolManager"
+    contract_id = "contract:SetterTopNPoolsStrategy"
     function_id = f"function:GenesisPoolManager:{hypothesis.target_function}"
     invariant_id = f"invariant:{hypothesis.invariant_id}"
     hypothesis_id = f"hypothesis:{hypothesis.hypothesis_id}"
-    observation_id = "valid-router-rejected"
+    observation_id = "owner-top-pool-update-rejected"
 
     model.add_node(Node(contract_id, "contract", "GenesisPoolManager",
                         {"provenance": "pinned historical source"}))
@@ -118,7 +125,7 @@ def canonical_model(hypothesis):
     model.add_node(Node(hypothesis_id, "hypothesis", hypothesis.claim, {"belief": 0.5}))
     model.add_node(Node(
         f"observation:{observation_id}", "observation",
-        "a non-zero router update is rejected by the owner-only setter",
+        "an owner top-pool update is rejected by the executor-only setter",
         {
             "status": "planned",
             "hypothesis_id": hypothesis_id,
@@ -157,7 +164,7 @@ def main() -> int:
             e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id
         )
 
-        if hypothesis.target_function != "setRouter":
+        if hypothesis.target_function != "setTopNPools":
             raise RuntimeError(
                 "blind selector did not choose the historical guard target: "
                 + hypothesis.hypothesis_id
@@ -201,9 +208,9 @@ def main() -> int:
     )
     impact = ImpactAssessment(
         ImpactLevel.MEDIUM,
-        "Administrative router configuration integrity",
-        "The owner-only router setter rejects valid non-zero router addresses, preventing the intended configuration transition and leaving the existing router unchanged.",
-        ("the owner must be able to configure a valid router", "the setter must not reject every valid non-zero address"),
+        "Administrative top-pool configuration integrity",
+        "The top-pool setter is restricted to executor even though its declared intent permits the owner or executor, so an owner cannot perform the documented configuration transition.",
+        ("the owner must be able to configure top pools", "the setter must accept an owner caller as permitted by the declared role boundary"),
         cycle.causal_verification.evidence_ids,
     )
     gate = evaluate_finding_graph(
@@ -236,7 +243,7 @@ def main() -> int:
         "independent_patched": independent_patched,
         "reproduction_verified": reproduction_verified,
         "finding_gate": gate.decision.value,
-        "boundary": "actual pinned Blackhole repository and dependency graph executed; causal control changes only the inverted router-address guard.",
+        "boundary": "actual pinned Blackhole repository and dependency graph executed; causal control changes only the setter role modifier.",
     }
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "result.json").write_text(
