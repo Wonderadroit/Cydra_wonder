@@ -28,6 +28,7 @@ jobs:
         with:
           python-version: "3.11"
       - uses: foundry-rs/foundry-toolchain@v1
+      - uses: oven-sh/setup-bun@v2
       - name: Install Python dependencies
         run: pip install -e . pytest
       - name: Run structural regression
