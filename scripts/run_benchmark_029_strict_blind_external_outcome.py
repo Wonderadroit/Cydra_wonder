@@ -18,7 +18,7 @@ TARGET_REPO = "https://github.com/code-423n4/2022-06-nested.git"
 TARGET_REF = "b4a153c943d54755711a2f7b80cbbf3a5bb49d76"
 TARGET_PATH = "contracts/Withdrawer.sol"
 
-TEST_SOURCE = r"""// SPDX-License-Identifier: MIT
+VULNERABLE_TEST_SOURCE = r"""// SPDX-License-Identifier: MIT
 pragma solidity 0.8.14;
 
 import "forge-std/Test.sol";
@@ -49,17 +49,58 @@ contract CydraExternalOutcomeTest is Test {
         vm.deal(address(weth), 1 ether);
     }
 
+    receive() external payable {}
+
     function testIgnoredExternalFailureCannotReleaseNativeValue() public {
         uint256 beforeBalance = address(this).balance;
         withdrawer.withdraw(1 ether);
         assertEq(
             address(this).balance,
-            beforeBalance + 1 ether,
-            "vulnerable path did not continue after false transferFrom"
+            beforeBalance,
+            "vulnerable path released native value after false transferFrom"
         );
     }
 }
 """
+
+PATCHED_TEST_SOURCE = r"""// SPDX-License-Identifier: MIT
+pragma solidity 0.8.14;
+
+import "forge-std/Test.sol";
+import "../Withdrawer.sol";
+import "../interfaces/external/IWETH.sol";
+
+contract CydraFalseReturnWETH {
+    function transferFrom(address, address, uint256) external pure returns (bool) {
+        return false;
+    }
+
+    function withdraw(uint256 amount) external {
+        require(address(this).balance >= amount, "insufficient mock WETH");
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        require(ok, "native send failed");
+    }
+
+    receive() external payable {}
+}
+
+contract CydraExternalOutcomeTest is Test {
+    Withdrawer internal withdrawer;
+    CydraFalseReturnWETH internal weth;
+
+    function setUp() public {
+        weth = new CydraFalseReturnWETH();
+        withdrawer = new Withdrawer(IWETH(address(weth)));
+        vm.deal(address(weth), 1 ether);
+    }
+
+    function testIgnoredExternalFailureIsStopped() public {
+        vm.expectRevert("Cydra: external call failed");
+        withdrawer.withdraw(1 ether);
+    }
+}
+"""
+
 
 def clone_target(destination: Path) -> Path:
     subprocess.run(
@@ -88,15 +129,15 @@ def clone_target(destination: Path) -> Path:
     )
     return destination
 
-def write_test(root: Path) -> None:
+def write_test(root: Path, label: str) -> None:
     path = root / "contracts" / "test" / "CydraExternalOutcome.t.sol"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(TEST_SOURCE, encoding="utf-8")
+    path.write_text(PATCHED_TEST_SOURCE if "patched" in label else VULNERABLE_TEST_SOURCE, encoding="utf-8")
 
 def run_target(root: Path, label: str):
-    write_test(root)
+    write_test(root, label)
     completed = subprocess.run(
-        ("forge", "test", "--match-test", "testIgnoredExternalFailureCannotReleaseNativeValue", "-vvv"),
+        ("forge", "test", "--match-test", "testIgnoredExternalFailureCannotReleaseNativeValue|testIgnoredExternalFailureIsStopped", "-vvv"),
         cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
     return {
@@ -234,4 +275,10 @@ def main() -> int:
     return 0 if gate.decision.value == "READY" else 1
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        output = Path("backtest-artifacts/strict-blind-external-outcome")
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "runner_error.json").write_text(json.dumps({"error_type": type(exc).__name__, "error": str(exc)}, indent=2) + "\n", encoding="utf-8")
+        raise
