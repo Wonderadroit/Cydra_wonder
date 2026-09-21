@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, json, subprocess, tempfile
+import argparse, json, os, subprocess, tempfile
 from pathlib import Path
 from cydra.canonical_cycle import run_canonical_differential_cycle
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
@@ -16,8 +16,8 @@ TARGET_PATH = "src/transformers/V3Utils.sol"
 TEST_SOURCE = r"""// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
-import "../../src/interfaces/IErrors.sol";
-import "../../src/transformers/V3Utils.sol";
+import "src/interfaces/IErrors.sol";
+import "src/transformers/V3Utils.sol";
 contract CydraResourceAuthorizationTest is Test {
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     IERC20 constant DAI = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
@@ -29,7 +29,7 @@ contract CydraResourceAuthorizationTest is Test {
     address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
     V3Utils v3utils;
     function setUp() external {
-        vm.createSelectFork("https://rpc.ankr.com/eth", 15489169);
+        vm.createSelectFork(os.getenv("CYDRA_FORK_RPC", "https://eth.llamarpc.com"), 15489169);
         v3utils = new V3Utils(NPM, EX0x, UNIVERSAL_ROUTER, PERMIT2);
     }
     function _instructions(address attacker, uint128 liquidity) internal view returns (V3Utils.Instructions memory) {
