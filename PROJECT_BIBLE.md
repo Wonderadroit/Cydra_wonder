@@ -1471,3 +1471,42 @@ The artifact is from the actual strict-blind CI run #37 (run ID 35596000527). Fu
 This is important evidence about the research loop itself: the previously retained selector miss was recovered by executing and learning from the first hypothesis rather than by changing selector scoring or teaching the system the historical answer. The original one-shot miss remains preserved as a negative baseline, while the iterative run demonstrates evidence-driven recovery.
 
 Boundary: Benchmark 028 remains a bounded historical campaign and does not establish arbitrary open-ended discovery. The next maturity work should therefore continue on a genuinely unfamiliar target/mechanism and test whether the generic loop produces the same kind of recovery and finding-gate evidence without a benchmark-specific execution binding.
+
+## Milestone 70 — strict blind callback-before-state-update finding (Benchmark 032)
+
+Benchmark 032 completed the next materially different strict-blind campaign against the pinned Phi `Cred.sol` target at revision `8c0985f7a10b231f916a51af5d506dd6b0c54120`.
+
+Strict blind boundary:
+- no vulnerability class;
+- no target function;
+- no exploit sequence;
+- no state surface;
+- no specialized reasoning-surface injection;
+- no custom planner;
+- no historical answer.
+
+The normal pipeline initially selected two non-executable hypotheses and recorded both as `UNMEASURABLE`. The generic selector then selected `H-CALLBACK-STATE-ORDER-buyShareCred` from source-level callback/state-order evidence. The selected hypothesis was bound to the public `buyShareCred` wrapper while preserving the internal `_handleTrade` provenance.
+
+The campaign exposed and fixed two generic issues before completion:
+- callback topology needed source-level binding through internal helpers rather than relying on direct model writes;
+- an `UNMEASURABLE` observation needed stronger generic information-gain deprioritization so the research loop would move to a different executable hypothesis instead of repeatedly selecting the same non-renderable candidate.
+
+The isolated Foundry differential harness then executed the real pinned repository after installing its authoritative `bun.lockb` dependencies.
+
+Final canonical CI run #26 (run ID `35610469250`) completed successfully:
+- blind selection: `H-CALLBACK-STATE-ORDER-buyShareCred`;
+- vulnerable execution: FAIL;
+- patched causal control: PASS;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction verification: true;
+- finding gate: READY.
+
+The vulnerable trace showed the attacker-controlled callback successfully reentering `sellShareCred` before the temporal state was established; the patched control moved the timestamp write before the external value transfer and blocked the reentrant sell. The final artifact was uploaded by the canonical GitHub Actions run and its `result.json` records the complete blind loop, differential execution, causal verification, and READY gate.
+
+This is a materially different mechanism from the preceding resource-authorization, type-domain, epoch-boundary, external-outcome, signature, authorization, lifecycle, accounting, rounding, and control-flow campaigns. The historical Phi source was used as the pinned evaluation target and causal-control basis only after blind hypothesis selection.
+
+The Solidity maturity/generalization gate remains open. Benchmark 032 adds another successful unfamiliar-mechanism blind finding, but closure still requires repeated evidence across additional unfamiliar targets and mechanisms without target-shaped detectors or benchmark-provided selection hints.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
