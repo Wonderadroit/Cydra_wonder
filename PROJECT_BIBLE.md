@@ -1288,3 +1288,41 @@ This milestone expands the demonstrated Solidity reasoning surface into **piecew
 Boundary: this benchmark establishes the invariant violation and causal reproduction in the pinned historical Canto revision. It is evidence of CYDRA's ability to derive and verify this mechanism on a directly executable unfamiliar target; it is not by itself an open-ended proof that every temporal/accounting defect can be discovered.
 
 The Solidity maturity gate remains open. The next cycle should deliberately seek another unfamiliar mechanism that is not reducible to the current reasoning surfaces, while preserving direct execution, blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
+## 61. Unfamiliar control-flow progress failure — blind causal finding with independent reproduction
+
+A ninth materially distinct Solidity mechanism has now completed the full causal/reproduction finding gate on an unfamiliar target whose actual pinned repository and dependency graph were executed: a reachable continue branch in a gas-optimized loop bypasses the loop-counter update, so a previously processed element can prevent the loop from advancing and make the whole batch execution exhaust gas.
+
+Target:
+- repository: https://github.com/code-423n4/2023-09-venus.git;
+- pinned revision: 23f5db740d8a794ac563ac32195b675c53042bb4;
+- source: contracts/Tokens/Prime/Prime.sol;
+- blind target function: updateScores;
+- observed mechanism: a loop over users checks isScoreUpdated[nextScoreUpdateRoundId][user] and executes continue without advancing i.
+
+The new reasoning surface derives a loop progress / termination invariant from source topology: every reachable iteration of a terminating loop must make progress toward its termination condition, and a continue branch must not bypass the loop-counter or termination-state update. The planner then asks for a discriminating execution containing an already-processed first element followed by a still-unprocessed element. It does not receive the historical finding as its answer.
+
+The blind campaign completed:
+
+Target -> System Model -> Loop Progress Invariant -> Blind Hypothesis -> Experiment -> Actual Target Execution -> Causal Control -> Causal Verification -> Independent Reproduction -> Finding Gate
+
+Dedicated CI run #25 (run ID 35555875658, artifact ID 10620885446):
+- blind hypothesis: H-CONTROL-FLOW-updateScores;
+- invariant: INV-CONTROL-FLOW-updateScores;
+- vulnerable execution: executed=true, tests_run=1, tests_failed=1;
+- vulnerable observation: with the first supplied user already marked as processed and a second user still pending, updateScores failed to make progress and exhausted the bounded gas call;
+- patched causal control: only the continue branch was changed to increment i before continuing;
+- patched execution: executed=true, tests_run=1, tests_failed=0;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction verification: VERIFIED;
+- finding gate: READY.
+
+The target was executed through its real upgradeable ERC1967 proxy boundary. The pinned Venus repository was cloned at the historical revision, its declared npm dependency graph was installed, Foundry dependencies were initialized, and the generated test executed against the real target implementation. A minimal access-control contract was used only as an environmental dependency required to reach the target's externally callable setup; the vulnerable loop and its state transition remained the pinned target implementation.
+
+This milestone demonstrates a materially different reasoning capability from the accounting, authorization, lifecycle, transfer, rounding, state-persistence, signature, and epoch-boundary surfaces: control-flow progress / termination reasoning. CYDRA derived the invariant from loop topology, selected an input that makes the problematic branch reachable, isolated the progress update as the causal variable, and reproduced the differential independently.
+
+Boundary: this benchmark establishes the control-flow invariant violation and causal reproduction in the pinned historical Venus revision. It does not claim that every non-terminating-loop defect is discoverable by this single structural surface, and the synthetic patch is a causal control rather than a claim about the historical production remediation.
+
+The Solidity maturity gate remains open. The demonstrated surface count is now nine materially distinct mechanisms, but the final gate still requires evidence that CYDRA can select and validate findings beyond its existing explicitly designed reasoning surfaces. The next campaign should therefore move toward a more open-ended blind target where the vulnerability class and specialized surface are not supplied in advance, while preserving direct execution, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
+
