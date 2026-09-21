@@ -1,6 +1,9 @@
 name: Benchmark 031 strict blind resource authorization
 
 on:
+  push:
+    branches:
+      - feat/benchmark-031-resource-authorization-2026-09-21
   pull_request:
     paths:
       - "src/cydra/**"
