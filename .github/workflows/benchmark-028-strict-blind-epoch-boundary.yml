@@ -1,6 +1,8 @@
 name: CYDRA strict blind epoch-boundary research
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - "src/cydra/**"
