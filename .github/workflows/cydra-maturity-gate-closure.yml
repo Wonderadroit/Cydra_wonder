@@ -52,6 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     continue-on-error: true
+    env:
+      PYTHONPATH: .
     strategy:
       fail-fast: false
       matrix:
@@ -87,6 +89,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - uses: oven-sh/setup-bun@v2
       - name: Install CYDRA
         run: |
           python -m pip install -e .
