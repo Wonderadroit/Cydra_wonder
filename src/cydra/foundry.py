@@ -11,6 +11,7 @@ from typing import Literal
 
 from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothesis, ParameterModel
 from .initialization_shapes import render_initialization_test_body
+from .interface_resolver import resolve_import, resolve_interface
 
 
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
@@ -598,6 +599,28 @@ def _model_initialization_source(
     resolved_interface_names = {
         interface.name: interface for interface in contract_model.inherited_resolved_interfaces
     }
+    # Resolve bare imported interface ABI types directly from the target source,
+    # not only through inheritance. Initializers commonly accept an interface
+    # imported by the concrete contract without inheriting it.
+    direct_parameter_interfaces: dict[str, object] = {}
+    project_root = None
+    if output_path is not None:
+        output = Path(output_path)
+        project_root = next(
+            (ancestor for ancestor in (output.parent, *output.parents) if (ancestor / "foundry.toml").exists()),
+            None,
+        )
+    if project_root is not None:
+        for parameter in function.parameters:
+            base = parameter.type.strip().split()[0].rstrip("[]")
+            if base in resolved_interface_names or _builtin_type(base) or "." in base:
+                continue
+            try:
+                direct_parameter_interfaces[base] = resolve_interface(
+                    project_root, contract_model.source, base
+                )
+            except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                continue
     for parameter in function.parameters:
         base = parameter.type.strip().split()[0].rstrip("[]")
         if base in resolved_interface_names:
@@ -605,9 +628,11 @@ def _model_initialization_source(
     custom_imports: list[str] = []
     for namespace in sorted(custom_namespaces):
         inherited_interface = resolved_interface_names.get(namespace)
-        if inherited_interface is not None and namespace == inherited_interface.name:
+        direct_interface = direct_parameter_interfaces.get(namespace)
+        resolved_parameter_interface = inherited_interface or direct_interface
+        if resolved_parameter_interface is not None and namespace == resolved_parameter_interface.name:
             custom_imports.append(
-                f'import {{ {namespace} }} from "{_resolved_interface_import_path(inherited_interface.source_path, output_path or "generated.t.sol")}";'
+                f'import {{ {namespace} }} from "{_resolved_interface_import_path(resolved_parameter_interface.source_path, output_path or "generated.t.sol")}";'
             )
             continue
         match = re.search(
