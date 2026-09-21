@@ -1336,6 +1336,16 @@ This milestone is materially different from the prior specialized benchmarks bec
 
 **Maturity gate:** still open. This milestone establishes the first open-ended selection-and-verification result, but it is one bounded class-hidden campaign. Solidity maturity should close only after repeated open-ended unfamiliar-target campaigns demonstrate that CYDRA can choose and causally verify findings across materially different mechanisms without benchmark-provided vulnerability-class guidance.
 
+
+## Milestone 64 — strict blind signature-reuse finding (Benchmark 025)
+- Benchmark 025 reran the unfamiliar pinned Phi signature-reuse target through CYDRA's normal investigation pipeline rather than injecting the signature-reuse reasoning surface or custom experiment planner.
+- Blind context supplied no vulnerability class, target function, state surface, reasoning-surface injection, or benchmark answer. The class-neutral selector independently selected H-SIGNATURE-REUSE-signatureClaim.
+- The selected hypothesis was tested against the actual pinned Phi repository and dependency graph. Vulnerable execution FAIL demonstrated that the same signed authorization was accepted twice; the isolated patched control PASS rejected reuse.
+- Canonical causal verification reached VERIFIED. Independent vulnerable reproduction FAIL and independent patched reproduction PASS; finding gate READY.
+- The strict blind run completed successfully in CI, and the canonical Solidity research loop on the merged main commit also completed successfully.
+- This strengthens the generalization evidence because the historical signature-reuse capability survived the normal blind orchestration boundary instead of being manually supplied by the benchmark harness.
+- The Solidity maturity gate remains open. Benchmark 025 is a third consecutive open-ended/class-hidden causal success across signed metadata integrity, role-intent authorization, and signature-consumption mechanisms, but closure still requires further unfamiliar-target campaigns and evidence that CYDRA continues to discover findings without accumulating target-shaped detectors.
+
 ## Milestone 63 — class-hidden role-intent blind finding (Benchmark 023)
 - Benchmark 023 exercised a stricter open-ended blind campaign against unfamiliar pinned Blackhole target contracts/SetterTopNPoolsStrategy.sol at revision 92fff849d3b266e609e6d63478c4164d9f608e91.
 - CYDRA received only the pinned source target. The benchmark did not supply the vulnerability class, target function, exploit sequence, or expected answer.
