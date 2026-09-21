@@ -28,7 +28,7 @@ jobs:
       - name: Install Python dependencies
         run: pip install -e . pytest
       - name: Run structural regression
-        run: pytest -q tests/test_structural_read_only_reentrancy.py
+        run: pytest -q tests/test_read_only_reentrancy.py
       - name: Run strict blind campaign
         run: python scripts/run_benchmark_033_strict_blind_readonly_bond.py
       - name: Upload benchmark artifact
