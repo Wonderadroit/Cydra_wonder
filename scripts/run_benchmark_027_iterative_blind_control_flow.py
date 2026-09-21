@@ -3,16 +3,16 @@ from __future__ import annotations
 import argparse
 import json
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from cydra.canonical_cycle import run_canonical_differential_cycle
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
-from cydra.hypothesis_selection import select_next_hypothesis
 from cydra.hypotheses import Hypothesis as CanonicalHypothesis
 from cydra.impact import ImpactAssessment, ImpactLevel
 from cydra.pipeline import investigate
+from cydra.research_loop import run_research_loop
 from cydra.system_model import Edge, Node, SystemModel
-from cydra.solidity_model import parse_solidity
 
 from run_benchmark_005_blind import run_initialization
 from run_benchmark_021_unfamiliar_control_flow import (
@@ -23,6 +23,14 @@ from run_benchmark_021_unfamiliar_control_flow import (
     run_target,
     patch_target,
 )
+
+
+@dataclass(frozen=True)
+class IterationObservation:
+    status: str
+    kind: str
+    payload: object
+
 
 def canonical_model(hypothesis):
     model = SystemModel()
@@ -47,6 +55,7 @@ def canonical_model(hypothesis):
     model.add_edge(Edge(f"observation:{observation_id}", "tests", hypothesis_id, {}))
     return model, CanonicalHypothesis(hypothesis.hypothesis_id, hypothesis.claim, 0.5), observation_id
 
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("backtest-artifacts/iterative-blind-control-flow"))
@@ -59,48 +68,62 @@ def main() -> int:
         # Strict blind: only the target source is supplied to the normal pipeline.
         investigation = investigate(source, target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_PATH}")
         experiments = {e.hypothesis_id: e for e in investigation.experiments}
+        contract = next(c for c in investigation.contracts if c.name == "Prime")
 
-        first = select_next_hypothesis(
-            investigation.hypotheses, investigation.invariants, investigation.experiments
+        # Benchmark-specific execution is injected into the generic research loop.
+        # The loop itself only knows select -> execute -> observe -> reselect.
+        def execute_selected(hypothesis, experiment):
+            if hypothesis.invariant_id == "INV-INIT-001":
+                _, execution, outcome = run_initialization(
+                    target, hypothesis, experiment, contract
+                )
+                if not execution.executed:
+                    raise RuntimeError(
+                        "selected initialization hypothesis was not executable: "
+                        + json.dumps(execution.__dict__, default=str)
+                    )
+                return IterationObservation(
+                    outcome.internal_status,
+                    "initialization",
+                    (execution, outcome),
+                )
+
+            if not hypothesis.invariant_id.startswith("INV-CONTROL-FLOW-"):
+                raise RuntimeError("no benchmark executor is bound for selected hypothesis: " + hypothesis.hypothesis_id)
+            payload = run_target(target, "vulnerable")
+            return IterationObservation(payload["status"], "target", payload)
+
+        def status_of(observation):
+            return observation.status
+
+        loop = run_research_loop(
+            investigation.hypotheses,
+            investigation.invariants,
+            investigation.experiments,
+            execute=execute_selected,
+            status_of=status_of,
+            max_rounds=2,
         )
+        if len(loop.rounds) != 2:
+            raise SystemExit("iterative research loop did not produce two observations")
 
-        # The first choice is evidence, not an oracle: execute exactly what CYDRA
-        # selected, then use the measured outcome to decide whether it remains viable.
+        first_round, second_round = loop.rounds
+        first = first_round.selection
+        second = second_round.selection
+
         if first.hypothesis.invariant_id != "INV-INIT-001":
             raise SystemExit(
                 "unexpected first hypothesis for this observed target: "
                 + first.hypothesis.hypothesis_id
             )
 
-        contract = next(c for c in investigation.contracts if c.name == "Prime")
-        init_experiment = experiments[first.hypothesis.hypothesis_id]
-        _, init_execution, init_outcome = run_initialization(
-            target, first.hypothesis, init_experiment, contract
-        )
-        if not init_execution.executed:
-            raise RuntimeError("initialization hypothesis was not executable: " + json.dumps(init_execution.__dict__, default=str))
-
-        # The initialization result is a real observation. A proposed/ambiguous
-        # result must remain eligible, but the selector should prefer a fresh
-        # hypothesis rather than repeating the same unresolved experiment.
+        init_execution, init_outcome = first_round.observation.payload
         if init_outcome.internal_status not in {"proposed", "ambiguous", "rejected", "contradicted"}:
             raise SystemExit(
                 "unexpected initialization classifier status: "
                 + init_outcome.internal_status
             )
 
-        # Feed the actual classifier result back into the class-neutral selector.
-        # Do not manually exclude the first hypothesis: this benchmark exercises
-        # the reusable evidence -> selection boundary introduced in PR #139.
-        observed_statuses = {
-            first.hypothesis.hypothesis_id: init_outcome.internal_status,
-        }
-        second = select_next_hypothesis(
-            investigation.hypotheses,
-            investigation.invariants,
-            investigation.experiments,
-            observed_statuses=observed_statuses,
-        )
         hypothesis = second.hypothesis
         if not hypothesis.invariant_id.startswith("INV-CONTROL-FLOW-"):
             raise SystemExit(
@@ -109,7 +132,7 @@ def main() -> int:
             )
 
         experiment = experiments[hypothesis.hypothesis_id]
-        vulnerable = run_target(target, "vulnerable")
+        vulnerable = second_round.observation.payload
 
     with tempfile.TemporaryDirectory(prefix="cydra-venus-iterative-patched-") as tmp:
         target = clone_target(Path(tmp) / "target")
@@ -161,7 +184,9 @@ def main() -> int:
         "first_selection": first.hypothesis.__dict__,
         "first_execution": init_execution.__dict__,
         "first_classification": init_outcome.__dict__,
-        "observed_statuses_after_first_experiment": observed_statuses,
+        "observed_statuses_after_first_experiment": {
+            first.hypothesis.hypothesis_id: first_round.status,
+        },
         "second_selection": {"hypothesis": hypothesis.__dict__, "score": second.score},
         "experiment": experiment.__dict__,
         "vulnerable": vulnerable,
@@ -171,12 +196,13 @@ def main() -> int:
         "independent_patched": independent_patched,
         "reproduction_verified": reproduction_verified,
         "finding_gate": gate.decision.value,
-        "boundary": "strict blind initial selection, actual pinned Venus execution for the selected control-flow hypothesis, isolated causal patch, and independent reproduction.",
+        "boundary": "strict blind initial selection, generic select-execute-observe-reselect orchestration, actual pinned Venus execution for the selected control-flow hypothesis, isolated causal patch, and independent reproduction.",
     }
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "result.json").write_text(json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8")
     print(json.dumps(payload, indent=2, default=str))
     return 0 if gate.decision.value == "READY" else 1
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
