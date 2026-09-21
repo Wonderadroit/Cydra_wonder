@@ -96,9 +96,9 @@ jobs:
         run: |
           set +e
           mkdir -p backtest-artifacts/campaign-status
-          ${{ matrix.name }}
+          ${{ matrix.command }}
           rc=$?
-          printf '{"benchmark":"${{ matrix.name }}","exit_code":%s}\n' '${{ matrix.name }}' "$rc" > "backtest-artifacts/campaign-status/result.json"
+          printf '{"benchmark":"${{ matrix.name }}","exit_code":%s}\n' "$rc" > "backtest-artifacts/campaign-status/result.json"
           exit 0
       - name: Upload campaign evidence
         if: always()
