@@ -108,9 +108,12 @@ def clone_target(destination: Path) -> Path:
         ("git", "-C", str(destination), "submodule", "update", "--init", "--recursive"),
         check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
-    subprocess.run(
+    npm = subprocess.run(
         ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"),
-        cwd=destination, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        cwd=destination, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    if npm.returncode != 0:
+        raise RuntimeError("npm dependency installation failed:\n" + npm.stdout[-12000:])
     )
     subprocess.run(
         ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
