@@ -89,8 +89,8 @@ def canonical_model(h):
     m=SystemModel(); fid=f"function:V3Utils:{h.target_function}"; iid=f"invariant:{h.invariant_id}"; hid=f"hypothesis:{h.hypothesis_id}"; oid="resource-owner-caller-binding"
     m.add_node(Node("contract:V3Utils","contract","V3Utils",{"provenance":"pinned historical source"}))
     m.add_node(Node(fid,"function",h.target_function,{"provenance":"pinned historical source"}))
-    m.add_node(Node(iid,"invariant",h.statement,{"status":"inferred","confidence":0.90}))
-    m.add_node(Node(hid,"hypothesis",h.statement,{"belief":0.5}))
+    m.add_node(Node(iid,"invariant","An externally callable action over an owned resource must bind the caller to the resource owner or an explicitly delegated actor before mutating or withdrawing that resource.",{"status":"inferred","confidence":0.90}))
+    m.add_node(Node(hid,"hypothesis",h.claim,{"belief":0.5}))
     m.add_node(Node("observation:"+oid,"observation","an approved position can be targeted by an unrelated caller unless the action binds caller to the resource owner or delegate",{"status":"planned","hypothesis_id":hid,"target_function_id":fid,"binding_status":"bound","experiment_binding":{"hypothesis_id":hid,"observation_id":"observation:"+oid,"target_function_id":fid}}))
     m.add_edge(Edge(iid,"informs",hid,{})); m.add_edge(Edge("observation:"+oid,"tests",hid,{}))
     return m,CanonicalHypothesis(h.hypothesis_id,h.claim,0.5),oid
