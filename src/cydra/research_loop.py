@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Callable, Generic, TypeVar
 
 from .hypothesis_selection import HypothesisSelection, select_next_hypothesis
+from .impact_priority import FindingCollection
 from .models import Experiment, Hypothesis, Invariant
 
 Observation = TypeVar("Observation")
@@ -26,6 +27,7 @@ class ResearchRound(Generic[Observation]):
 class ResearchLoopResult(Generic[Observation]):
     """The complete sequence of selections and measured observations."""
     rounds: tuple[ResearchRound[Observation], ...]
+    findings: FindingCollection | None = None
 
 def run_research_loop(
     hypotheses: tuple[Hypothesis, ...],
@@ -35,6 +37,8 @@ def run_research_loop(
     execute: Callable[[Hypothesis, Experiment], Observation],
     status_of: Callable[[Observation], str],
     stop_when: Callable[[Observation], bool] | None = None,
+    finding_of: Callable[[Observation], object | None] | None = None,
+    finding_target: str = "",
     max_rounds: int = 2,
 ) -> ResearchLoopResult[Observation]:
     """Run class-neutral select -> execute -> observe -> reselect cycles."""
@@ -42,6 +46,7 @@ def run_research_loop(
         raise ValueError("max_rounds must be at least 1")
     observed_statuses: dict[str, str] = {}
     rounds: list[ResearchRound[Observation]] = []
+    findings = FindingCollection(finding_target) if finding_of is not None else None
     experiment_by_id = {item.hypothesis_id: item for item in experiments}
     for _ in range(max_rounds):
         selection = select_next_hypothesis(
@@ -56,6 +61,12 @@ def run_research_loop(
             raise ValueError("observation status must be non-empty")
         observed_statuses[selection.hypothesis.hypothesis_id] = status
         rounds.append(ResearchRound(selection, observation, status))
+        if finding_of is not None:
+            finding = finding_of(observation)
+            if finding is not None:
+                if findings is None:
+                    raise AssertionError("finding collection was not initialized")
+                findings = findings.add(finding)
         if stop_when is not None and stop_when(observation):
             break
-    return ResearchLoopResult(tuple(rounds))
+    return ResearchLoopResult(tuple(rounds), findings)
