@@ -1,0 +1,33 @@
+name: CYDRA strict blind epoch discovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_024_strict_blind_epoch.py"
+      - "benchmarks/024_strict_blind_epoch/**"
+      - ".github/workflows/benchmark-024-strict-blind-epoch.yml"
+  pull_request:
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_024_strict_blind_epoch.py"
+      - "benchmarks/024_strict_blind_epoch/**"
+      - ".github/workflows/benchmark-024-strict-blind-epoch.yml"
+  workflow_dispatch:
+
+jobs:
+  strict-blind-epoch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+      - run: python -m pip install -e . pytest
+      - run: pytest -q tests
+      - run: PYTHONPATH=src python scripts/run_benchmark_024_strict_blind_epoch.py --output backtest-artifacts/strict-blind-epoch
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-024-strict-blind-epoch
+          path: backtest-artifacts/strict-blind-epoch/
