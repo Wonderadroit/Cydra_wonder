@@ -29,22 +29,14 @@ import { TransparentUpgradeableProxy } from "@openzeppelin/contracts/proxy/trans
 
 contract CydraMockMultiVault {
     address internal atomWarden;
-
-    constructor(address _atomWarden) {
-        atomWarden = _atomWarden;
-    }
-
-    function getAtomWarden() external view returns (address) {
-        return atomWarden;
-    }
+    constructor(address _atomWarden) { atomWarden = _atomWarden; }
+    function getAtomWarden() external view returns (address) { return atomWarden; }
 }
 
 contract CydraSignedMetadataTest is Test {
-    function testCydraSignedMetadataBinding() public {
-        uint256 ownerKey = 0xA11CE;
+    function _deployWallet(uint256 ownerKey) internal returns (AtomWallet wallet, address entryPoint) {
         address owner = vm.addr(ownerKey);
-        address entryPoint = makeAddr("entryPoint");
-
+        entryPoint = makeAddr("entryPoint");
         CydraMockMultiVault multiVault = new CydraMockMultiVault(owner);
         AtomWallet walletImpl = new AtomWallet();
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
@@ -57,62 +49,68 @@ contract CydraSignedMetadataTest is Test {
                 bytes32("ATOM")
             )
         );
-        AtomWallet wallet = AtomWallet(payable(address(proxy)));
+        wallet = AtomWallet(payable(address(proxy)));
+    }
 
-        PackedUserOperation memory userOp = PackedUserOperation({
-            sender: address(wallet),
-            nonce: 0,
-            initCode: "",
-            callData: "",
-            accountGasLimits: bytes32(0),
-            preVerificationGas: 0,
-            gasFees: bytes32(0),
-            paymasterAndData: "",
-            signature: ""
-        });
+    function _emptyUserOp(address wallet) internal pure returns (PackedUserOperation memory userOp) {
+        userOp.sender = wallet;
+        userOp.nonce = 0;
+        userOp.initCode = "";
+        userOp.callData = "";
+        userOp.accountGasLimits = bytes32(0);
+        userOp.preVerificationGas = 0;
+        userOp.gasFees = bytes32(0);
+        userOp.paymasterAndData = "";
+        userOp.signature = "";
+    }
 
-        bytes32 userOpHash = keccak256("userOpHash");
-        uint48 originalValidUntil = uint48(block.timestamp + 1);
-        uint48 originalValidAfter = 0;
-
-        // The signer commits to the complete 77-byte authorization format.
-        bytes32 signedHash = keccak256(
-            abi.encodePacked(userOpHash, originalValidUntil, originalValidAfter)
-        );
+    function _signWindow(
+        uint256 ownerKey,
+        bytes32 userOpHash,
+        uint48 validUntil,
+        uint48 validAfter
+    ) internal returns (bytes memory) {
+        bytes32 signedHash = keccak256(abi.encodePacked(userOpHash, validUntil, validAfter));
         bytes32 digest = keccak256(
             abi.encodePacked("\x19Ethereum Signed Message:\n32", signedHash)
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerKey, digest);
-        bytes memory baseSig = abi.encodePacked(r, s, v);
+        return abi.encodePacked(r, s, v, validUntil, validAfter);
+    }
 
-        userOp.signature = bytes.concat(
-            baseSig,
-            abi.encodePacked(originalValidUntil, originalValidAfter)
-        );
+    function testCydraSignedMetadataBinding() public {
+        uint256 ownerKey = 0xA11CE;
+        (AtomWallet wallet, address entryPoint) = _deployWallet(ownerKey);
+        PackedUserOperation memory userOp = _emptyUserOp(address(wallet));
+        bytes32 userOpHash = keccak256("userOpHash");
+        uint48 originalValidUntil = uint48(block.timestamp + 1);
+
+        userOp.signature = _signWindow(ownerKey, userOpHash, originalValidUntil, 0);
 
         vm.prank(entryPoint);
-        uint256 validationDataOriginal = wallet.validateUserOp(userOp, userOpHash, 0);
-        ValidationData memory parsedOriginal = _parseValidationData(validationDataOriginal);
-        assertEq(parsedOriginal.aggregator, address(0), "original authorization must validate");
-        assertEq(parsedOriginal.validUntil, originalValidUntil);
-        assertEq(parsedOriginal.validAfter, originalValidAfter);
+        ValidationData memory original = _parseValidationData(
+            wallet.validateUserOp(userOp, userOpHash, 0)
+        );
+        assertEq(original.aggregator, address(0), "original authorization must validate");
 
-        // Move beyond the signed validity window, then change only the metadata.
         vm.warp(originalValidUntil + 1);
         uint48 attackerValidUntil = uint48(block.timestamp + 30 days);
         userOp.signature = bytes.concat(
-            baseSig,
-            abi.encodePacked(attackerValidUntil, originalValidAfter)
+            _signWindow(ownerKey, userOpHash, originalValidUntil, 0),
+            ""
+        );
+        // Preserve the original signature bytes but replace only the 12-byte metadata suffix.
+        userOp.signature = bytes.concat(
+            bytes.slice(userOp.signature, 0, 65),
+            abi.encodePacked(attackerValidUntil, uint48(0))
         );
 
         vm.prank(entryPoint);
-        uint256 validationDataModified = wallet.validateUserOp(userOp, userOpHash, 0);
-        ValidationData memory parsedModified = _parseValidationData(validationDataModified);
-
-        // Security invariant: the same signature must not authenticate a new window.
-        // Vulnerable source returns aggregator == address(0), so this assertion fails.
+        ValidationData memory modified = _parseValidationData(
+            wallet.validateUserOp(userOp, userOpHash, 0)
+        );
         assertEq(
-            parsedModified.aggregator,
+            modified.aggregator,
             address(1),
             "signature accepted metadata that was not authenticated"
         );
