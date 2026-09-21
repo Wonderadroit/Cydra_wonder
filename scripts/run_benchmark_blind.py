@@ -187,20 +187,32 @@ def clone_target(repo: str, ref: str, destination: Path) -> None:
 
 
 def prepare_target_project(project: Path) -> None:
-    """Materialize declared JavaScript dependencies without target-specific knowledge."""
+    """Materialize declared dependencies needed by the generic experiment harness."""
     package = project / "package.json"
-    if not package.exists():
-        return
-    # Prefer an npm lockfile when both lockfiles exist. Some audit targets
-    # retain a stale yarn.lock beside the authoritative package-lock.json;
-    # frozen Yarn then fails before CYDRA can inspect the target.
-    if (project / "package-lock.json").exists():
-        command = ("npm", "ci", "--ignore-scripts")
-    elif (project / "yarn.lock").exists():
-        command = ("yarn", "install", "--frozen-lockfile", "--ignore-scripts")
-    else:
-        command = ("npm", "install", "--ignore-scripts")
-    subprocess.run(command, cwd=project, check=True)
+    if package.exists():
+        # Prefer an npm lockfile when both lockfiles exist. Some audit targets
+        # retain a stale yarn.lock beside the authoritative package-lock.json;
+        # frozen Yarn then fails before CYDRA can inspect the target.
+        if (project / "package-lock.json").exists():
+            command = ("npm", "ci", "--ignore-scripts")
+        elif (project / "yarn.lock").exists():
+            command = ("yarn", "install", "--frozen-lockfile", "--ignore-scripts")
+        else:
+            command = ("npm", "install", "--ignore-scripts")
+        subprocess.run(command, cwd=project, check=True)
+
+    # Generated Foundry experiments import forge-std/Test.sol. Some otherwise
+    # valid Solidity targets use Hardhat/npm dependencies and do not vendor
+    # forge-std at all. Materialize the standard Foundry test library only when
+    # the target lacks it; never replace an existing target dependency.
+    foundry_config = project / "foundry.toml"
+    forge_std = project / "lib" / "forge-std"
+    if foundry_config.exists() and not forge_std.exists():
+        subprocess.run(
+            ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
+            cwd=project,
+            check=True,
+        )
 
 
 def _contract_for_hypothesis(result, hypothesis):
