@@ -48,23 +48,18 @@ def _loop_arrays(source: str) -> set[str]:
 
 def _storage_array_names(source: str) -> set[str]:
     names: set[str] = set()
-    for match in re.finditer(
+    patterns = (
+        r"mapping\s*\([^;{}]*?=>\s*([A-Za-z_]\w*)\[\]\)\s+(?:public|private|internal)?\s*([A-Za-z_]\w*)\s*;",
         r"\b(?:address|uint\d*|bytes\d*|bool|[A-Za-z_]\w*)\s*\[\]\s*(?:public|private|internal)?\s*([A-Za-z_]\w*)\s*;",
-        source,
-    ):
-        names.add(match.group(1))
-    for match in re.finditer(
         r"\b(?:public|private|internal)\s+(?:address|uint\d*|bytes\d*|bool|[A-Za-z_]\w*)\[\]\s*([A-Za-z_]\w*)\s*;",
-        source,
-    ):
-        names.add(match.group(1))
-    for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\[[^\]]*\]\s*;", source):
-        if match.group(1) not in {"memory", "calldata"}:
-            names.add(match.group(1))
+    )
+    for index, pattern in enumerate(patterns):
+        for match in re.finditer(pattern, source):
+            names.add(match.group(2) if index == 0 else match.group(1))
     return names
 
 
-def _caller_growth_evidence(contract: ContractModel, array_name: str) -> bool:
+def _caller_growth_evidence(contract: ContractModel, array_name: str)(contract: ContractModel, array_name: str) -> bool:
     source = _source(contract)
     # A loop is materially more concerning when a public/external entry point can
     # append to the same storage collection. This is a structural witness, not a
@@ -92,6 +87,16 @@ def generate_unbounded_iteration_hypotheses(
     if not candidates:
         return UnboundedIterationContribution((), ())
 
+    loop_functions = {
+        fn.name: tuple(name for name in candidates if re.search(
+            rf"\b{re.escape(name)}(?:\[[^\]]+\])?\.length\b", _body(source, fn.name)
+        ))
+        for fn in contract.functions
+    }
+    loop_functions = {name: arrays for name, arrays in loop_functions.items() if arrays}
+    if not loop_functions:
+        return UnboundedIterationContribution((), ())
+
     invariant_id = f"INV-UNBOUNDED-ITERATION-{contract.name}"
     invariant = Invariant(
         invariant_id,
@@ -104,14 +109,17 @@ def generate_unbounded_iteration_hypotheses(
         if function.visibility not in {"public", "external"}:
             continue
         body = _body(source, function.name)
-        if not body:
-            continue
-        related: list[str] = []
-        for array_name in candidates:
-            if re.search(rf"\b{re.escape(array_name)}\b", body) or re.search(
-                rf"\b_isLiquidatable\s*\(", body
-            ):
-                related.append(array_name)
+        called_helpers = [
+            helper for helper in loop_functions
+            if helper != function.name and re.search(rf"\b{re.escape(helper)}\s*\(", body)
+        ]
+        direct_arrays = [
+            name for name in candidates
+            if re.search(rf"\b{re.escape(name)}(?:\[[^\]]+\])?\.length\b", body)
+        ]
+        related = sorted(set(direct_arrays + [
+            array for helper in called_helpers for array in loop_functions[helper]
+        ]))
         if not related:
             continue
         growable = any(_caller_growth_evidence(contract, name) for name in related)
