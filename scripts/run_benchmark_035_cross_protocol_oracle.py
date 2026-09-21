@@ -82,14 +82,25 @@ def setup_foundry(destination: Path) -> Path:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    subprocess.run(
-        ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
-        cwd=destination,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
+    install_error = None
+    for attempt in range(1, 4):
+        completed = subprocess.run(
+            ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
+            cwd=destination,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        if completed.returncode == 0:
+            install_error = None
+            break
+        install_error = (
+            f"forge-std installation attempt {attempt}/3 failed "
+            f"(exit {completed.returncode}):\n{completed.stdout[-8000:]}"
+        )
+    if install_error is not None:
+        raise RuntimeError(install_error)
     target_dir = destination / "benchmarks" / "035_cross_protocol_oracle"
     target_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(TARGET_PATH, target_dir / "Target.sol")
