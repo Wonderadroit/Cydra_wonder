@@ -89,6 +89,7 @@ class Hypothesis:
     # relevant. This remains class-neutral so sequence planners do not have to infer
     # peer functions from prose or benchmark-specific names.
     related_functions: tuple[str, ...] = field(default_factory=tuple)
+    potential_impact: str = "UNKNOWN"
 
 
 @dataclass(frozen=True)

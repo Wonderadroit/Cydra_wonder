@@ -29,3 +29,9 @@ def test_duplicate_finding_is_rejected():
 def test_potential_priority_is_not_a_severity_verdict():
     assert priority_for_potential(ImpactPriority.CRITICAL) > priority_for_potential(ImpactPriority.LOW)
     assert priority_for_potential(ImpactPriority.UNKNOWN) == 1.0
+
+
+def test_potential_impact_is_available_on_hypothesis_without_being_final_severity():
+    from cydra.models import Hypothesis
+    h = Hypothesis("h", "claim", "i", "target", "permissionless", "asset loss", potential_impact="CRITICAL")
+    assert h.potential_impact == "CRITICAL"
