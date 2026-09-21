@@ -35,7 +35,7 @@ from .structural_authorization import generate_structural_access_control_hypothe
 from .structural_initialization import generate_structural_initialization_hypotheses
 from .structural_guard_parity import generate_guard_parity_hypotheses
 from .structural_idempotency import generate_idempotency_hypotheses
-from .structural_read_only_reentrancy import generate_read_only_reentrancy_hypotheses
+from .structural_read_only_reentrancy import generate_read_only_reentrancy_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses
 from .structural_transfer_accounting import generate_transfer_accounting_hypotheses
 from .structural_redemption_rounding import generate_redemption_rounding_hypotheses
 from .structural_cross_contract_economic import generate_cross_contract_economic_hypotheses
@@ -105,7 +105,7 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_temporal_precondition_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-IDEMPOTENCY-"):
         return plan_idempotency_experiment(hypothesis)
-    if hypothesis.invariant_id.startswith("INV-READONLY-REENTRANCY-"):
+    if hypothesis.invariant_id.startswith(("INV-READONLY-REENTRANCY-", "INV-READONLY-XCONTRACT-")):
         return plan_read_only_reentrancy_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-"):
         return plan_transfer_accounting_experiment(hypothesis)
@@ -213,7 +213,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
