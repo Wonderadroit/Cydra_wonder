@@ -209,6 +209,7 @@ def main() -> int:
         first_observation = None
         if hypothesis.hypothesis_id.startswith("H-EXTERNAL-OUTCOME-"):
             first_observation = run_external_outcome_probe(target)
+            print("first research-loop observation:", json.dumps(first_observation, indent=2))
             selection = select_next_hypothesis(
                 investigation.hypotheses,
                 investigation.invariants,
