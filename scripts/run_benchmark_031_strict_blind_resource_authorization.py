@@ -29,7 +29,7 @@ contract CydraResourceAuthorizationTest is Test {
     address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
     V3Utils v3utils;
     function setUp() external {
-        vm.createSelectFork("__CYDRA_FORK_RPC__", 15489169);
+        vm.createSelectFork("__CYDRA_FORK_RPC__", 15500001);
         v3utils = new V3Utils(NPM, EX0x, UNIVERSAL_ROUTER, PERMIT2);
     }
     function _instructions(address attacker, uint128 liquidity) internal view returns (V3Utils.Instructions memory) {
