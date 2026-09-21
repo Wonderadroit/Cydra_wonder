@@ -133,8 +133,8 @@ def test_blind_auth_renderer_handles_legacy_constructor_and_no_forge_std(tmp_pat
     source = output.read_text(encoding="utf-8")
     assert "pragma solidity ^0.6.12;" in source
     assert 'import {Test} from "forge-std/Test.sol";' not in source
-    assert "type(Legacy).creationCode" in source
-    assert "abi.encode(IERC20(address(0x1001)), AlEth(address(0x1001)), address(0x1001), address(0x1001))" in source
+    assert "target = new Legacy(" in source
+    assert "new Legacy(IERC20(address(0x1001)), AlEth(address(0x1001)), address(0x1001), address(0x1001))" in source
 
 
 def test_blind_auth_renderer_asserts_modeled_public_state(tmp_path: Path):
@@ -189,7 +189,6 @@ contract DcntEth {
         creation_bytecode="6000",
     )
     rendered = output.read_text(encoding="utf-8")
-    assert "CydraBlindAuthorizationStateView(target).router()" in rendered
-    assert "interface CydraBlindAuthorizationStateView" in rendered
-    assert "beforeState" in rendered
+    assert "target.router()" in rendered
+        assert "beforeState" in rendered
     assert "unauthorized caller mutated modeled administrative state" in rendered
