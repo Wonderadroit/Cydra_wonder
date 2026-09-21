@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import math
 
 from .models import Experiment, Hypothesis, Invariant
+from .impact_priority import ImpactPriority, priority_for_potential
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,11 @@ def _information_score(
     evidence_weight = 1.0 + math.log1p(len(hypothesis.evidence_ids))
     discrimination_weight = max(1, len(experiment.discriminates))
     cost = max(experiment.cost, 0.1)
-    return invariant.confidence * evidence_weight * discrimination_weight / cost
+    try:
+        potential = ImpactPriority[str(hypothesis.potential_impact).upper()]
+    except KeyError:
+        potential = ImpactPriority.UNKNOWN
+    return invariant.confidence * evidence_weight * discrimination_weight / cost * priority_for_potential(potential)
 
 
 def select_next_hypothesis(
