@@ -109,7 +109,7 @@ def clone_target(destination: Path) -> Path:
         check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
     npm = subprocess.run(
-        ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"),
+        ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", "--legacy-peer-deps"),
         cwd=destination, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
     if npm.returncode != 0:
