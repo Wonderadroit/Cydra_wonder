@@ -23,5 +23,5 @@ def plan_cross_function_state_experiment(hypothesis: Hypothesis) -> Experiment:
         ),
         cost=1.0,
         target_function=hypothesis.target_function,
-        steps=tuple(\n            [ExperimentStep(function=peer) for peer in hypothesis.related_functions]\n            + [ExperimentStep(function=hypothesis.target_function)]\n        ),
+        steps=tuple(\n            [ExperimentStep(function=hypothesis.related_functions[0])]\n            if hypothesis.related_functions\n            else []\n        ) + (ExperimentStep(function=hypothesis.target_function),),
     )
