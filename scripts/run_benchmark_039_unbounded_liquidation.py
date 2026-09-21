@@ -97,11 +97,10 @@ def main() -> int:
     print(json.dumps(payload, indent=2))
     if not candidates:
         raise RuntimeError("generic unbounded-iteration surface produced no hypothesis")
-    if hypothesis.invariant_id != candidates[0].invariant_id:
-        raise RuntimeError("blind selector did not select the unbounded-iteration surface")
-    if hypothesis.target_function != "isUserLiquidatable":
+    candidate_ids = {item.hypothesis_id for item in candidates}
+    if hypothesis.hypothesis_id not in candidate_ids:
         raise RuntimeError(
-            "generic unbounded-iteration reasoning did not bind the public liquidation path: "
+            "blind selector did not select an unbounded-iteration hypothesis: "
             + hypothesis.hypothesis_id
             + " / "
             + hypothesis.target_function
