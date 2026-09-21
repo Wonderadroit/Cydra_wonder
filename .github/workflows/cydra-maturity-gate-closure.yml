@@ -1,4 +1,5 @@
 name: CYDRA Solidity maturity gate closure campaign
+# Milestone 75 closure validation: full campaign must remain reproducible on the final head.
 
 on:
   pull_request:
