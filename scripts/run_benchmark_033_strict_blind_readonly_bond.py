@@ -23,6 +23,7 @@ pragma solidity 0.8.15;
 
 import "forge-std/Test.sol";
 import "../src/BondFixedTermTeller.sol";
+import "../src/lib/ERC1155.sol";
 
 contract MockERC20 is ERC20 {
     constructor() ERC20("Mock", "MOCK", 18) {}
