@@ -85,12 +85,17 @@ def main() -> int:
         if init_outcome.benchmark_status == "confirmed":
             raise SystemExit("initialization hypothesis unexpectedly confirmed; do not treat it as a false-positive rejection")
 
-        excluded = (first.hypothesis.hypothesis_id,)
+        # Feed the actual classifier result back into the class-neutral selector.
+        # Do not manually exclude the first hypothesis: this benchmark exercises
+        # the reusable evidence -> selection boundary introduced in PR #139.
+        observed_statuses = {
+            first.hypothesis.hypothesis_id: first_classification.internal_status,
+        }
         second = select_next_hypothesis(
             investigation.hypotheses,
             investigation.invariants,
             investigation.experiments,
-            excluded_hypothesis_ids=excluded,
+            observed_statuses=observed_statuses,
         )
         hypothesis = second.hypothesis
         if not hypothesis.invariant_id.startswith("INV-CONTROL-FLOW-"):
@@ -152,7 +157,7 @@ def main() -> int:
         "first_selection": first.hypothesis.__dict__,
         "first_execution": init_execution.__dict__,
         "first_classification": init_outcome.__dict__,
-        "excluded_after_evidence": list(excluded),
+        "observed_statuses_after_first_experiment": observed_statuses,
         "second_selection": {"hypothesis": hypothesis.__dict__, "score": second.score},
         "experiment": experiment.__dict__,
         "vulnerable": vulnerable,
