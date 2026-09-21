@@ -147,7 +147,8 @@ def _imports_for(path: Path) -> tuple[str, ...]:
 def resolve_interface(root: str | Path, importer: str | Path, name: str) -> ResolvedInterface:
     root = Path(root).resolve()
     importer = Path(importer).resolve()
-    for import_path in _imports_for(importer):
+    imports = _imports_for(importer)
+    for import_path in imports:
         if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
             continue
         resolved = resolve_import(root, importer, import_path)
@@ -158,6 +159,21 @@ def resolve_interface(root: str | Path, importer: str | Path, name: str) -> Reso
             )
         path, method = resolved
         return _extract_interface(name, path, method, root)
+
+    # Some repositories alias or aggregate interface declarations in files
+    # whose filename does not match the symbol. Inspect resolved imports as a
+    # generic fallback rather than requiring filename/name coincidence.
+    for import_path in imports:
+        resolved = resolve_import(root, importer, import_path)
+        if resolved is None:
+            continue
+        path, method = resolved
+        try:
+            source = _strip_comments(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            continue
+        if re.search(rf"\binterface\s+{re.escape(name)}\b", source):
+            return _extract_interface(name, path, method, root)
 
     raise FileNotFoundError(
         f"Unable to resolve interface {name}: no declared import matching {name}.sol in {importer}"
