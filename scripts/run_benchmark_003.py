@@ -15,7 +15,7 @@ from cydra.finding import Finding
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
 from cydra.finding_persistence import persist_finding
 from cydra.hypotheses import Hypothesis as CanonicalHypothesis
-from cydra.impact import ImpactAssessment, ImpactLevel
+from cydra.impact import ImpactAssessment, ImpactLevel, ImpactScope, AttackerAccess, Exploitability, Repeatability, Recoverability
 from cydra.models import Evidence
 from cydra.pipeline import investigate
 from cydra.solidity_model import parse_solidity
@@ -206,6 +206,7 @@ def main() -> int:
         "the vulnerable arithmetic path returns more units than the exact-floor invariant permits for a discriminating input",
         ("caller controls the arithmetic input",),
         cycle.causal_verification.evidence_ids,
+        ImpactScope.LIMITED, AttackerAccess.PERMISSIONLESS, Exploitability.DEMONSTRATED, Repeatability.REPEATABLE, Recoverability.RECOVERABLE,
     )
     finding_candidate = FindingCandidate(
         True,

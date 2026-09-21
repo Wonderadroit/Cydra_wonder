@@ -9,7 +9,7 @@ from cydra.finding import Finding
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
 from cydra.finding_persistence import persist_finding
 from cydra.foundry import classify_access_control_outcome, generate_access_control_test, require_executed, run_foundry_test, test_path_for
-from cydra.impact import ImpactAssessment, ImpactLevel
+from cydra.impact import ImpactAssessment, ImpactLevel, ImpactScope, AttackerAccess, Exploitability, Repeatability, Recoverability
 from cydra.pipeline import investigate
 from cydra.solidity_model import parse_solidity
 from cydra.solidity_system_model import project_contracts
@@ -98,6 +98,7 @@ def main() -> int:
         "an unauthorized caller can mutate privileged access-control state",
         ("unauthorized caller can reach setWhitelist",),
         cycle.causal_verification.evidence_ids,
+        ImpactScope.PROTOCOL_WIDE, AttackerAccess.PERMISSIONLESS, Exploitability.DEMONSTRATED, Repeatability.REPEATABLE, Recoverability.IRREVERSIBLE,
     )
     finding_candidate = FindingCandidate(True, False, True, True, True, impact.assessed, True)
     gate = evaluate_finding_graph(
