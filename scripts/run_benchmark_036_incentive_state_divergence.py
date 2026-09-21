@@ -163,7 +163,7 @@ def canonical_model(h):
     )
     model.add_edge(Edge(invariant_id, "informs", hypothesis_id, {}))
     model.add_edge(Edge("observation:" + observation_id, "tests", hypothesis_id, {}))
-    return model, ModelHypothesis(h.hypothesis_id, h.claim, 0.5), observation_id
+    return model, ModelHypothesis("hypothesis:" + h.hypothesis_id, h.claim, 0.5), observation_id
 
 
 def main():
