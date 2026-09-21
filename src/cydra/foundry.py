@@ -494,6 +494,8 @@ def _runtime_stub_source(
     for interface in imported_interfaces.values():
         for imported_name, imported_source in getattr(interface, "imported_types", ()):
             imported_signature_types.setdefault(imported_name, imported_source)
+        for declared_name in getattr(interface, "declared_types", ()):
+            imported_signature_types.setdefault(declared_name, interface.source_path)
 
     interface_imports = [
         f'import {{ {interface_name} }} from "{_resolved_interface_import_path(interface.source_path, output_path)}";'
