@@ -28,11 +28,16 @@ def select_next_hypothesis(
     invariants: tuple[Invariant, ...],
     experiments: tuple[Experiment, ...],
     excluded_hypothesis_ids: tuple[str, ...] = (),
+    observed_statuses: dict[str, str] | None = None,
 ) -> HypothesisSelection:
     """Choose the next experiment without knowing or naming a vulnerability class."""
     if not hypotheses:
         raise ValueError("no hypotheses available")
     excluded = set(excluded_hypothesis_ids)
+    # Only an explicit contradiction removes a candidate. Ambiguous and
+    # non-terminal observations remain available for further information gain.
+    observed = observed_statuses or {}
+    excluded.update(hid for hid, status in observed.items() if status == "contradicted")
     invariant_by_id = {item.invariant_id: item for item in invariants}
     experiment_by_id = {item.hypothesis_id: item for item in experiments}
     ranked = []
