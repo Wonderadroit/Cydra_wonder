@@ -453,6 +453,7 @@ def _runtime_stub_source(
     known_interfaces = set(interfaces)
     for interface in interfaces.values():
         known_interfaces.update(name for name, _ in getattr(interface, "imported_types", ()))
+        known_interfaces.update(getattr(interface, "declared_types", ()))
 
     derived_by_source: dict[str, list[tuple[str, object]]] = {}
     for source_interface, source_method, target_interface in derived_interface_casts:
