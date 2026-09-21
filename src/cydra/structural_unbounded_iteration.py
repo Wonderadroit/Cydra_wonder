@@ -157,4 +157,4 @@ def generate_unbounded_iteration_hypotheses(
                 potential_impact="HIGH",
             )
         )
-    return (invariant,) if hypotheses else (), tuple(hypotheses)
+    return UnboundedIterationContribution((invariant,) if hypotheses else (), tuple(hypotheses))
