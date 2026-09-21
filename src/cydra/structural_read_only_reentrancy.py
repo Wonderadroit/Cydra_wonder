@@ -129,6 +129,47 @@ def generate_read_only_reentrancy_hypotheses(
             )
             break
 
+    # ERC1155-style minting can invoke an arbitrary receiver before a
+    # protocol-specific aggregate (such as total supply) is updated.  A public
+    # mapping getter is itself a read-only observation surface, so it can expose
+    # the transient value during the receiver callback even though no explicit
+    # view function is declared in the target contract.
+    public_mapping = re.search(
+        r"mapping\\s*\\([^)]*\\)\\s+public\\s+(?P<name>\\w+)\\s*;", source
+    )
+    if public_mapping and re.search(r"\\b(?:_mint|safeTransferFrom)\\s*\\(", source):
+        mint_update = re.search(
+            r"function\\s+(?P<name>_\\w*mint\\w*)\\s*\\([^)]*\\)[^{]*\\{(?P<body>.*?)\\n\\s*\\}",
+            source,
+            re.S,
+        )
+        if mint_update and re.search(
+            rf"\\b{re.escape(public_mapping.group('name'))}\\s*\\[[^]]+\\][^;]*\\+=|\\b{re.escape(public_mapping.group('name'))}\\s*\\[[^]]+\\]\\[[^]]+\\][^;]*\\+=",
+            mint_update.group("body"),
+        ) and re.search(r"\\b(?:_mint|safeTransferFrom)\\s*\\(", mint_update.group("body")):
+            target = mint_update.group("name")
+            iid = f"INV-READONLY-REENTRANCY-{target}-mapping"
+            hid = f"H-READONLY-{target}-mapping"
+            invariants.append(
+                Invariant(
+                    iid,
+                    "A public read-only observation must not expose an aggregate state value before the external token callback that can observe it has completed.",
+                    "token callback ordering plus public mapping observation surface",
+                    0.72,
+                )
+            )
+            hypotheses.append(
+                Hypothesis(
+                    hid,
+                    f"{target} may expose a stale aggregate through the public mapping getter during a token receiver callback because the aggregate is updated after the callback-capable mint operation.",
+                    iid,
+                    target,
+                    "a receiver contract able to observe the public mapping getter during the token callback",
+                    f"the public mapping getter returns a pre-update aggregate during {target} but the settled aggregate after {target} completes",
+                    evidence_ids=(f"E-MODEL-{target}", f"E-MODEL-READONLY-MAPPING-{public_mapping.group('name')}"),
+                )
+            )
+
     return ReadOnlyReentrancyContribution(tuple(invariants), tuple(hypotheses))
 
 
