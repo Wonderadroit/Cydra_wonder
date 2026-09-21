@@ -80,17 +80,26 @@ def main() -> int:
         if not init_execution.executed:
             raise RuntimeError("initialization hypothesis was not executable: " + json.dumps(init_execution.__dict__, default=str))
 
-        # A non-confirming initialization result is a real observation that
-        # removes that candidate from the next selection round.
-        if init_outcome.benchmark_status == "confirmed":
-            raise SystemExit("initialization hypothesis unexpectedly confirmed; do not treat it as a false-positive rejection")
+        # The initialization result is a real observation. A proposed/ambiguous
+        # result must remain eligible, but the selector should prefer a fresh
+        # hypothesis rather than repeating the same unresolved experiment.
+        if init_outcome.internal_status not in {"proposed", "ambiguous", "rejected", "contradicted"}:
+            raise SystemExit(
+                "unexpected initialization classifier status: "
+                + init_outcome.internal_status
+            )
 
-        excluded = (first.hypothesis.hypothesis_id,)
+        # Feed the actual classifier result back into the class-neutral selector.
+        # Do not manually exclude the first hypothesis: this benchmark exercises
+        # the reusable evidence -> selection boundary introduced in PR #139.
+        observed_statuses = {
+            first.hypothesis.hypothesis_id: init_outcome.internal_status,
+        }
         second = select_next_hypothesis(
             investigation.hypotheses,
             investigation.invariants,
             investigation.experiments,
-            excluded_hypothesis_ids=excluded,
+            observed_statuses=observed_statuses,
         )
         hypothesis = second.hypothesis
         if not hypothesis.invariant_id.startswith("INV-CONTROL-FLOW-"):
@@ -152,7 +161,7 @@ def main() -> int:
         "first_selection": first.hypothesis.__dict__,
         "first_execution": init_execution.__dict__,
         "first_classification": init_outcome.__dict__,
-        "excluded_after_evidence": list(excluded),
+        "observed_statuses_after_first_experiment": observed_statuses,
         "second_selection": {"hypothesis": hypothesis.__dict__, "score": second.score},
         "experiment": experiment.__dict__,
         "vulnerable": vulnerable,

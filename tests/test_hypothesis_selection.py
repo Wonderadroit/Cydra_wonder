@@ -54,3 +54,35 @@ def test_ambiguous_observation_does_not_discard_a_hypothesis():
         observed_statuses={"H-A": "ambiguous"},
     )
     assert selected.hypothesis.hypothesis_id == "H-A"
+
+
+def test_rejected_classifier_feedback_is_terminal_for_selection():
+    invariant_a = Invariant("INV-A", "a", "test", 0.95)
+    invariant_b = Invariant("INV-B", "b", "test", 0.8)
+    h_a = Hypothesis("H-A", "a", "INV-A", "a", "caller", "impact")
+    h_b = Hypothesis("H-B", "b", "INV-B", "b", "caller", "impact")
+    e_a = Experiment("X-H-A", "H-A", "a", ("one",), 1.0)
+    e_b = Experiment("X-H-B", "H-B", "b", ("one",), 1.0)
+
+    selected = select_next_hypothesis(
+        (h_a, h_b), (invariant_a, invariant_b), (e_a, e_b),
+        observed_statuses={"H-A": "rejected"},
+    )
+
+    assert selected.hypothesis.hypothesis_id == "H-B"
+
+
+def test_observed_nonterminal_hypothesis_remains_eligible_but_is_deprioritized():
+    invariant_a = Invariant("INV-A", "a", "test", 0.95)
+    invariant_b = Invariant("INV-B", "b", "test", 0.8)
+    h_a = Hypothesis("H-A", "a", "INV-A", "a", "caller", "impact")
+    h_b = Hypothesis("H-B", "b", "INV-B", "b", "caller", "impact")
+    e_a = Experiment("X-H-A", "H-A", "a", ("one",), 1.0)
+    e_b = Experiment("X-H-B", "H-B", "b", ("one",), 1.0)
+
+    selected = select_next_hypothesis(
+        (h_a, h_b), (invariant_a, invariant_b), (e_a, e_b),
+        observed_statuses={"H-A": "proposed"},
+    )
+
+    assert selected.hypothesis.hypothesis_id == "H-B"
