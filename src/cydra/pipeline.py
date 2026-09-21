@@ -43,6 +43,8 @@ from .structural_cross_contract_attribution import generate_cross_contract_attri
 from .structural_signature_reuse import generate_signature_reuse_hypotheses
 from .structural_signed_metadata import generate_signed_metadata_hypotheses
 from .structural_intent_parity import generate_intent_parity_hypotheses
+from .structural_epoch_accounting import generate_epoch_accounting_hypotheses
+from .epoch_accounting_planning import plan_epoch_accounting_experiment
 from .intent_parity_planning import plan_intent_parity_experiment
 from .signature_reuse_planning import plan_signature_reuse_experiment
 from .signed_metadata_planning import plan_signed_metadata_experiment
@@ -107,6 +109,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_signed_metadata_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-INTENT-PARITY-"):
         return plan_intent_parity_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-EPOCH-ACCOUNTING-"):
+        return plan_epoch_accounting_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -222,6 +226,7 @@ def investigate(
         signature_reuse = generate_signature_reuse_hypotheses(contract, contract_semantic)
         signed_metadata = generate_signed_metadata_hypotheses(contract, contract_semantic)
         intent_invariants, intent_hypotheses = generate_intent_parity_hypotheses(contract, contract_semantic)
+        epoch_accounting = generate_epoch_accounting_hypotheses(contract, contract_semantic)
 
         if auth:
             all_invariants.append(access_control_invariant(contract))
@@ -254,6 +259,7 @@ def investigate(
             signature_reuse.hypotheses,
             signed_metadata.hypotheses,
             intent_hypotheses,
+            epoch_accounting.hypotheses,
             surface_hypotheses,
         )
         all_invariants.extend(guard_parity.invariants)
@@ -264,6 +270,7 @@ def investigate(
         all_invariants.extend(signature_reuse.invariants)
         all_invariants.extend(signed_metadata.invariants)
         all_invariants.extend(intent_invariants)
+        all_invariants.extend(epoch_accounting.invariants)
         all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
