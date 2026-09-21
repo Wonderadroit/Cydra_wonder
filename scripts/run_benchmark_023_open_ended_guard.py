@@ -95,14 +95,8 @@ def run_target(root: Path, label: str) -> dict:
 def patch_target(root: Path) -> None:
     path = root / TARGET_PATH
     source = path.read_text(encoding="utf-8")
-    old = """modifier onlyExecutor() {
-        require(msg.sender == executor, "Only AVM can call");
-        _;
-    }"""
-    new = """modifier onlyOwnerOrExecutor() {
-        require(msg.sender == owner() || msg.sender == executor, "Unauthorized");
-        _;
-    }"""
+    old = "function setTopNPools(address[] memory _poolAddresses) external onlyExecutor"
+    new = "function setTopNPools(address[] memory _poolAddresses) external onlyOwnerOrExecutor"
     if old not in source:
         raise RuntimeError("guard causal insertion point not found")
     path.write_text(source.replace(old, new, 1), encoding="utf-8")
