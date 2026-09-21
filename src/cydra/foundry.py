@@ -567,7 +567,6 @@ def _model_initialization_source(
         )
         if match:
             raw_import = match.group(1)
-            source_path = Path(contract_model.source).parent / raw_import
             project_root = None
             if output_path is not None:
                 output = Path(output_path)
@@ -575,6 +574,20 @@ def _model_initialization_source(
                     if (ancestor / "foundry.toml").exists():
                         project_root = ancestor
                         break
+
+            # ContractModel.source may be repository-relative while the generated
+            # test lives under the target project. Resolve source-defined imports
+            # against that project root before falling back to the legacy layout
+            # resolver. This preserves provenance without emitting imports such as
+            # "Interfaces/Foo.sol" relative to the project root when the real file
+            # lives under contracts/Tokens/.../Interfaces.
+            source_file = Path(contract_model.source)
+            if not source_file.is_absolute() and project_root is not None:
+                candidate_source = project_root / source_file
+                if candidate_source.exists():
+                    source_file = candidate_source
+            source_path = source_file.parent / raw_import
+
             if project_root is not None and source_path.exists():
                 import_path = source_path.resolve().relative_to(project_root.resolve()).as_posix()
             else:
