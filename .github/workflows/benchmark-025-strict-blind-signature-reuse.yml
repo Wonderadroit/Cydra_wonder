@@ -1,0 +1,36 @@
+name: CYDRA strict blind signature reuse
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_025_strict_blind_signature_reuse.py"
+      - "benchmarks/025_strict_blind_signature_reuse/**"
+      - ".github/workflows/benchmark-025-strict-blind-signature-reuse.yml"
+  pull_request:
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_025_strict_blind_signature_reuse.py"
+      - "benchmarks/025_strict_blind_signature_reuse/**"
+      - ".github/workflows/benchmark-025-strict-blind-signature-reuse.yml"
+  workflow_dispatch:
+
+jobs:
+  strict-blind-signature-reuse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: python -m pip install -e . pytest
+      - run: pytest -q tests
+      - run: PYTHONPATH=src python scripts/run_benchmark_025_strict_blind_signature_reuse.py --output backtest-artifacts/strict-blind-signature-reuse
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-025-strict-blind-signature-reuse
+          path: backtest-artifacts/strict-blind-signature-reuse/
