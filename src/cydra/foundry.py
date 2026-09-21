@@ -385,6 +385,14 @@ def _qualify_type(type_declaration: str, interface_name: str, known_interfaces: 
     base = type_token.rstrip("[]")
     if _builtin_type(base):
         return type_declaration
+    # Imported interface-signature symbols are top-level names in their
+    # defining source. If a prior model representation qualified such a
+    # symbol as Interface.Symbol, restore the compiler-valid unqualified form.
+    if "." in base:
+        namespace, member = base.split(".", 1)
+        if member in known_interfaces:
+            tokens[0] = member + ("[]" if type_token.endswith("[]") else "")
+            return " ".join(tokens)
     if base not in known_interfaces and "." not in base:
         tokens[0] = f"{interface_name}.{type_token}"
     return " ".join(tokens)
