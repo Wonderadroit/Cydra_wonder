@@ -83,7 +83,7 @@ def generate_signed_metadata_hypotheses(
         if not base_hash_match:
             continue
 
-        digest_region = body[:base_hash_match.end()]
+        digest_region = base_hash_match.group(0)
         if any(re.search(rf"\b{re.escape(name)}\b", digest_region, re.I) for name in metadata_names):
             continue
 
