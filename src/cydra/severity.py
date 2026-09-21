@@ -64,6 +64,13 @@ def assess_severity(impact: ImpactAssessment, kind: ImpactKind) -> SeverityAsses
     irreversible = impact.recoverability is Recoverability.IRREVERSIBLE
 
     if kind in {ImpactKind.ASSET_LOSS, ImpactKind.ASSET_LOCK}:
+        if impact.scope is ImpactScope.SINGLE_USER:
+            return SeverityAssessment(
+                ImpactLevel.MEDIUM,
+                "demonstrated asset impact is bounded to a single-user scope",
+                evidence,
+                True,
+            )
         if broad and permissionless and irreversible:
             return SeverityAssessment(
                 ImpactLevel.CRITICAL,
@@ -75,13 +82,6 @@ def assess_severity(impact: ImpactAssessment, kind: ImpactKind) -> SeverityAsses
             return SeverityAssessment(
                 ImpactLevel.HIGH,
                 "demonstrated permissionless asset impact is exploitable but does not meet the conservative critical threshold",
-                evidence,
-                True,
-            )
-        if impact.scope is ImpactScope.SINGLE_USER:
-            return SeverityAssessment(
-                ImpactLevel.MEDIUM,
-                "demonstrated asset impact is bounded to a single-user scope",
                 evidence,
                 True,
             )
