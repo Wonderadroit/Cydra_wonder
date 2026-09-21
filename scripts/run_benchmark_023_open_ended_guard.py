@@ -71,6 +71,53 @@ def clone_target(destination: Path) -> Path:
     return destination
 
 
+def prepare_isolated(root: Path) -> Path:
+    isolated = root / ".cydra_isolated"
+    (isolated / "contracts" / "interfaces").mkdir(parents=True, exist_ok=True)
+    (isolated / "contracts" / "AVM" / "interfaces").mkdir(parents=True, exist_ok=True)
+    (isolated / "test" / "autogen").mkdir(parents=True, exist_ok=True)
+
+    target_source = (root / TARGET_PATH).read_text(encoding="utf-8")
+    (isolated / TARGET_PATH).parent.mkdir(parents=True, exist_ok=True)
+    (isolated / TARGET_PATH).write_text(target_source, encoding="utf-8")
+
+    (isolated / "contracts" / "interfaces" / "IVoter.sol").write_text(
+        """// SPDX-License-Identifier: MIT
+pragma solidity 0.8.13;
+interface IVoter {}
+""", encoding="utf-8")
+    (isolated / "contracts" / "interfaces" / "ITopNPoolsStrategy.sol").write_text(
+        """// SPDX-License-Identifier: MIT
+pragma solidity 0.8.13;
+interface ITopNPoolsStrategy {
+    function getTopNPools() external view returns (address[] memory);
+    function setAVM(address _avm) external;
+    function setTopN() external;
+}
+""", encoding="utf-8")
+    (isolated / "contracts" / "AVM" / "interfaces" / "IAutoVotingEscrowManager.sol").write_text(
+        """// SPDX-License-Identifier: MIT
+pragma solidity 0.8.13;
+interface IAutoVotingEscrowManager {
+    function topN() external view returns (uint256);
+    function executor() external view returns (address);
+}
+""", encoding="utf-8")
+
+    oz = root / "node_modules" / "@openzeppelin" / "contracts"
+    (isolated / "node_modules" / "@openzeppelin" / "contracts" / "access").mkdir(parents=True, exist_ok=True)
+    (isolated / "node_modules" / "@openzeppelin" / "contracts" / "utils").mkdir(parents=True, exist_ok=True)
+    (isolated / "node_modules" / "@openzeppelin" / "contracts" / "access" / "Ownable.sol").write_text(
+        (oz / "access" / "Ownable.sol").read_text(encoding="utf-8"), encoding="utf-8")
+    (isolated / "node_modules" / "@openzeppelin" / "contracts" / "utils" / "Context.sol").write_text(
+        (oz / "utils" / "Context.sol").read_text(encoding="utf-8"), encoding="utf-8")
+    (isolated / "remappings.txt").write_text(
+        "@openzeppelin/=node_modules/@openzeppelin/\n", encoding="utf-8")
+    (isolated / "foundry.toml").write_text(
+        '[profile.default]\nsrc = "contracts"\ntest = "test"\nsolc_version = "0.8.13"\n', encoding="utf-8")
+    return isolated
+
+
 def write_harness(root: Path) -> None:
     path = root / "test" / "autogen" / "CydraGuardProgress.t.sol"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -78,13 +125,12 @@ def write_harness(root: Path) -> None:
 
 
 def run_target(root: Path, label: str) -> dict:
-    write_harness(root)
+    isolated = prepare_isolated(root)
+    write_harness(isolated)
     completed = subprocess.run(
-        (
-            "forge", "test", "--match-path", "test/autogen/CydraGuardProgress.t.sol",
-            "--match-test", "testOwnerCanSetTopNPools", "-vvv",
-        ),
-        cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        ("forge", "test", "--match-path", "test/autogen/CydraGuardProgress.t.sol",
+         "--match-test", "testOwnerCanSetTopNPools", "-vvv"),
+        cwd=isolated, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
     return {
         "experiment_id": f"X-OPEN-GUARD-{label}",
