@@ -1574,3 +1574,17 @@ The campaign also exposed and repaired two harness defects before acceptance: an
 The result strengthens evidence for generic incentive-state reasoning and adversarial execution measurement. It does not close the Solidity maturity/generalization gate. Further unfamiliar targets must continue to test whether the reasoning generalizes without benchmark-shaped selection or target-specific detectors.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+## Milestone 74 — multi-finding and evidence-backed severity architecture
+
+CYDRA now supports target-scoped accumulation of independently confirmed findings. The generic research loop can retain multiple verified findings across investigation rounds instead of replacing the target result after the first finding. Findings can be ordered for reporting by their demonstrated canonical impact level.
+
+Pre-confirmation impact potential is a bounded research-priority signal only. UNKNOWN receives no bonus. It must never be treated as final severity. Final severity remains evidence-backed and is required to agree with the demonstrated impact assessment.
+
+An optional program-specific severity policy can be supplied after the conservative baseline classifier. This avoids assuming that all bounty programs use identical severity taxonomies while preserving the underlying technical impact evidence.
+
+PR #162 integrated the target-scoped finding collection. PR #163 connected impact potential to generic hypothesis selection. PR #164 integrated multi-finding accumulation into the research loop. PR #165 added explicit program severity policy handling. All four milestones passed their repository CI gates before merge; PR #165 completed 39/39 checks with zero failures before merge.
+
+This architecture does not close the Solidity maturity/generalization gate. The remaining proof obligation is behavioral: repeated strict-blind unfamiliar-target campaigns must demonstrate that the generalized research loop can discover and causally verify genuine vulnerabilities, including more than one finding where the target supports it, without benchmark-specific detectors or selector overrides.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
