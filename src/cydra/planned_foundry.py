@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from .interface_resolver import resolve_interface
 
 from .models import ContractModel, Experiment, Hypothesis
 from .planned_call import render_function_call
@@ -42,6 +43,56 @@ def generate_authorization_test_from_experiment(
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    project_root = next(
+        (ancestor for ancestor in (path.parent, *path.parents) if (ancestor / "foundry.toml").exists()),
+        None,
+    )
+    constructor_arguments: list[str] = []
+    constructor_imports: list[str] = []
+    inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
+    direct_interfaces: dict[str, object] = {}
+    if project_root is not None and contract_model.constructor is not None:
+        for parameter in contract_model.constructor.parameters:
+            base = parameter.type.strip().split()[0].rstrip("[]")
+            if base in inherited_interfaces:
+                direct_interfaces[base] = inherited_interfaces[base]
+            elif "." not in base and base not in {"address", "bool", "string", "bytes"} and not base.startswith(("uint", "int", "bytes")):
+                try:
+                    direct_interfaces[base] = resolve_interface(project_root, contract_model.source, base)
+                except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                    pass
+
+    for parameter in (contract_model.constructor.parameters if contract_model.constructor else ()):
+        parameter_type = parameter.type.strip()
+        base = parameter_type.split()[0].rstrip("[]")
+        if parameter_type.endswith("[]"):
+            raise ValueError(f"unsupported authorization constructor array type: {parameter.type}")
+        if base == "address":
+            constructor_arguments.append("address(0)")
+        elif parameter_type == "address payable":
+            constructor_arguments.append("payable(address(0))")
+        elif base == "bool":
+            constructor_arguments.append("false")
+        elif base.startswith(("uint", "int")):
+            constructor_arguments.append("0")
+        elif base == "string":
+            constructor_arguments.append('""')
+        elif base == "bytes":
+            constructor_arguments.append('bytes("")')
+        elif base.startswith("bytes") and base[5:].isdigit():
+            constructor_arguments.append("0")
+        elif base in direct_interfaces:
+            constructor_arguments.append(f"{base}(address(0))")
+            resolved = direct_interfaces[base]
+            relative = Path(__import__("os").path.relpath(project_root / resolved.source_path, path.parent)).as_posix()
+            constructor_imports.append(f'import {{ {base} }} from "{relative}";')
+        else:
+            raise ValueError(f"unsupported authorization constructor type: {parameter.type}")
+
+    constructor_args_text = ", ".join(constructor_arguments)
+    constructor_call = f"new {target_type}({constructor_args_text})" if constructor_arguments else f"new {target_type}()"
+    constructor_import_text = "\n".join(dict.fromkeys(constructor_imports))
+
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -49,13 +100,14 @@ pragma solidity {pragma};
 // Planned inputs are authoritative for this concrete target call.
 import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
+{constructor_import_text}
 
 contract CydraAuthInvariantTest is Test {{
     {target_type} internal target;
     address internal attacker = address(0xBEEF);
 
     function setUp() public {{
-        target = new {target_type}();
+        target = {constructor_call};
     }}
 
     function testUnauthorizedCallerMutationSurface() public {{
