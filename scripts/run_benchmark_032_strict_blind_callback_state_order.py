@@ -90,6 +90,12 @@ def clone_target(destination: Path) -> Path:
                    check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", TARGET_REF),
                    check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    # The pinned Phi test suite imports @prb/test through node_modules. The
+    # repository's bun.lockb is the authoritative dependency snapshot; install
+    # it before every isolated vulnerable/patched reproduction so compilation
+    # failures cannot masquerade as security observations.
+    subprocess.run(("bun", "install", "--frozen-lockfile"), cwd=destination,
+                   check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     return destination
 
 def patch_target(root: Path) -> None:
