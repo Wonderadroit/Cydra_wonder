@@ -57,6 +57,8 @@ from .type_domain_planning import plan_type_domain_experiment
 from .structural_resource_authorization import generate_resource_authorization_hypotheses
 from .resource_authorization_planning import plan_resource_authorization_experiment
 from .structural_callback_state_order import generate_callback_state_order_hypotheses
+from .structural_incentive_liveness import generate_incentive_liveness_hypotheses
+from .incentive_liveness_planning import plan_incentive_liveness_experiment
 from .callback_state_order_planning import plan_callback_state_order_experiment
 
 
@@ -131,6 +133,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_resource_authorization_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
         return plan_callback_state_order_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-INCENTIVE-LIVENESS-"):
+        return plan_incentive_liveness_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -213,7 +217,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses, generate_incentive_liveness_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
