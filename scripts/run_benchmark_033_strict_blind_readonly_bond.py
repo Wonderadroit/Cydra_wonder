@@ -155,6 +155,45 @@ def canonical_model(hypothesis):
     model.add_edge(Edge(f"observation:{observation_id}", "tests", hypothesis_id, {}))
     return model, CanonicalHypothesis(hypothesis.hypothesis_id, hypothesis.claim, 0.5), observation_id
 
+def run_external_outcome_probe(root: Path):
+    probe = r"""// SPDX-License-Identifier: MIT
+pragma solidity 0.8.15;
+import "forge-std/Test.sol";
+import "../src/BondFixedTermTeller.sol";
+
+contract FalseERC20 is ERC20 {
+    constructor() ERC20("False", "FALSE", 18) {}
+    function transferFrom(address, address, uint256) public pure override returns (bool) { return false; }
+}
+contract ExternalOutcomeProbe is Test {
+    function testFalseTransferFromIsRejected() public {
+        BondFixedTermTeller teller = new BondFixedTermTeller(address(this), IBondAggregator(address(0)), address(this), Authority(address(0)));
+        FalseERC20 token = new FalseERC20();
+        uint48 expiry = uint48(block.timestamp + 2 days);
+        teller.deploy(token, expiry);
+        vm.expectRevert();
+        teller.create(token, expiry, 1);
+    }
+}
+"""
+    path = root / "test" / "CydraExternalOutcomeProbe.t.sol"
+    path.write_text(probe, encoding="utf-8")
+    completed = subprocess.run(
+        ("forge", "test", "--match-test", "testFalseTransferFromIsRejected", "-vvv"),
+        cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    return {
+        "experiment_id": "X-EXTERNAL-OUTCOME-create",
+        "executed": True,
+        "tests_run": 1,
+        "tests_failed": 0 if completed.returncode == 0 else 1,
+        "status": "PASS" if completed.returncode == 0 else "FAIL",
+        "exit_code": completed.returncode,
+        "stdout": completed.stdout[-12000:],
+        "stderr": "",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("backtest-artifacts/strict-blind-readonly-bond"))
@@ -165,9 +204,20 @@ def main() -> int:
         investigation = investigate(target / TARGET_PATH, target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_PATH}")
         selection = select_next_hypothesis(investigation.hypotheses, investigation.invariants, investigation.experiments)
         hypothesis = selection.hypothesis
+        experiment = next(e for e in investigation.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
+        first_observation = None
+        if hypothesis.hypothesis_id.startswith("H-EXTERNAL-OUTCOME-"):
+            first_observation = run_external_outcome_probe(target)
+            selection = select_next_hypothesis(
+                investigation.hypotheses,
+                investigation.invariants,
+                investigation.experiments,
+                observed_statuses={hypothesis.hypothesis_id: first_observation["status"]},
+            )
+            hypothesis = selection.hypothesis
+            experiment = next(e for e in investigation.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
         if not hypothesis.hypothesis_id.startswith("H-READONLY-_mintToken-mapping"):
             raise SystemExit("strict blind selector did not choose callback-visible read-only hypothesis: " + hypothesis.hypothesis_id)
-        experiment = next(e for e in investigation.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
         vulnerable = run_target(target, "vulnerable")
 
     with tempfile.TemporaryDirectory(prefix="cydra-bond-blind-p-") as tmp:
@@ -218,6 +268,7 @@ def main() -> int:
         "target": {"repo": TARGET_REPO, "ref": TARGET_REF, "path": TARGET_PATH},
         "blind_selection": {"hypothesis": hypothesis.__dict__, "score": selection.score},
         "experiment": experiment.__dict__,
+        "research_loop_observation": first_observation,
         "vulnerable": vulnerable,
         "patched": patched,
         "causal_verification": cycle.causal_verification.__dict__,
