@@ -293,6 +293,25 @@ def _layout_aware_import_path(target_import: str, output_path: str | Path) -> st
     return target_import
 
 
+def _resolved_interface_import_path(source_path: str, output_path: str | Path) -> str:
+    """Resolve repository-relative interface provenance against the target project root."""
+    output = Path(output_path)
+    project_root = next(
+        (
+            ancestor
+            for ancestor in (output.parent, *output.parents)
+            if (ancestor / "foundry.toml").exists()
+        ),
+        None,
+    )
+    raw = Path(source_path)
+    if project_root is not None and not raw.is_absolute():
+        candidate = project_root / raw
+        if candidate.exists():
+            return Path(os.path.relpath(candidate.resolve(), output.parent.resolve())).as_posix()
+    return _layout_aware_import_path(source_path, output_path)
+
+
 def _source_text(contract_model: ContractModel) -> str:
     try:
         return Path(contract_model.source).read_text(encoding="utf-8")
@@ -447,7 +466,7 @@ def _runtime_stub_source(
         imported_interfaces.setdefault(interface.name, interface)
 
     interface_imports = [
-        f'import {{ {interface_name} }} from "{_layout_aware_import_path(interface.source_path, output_path)}";'
+        f'import {{ {interface_name} }} from "{_resolved_interface_import_path(interface.source_path, output_path)}";'
         for interface_name, interface in imported_interfaces.items()
     ]
 
