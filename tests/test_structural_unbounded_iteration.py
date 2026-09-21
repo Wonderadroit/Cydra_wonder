@@ -11,7 +11,8 @@ def test_detects_caller_growable_storage_array_on_critical_path(tmp_path: Path):
         pragma solidity ^0.8.0;
         contract Target {
             mapping(address => address[]) public entered;
-            function enter(address market) external { entered[msg.sender].push(market); }
+            function enter(address market) external { _enter(msg.sender, market); }
+            function _enter(address user, address market) internal { entered[user].push(market); }
             function check(address user) public view returns (bool) { return _check(user); }
             function _check(address user) internal view returns (bool) {
                 address[] memory markets = entered[user];
@@ -26,7 +27,8 @@ def test_detects_caller_growable_storage_array_on_critical_path(tmp_path: Path):
     functions = (
         FunctionModel("enter", "external", (), (), (), 5),
         FunctionModel("check", "public", (), (), (), 6),
-        FunctionModel("_check", "internal", (), (), (), 7),
+        FunctionModel("_enter", "internal", (), (), (), 7),
+        FunctionModel("_check", "internal", (), (), (), 8),
     )
     contract = ContractModel("Target", str(source), functions)
     result = generate_unbounded_iteration_hypotheses(contract)

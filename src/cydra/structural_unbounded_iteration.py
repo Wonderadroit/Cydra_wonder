@@ -61,17 +61,40 @@ def _storage_array_names(source: str) -> set[str]:
 
 def _caller_growth_evidence(contract: ContractModel, array_name: str) -> bool:
     source = _source(contract)
-    # A loop is materially more concerning when a public/external entry point can
-    # append to the same storage collection. This is a structural witness, not a
-    # proof of exploitability.
-    return bool(re.search(
-        rf"\b{re.escape(array_name)}\s*(?:\[[^\]]+\])?\s*\.push\s*\(",
-        source,
-    )) and any(
-        fn.visibility in {"public", "external"}
-        and re.search(rf"\b{re.escape(array_name)}\b", _body(source, fn.name))
+    # Growth may be hidden behind internal helpers. Trace the structural call
+    # topology from public/external entry points to any helper that pushes into the
+    # same collection. This remains a witness of attacker-influenced growth, not a
+    # proof that the growth is economically useful.
+    growth_functions = {
+        fn.name
         for fn in contract.functions
-    )
+        if re.search(
+            rf"\b{re.escape(array_name)}\s*(?:\[[^\]]+\])?\s*\.push\s*\(",
+            _body(source, fn.name),
+        )
+    }
+    if not growth_functions:
+        return False
+
+    reachable = {
+        fn.name
+        for fn in contract.functions
+        if fn.visibility in {"public", "external"}
+    }
+    changed = True
+    while changed:
+        changed = False
+        for fn in contract.functions:
+            if fn.name in reachable:
+                continue
+            body = _body(source, fn.name)
+            if any(
+                re.search(rf"\b{re.escape(fn.name)}\s*\(", _body(source, reachable_fn))
+                for reachable_fn in reachable
+            ):
+                reachable.add(fn.name)
+                changed = True
+    return bool(growth_functions & reachable)
 
 
 def generate_unbounded_iteration_hypotheses(
@@ -82,6 +105,15 @@ def generate_unbounded_iteration_hypotheses(
         return UnboundedIterationContribution((), ())
 
     storage_arrays = _storage_array_names(source)
+    # Inherited storage declarations may live outside the extracted source file.
+    # Treat a collection as storage-backed when the target source itself performs
+    # indexed access and push growth on the same symbol.
+    storage_arrays |= {
+        match.group(1)
+        for match in re.finditer(
+            r"\b([A-Za-z_]\w*)\s*\[[^\]]+\]\s*\.push\s*\(", source
+        )
+    }
     loop_arrays = _loop_arrays(source)
     aliases: dict[str, str] = {}
     for match in re.finditer(
