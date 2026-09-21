@@ -1510,3 +1510,42 @@ This is a materially different mechanism from the preceding resource-authorizati
 The Solidity maturity/generalization gate remains open. Benchmark 032 adds another successful unfamiliar-mechanism blind finding, but closure still requires repeated evidence across additional unfamiliar targets and mechanisms without target-shaped detectors or benchmark-provided selection hints.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+## Milestone 71 — iterative strict-blind read-only reentrancy finding (Benchmark 033)
+
+Benchmark 033 completed the next unfamiliar-target campaign against the pinned Bond Protocol `BondFixedTermTeller.sol` target from `sherlock-audit/2022-11-bond`.
+
+The campaign preserved the strict blind boundary:
+- no vulnerability class supplied to selection;
+- no target function supplied;
+- no exploit sequence supplied;
+- no state surface supplied;
+- no historical answer supplied;
+- no benchmark-specific selector override.
+
+The first normal class-neutral selection chose `H-EXTERNAL-OUTCOME-create`. CYDRA executed that hypothesis against the real pinned repository with a false-returning ERC20 transferFrom probe. The experiment passed, meaning the selected external-outcome hypothesis was contradicted for the target. The generic research loop fed that measured result back into selection as a rejected hypothesis rather than silently replacing it.
+
+The second selection independently reached:
+`H-READONLY-_mintToken-mapping`
+
+The selected experiment was then executed against the actual pinned Bond repository. The vulnerable implementation allowed the ERC1155 receiver callback to read the public `tokenMetadata` mapping while the bond-token supply was still zero; after the callback returned, the settled supply became the minted amount.
+
+Canonical differential result from CI run #13 (run ID `35613621802`):
+- first hypothesis: `H-EXTERNAL-OUTCOME-create`;
+- first experiment: PASS / contradicted;
+- second blind hypothesis: `H-READONLY-_mintToken-mapping`;
+- vulnerable execution: FAIL;
+- patched causal control: PASS;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL;
+- independent patched reproduction: PASS;
+- reproduction verification: true;
+- finding gate: READY.
+
+The causal control changed only the ordering in `_mintToken`: record the supply before invoking the callback-capable ERC1155 mint. The vulnerable and patched executions were run from independent clones. The uploaded CI `result.json` artifact contains the complete selection/reselection, execution differential, causal verification, and READY gate.
+
+This campaign is materially different from Benchmark 032. Benchmark 032 tested callback-before-security-state-update where the callback reentered a state-changing function; Benchmark 033 tests a read-only observation of transient aggregate state through a public mapping during a token receiver callback. It therefore adds evidence for cross-function temporal consistency and evidence-driven hypothesis reselection on an unfamiliar target.
+
+The Solidity maturity/generalization gate remains open. The next maturity step is not to add another target-shaped detector merely to increase the benchmark count. The evidence now supports continuing toward broader open-ended campaigns where CYDRA must generate, test, reject, and reselection hypotheses across unfamiliar targets while preserving causal verification and independent reproduction.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
