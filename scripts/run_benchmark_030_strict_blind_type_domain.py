@@ -19,7 +19,7 @@ TARGET_REF = "cd1a0e6d1b40168657d1aaee8223dc050e15f8cc"
 TARGET_PATH = "src/FighterFarm.sol"
 
 VULNERABLE_TEST_SOURCE = r"""// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.13;
 
 import "forge-std/Test.sol";
 import "../src/FighterFarm.sol";
@@ -36,7 +36,7 @@ contract CydraTypeDomainTest is Test {
 """
 
 PATCHED_TEST_SOURCE = r"""// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.13;
 
 import "forge-std/Test.sol";
 import "../src/FighterFarm.sol";
