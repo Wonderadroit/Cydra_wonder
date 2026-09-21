@@ -78,7 +78,7 @@ def main() -> int:
             target, first.hypothesis, init_experiment, contract
         )
         if not init_execution.executed:
-            raise RuntimeError("initialization hypothesis was not executable")
+            raise RuntimeError("initialization hypothesis was not executable: " + json.dumps(init_execution.__dict__, default=str))
 
         # A non-confirming initialization result is a real observation that
         # removes that candidate from the next selection round.
