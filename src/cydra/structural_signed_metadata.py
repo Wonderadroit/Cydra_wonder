@@ -99,7 +99,7 @@ def generate_signed_metadata_hypotheses(
             hid,
             f"{function_name} may accept authorization metadata that was not authenticated by the signer because the recovered digest is derived from a base authorization hash without the observed validity metadata.",
             iid,
-            function.name,
+            function_name,
             "a caller or relayer who can preserve a valid signature while changing the unauthenticated metadata",
             "the authorization can remain valid outside the signer's intended metadata constraints",
             evidence_ids=(
