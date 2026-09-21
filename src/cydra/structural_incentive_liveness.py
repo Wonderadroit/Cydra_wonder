@@ -27,14 +27,14 @@ def generate_incentive_liveness_hypotheses(contract: ContractModel, semantic=())
     for f in contract.functions:
         if f.visibility not in {"public","external"}: continue
         body=_body(contract,f.name)
-        if re.search(r"(?:payable\s*\(\s*msg\.sender\s*\)|msg\.sender)\s*(?:\.\s*)?(?:transfer|send|call)",body) and re.search(r"(?:reward|fee|bounty|incentive|payout)",body,re.I):
+        if (re.search(r"(?:payable\s*\(\s*msg\.sender\s*\)|msg\.sender)\s*(?:\.\s*)?(?:transfer|send|call)",body) and re.search(r"(?:reward|fee|bounty|incentive|payout)",body,re.I)) or any(re.search(r"(?:keep|reward|incentive|bounty|payout|fee)", modifier, re.I) for modifier in f.modifiers):
             rewarders.append(f)
-        if re.search(r"(?:request|pending|queue|epoch|job|work)",f.name,re.I) and re.search(r"\+\+|\+=|push\s*\(",body):
+        if (re.search(r"(?:request|pending|queue|epoch|job|work)",f.name,re.I) and re.search(r"\+\+|\+=|push\s*\(",body)) or (re.search(r"\bfor\s*\(",body) and ".length" in body and any(re.search(r"(?:keep|reward|incentive|bounty|payout|fee)", modifier, re.I) for modifier in f.modifiers)):
             triggers.append(f)
     if not rewarders or not triggers: return IncentiveContribution((),())
     for rewarder in rewarders:
         iid="INV-INCENTIVE-LIVENESS-"+rewarder.name
-        invariants.append(Invariant(iid,"A permissionless incentive payout must remain coupled to a value-bearing or bounded-cost state transition; a caller must not manufacture payout-eligible work at lower cost than the reward.","reward payout plus permissionless work/request topology",0.72))
+        invariants.append(Invariant(iid,"A permissionless incentive payout must remain coupled to an actual value-bearing or bounded-cost work transition; a caller must not receive a reward when no qualifying work was performed.","reward payout plus permissionless work/request topology",0.72))
         peers=tuple(t.name for t in triggers if t.name != rewarder.name)
-        hypotheses.append(Hypothesis("H-INCENTIVE-LIVENESS-"+rewarder.name,rewarder.name+" may pay an incentive to a caller for work that a permissionless caller can manufacture without paying a commensurate cost.",iid,rewarder.name,"permissionless caller able to create payout-eligible work","attacker can increase payout-eligible work without value-bearing input and extract more reward than the cost of creating the work",evidence_ids=("E-MODEL-"+rewarder.name,),related_functions=peers))
+        hypotheses.append(Hypothesis("H-INCENTIVE-LIVENESS-"+rewarder.name,rewarder.name+" may pay an incentive even when the supplied execution performs no qualifying work, allowing a permissionless caller to extract reward without the intended transition.",iid,rewarder.name,"permissionless caller can invoke the reward-bearing path","attacker can extract a reward without the qualifying work transition that should justify it",evidence_ids=("E-MODEL-"+rewarder.name,),related_functions=peers))
     return IncentiveContribution(tuple(invariants),tuple(hypotheses))
