@@ -64,7 +64,7 @@ contract CydraSignedMetadataTest is Test {
         userOp.signature = "";
     }
 
-    function _signWindow(
+    function _signBase(
         uint256 ownerKey,
         bytes32 userOpHash,
         uint48 validUntil,
@@ -75,7 +75,7 @@ contract CydraSignedMetadataTest is Test {
             abi.encodePacked("\x19Ethereum Signed Message:\n32", signedHash)
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerKey, digest);
-        return abi.encodePacked(r, s, v, validUntil, validAfter);
+        return abi.encodePacked(r, s, v);
     }
 
     function testCydraSignedMetadataBinding() public {
