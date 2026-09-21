@@ -76,7 +76,7 @@ contract CydraCrossProtocolPatchedTest is Test {
 
 def setup_foundry(destination: Path) -> Path:
     subprocess.run(
-        ("forge", "init", "--force", "--no-git", str(destination)),
+        ("forge", "init", "--force", str(destination)),
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
