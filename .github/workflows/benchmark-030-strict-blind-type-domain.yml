@@ -24,7 +24,7 @@ jobs:
           python-version: "3.11"
       - uses: foundry-rs/foundry-toolchain@v1
       - name: Install Python dependencies
-        run: pip install -e .
+        run: pip install -e . pytest
       - name: Run structural regression
         run: pytest -q tests/test_structural_type_domain.py
       - name: Run strict blind campaign
