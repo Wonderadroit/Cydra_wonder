@@ -80,6 +80,7 @@ def test_sequence_renderer_emits_constructor_arguments_for_interface_dependency(
     from cydra.models import ConstructorModel, ParameterModel
     from cydra.interface_resolver import ResolvedInterface
     model = _model()
+    root = tmp_path
     model = ContractModel(
         name="SequenceWithConstructor",
         source=str(root / "contracts" / "SequenceWithConstructor.sol"),
@@ -100,7 +101,6 @@ def test_sequence_renderer_emits_constructor_arguments_for_interface_dependency(
             ),
         ),
     )
-    root = tmp_path
     (root / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
     (root / "contracts" / "interfaces").mkdir(parents=True)
     (root / "contracts" / "interfaces" / "IVaultAccountant.sol").write_text(
