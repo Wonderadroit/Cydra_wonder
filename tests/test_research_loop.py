@@ -14,14 +14,15 @@ class Observation:
 
 
 def _fixtures():
-    invariant = Invariant("INV-TEST", "test invariant", "unit-test", 0.8)
-    first = Hypothesis("H-FIRST", "first", "INV-TEST", "first_fn", "caller", "impact")
-    second = Hypothesis("H-SECOND", "second", "INV-TEST", "second_fn", "caller", "impact")
+    first_invariant = Invariant("INV-FIRST", "first invariant", "unit-test", 0.9)
+    second_invariant = Invariant("INV-SECOND", "second invariant", "unit-test", 0.8)
+    first = Hypothesis("H-FIRST", "first", "INV-FIRST", "first_fn", "caller", "impact")
+    second = Hypothesis("H-SECOND", "second", "INV-SECOND", "second_fn", "caller", "impact")
     experiments = (
         Experiment("E-FIRST", "H-FIRST", "first experiment", ("distinguish",), 1.0),
         Experiment("E-SECOND", "H-SECOND", "second experiment", ("distinguish",), 1.0),
     )
-    return (first, second), (invariant,), experiments
+    return (first, second), (first_invariant, second_invariant), experiments
 
 
 def test_research_loop_reselects_after_non_terminal_observation():
