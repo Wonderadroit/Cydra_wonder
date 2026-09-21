@@ -115,6 +115,12 @@ interface IAutoVotingEscrowManager {
         "@openzeppelin/=node_modules/@openzeppelin/\n", encoding="utf-8")
     (isolated / "foundry.toml").write_text(
         '[profile.default]\nsrc = "contracts"\ntest = "test"\nsolc_version = "0.8.13"\n', encoding="utf-8")
+    forge_std = subprocess.run(
+        ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
+        cwd=isolated, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    if forge_std.returncode != 0:
+        raise RuntimeError("forge-std installation failed:\\n" + forge_std.stdout[-12000:])
     return isolated
 
 
