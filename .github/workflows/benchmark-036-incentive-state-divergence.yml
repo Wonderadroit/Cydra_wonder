@@ -1,0 +1,32 @@
+name: Benchmark 036 strict blind incentive-state divergence
+on:
+  pull_request:
+    paths:
+      - "benchmarks/036_incentive_state_divergence/**"
+      - "scripts/run_benchmark_036_incentive_state_divergence.py"
+      - "src/cydra/**"
+      - "tests/test_benchmark_036_incentive_state_divergence.py"
+  push:
+    branches: [main]
+    paths:
+      - "benchmarks/036_incentive_state_divergence/**"
+      - "scripts/run_benchmark_036_incentive_state_divergence.py"
+      - "src/cydra/**"
+jobs:
+  benchmark-036:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: pip install -e . pytest
+      - run: pytest -q tests/test_benchmark_036_incentive_state_divergence.py
+      - run: python scripts/run_benchmark_036_incentive_state_divergence.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-036-incentive-state-divergence
+          path: backtest-artifacts/benchmark-036-incentive-state-divergence
