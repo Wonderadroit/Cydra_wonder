@@ -41,7 +41,7 @@ def run_fixture(patched: bool, label: str):
         harness=(
             "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n"
             "import \"forge-std/Test.sol\"; import \"../Target.sol\";\n"
-            "contract C is Test { function test() public { "
+            "contract C is Test { function test() public { vm.deal(address(this), 2 ether); "
             + ("IncentiveQueuePatched target = new IncentiveQueuePatched{value: 5 ether}();" if patched else "IncentiveQueue target = new IncentiveQueue{value: 2 ether}();")
             + " (bool a,) = address(target).call"
             + ("(abi.encodeWithSignature(\"requestWork()\"));" if patched else "(abi.encodeWithSignature(\"requestWork()\"));")
