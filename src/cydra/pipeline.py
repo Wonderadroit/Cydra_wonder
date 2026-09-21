@@ -54,6 +54,8 @@ from .structural_external_outcome import generate_external_outcome_hypotheses
 from .external_outcome_planning import plan_external_outcome_experiment
 from .structural_type_domain import generate_type_domain_hypotheses
 from .type_domain_planning import plan_type_domain_experiment
+from .structural_resource_authorization import generate_resource_authorization_hypotheses
+from .resource_authorization_planning import plan_resource_authorization_experiment
 
 
 @dataclass(frozen=True)
@@ -123,6 +125,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_external_outcome_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-TYPE-DOMAIN-"):
         return plan_type_domain_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-RESOURCE-AUTH-"):
+        return plan_resource_authorization_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -205,7 +209,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
@@ -239,6 +243,7 @@ def investigate(
         signed_metadata = generate_signed_metadata_hypotheses(contract, contract_semantic)
         intent_invariants, intent_hypotheses = generate_intent_parity_hypotheses(contract, contract_semantic)
         type_domain = generate_type_domain_hypotheses(contract, contract_semantic)
+        resource_auth = generate_resource_authorization_hypotheses(contract, contract_semantic)
 
         if auth:
             all_invariants.append(access_control_invariant(contract))
@@ -272,6 +277,7 @@ def investigate(
             signed_metadata.hypotheses,
             intent_hypotheses,
             type_domain.hypotheses,
+            resource_auth.hypotheses,
             surface_hypotheses,
         )
         all_invariants.extend(guard_parity.invariants)
@@ -283,6 +289,7 @@ def investigate(
         all_invariants.extend(signed_metadata.invariants)
         all_invariants.extend(intent_invariants)
         all_invariants.extend(type_domain.invariants)
+        all_invariants.extend(resource_auth.invariants)
         all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
