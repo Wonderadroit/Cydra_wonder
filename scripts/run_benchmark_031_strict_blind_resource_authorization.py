@@ -64,26 +64,43 @@ contract MockPositionManager {
         return (0, approved, token0, token1, 3000, -60, 60, liquidity, 0, 0, 0, 0);
     }
 
-    function decreaseLiquidity(
-        uint256 tokenId, uint128 amount, uint256, uint256, uint256
-    ) external returns (uint256 amount0, uint256 amount1) {
+    struct DecreaseLiquidityParams {
+        uint256 tokenId;
+        uint128 liquidity;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        uint256 deadline;
+    }
+
+    struct CollectParams {
+        uint256 tokenId;
+        address recipient;
+        uint128 amount0Max;
+        uint128 amount1Max;
+    }
+
+    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
+        external
+        returns (uint256 amount0, uint256 amount1)
+    {
         require(msg.sender == approved || msg.sender == owner);
-        require(tokenId == 4660 && amount > 0 && liquidity >= amount);
-        liquidity -= amount;
+        require(params.tokenId == 4660 && params.liquidity > 0 && liquidity >= params.liquidity);
+        liquidity -= params.liquidity;
         asset0.mint(address(this), 100);
         asset1.mint(address(this), 100);
         return (100, 100);
     }
 
-    function collect(
-        uint256 tokenId, address recipient, uint128 amount0Requested, uint128 amount1Requested
-    ) external returns (uint128 amount0, uint128 amount1) {
+    function collect(CollectParams calldata params)
+        external
+        returns (uint128 amount0, uint128 amount1)
+    {
         require(msg.sender == approved || msg.sender == owner);
-        require(tokenId == 4660);
-        amount0 = amount0Requested == type(uint128).max ? 100 : amount0Requested;
-        amount1 = amount1Requested == type(uint128).max ? 100 : amount1Requested;
-        if (amount0 > 0) MockERC20(token0).transfer(recipient, amount0);
-        if (amount1 > 0) MockERC20(token1).transfer(recipient, amount1);
+        require(params.tokenId == 4660);
+        amount0 = params.amount0Max == type(uint128).max ? 100 : params.amount0Max;
+        amount1 = params.amount1Max == type(uint128).max ? 100 : params.amount1Max;
+        if (amount0 > 0) MockERC20(token0).transfer(params.recipient, amount0);
+        if (amount1 > 0) MockERC20(token1).transfer(params.recipient, amount1);
     }
 }
 
