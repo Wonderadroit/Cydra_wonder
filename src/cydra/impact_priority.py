@@ -36,8 +36,20 @@ class FindingCollection:
         return FindingCollection(self.target, self.findings + (finding,))
 
     def ordered_by_severity(self) -> tuple[object, ...]:
-        rank = {level.value: int(level) for level in ImpactLevel if level is not ImpactLevel.UNKNOWN}
-        return tuple(sorted(self.findings, key=lambda f: rank.get(getattr(getattr(f, "impact", None), "level", None).value if getattr(getattr(f, "impact", None), "level", None) else "UNKNOWN", 0), reverse=True))
+        rank = {
+            ImpactLevel.UNKNOWN.value: 0,
+            ImpactLevel.NONE.value: 1,
+            ImpactLevel.LOW.value: 2,
+            ImpactLevel.MEDIUM.value: 3,
+            ImpactLevel.HIGH.value: 4,
+            ImpactLevel.CRITICAL.value: 5,
+        }
+        def severity_rank(finding: object) -> int:
+            impact = getattr(finding, "impact", None)
+            level = getattr(impact, "level", ImpactLevel.UNKNOWN)
+            value = level.value if isinstance(level, ImpactLevel) else str(level)
+            return rank.get(value, 0)
+        return tuple(sorted(self.findings, key=severity_rank, reverse=True))
 
 
 def priority_for_potential(level: ImpactPriority) -> float:
