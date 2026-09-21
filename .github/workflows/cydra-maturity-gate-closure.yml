@@ -17,6 +17,8 @@ on:
       - "scripts/run_benchmark_035_cross_protocol_oracle.py"
       - "scripts/run_benchmark_036_incentive_state_divergence.py"
       - "scripts/run_benchmark_037_keeper_zero_work_incentive.py"
+      - "scripts/run_benchmark_038_multi_finding_blind.py"
+      - "benchmarks/038_multi_finding_blind/**"
       - ".github/workflows/cydra-maturity-gate-closure.yml"
   workflow_dispatch:
 
@@ -80,6 +82,8 @@ jobs:
             command: python scripts/run_benchmark_036_incentive_state_divergence.py
           - name: benchmark-037-zero-work-incentive
             command: python scripts/run_benchmark_037_keeper_zero_work_incentive.py
+          - name: benchmark-038-multi-finding
+            command: python scripts/run_benchmark_038_multi_finding_blind.py --output backtest-artifacts/benchmark-038
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -143,7 +147,7 @@ jobs:
               failures=$((failures+1))
             fi
           done
-          expected=11
+          expected=12
           observed=$(find maturity-artifacts -path '*/campaign-status/result.json' -type f | wc -l)
           echo "Observed campaign result manifests: $observed / $expected"
           if [ "$observed" -ne "$expected" ]; then
