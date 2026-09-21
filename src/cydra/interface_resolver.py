@@ -128,6 +128,13 @@ def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> 
         if relative.is_file():
             return relative, "relative_import"
 
+    # Foundry also permits project-root-relative imports in generated/source
+    # contexts. Treat an existing repository-relative path as authoritative
+    # after remappings and explicit relative imports have been checked.
+    repository_relative = (root / import_path).resolve()
+    if repository_relative.is_file():
+        return repository_relative, "project_relative"
+
     return None
 
 
