@@ -1,0 +1,40 @@
+name: Benchmark 032 strict blind callback state order
+
+on:
+  push:
+    branches:
+      - feat/benchmark-032-callback-state-order-2026-09-21
+  pull_request:
+    paths:
+      - "src/cydra/**"
+      - "tests/test_structural_callback_state_order.py"
+      - "scripts/run_benchmark_032_strict_blind_callback_state_order.py"
+      - "benchmarks/032_callback_state_order/**"
+      - ".github/workflows/benchmark-032-strict-blind-callback-state-order.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark-032:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install Python dependencies
+        run: pip install -e . pytest
+      - name: Run structural regression
+        run: pytest -q tests/test_structural_callback_state_order.py
+      - name: Run strict blind campaign
+        run: python scripts/run_benchmark_032_strict_blind_callback_state_order.py
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-032-strict-blind-callback-state-order
+          path: backtest-artifacts/strict-blind-callback-state-order/
