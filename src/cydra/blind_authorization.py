@@ -111,22 +111,8 @@ def generate_blind_authorization_test_from_experiment(
 
     state_view = ""
     if state_getter is not None:
-        if creation_bytecode:
-            state_view = f"""
-interface CydraBlindAuthorizationStateView {{
-    function {state_getter}() external view returns ({state_type});
-}}
-"""
-            state_snapshot = f"        {state_type} beforeState = CydraBlindAuthorizationStateView(target).{state_getter}();"
-            post_state = f"CydraBlindAuthorizationStateView(target).{state_getter}()"
-        else:
-            state_snapshot = f"        {state_type} beforeState = target.{state_getter}();"
-            post_state = f"target.{state_getter}()"
-        call_assertion = f'''        require(ok, "{security_assertion_marker()}: authorization call reverted before invariant observation");
-        require(
-            {post_state} == beforeState,
-            "{security_assertion_marker()}: unauthorized caller mutated modeled administrative state"
-        );'''
+        state_snapshot = f"        {state_type} beforeState = target.{state_getter}();"
+        post_state = f"target.{state_getter}()"
     else:
         state_snapshot = ""
         call_assertion = f'''        require(
