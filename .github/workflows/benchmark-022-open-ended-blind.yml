@@ -27,6 +27,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
       - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - run: python -m pip install -e . pytest
       - run: pytest -q tests/test_structural_signed_metadata.py tests/test_hypothesis_selection.py
       - run: PYTHONPATH=src python scripts/run_benchmark_022_open_ended_blind.py --output backtest-artifacts/open-ended-blind
