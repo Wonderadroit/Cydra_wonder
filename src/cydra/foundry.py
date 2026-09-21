@@ -478,10 +478,22 @@ def _runtime_stub_source(
     for interface in inherited_resolved_interfaces:
         imported_interfaces.setdefault(interface.name, interface)
 
+    # Imported signature types (e.g. FeeTiers used by IAccountManager) need
+    # their own provenance-preserving imports in the generated stub.
+    imported_signature_types: dict[str, str] = {}
+    for interface in imported_interfaces.values():
+        for imported_name, imported_source in getattr(interface, "imported_types", ()):
+            imported_signature_types.setdefault(imported_name, imported_source)
+
     interface_imports = [
         f'import {{ {interface_name} }} from "{_resolved_interface_import_path(interface.source_path, output_path)}";'
         for interface_name, interface in imported_interfaces.items()
     ]
+    interface_imports.extend(
+        f'import {{ {name} }} from "{_resolved_interface_import_path(source, output_path)}";'
+        for name, source in sorted(imported_signature_types.items())
+        if name not in imported_interfaces
+    )
 
     if need_erc20:
         declarations.append('''contract CydraERC20Stub {
