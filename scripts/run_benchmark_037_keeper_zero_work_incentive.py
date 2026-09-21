@@ -34,9 +34,9 @@ interface IKeeperLike {
 contract C is Test {
     function test() public {
         vm.deal(address(this), 5 ether);
-        uint256 initialBalance = address(this).balance;
 
         KeeperLike target = new KeeperLike{value: 5 ether}();
+        uint256 initialBalance = address(this).balance;
         bytes32[] memory ids = new bytes32[](0);
         address[] memory markets = new address[](0);
         uint256[] memory versions = new uint256[](0);
