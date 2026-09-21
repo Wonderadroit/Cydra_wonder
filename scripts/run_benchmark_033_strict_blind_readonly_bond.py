@@ -214,7 +214,7 @@ def main() -> int:
                 investigation.hypotheses,
                 investigation.invariants,
                 investigation.experiments,
-                observed_statuses={hypothesis.hypothesis_id: first_observation["status"]},
+                observed_statuses={hypothesis.hypothesis_id: "rejected" if first_observation["status"] == "PASS" else "UNMEASURABLE"},
             )
             hypothesis = selection.hypothesis
             experiment = next(e for e in investigation.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
