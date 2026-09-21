@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cydra.models import ContractModel, Experiment, FunctionModel, Hypothesis, ParameterModel
+from cydra.models import ConstructorModel, ContractModel, Experiment, FunctionModel, Hypothesis, ParameterModel
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 
 
@@ -97,14 +97,25 @@ def test_authorization_renderer_emits_constructor_arguments_and_imports_interfac
         'function withdraw(uint256 amount) external {} }\n',
         encoding="utf-8",
     )
-    model = _model(tmp_path)
-    model.source = str(source)
-    model.constructor = __import__("cydra.models", fromlist=["ConstructorModel"]).ConstructorModel(
+    model = ContractModel(
+        "Target",
+        str(source),
         (
-            ParameterModel("token", "IERC20"),
-            ParameterModel("value", "uint256"),
+            FunctionModel(
+                name="withdraw",
+                visibility="external",
+                modifiers=(),
+                writes=(),
+                external_calls=(),
+                line=4,
+                parameters=(ParameterModel("amount", "uint256"), ParameterModel("recipient", "address")),
+            ),
         ),
-        1,
+        constructor=ConstructorModel(
+            (ParameterModel("token", "IERC20"), ParameterModel("value", "uint256")),
+            1,
+        ),
+        pragma="^0.8.20",
     )
     generated = generate_authorization_test_from_experiment(
         _hypothesis(),
