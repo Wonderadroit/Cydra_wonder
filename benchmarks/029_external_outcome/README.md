@@ -21,3 +21,5 @@ The historical report documents an unchecked `transferFrom()` return-value issue
 Success requires blind selection of the external-outcome hypothesis, vulnerable execution FAIL, isolated causal control PASS, canonical causal verification VERIFIED, independent vulnerable FAIL, independent patched PASS, and finding gate READY.
 
 The synthetic patch is a causal control, not a claim about the historical production remediation.
+
+CI validation trigger: execute the benchmark on this revision.
