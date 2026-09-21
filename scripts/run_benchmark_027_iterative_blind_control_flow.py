@@ -82,14 +82,17 @@ def main() -> int:
 
         # A non-confirming initialization result is a real observation that
         # removes that candidate from the next selection round.
-        if init_outcome.benchmark_status == "confirmed":
-            raise SystemExit("initialization hypothesis unexpectedly confirmed; do not treat it as a false-positive rejection")
+        if init_outcome.internal_status != "rejected":
+            raise SystemExit(
+                "initialization classifier did not produce a terminal rejection: "
+                + init_outcome.internal_status
+            )
 
         # Feed the actual classifier result back into the class-neutral selector.
         # Do not manually exclude the first hypothesis: this benchmark exercises
         # the reusable evidence -> selection boundary introduced in PR #139.
         observed_statuses = {
-            first.hypothesis.hypothesis_id: first_classification.internal_status,
+            first.hypothesis.hypothesis_id: init_outcome.internal_status,
         }
         second = select_next_hypothesis(
             investigation.hypotheses,
