@@ -10,6 +10,9 @@ on:
       - ".github/workflows/benchmark-029-strict-blind-external-outcome.yml"
   workflow_dispatch:
 
+permissions:
+  pull-requests: write
+
 jobs:
   strict-blind-external-outcome:
     runs-on: ubuntu-latest
@@ -23,6 +26,28 @@ jobs:
       - run: python -m pip install -e . pytest
       - run: pytest -q tests
       - run: PYTHONPATH=src python scripts/run_benchmark_029_strict_blind_external_outcome.py --output backtest-artifacts/strict-blind-external-outcome
+      - if: always()
+        uses: actions/github-script@v9
+        env:
+          RESULT_PATH: backtest-artifacts/strict-blind-external-outcome/result.json
+        with:
+          script: |
+            const fs = require('fs');
+            const path = process.env.RESULT_PATH;
+            let body = 'Benchmark 029 did not produce result.json.';
+            if (fs.existsSync(path)) {
+              const r = JSON.parse(fs.readFileSync(path, 'utf8'));
+              body = '## CYDRA Benchmark 029 result\\n' +
+                '- blind hypothesis: `' + r.blind_selection.hypothesis.hypothesis_id + '`\\n' +
+                '- vulnerable: `' + r.vulnerable.status + '`\\n' +
+                '- patched: `' + r.patched.status + '`\\n' +
+                '- causal verification: `' + r.causal_verification.state + '`\\n' +
+                '- independent vulnerable: `' + r.independent_vulnerable.status + '`\\n' +
+                '- independent patched: `' + r.independent_patched.status + '`\\n' +
+                '- finding gate: `' + r.finding_gate + '`';
+            }
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
