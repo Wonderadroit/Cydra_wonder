@@ -62,6 +62,7 @@ from .structural_unbounded_iteration import generate_unbounded_iteration_hypothe
 from .unbounded_iteration_planning import plan_unbounded_iteration_experiment
 from .incentive_liveness_planning import plan_incentive_liveness_experiment
 from .callback_state_order_planning import plan_callback_state_order_experiment
+from .cross_function_state_planning import plan_cross_function_state_experiment
 
 
 @dataclass(frozen=True)
@@ -139,6 +140,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_incentive_liveness_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-UNBOUNDED-ITERATION-"):
         return plan_unbounded_iteration_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-STATE-"):
+        return plan_cross_function_state_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
