@@ -85,7 +85,8 @@ contract CydraSignedMetadataTest is Test {
         bytes32 userOpHash = keccak256("userOpHash");
         uint48 originalValidUntil = uint48(block.timestamp + 1);
 
-        userOp.signature = _signWindow(ownerKey, userOpHash, originalValidUntil, 0);
+        bytes memory baseSig = _signBase(ownerKey, userOpHash, originalValidUntil, 0);
+        userOp.signature = bytes.concat(baseSig, abi.encodePacked(originalValidUntil, uint48(0)));
 
         vm.prank(entryPoint);
         ValidationData memory original = _parseValidationData(
@@ -95,15 +96,8 @@ contract CydraSignedMetadataTest is Test {
 
         vm.warp(originalValidUntil + 1);
         uint48 attackerValidUntil = uint48(block.timestamp + 30 days);
-        userOp.signature = bytes.concat(
-            _signWindow(ownerKey, userOpHash, originalValidUntil, 0),
-            ""
-        );
-        // Preserve the original signature bytes but replace only the 12-byte metadata suffix.
-        userOp.signature = bytes.concat(
-            bytes.slice(userOp.signature, 0, 65),
-            abi.encodePacked(attackerValidUntil, uint48(0))
-        );
+        // Preserve the original 65-byte signature and replace only the metadata suffix.
+        userOp.signature = bytes.concat(baseSig, abi.encodePacked(attackerValidUntil, uint48(0)));
 
         vm.prank(entryPoint);
         ValidationData memory modified = _parseValidationData(
