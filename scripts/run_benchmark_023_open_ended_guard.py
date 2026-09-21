@@ -62,6 +62,12 @@ def clone_target(destination: Path) -> Path:
         ("git", "-C", str(destination), "submodule", "update", "--init", "--recursive"),
         check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
+    npm = subprocess.run(
+        ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", "--legacy-peer-deps"),
+        cwd=destination, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    if npm.returncode != 0:
+        raise RuntimeError("target npm dependency installation failed:\\n" + npm.stdout[-12000:])
     return destination
 
 
