@@ -443,6 +443,8 @@ def _runtime_stub_source(
     interfaces: dict[str, object] = dict(resolved)
     interfaces.update(derived_targets)
     known_interfaces = set(interfaces)
+    for interface in interfaces.values():
+        known_interfaces.update(name for name, _ in getattr(interface, "imported_types", ()))
 
     derived_by_source: dict[str, list[tuple[str, object]]] = {}
     for source_interface, source_method, target_interface in derived_interface_casts:
@@ -635,7 +637,7 @@ def _model_initialization_source(
                 continue
     for parameter in function.parameters:
         base = parameter.type.strip().split()[0].rstrip("[]")
-        if base in resolved_interface_names:
+        if base in resolved_interface_names or base in direct_parameter_interfaces:
             custom_namespaces.add(base)
     custom_imports: list[str] = []
     for namespace in sorted(custom_namespaces):
