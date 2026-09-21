@@ -177,6 +177,7 @@ contract ExternalOutcomeProbe is Test {
 }
 """
     path = root / "test" / "CydraExternalOutcomeProbe.t.sol"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(probe, encoding="utf-8")
     completed = subprocess.run(
         ("forge", "test", "--match-test", "testFalseTransferFromIsRejected", "-vvv"),
