@@ -20,6 +20,7 @@ class ResolvedInterface:
     methods: tuple[InterfaceMethod, ...]
     declared_types: tuple[str, ...] = ()
     imported_types: tuple[tuple[str, str], ...] = ()
+    top_level_types: tuple[str, ...] = ()
 
 
 _INTERFACE_RE = re.compile(r"\binterface\s+(\w+)")
@@ -217,16 +218,17 @@ def _extract_interface(
             declared_types.append(declared_type)
     # A Solidity source file may declare ABI structs/enums alongside the
     # interface and use them in interface methods. Preserve only declarations
-    # at source scope; declarations belonging to a different interface must
-    # remain excluded from this interface's provenance.
+    # at source scope separately; declarations belonging to an interface body
+    # remain in declared_types and must be referenced as Interface.Type.
+    top_level_types: list[str] = []
     for declaration in _DECLARED_TYPE_RE.finditer(source):
         prefix = source[:declaration.start()]
         depth = prefix.count("{") - prefix.count("}")
         if depth != 0:
             continue
         declared_type = declaration.group("struct") or declaration.group("enum") or declaration.group("type")
-        if declared_type and declared_type not in declared_types:
-            declared_types.append(declared_type)
+        if declared_type and declared_type not in top_level_types:
+            top_level_types.append(declared_type)
 
     # Preserve provenance for named symbols imported by the interface source.
     # Interface method signatures may use a top-level struct/enum/value type
@@ -261,4 +263,5 @@ def _extract_interface(
         methods=tuple(methods),
         declared_types=tuple(declared_types),
         imported_types=tuple(imported_types),
+        top_level_types=tuple(top_level_types),
     )
