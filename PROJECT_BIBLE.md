@@ -1588,3 +1588,40 @@ PR #162 integrated the target-scoped finding collection. PR #163 connected impac
 This architecture does not close the Solidity maturity/generalization gate. The remaining proof obligation is behavioral: repeated strict-blind unfamiliar-target campaigns must demonstrate that the generalized research loop can discover and causally verify genuine vulnerabilities, including more than one finding where the target supports it, without benchmark-specific detectors or selector overrides.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 75 — Solidity maturity/generalization gate closure campaign
+
+The maturity gate was exercised as one closure campaign rather than as individually hand-picked follow-up benchmarks.
+
+The campaign included:
+- strict-blind unfamiliar-target campaigns for Benchmarks 025, 027, and 029–037;
+- full repository regression;
+- the multi-finding research-loop regression;
+- Benchmark 038, a strict-blind executable target containing two independently exploitable authorization boundaries.
+
+The first closure attempt exposed two validation-environment failures:
+- Benchmark 032 could not execute because the closure workflow did not install Bun, although the benchmark requires it for the pinned target;
+- Benchmark 034 could not import its repository-local scripts package because the closure workflow did not preserve PYTHONPATH=.
+
+Neither failure was hidden or worked around inside CYDRA. The closure harness was corrected to reproduce the required target runtime environment, and the entire campaign was rerun.
+
+Final closure campaign run #5 (35642303164) completed with:
+- full regression: PASS;
+- multi-finding research-loop regression: PASS;
+- all 11 prior strict-blind campaigns: exit code 0;
+- Benchmark 038 strict-blind multi-finding campaign: PASS;
+- 12/12 campaign result manifests observed;
+- maturity evaluator: PASS.
+
+Benchmark 038 independently exercised the new target-scoped finding collection through the real research loop. CYDRA generated two blind authorization hypotheses: H-AUTH-setTreasury and H-AUTH-setFeeBps. The first selected hypothesis was confirmed by vulnerable execution PASS / patched execution FAIL. The loop then continued rather than stopping after the first finding, selected the second hypothesis, and independently confirmed it with the same vulnerable/patched differential. The final collection contained two distinct finding IDs: F-038-setTreasury and F-038-setFeeBps.
+
+No target-specific detector or selector override was introduced for this campaign. The multi-finding fixture is an executable validation target for the collection/reselection behavior; it is not presented as a newly discovered production vulnerability.
+
+The combined evidence satisfies the behavioral proof obligation recorded in Milestone 74: repeated strict-blind unfamiliar-target campaigns, causal differential verification and independent reproduction across materially different mechanisms, plus a target supporting multiple independently confirmed findings through the generic research loop.
+
+**Solidity maturity/generalization gate: CLOSED for this phase.**
+
+This closure means the current architecture has crossed the project's defined maturity gate; it does not mean future targets cannot expose new reasoning gaps. The doctrine remains unchanged: new failures must be diagnosed from evidence, repaired generically where possible, and regression-tested rather than patched with benchmark-specific selectors or detectors.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
