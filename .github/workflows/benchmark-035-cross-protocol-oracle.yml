@@ -1,0 +1,41 @@
+name: Benchmark 035 strict blind cross-protocol oracle
+
+on:
+  pull_request:
+    paths:
+      - "benchmarks/035_cross_protocol_oracle/**"
+      - "scripts/run_benchmark_035_cross_protocol_oracle.py"
+      - "src/cydra/pipeline.py"
+      - "src/cydra/research_loop.py"
+      - "src/cydra/structural_read_only_reentrancy.py"
+      - "src/cydra/**"
+      - ".github/workflows/benchmark-035-cross-protocol-oracle.yml"
+  push:
+    branches: [main]
+    paths:
+      - "benchmarks/035_cross_protocol_oracle/**"
+      - "scripts/run_benchmark_035_cross_protocol_oracle.py"
+      - "src/cydra/pipeline.py"
+
+jobs:
+  benchmark-035:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install Python dependencies
+        run: pip install -e . pytest
+      - name: Run Benchmark 035 regression
+        run: pytest -q tests/test_benchmark_035_cross_protocol_oracle.py
+      - name: Run strict blind campaign
+        run: python scripts/run_benchmark_035_cross_protocol_oracle.py
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-035-cross-protocol-oracle
+          path: backtest-artifacts/benchmark-035-cross-protocol
