@@ -68,7 +68,7 @@ def clone_target(destination: Path) -> Path:
     return destination
 
 def write_test(root: Path):
-    rpc = os.environ.get("CYDRA_FORK_RPC", "https://rpcfree.com/ethereum-rpc")
+    rpc = os.environ.get("CYDRA_FORK_RPC", "https://ethereum-rpc.blockreq.com/v1/rpc/public")
     if '"' in rpc or "\\n" in rpc or "\\r" in rpc:
         raise RuntimeError("invalid CYDRA_FORK_RPC value")
     source = TEST_SOURCE.replace("__CYDRA_FORK_RPC__", rpc)
