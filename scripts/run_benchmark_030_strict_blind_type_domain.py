@@ -15,7 +15,7 @@ from cydra.pipeline import investigate
 from cydra.system_model import Edge, Node, SystemModel
 
 TARGET_REPO = "https://github.com/code-423n4/2024-02-ai-arena.git"
-TARGET_REF = "06ee3e647a26292344b1e7b081e5af26a6ba81da"
+TARGET_REF = "cd1a0e6d1b40168657d1aaee8223dc050e15f8cc"
 TARGET_PATH = "src/FighterFarm.sol"
 
 VULNERABLE_TEST_SOURCE = r"""// SPDX-License-Identifier: MIT
