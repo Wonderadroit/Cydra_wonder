@@ -22,7 +22,7 @@ from cydra.foundry import (
     test_path_for,
 )
 from cydra.initialization_runtime import classify_initialization_execution
-from cydra.pipeline import investigate
+from cydra.pipeline import _default_experiment_planner, investigate
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment, plan_guard_parity_experiment
 from cydra.sequence_foundry import generate_sequence_test_from_experiment
@@ -191,10 +191,13 @@ def prepare_target_project(project: Path) -> None:
     package = project / "package.json"
     if not package.exists():
         return
-    if (project / "yarn.lock").exists():
-        command = ("yarn", "install", "--frozen-lockfile", "--ignore-scripts")
-    elif (project / "package-lock.json").exists():
+    # Prefer an npm lockfile when both lockfiles exist. Some audit targets
+    # retain a stale yarn.lock beside the authoritative package-lock.json;
+    # frozen Yarn then fails before CYDRA can inspect the target.
+    if (project / "package-lock.json").exists():
         command = ("npm", "ci", "--ignore-scripts")
+    elif (project / "yarn.lock").exists():
+        command = ("yarn", "install", "--frozen-lockfile", "--ignore-scripts")
     else:
         command = ("npm", "install", "--ignore-scripts")
     subprocess.run(command, cwd=project, check=True)
@@ -396,14 +399,16 @@ def create_freeze(files: dict[str, Any], text_files: dict[str, str], destination
             write_json(freeze / name, value)
         for name, text in text_files.items():
             (freeze / name).write_text(text, encoding="utf-8")
-        missing = [
-            name for name in FREEZE_FILES if name not in files and name not in text_files
-        ]
-        if missing:
-            raise RuntimeError(f"Freeze missing files: {missing}")
+        # manifest.sha256 is derived from the other freeze files, so it
+        # must be created before checking completeness.
         (freeze / "manifest.sha256").write_text(
             "\n".join(_manifest(freeze)) + "\n", encoding="utf-8"
         )
+        missing = [
+            name for name in FREEZE_FILES if not (freeze / name).exists()
+        ]
+        if missing:
+            raise RuntimeError(f"Freeze missing files: {missing}")
         if destination.exists():
             raise FileExistsError(destination)
         os.replace(freeze, destination)
@@ -440,16 +445,12 @@ def _environment_provenance(root: Path, project: Path) -> tuple[dict[str, Any], 
 
 
 def _blind_planner(hypothesis):
-    if hypothesis.invariant_id.startswith("INV-STATE-"):
-        return plan_cross_function_state_experiment(hypothesis)
-    if hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
-        return plan_guard_parity_experiment(hypothesis)
-    planners = {
-        "INV-AUTH-001": plan_access_control_experiment,
-        "INV-INIT-001": plan_initialization_experiment,
-        "INV-ARITH-001": plan_arithmetic_experiment,
-    }
-    return planners[hypothesis.invariant_id](hypothesis)
+    # Reuse the repository's complete class-neutral planner dispatch. The
+    # blind runner only exposes executable layers for the explicitly requested
+    # capability classes, but investigation may legitimately generate other
+    # hypotheses from compiler/structural evidence. Those hypotheses must not
+    # crash the entire blind investigation with a planner KeyError.
+    return _default_experiment_planner(hypothesis)
 
 def main() -> int:
     parser = argparse.ArgumentParser(
