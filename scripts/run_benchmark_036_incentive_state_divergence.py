@@ -43,10 +43,9 @@ def run_fixture(patched: bool, label: str):
             "import \"forge-std/Test.sol\"; import \"../Target.sol\";\n"
             "contract C is Test { function test() public { "
             + ("IncentiveQueuePatched target = new IncentiveQueuePatched{value: 5 ether}();" if patched else "IncentiveQueue target = new IncentiveQueue{value: 2 ether}();")
-            + " (bool a,) = address(target).call"
-            + ("(abi.encodeWithSignature(\"requestWork()\", \"\"));" if patched else "(abi.encodeWithSignature(\"requestWork()\"));")
+            + " uint256 before = address(this).balance; (bool a,) = address(target).call"
+            + ("(abi.encodeWithSignature(\"requestWork()\"));" if patched else "(abi.encodeWithSignature(\"requestWork()\"));")
             + " require(a); "
-            + ("(bool b,) = address(target).call{value: 2 ether}(abi.encodeWithSignature(\"requestWork()\")); require(b);" if patched else "")
             + " uint256 before = address(this).balance; (bool c,) = address(target).call(abi.encodeWithSignature(\"commitWork()\")); require(c); require(address(this).balance > before, \"no reward\"); } receive() external payable {} }\n"
         )
         (root/"test"/"Incentive.t.sol").write_text(harness,encoding="utf-8")
