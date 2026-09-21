@@ -19,6 +19,7 @@ class ResolvedInterface:
     resolution_method: str
     methods: tuple[InterfaceMethod, ...]
     declared_types: tuple[str, ...] = ()
+    imported_types: tuple[tuple[str, str], ...] = ()
 
 
 _INTERFACE_RE = re.compile(r"\binterface\s+(\w+)")
@@ -198,10 +199,38 @@ def _extract_interface(
         declared_type = declaration.group("struct") or declaration.group("enum") or declaration.group("type")
         if declared_type and declared_type not in declared_types:
             declared_types.append(declared_type)
+
+    # Preserve provenance for named symbols imported by the interface source.
+    # Interface method signatures may use a top-level struct/enum/value type
+    # declared in an imported file; a generated runtime stub must import that
+    # symbol too or the otherwise-correct signature becomes uncompilable.
+    imported_types: list[tuple[str, str]] = []
+    for import_match in re.finditer(
+        r'import\s*\{([^}]+)\}\s*from\s*"([^"]+)"\s*;',
+        source,
+        re.MULTILINE,
+    ):
+        symbols_text, import_path = import_match.groups()
+        resolved_import = resolve_import(root, path, import_path)
+        if resolved_import is None:
+            continue
+        imported_path, _ = resolved_import
+        for symbol in _split_parameters(symbols_text):
+            token = symbol.strip()
+            if not token:
+                continue
+            parts = re.split(r'\s+as\s+', token, maxsplit=1)
+            imported_name = parts[-1].strip()
+            if imported_name and imported_name not in {item[0] for item in imported_types}:
+                imported_types.append(
+                    (imported_name, imported_path.relative_to(root).as_posix())
+                )
+
     return ResolvedInterface(
         name=name,
         source_path=path.relative_to(root).as_posix(),
         resolution_method=resolution_method,
         methods=tuple(methods),
         declared_types=tuple(declared_types),
+        imported_types=tuple(imported_types),
     )
