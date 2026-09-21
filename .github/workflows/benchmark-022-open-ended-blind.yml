@@ -38,3 +38,5 @@ jobs:
         with:
           name: benchmark-022-open-ended-blind
           path: backtest-artifacts/open-ended-blind/
+
+# Open-ended benchmark: rerun on harness changes.
