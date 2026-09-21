@@ -24,6 +24,7 @@ pragma solidity 0.8.25;
 import { Settings } from "./helpers/Settings.sol";
 import { Cred } from "../src/Cred.sol";
 import { CuratorRewardsDistributor } from "../src/reward/CuratorRewardsDistributor.sol";
+import { ECDSA } from "solady/utils/ECDSA.sol";
 
 contract CydraCallbackStateOrderTest is Settings {
     function _createCredForTest() internal {
