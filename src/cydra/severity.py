@@ -132,3 +132,25 @@ def assess_severity(impact: ImpactAssessment, kind: ImpactKind) -> SeverityAsses
         evidence,
         False,
     )
+
+
+@dataclass(frozen=True)
+class SeverityPolicy:
+    """Optional program-specific severity mapping.
+
+    The default classifier remains the conservative baseline. Programs may
+    provide an explicit policy rather than assuming all bounty taxonomies are
+    identical.
+    """
+    levels: tuple[str, ...] = tuple(level.value for level in ImpactLevel if level is not ImpactLevel.UNKNOWN)
+
+    def allows(self, level: ImpactLevel) -> bool:
+        return level.value in self.levels
+
+
+def apply_severity_policy(assessment: SeverityAssessment, policy: SeverityPolicy | None = None) -> SeverityAssessment:
+    if policy is None or assessment.level is ImpactLevel.UNKNOWN:
+        return assessment
+    if policy.allows(assessment.level):
+        return assessment
+    return SeverityAssessment(ImpactLevel.UNKNOWN, "baseline severity is not represented by the supplied program policy", assessment.evidence_ids, False)
