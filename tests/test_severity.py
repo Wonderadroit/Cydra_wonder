@@ -7,7 +7,7 @@ from cydra.impact import (
     Recoverability,
     Repeatability,
 )
-from cydra.severity import ImpactKind, assess_severity
+from cydra.severity import ImpactKind, SeverityPolicy, apply_severity_policy, assess_severity
 
 
 def impact(scope, access, recoverability):
@@ -60,5 +60,16 @@ def test_unresolved_dimensions_are_unknown_not_guessed():
         ),
         ImpactKind.ASSET_LOSS,
     )
+    assert result.level is ImpactLevel.UNKNOWN
+    assert not result.determined
+
+
+def test_program_policy_can_represent_a_different_allowed_taxonomy():
+    assessment = assess_severity(
+        impact(ImpactScope.PROTOCOL_WIDE, AttackerAccess.PERMISSIONLESS, Recoverability.IRREVERSIBLE),
+        ImpactKind.ASSET_LOSS,
+    )
+    policy = SeverityPolicy(levels=(ImpactLevel.HIGH.value, ImpactLevel.MEDIUM.value, ImpactLevel.LOW.value, ImpactLevel.NONE.value))
+    result = apply_severity_policy(assessment, policy)
     assert result.level is ImpactLevel.UNKNOWN
     assert not result.determined
