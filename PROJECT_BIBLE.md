@@ -1326,3 +1326,12 @@ Boundary: this benchmark establishes the control-flow invariant violation and ca
 
 The Solidity maturity gate remains open. The demonstrated surface count is now nine materially distinct mechanisms, but the final gate still requires evidence that CYDRA can select and validate findings beyond its existing explicitly designed reasoning surfaces. The next campaign should therefore move toward a more open-ended blind target where the vulnerability class and specialized surface are not supplied in advance, while preserving direct execution, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
 
+
+
+## Milestone 62 — First class-hidden open-ended blind discovery
+
+Benchmark 022 completed the first true class-hidden blind campaign. CYDRA investigated a pinned unfamiliar Intuition AtomWallet target without being supplied a vulnerability class, target function, state surface, exploit sequence, or historical answer. It generated three candidate hypotheses and its class-neutral information-per-cost selector independently selected H-SIGNED-METADATA-_validateSignature. The selected experiment was executed against the real pinned repository and dependency graph. The vulnerable target accepted the same 65-byte ECDSA signature after only the 12-byte validity metadata suffix was changed, including after the original validity window had expired. A minimal causal control bound the validity metadata into the signed digest; vulnerable execution failed the security assertion and the patched control passed. Fresh independent vulnerable and patched clones reproduced the same split. Canonical causal verification reached verified, reproduction verification was true, and the finding gate reached READY.
+
+This milestone is materially different from the prior specialized benchmarks because the benchmark selection boundary is class-hidden: the benchmark does not tell CYDRA what mechanism to look for. The benchmark harness retains the historical oracle only for evaluation and causal-control construction after CYDRA has selected and tested its own hypothesis.
+
+**Maturity gate:** still open. This milestone establishes the first open-ended selection-and-verification result, but it is one bounded class-hidden campaign. Solidity maturity should close only after repeated open-ended unfamiliar-target campaigns demonstrate that CYDRA can choose and causally verify findings across materially different mechanisms without benchmark-provided vulnerability-class guidance.
