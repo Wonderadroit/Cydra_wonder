@@ -1,0 +1,33 @@
+name: Benchmark 034 generic research-loop holdout
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  benchmark-034:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Regression
+        run: python -m pytest -q
+      - name: Benchmark 034
+        env:
+          PYTHONPATH: .
+        run: python scripts/run_benchmark_034_open_ended_research_loop.py --output backtest-artifacts/benchmark-034
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-034-${{ github.sha }}
+          path: backtest-artifacts/benchmark-034
+          if-no-files-found: error
