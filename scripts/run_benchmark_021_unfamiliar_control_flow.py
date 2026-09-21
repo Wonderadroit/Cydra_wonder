@@ -109,7 +109,7 @@ def clone_target(destination: Path) -> Path:
         check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
     subprocess.run(
-        ("npm", "ci", "--ignore-scripts"),
+        ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"),
         cwd=destination, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
     subprocess.run(
