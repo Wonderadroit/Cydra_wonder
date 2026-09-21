@@ -206,7 +206,7 @@ def _resolve_custom_type(parameter_type: str, target_type: str, contract_model: 
             (
                 interface.name
                 for interface in contract_model.inherited_resolved_interfaces
-                if base in interface.declared_types
+                if base == interface.name or base in interface.declared_types
             ),
             None,
         )
@@ -590,8 +590,26 @@ def _model_initialization_source(
         for parameter in function.parameters
         if "." in parameter.type
     }
+    # Imported interface types can appear as bare ABI parameter types (for
+    # example IERC20Metadata) even when the resolver records the interface
+    # itself rather than a declared struct/enum. Preserve that provenance and
+    # import the exact resolved interface instead of emitting an unresolved
+    # bare type into the generated harness.
+    resolved_interface_names = {
+        interface.name: interface for interface in contract_model.inherited_resolved_interfaces
+    }
+    for parameter in function.parameters:
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if base in resolved_interface_names:
+            custom_namespaces.add(base)
     custom_imports: list[str] = []
     for namespace in sorted(custom_namespaces):
+        inherited_interface = resolved_interface_names.get(namespace)
+        if inherited_interface is not None and namespace == inherited_interface.name:
+            custom_imports.append(
+                f'import {{ {namespace} }} from "{_resolved_interface_import_path(inherited_interface.source_path, output_path or "generated.t.sol")}";'
+            )
+            continue
         match = re.search(
             rf'import\s*\{{\s*{re.escape(namespace)}\s*\}}\s*from\s*"([^"]+)"\s*;',
             source_text,
