@@ -205,9 +205,8 @@ def prepare_target_project(project: Path) -> None:
     # valid Solidity targets use Hardhat/npm dependencies and do not vendor
     # forge-std at all. Materialize the standard Foundry test library only when
     # the target lacks it; never replace an existing target dependency.
-    foundry_config = project / "foundry.toml"
-    forge_std = project / "lib" / "forge-std"
-    if foundry_config.exists() and not forge_std.exists():
+    # The generated harness is a Foundry test regardless of whether the target\n    # repository declares a foundry.toml. Install forge-std only when the target\n    # does not already provide the standard library under the canonical lib path.\n    forge_std = project / "lib" / "forge-std"
+    if not forge_std.exists():
         subprocess.run(
             ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
             cwd=project,
