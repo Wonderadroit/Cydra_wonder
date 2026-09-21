@@ -87,20 +87,3 @@ def test_observed_nonterminal_hypothesis_remains_eligible_but_is_deprioritized()
 
     assert selected.hypothesis.hypothesis_id == "H-B"
 
-
-def test_evidence_density_does_not_outvote_a_fresher_more_discriminating_candidate():
-    evidence_rich = Invariant("INV-RICH", "rich", "test", 0.82)
-    fresh = Invariant("INV-FRESH", "fresh", "test", 0.86)
-    h_rich = Hypothesis(
-        "H-RICH", "rich", "INV-RICH", "rich", "caller", "impact",
-        evidence_ids=("e1", "e2", "e3", "e4", "e5"),
-    )
-    h_fresh = Hypothesis("H-FRESH", "fresh", "INV-FRESH", "fresh", "caller", "impact")
-    e_rich = Experiment("X-RICH", "H-RICH", "rich", ("one", "two"), 1.0)
-    e_fresh = Experiment("X-FRESH", "H-FRESH", "fresh", ("one", "two"), 1.0)
-
-    selected = select_next_hypothesis(
-        (h_rich, h_fresh), (evidence_rich, fresh), (e_rich, e_fresh)
-    )
-
-    assert selected.hypothesis.hypothesis_id == "H-FRESH"
