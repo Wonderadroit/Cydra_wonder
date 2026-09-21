@@ -10,7 +10,7 @@ from cydra.canonical_cycle import run_canonical_differential_cycle
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
 from cydra.hypothesis_selection import select_next_hypothesis
 from cydra.impact import ImpactAssessment, ImpactLevel
-from cydra.models import Hypothesis as ModelHypothesis
+from cydra.hypotheses import Hypothesis as ModelHypothesis
 from cydra.pipeline import investigate
 from cydra.system_model import Edge, Node, SystemModel
 
