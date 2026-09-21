@@ -16,3 +16,5 @@ Acceptance:
 - finding gate is READY.
 
 Historical report material is evaluation/corroboration context only and is not supplied to selection.
+
+Canonical validation is executed from main after the capability is integrated; the blind boundary remains unchanged.
