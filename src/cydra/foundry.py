@@ -309,6 +309,18 @@ def _resolved_interface_import_path(source_path: str, output_path: str | Path) -
         candidate = project_root / raw
         if candidate.exists():
             return Path(os.path.relpath(candidate.resolve(), output.parent.resolve())).as_posix()
+
+        # Some legacy resolver records contain an importer-relative path such
+        # as Interfaces/Foo.sol. At emission time the target project root is
+        # known, so resolve that already-identified file beneath contracts/
+        # without guessing an interface by name or changing provenance.
+        matches = sorted(
+            (project_root / "contracts").rglob(raw.as_posix())
+            if (project_root / "contracts").is_dir()
+            else ()
+        )
+        if len(matches) == 1:
+            return Path(os.path.relpath(matches[0].resolve(), output.parent.resolve())).as_posix()
     return _layout_aware_import_path(source_path, output_path)
 
 
