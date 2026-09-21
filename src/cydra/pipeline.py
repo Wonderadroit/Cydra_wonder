@@ -40,12 +40,14 @@ from .structural_transfer_accounting import generate_transfer_accounting_hypothe
 from .structural_redemption_rounding import generate_redemption_rounding_hypotheses
 from .structural_cross_contract_economic import generate_cross_contract_economic_hypotheses
 from .structural_cross_contract_attribution import generate_cross_contract_attribution_hypotheses
+from .structural_control_flow import generate_control_flow_hypotheses
 from .structural_signature_reuse import generate_signature_reuse_hypotheses
 from .structural_signed_metadata import generate_signed_metadata_hypotheses
 from .structural_intent_parity import generate_intent_parity_hypotheses
 from .intent_parity_planning import plan_intent_parity_experiment
 from .signature_reuse_planning import plan_signature_reuse_experiment
 from .signed_metadata_planning import plan_signed_metadata_experiment
+from .control_flow_planning import plan_control_flow_experiment
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         "INV-ARITH-001": plan_arithmetic_experiment,
         "INV-ROUND-001": plan_weighted_average_rounding_experiment,
     }
+    if hypothesis.invariant_id.startswith("INV-CONTROL-FLOW-"):
+        return plan_control_flow_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
         return plan_guard_parity_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-TEMPORAL-PRECONDITION-"):
@@ -189,7 +193,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_control_flow_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
