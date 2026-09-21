@@ -11,8 +11,8 @@ from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
 from cydra.hypotheses import Hypothesis as CanonicalHypothesis
 from cydra.impact import ImpactAssessment, ImpactLevel
 from cydra.pipeline import investigate
+from cydra.research_loop import run_research_loop
 from cydra.system_model import Edge, Node, SystemModel
-from cydra.hypothesis_selection import select_next_hypothesis
 
 TARGET_REPO = "https://github.com/code-423n4/2024-01-canto.git"
 TARGET_REF = "5e0d6f1f981993f83d0db862bcf1b2a49bb6ff50"
@@ -133,15 +133,47 @@ def main() -> int:
         # No vulnerability class, target function, state surface, reasoning-surface
         # injection, custom planner, exploit sequence, or historical answer is supplied.
         result = investigate(source, target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_PATH}")
-        selection = select_next_hypothesis(result.hypotheses, result.invariants, result.experiments)
-        hypothesis = selection.hypothesis
+
+        def execute(hypothesis, experiment):
+            # This benchmark can materially execute only its epoch-boundary harness.
+            # Any other selected hypothesis is recorded as unmeasurable rather than
+            # treated as success, allowing the generic loop to reselect from evidence.
+            if not hypothesis.invariant_id.startswith("INV-EPOCH-ACCOUNTING-"):
+                return {
+                    "experiment_id": experiment.experiment_id,
+                    "executed": False,
+                    "tests_run": 0,
+                    "tests_failed": 0,
+                    "status": "UNMEASURABLE",
+                    "exit_code": None,
+                    "stdout": "benchmark harness does not provide an executable binding for this experiment",
+                    "stderr": "",
+                }
+            return run_target(target, "vulnerable")
+
+        loop = run_research_loop(
+            result.hypotheses,
+            result.invariants,
+            result.experiments,
+            execute=execute,
+            status_of=lambda observation: observation["status"],
+            stop_when=lambda observation: observation["status"] in {"PASS", "FAIL"},
+            max_rounds=3,
+        )
+        if not loop.rounds:
+            raise RuntimeError("blind research loop produced no rounds")
+        round_ = loop.rounds[-1]
+        hypothesis = round_.selection.hypothesis
+        experiment = round_.selection and next(
+            e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id
+        )
+        vulnerable = round_.observation
         if not hypothesis.invariant_id.startswith("INV-EPOCH-ACCOUNTING-"):
             raise SystemExit(
-                "strict blind selector did not choose the epoch-boundary hypothesis: "
+                "iterative blind loop did not reach the executable epoch-boundary hypothesis: "
                 + hypothesis.hypothesis_id + "/" + hypothesis.target_function
             )
-        experiment = next(e for e in result.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
-        vulnerable = run_target(target, "vulnerable")
+        selection = round_.selection
 
     with tempfile.TemporaryDirectory(prefix="cydra-canto-blind-p-") as tmp:
         target = clone_target(Path(tmp) / "target")
