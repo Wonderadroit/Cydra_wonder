@@ -27,7 +27,7 @@ def generate_incentive_liveness_hypotheses(contract: ContractModel, semantic=())
     for f in contract.functions:
         if f.visibility not in {"public","external"}: continue
         body=_body(contract,f.name)
-        if re.search(r"(?:transfer|send|call)\s*\([^;]*msg\.sender",body) and re.search(r"(?:reward|fee|bounty|incentive|payout)",body,re.I):
+        if re.search(r"(?:payable\s*\(\s*msg\.sender\s*\)|msg\.sender)\s*(?:\.\s*)?(?:transfer|send|call)",body) and re.search(r"(?:reward|fee|bounty|incentive|payout)",body,re.I):
             rewarders.append(f)
         if re.search(r"(?:request|pending|queue|epoch|job|work)",f.name,re.I) and re.search(r"\+\+|\+=|push\s*\(",body):
             triggers.append(f)
