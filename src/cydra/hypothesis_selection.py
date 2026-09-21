@@ -53,8 +53,16 @@ def select_next_hypothesis(
         experiment = experiment_by_id.get(hypothesis.hypothesis_id)
         if invariant is None or experiment is None:
             continue
+        score = _information_score(hypothesis, invariant, experiment)
+        # A non-terminal observation is evidence, not disqualification. Keep the
+        # hypothesis eligible, but prefer an untested candidate when it offers
+        # comparable information gain. This prevents the loop from spending every
+        # round repeating the same unresolved experiment.
+        status = observed.get(hypothesis.hypothesis_id)
+        if status is not None:
+            score *= 0.5
         ranked.append((
-            _information_score(hypothesis, invariant, experiment),
+            score,
             -experiment.cost,
             hypothesis.hypothesis_id,
             hypothesis,
