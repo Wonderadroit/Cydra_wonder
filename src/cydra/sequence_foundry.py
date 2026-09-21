@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface
@@ -98,7 +99,7 @@ def generate_sequence_test_from_experiment(
             constructor_arguments.append(f"{base}(address(0))")
             resolved = direct_interfaces[base]
             constructor_imports.append(
-                f'import {{ {base} }} from "{Path(__import__("os").path.relpath(project_root / resolved.source_path, path.parent)).as_posix()}";'
+                f'import {{ {base} }} from "{Path(os.path.relpath(project_root / resolved.source_path, path.parent)).as_posix()}";'
             )
         elif "." in base:
             raise ValueError(f"unsupported sequence constructor namespaced type: {parameter.type}")
