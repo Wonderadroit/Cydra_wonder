@@ -52,8 +52,9 @@ contract CydraCallbackStateOrderTest is Settings {
         uint256 buyPrice = bondingCurve.getBuyPriceAfterFee(1, 1, 10);
         bool ok = attacker.tryBuy(buyPrice);
 
-        assertFalse(ok, "reentrant callback bypassed the cooldown before state update");
-        assertEq(cred.getShareNumber(1, address(attacker)), 0);
+        assertTrue(ok, "buy execution itself must remain successful");
+        assertFalse(attacker.reentrantSellSucceeded(), "reentrant callback bypassed the cooldown before state update");
+        assertEq(cred.getShareNumber(1, address(attacker)), 10);
     }
 }
 
@@ -61,6 +62,7 @@ contract CallbackAttacker {
     Cred immutable cred;
     CuratorRewardsDistributor immutable distributor;
     bool active = true;
+    bool _reentrantSellSucceeded;
 
     constructor(Cred cred_, CuratorRewardsDistributor distributor_) {
         cred = cred_;
@@ -73,13 +75,19 @@ contract CallbackAttacker {
         );
     }
 
+    function reentrantSellSucceeded() external view returns (bool) {
+        return _reentrantSellSucceeded;
+    }
+
     receive() external payable {
         if (!active) return;
         active = false;
         distributor.distribute(1);
         uint256 shares = cred.getShareNumber(1, address(this));
         if (shares > 0) {
-            cred.sellShareCred(1, shares, 0);
+            try cred.sellShareCred(1, shares, 0) {
+                _reentrantSellSucceeded = true;
+            } catch {}
         }
     }
 }
@@ -89,6 +97,12 @@ def clone_target(destination: Path) -> Path:
     subprocess.run(("git", "clone", "--no-tags", "--recurse-submodules", TARGET_REPO, str(destination)),
                    check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", TARGET_REF),
+                   check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    # The pinned Phi test suite imports @prb/test through node_modules. The
+    # repository's bun.lockb is the authoritative dependency snapshot; install
+    # it before every isolated vulnerable/patched reproduction so compilation
+    # failures cannot masquerade as security observations.
+    subprocess.run(("bun", "install", "--frozen-lockfile"), cwd=destination,
                    check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     return destination
 

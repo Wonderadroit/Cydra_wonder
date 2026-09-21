@@ -11,6 +11,9 @@ def test_callback_state_order_surface_detects_external_transfer_then_write(tmp_p
         contract Callback {
             mapping(address => uint256) public lastTrade;
             function trade() external payable {
+                _trade();
+            }
+            function _trade() internal {
                 payable(msg.sender).transfer(msg.value);
                 lastTrade[msg.sender] = block.timestamp;
             }

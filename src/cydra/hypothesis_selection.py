@@ -60,7 +60,11 @@ def select_next_hypothesis(
         # round repeating the same unresolved experiment.
         status = observed.get(hypothesis.hypothesis_id)
         if status is not None:
-            score *= 0.5
+            # An unmeasurable experiment yielded no executable evidence. Keep the
+            # hypothesis auditable, but strongly prefer a different candidate so
+            # the generic loop spends its budget on new information rather than
+            # retrying the same non-renderable experiment.
+            score *= 0.1 if status.lower() == "unmeasurable" else 0.5
         ranked.append((
             score,
             -experiment.cost,

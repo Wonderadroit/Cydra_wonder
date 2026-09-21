@@ -86,3 +86,19 @@ def test_observed_nonterminal_hypothesis_remains_eligible_but_is_deprioritized()
     )
 
     assert selected.hypothesis.hypothesis_id == "H-B"
+
+
+def test_unmeasurable_observation_is_strongly_deprioritized_without_being_discarded():
+    invariant_a = Invariant("INV-A", "a", "test", 0.95)
+    invariant_b = Invariant("INV-B", "b", "test", 0.8)
+    h_a = Hypothesis("H-A", "a", "INV-A", "a", "caller", "impact")
+    h_b = Hypothesis("H-B", "b", "INV-B", "b", "caller", "impact")
+    e_a = Experiment("X-H-A", "H-A", "a", ("one", "two"), 1.0)
+    e_b = Experiment("X-H-B", "H-B", "b", ("one",), 1.0)
+
+    selected = select_next_hypothesis(
+        (h_a, h_b), (invariant_a, invariant_b), (e_a, e_b),
+        observed_statuses={"H-A": "UNMEASURABLE"},
+    )
+
+    assert selected.hypothesis.hypothesis_id == "H-B"
