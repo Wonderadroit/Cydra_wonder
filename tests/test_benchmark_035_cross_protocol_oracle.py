@@ -13,3 +13,14 @@ def test_cross_protocol_readonly_hypothesis_gets_generic_planner():
     assert matches
     experiment = next(e for e in result.experiments if e.hypothesis_id == matches[0].hypothesis_id)
     assert experiment.experiment_id == "X-H-READONLY-XCONTRACT-latestAnswer"
+
+
+def test_cross_protocol_feed_edges_are_canonical():
+    from cydra.graph_semantics import validate_graph
+    from cydra.system_model import Edge, Node, SystemModel
+
+    model = SystemModel()
+    model.add_node(Node("contract:A", "contract", "A", {}))
+    model.add_node(Node("contract:B", "contract", "B", {}))
+    model.add_edge(Edge("contract:A", "feeds", "contract:B", {}))
+    assert validate_graph(model) == []
