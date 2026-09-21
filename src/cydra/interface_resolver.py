@@ -216,9 +216,24 @@ def _extract_interface(
         if declared_type and declared_type not in declared_types:
             declared_types.append(declared_type)
     # A Solidity source file may declare ABI structs/enums alongside the
-    # interface and use them in interface methods. Preserve those top-level
-    # declarations too so generated stubs can import them by name.
+    # interface and use them in interface methods. Preserve only declarations
+    # at source scope; declarations belonging to a different interface must
+    # remain excluded from this interface's provenance.
+    brace_depth = 0
+    line_start = 0
+    top_level_spans: list[tuple[int, int]] = []
+    for index, ch in enumerate(source):
+        if ch == "{":
+            brace_depth += 1
+        elif ch == "}":
+            brace_depth = max(0, brace_depth - 1)
+        if ch == "\n":
+            line_start = index + 1
     for declaration in _DECLARED_TYPE_RE.finditer(source):
+        prefix = source[:declaration.start()]
+        depth = prefix.count("{") - prefix.count("}")
+        if depth != 0:
+            continue
         declared_type = declaration.group("struct") or declaration.group("enum") or declaration.group("type")
         if declared_type and declared_type not in declared_types:
             declared_types.append(declared_type)
