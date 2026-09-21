@@ -37,7 +37,12 @@ def select_next_hypothesis(
     # Only an explicit contradiction removes a candidate. Ambiguous and
     # non-terminal observations remain available for further information gain.
     observed = observed_statuses or {}
-    excluded.update(hid for hid, status in observed.items() if status == "contradicted")
+    # Classifiers may use "rejected" for a hypothesis disproved by an
+    # executable observation. Normalize that terminal classifier outcome to the
+    # canonical contradiction state; ambiguous/not-confirmed outcomes remain
+    # eligible for further information-gain testing.
+    contradictory_statuses = {"contradicted", "rejected"}
+    excluded.update(hid for hid, status in observed.items() if status in contradictory_statuses)
     invariant_by_id = {item.invariant_id: item for item in invariants}
     experiment_by_id = {item.hypothesis_id: item for item in experiments}
     ranked = []
