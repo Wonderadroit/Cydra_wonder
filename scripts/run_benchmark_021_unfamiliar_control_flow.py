@@ -114,7 +114,6 @@ def clone_target(destination: Path) -> Path:
     )
     if npm.returncode != 0:
         raise RuntimeError("npm dependency installation failed:\n" + npm.stdout[-12000:])
-    )
     subprocess.run(
         ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
         cwd=destination, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
