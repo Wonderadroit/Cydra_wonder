@@ -37,6 +37,7 @@ RELATION_RULES: Dict[str, Tuple[FrozenSet[str], FrozenSet[str]]] = {
     "reads": (frozenset({"function"}), frozenset({"state_variable", "data_flow"})),
     "writes": (frozenset({"function"}), frozenset({"state_variable", "data_flow"})),
     "external_call": (frozenset({"function"}), frozenset({"data_flow", "function"})),
+    "feeds": (frozenset({"contract", "module", "function"}), frozenset({"contract", "module", "function"})),
 }
 
 @dataclass(frozen=True)
