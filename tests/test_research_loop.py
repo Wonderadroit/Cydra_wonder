@@ -87,3 +87,26 @@ def test_research_loop_fails_closed_on_empty_status():
             execute=lambda h, e: Observation(""),
             status_of=lambda o: o.status,
         )
+
+
+def test_research_loop_accumulates_multiple_verified_findings():
+    hypotheses, invariants, experiments = _fixtures()
+
+    @dataclass(frozen=True)
+    class Finding:
+        finding_id: str
+
+    counter = iter((Finding("F-1"), Finding("F-2")))
+    result = run_research_loop(
+        hypotheses,
+        invariants,
+        experiments,
+        execute=lambda h, e: Observation("confirmed"),
+        status_of=lambda o: o.status,
+        finding_of=lambda o: next(counter),
+        finding_target="target-A",
+        max_rounds=2,
+    )
+    assert result.findings is not None
+    assert result.findings.target == "target-A"
+    assert [f.finding_id for f in result.findings.findings] == ["F-1", "F-2"]
