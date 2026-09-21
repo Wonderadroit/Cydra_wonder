@@ -80,11 +80,12 @@ def main() -> int:
         if not init_execution.executed:
             raise RuntimeError("initialization hypothesis was not executable: " + json.dumps(init_execution.__dict__, default=str))
 
-        # A non-confirming initialization result is a real observation that
-        # removes that candidate from the next selection round.
-        if init_outcome.internal_status != "rejected":
+        # The initialization result is a real observation. A proposed/ambiguous
+        # result must remain eligible, but the selector should prefer a fresh
+        # hypothesis rather than repeating the same unresolved experiment.
+        if init_outcome.internal_status not in {"proposed", "ambiguous", "rejected", "contradicted"}:
             raise SystemExit(
-                "initialization classifier did not produce a terminal rejection: "
+                "unexpected initialization classifier status: "
                 + init_outcome.internal_status
             )
 
