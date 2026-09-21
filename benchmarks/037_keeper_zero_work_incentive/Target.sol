@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-abstract contract KeeperLike {
+contract KeeperLike {
     uint256 public rewardPool;
 
     constructor() payable {
