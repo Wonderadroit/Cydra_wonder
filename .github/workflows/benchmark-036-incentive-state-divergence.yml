@@ -4,7 +4,7 @@ on:
     paths:
       - "benchmarks/036_incentive_state_divergence/**"
       - "scripts/run_benchmark_036_incentive_state_divergence.py"
-      - "src/cydra/**"
+      - "src/cydra/**""
       - "tests/test_benchmark_036_incentive_state_divergence.py"
   push:
     branches: [main]
