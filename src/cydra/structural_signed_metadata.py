@@ -22,7 +22,7 @@ def _source(contract: ContractModel) -> str:
 
 def _body(source: str, name: str) -> str:
     marker = re.search(
-        rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)[^{;]*\{{",
+        rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)[^{{;]*\{{",
         source,
         re.S,
     )
