@@ -26,7 +26,7 @@ def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
     if base == "bytes":
         return 'bytes("")'
     if base.startswith("bytes") and base[5:].isdigit():
-        return f"{base}(0)"
+        return "bytes32(uint256(1))" if base == "bytes32" else f"{base}(0)"
     if abi_only:
         return "address(0x1001)"
     return f"{base}(address(0x1001))"
