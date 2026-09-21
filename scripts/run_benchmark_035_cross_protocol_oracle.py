@@ -156,7 +156,17 @@ def canonical_model(hypothesis):
         f"observation:{observation_id}",
         "observation",
         "oracle value is elevated during the pool callback and settles afterward",
-        {"status": "planned", "hypothesis_id": hypothesis_id, "binding_status": "bound"},
+        {
+            "status": "planned",
+            "hypothesis_id": hypothesis_id,
+            "target_function_id": function_id,
+            "binding_status": "bound",
+            "experiment_binding": {
+                "hypothesis_id": hypothesis_id,
+                "observation_id": f"observation:{observation_id}",
+                "target_function_id": function_id,
+            },
+        },
     ))
     model.add_edge(Edge(contract_ids["pool"], "feeds", contract_ids["oracle"], {}))
     model.add_edge(Edge(contract_ids["oracle"], "feeds", contract_ids["lending"], {}))
