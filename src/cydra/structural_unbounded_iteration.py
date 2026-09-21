@@ -105,6 +105,15 @@ def generate_unbounded_iteration_hypotheses(
         return UnboundedIterationContribution((), ())
 
     storage_arrays = _storage_array_names(source)
+    # Inherited storage declarations may live outside the extracted source file.
+    # Treat a collection as storage-backed when the target source itself performs
+    # indexed access and push growth on the same symbol.
+    storage_arrays |= {
+        match.group(1)
+        for match in re.finditer(
+            r"\\b([A-Za-z_]\\w*)\\s*\\[[^\\]]+\\]\\s*\\.push\\s*\\(", source
+        )
+    }
     loop_arrays = _loop_arrays(source)
     aliases: dict[str, str] = {}
     for match in re.finditer(
