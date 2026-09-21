@@ -13,6 +13,11 @@ def plan_cross_function_state_experiment(hypothesis: Hypothesis) -> Experiment:
     render and execute the experiment.
     """
     peers = ", ".join(hypothesis.related_functions) or "another externally callable transition"
+    peer_steps = (
+        (ExperimentStep(function=hypothesis.related_functions[0]),)
+        if hypothesis.related_functions
+        else ()
+    )
     return Experiment(
         experiment_id="X-" + hypothesis.hypothesis_id,
         hypothesis_id=hypothesis.hypothesis_id,
@@ -23,5 +28,5 @@ def plan_cross_function_state_experiment(hypothesis: Hypothesis) -> Experiment:
         ),
         cost=1.0,
         target_function=hypothesis.target_function,
-        steps=tuple(\n            [ExperimentStep(function=hypothesis.related_functions[0])]\n            if hypothesis.related_functions\n            else []\n        ) + (ExperimentStep(function=hypothesis.target_function),),
+        steps=peer_steps + (ExperimentStep(function=hypothesis.target_function),),
     )
