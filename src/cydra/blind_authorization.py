@@ -79,18 +79,15 @@ def generate_blind_authorization_test_from_experiment(
         if constructor_arguments
         else 'bytes("")'
     )
-    if creation_bytecode:
-        init_expression = f'abi.encodePacked(hex"{creation_bytecode}", {constructor_encoding})'
-        target_declaration = "address internal target;"
-        import_line = ""
-        target_cast = "deployed"
-    else:
-        init_expression = (
-            f"abi.encodePacked(type({target_type}).creationCode, {constructor_encoding})"
-        )
-        target_declaration = f"{target_type} internal target;"
-        import_line = f'import {{ {target_type} }} from "{target_import}";'
-        target_cast = f"{target_type}(deployed)"
+    # Prefer typed deployment for blind authorization harnesses. A raw
+    # creation-bytecode path can cause Foundry to synthesize constructor-argument
+    # helper structs whose ABI shape is lost for multi-parameter constructors.
+    # The target import is already part of the authorized harness boundary, so
+    # direct deployment preserves the constructor ABI exactly.
+    init_expression = ""
+    target_declaration = f"{target_type} internal target;"
+    import_line = f'import {{ {target_type} }} from "{target_import}";'
+    target_cast = target_type
 
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
@@ -148,13 +145,7 @@ contract CydraBlindAuthorizationTest {{
     {target_declaration}
 
     function setUp() public {{
-        bytes memory init = {init_expression};
-        address deployed;
-        assembly {{
-            deployed := create(0, add(init, 32), mload(init))
-        }}
-        require(deployed != address(0), "CYDRA target deployment failed");
-        target = {target_cast};
+        target = new {target_type}({constructor_arguments});
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
