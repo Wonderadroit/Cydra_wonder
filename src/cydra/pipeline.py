@@ -52,6 +52,8 @@ from .structural_epoch_accounting import generate_epoch_accounting_hypotheses
 from .epoch_accounting_planning import plan_epoch_accounting_experiment
 from .structural_external_outcome import generate_external_outcome_hypotheses
 from .external_outcome_planning import plan_external_outcome_experiment
+from .structural_type_domain import generate_type_domain_hypotheses
+from .type_domain_planning import plan_type_domain_experiment
 
 
 @dataclass(frozen=True)
@@ -119,6 +121,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_epoch_accounting_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-EXTERNAL-OUTCOME-"):
         return plan_external_outcome_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-TYPE-DOMAIN-"):
+        return plan_type_domain_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -201,7 +205,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
@@ -234,6 +238,7 @@ def investigate(
         signature_reuse = generate_signature_reuse_hypotheses(contract, contract_semantic)
         signed_metadata = generate_signed_metadata_hypotheses(contract, contract_semantic)
         intent_invariants, intent_hypotheses = generate_intent_parity_hypotheses(contract, contract_semantic)
+        type_domain = generate_type_domain_hypotheses(contract, contract_semantic)
 
         if auth:
             all_invariants.append(access_control_invariant(contract))
@@ -266,6 +271,7 @@ def investigate(
             signature_reuse.hypotheses,
             signed_metadata.hypotheses,
             intent_hypotheses,
+            type_domain.hypotheses,
             surface_hypotheses,
         )
         all_invariants.extend(guard_parity.invariants)
@@ -276,6 +282,7 @@ def investigate(
         all_invariants.extend(signature_reuse.invariants)
         all_invariants.extend(signed_metadata.invariants)
         all_invariants.extend(intent_invariants)
+        all_invariants.extend(type_domain.invariants)
         all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
