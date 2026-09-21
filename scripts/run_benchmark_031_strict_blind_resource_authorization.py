@@ -38,12 +38,22 @@ contract MockERC20 {
 contract MockPositionManager {
     address public owner;
     address public approved;
-    address public token;
+    address public token0;
+    address public token1;
     uint128 public liquidity = 1;
-    MockERC20 public asset;
+    MockERC20 public asset0;
+    MockERC20 public asset1;
 
-    constructor(address owner_, MockERC20 asset_) { owner = owner_; asset = asset_; token = address(asset_); }
+    constructor(address owner_, MockERC20 asset0_, MockERC20 asset1_) {
+        owner = owner_;
+        asset0 = asset0_;
+        asset1 = asset1_;
+        token0 = address(asset0_);
+        token1 = address(asset1_);
+    }
 
+    function WETH9() external pure returns (address) { return address(0); }
+    function factory() external pure returns (address) { return address(0); }
     function approve(address to, uint256) external returns (bool) { require(msg.sender == owner); approved = to; return true; }
     function ownerOf(uint256) external view returns (address) { return owner; }
 
@@ -51,7 +61,7 @@ contract MockPositionManager {
         uint96, address, address, address, uint24, int24, int24, uint128,
         uint256, uint256, uint128, uint128
     ) {
-        return (0, approved, token, token, 3000, -60, 60, liquidity, 0, 0, 0, 0);
+        return (0, approved, token0, token1, 3000, -60, 60, liquidity, 0, 0, 0, 0);
     }
 
     function decreaseLiquidity(
@@ -60,7 +70,8 @@ contract MockPositionManager {
         require(msg.sender == approved || msg.sender == owner);
         require(tokenId == 4660 && amount > 0 && liquidity >= amount);
         liquidity -= amount;
-        asset.mint(address(this), 200);
+        asset0.mint(address(this), 100);
+        asset1.mint(address(this), 100);
         return (100, 100);
     }
 
@@ -71,8 +82,8 @@ contract MockPositionManager {
         require(tokenId == 4660);
         amount0 = amount0Requested == type(uint128).max ? 100 : amount0Requested;
         amount1 = amount1Requested == type(uint128).max ? 100 : amount1Requested;
-        if (amount0 > 0) MockERC20(token).transfer(recipient, amount0);
-        if (amount1 > 0) MockERC20(token).transfer(recipient, amount1);
+        if (amount0 > 0) MockERC20(token0).transfer(recipient, amount0);
+        if (amount1 > 0) MockERC20(token1).transfer(recipient, amount1);
     }
 }
 
@@ -80,12 +91,14 @@ contract CydraResourceAuthorizationTest is Test {
     address constant OWNER = address(0xA11CE);
     uint256 constant TOKEN_ID = 4660;
     MockERC20 asset;
+    MockERC20 asset1;
     MockPositionManager manager;
     V3Utils v3utils;
 
     function setUp() external {
         asset = new MockERC20();
-        manager = new MockPositionManager(OWNER, asset);
+        asset1 = new MockERC20();
+        manager = new MockPositionManager(OWNER, asset, asset1);
         v3utils = new V3Utils(
             INonfungiblePositionManager(address(manager)),
             address(0), address(0), address(0)
