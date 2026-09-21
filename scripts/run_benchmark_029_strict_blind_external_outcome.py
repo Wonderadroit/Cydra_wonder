@@ -135,7 +135,7 @@ def write_test(root: Path, label: str) -> None:
     path.write_text(PATCHED_TEST_SOURCE if "patched" in label else VULNERABLE_TEST_SOURCE, encoding="utf-8")
 
 def run_target(root: Path, label: str):
-    write_test(root)
+    write_test(root, label)
     completed = subprocess.run(
         ("forge", "test", "--match-test", "testIgnoredExternalFailureCannotReleaseNativeValue|testIgnoredExternalFailureIsStopped", "-vvv"),
         cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
