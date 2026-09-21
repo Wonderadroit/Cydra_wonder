@@ -241,7 +241,21 @@ def investigate(
             surface_invariants.extend(contribution.invariants)
             surface_hypotheses.extend(contribution.hypotheses)
 
-        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *idempotency.hypotheses, *readonly.hypotheses, *transfer_accounting.hypotheses, *redemption_rounding.hypotheses, *signature_reuse.hypotheses, *signed_metadata.hypotheses, *intent_hypotheses, *surface_hypotheses)
+        hypotheses = _merge_hypotheses(
+            auth,
+            init,
+            arith,
+            rounding,
+            guard_parity.hypotheses,
+            idempotency.hypotheses,
+            readonly.hypotheses,
+            transfer_accounting.hypotheses,
+            redemption_rounding.hypotheses,
+            signature_reuse.hypotheses,
+            signed_metadata.hypotheses,
+            intent_hypotheses,
+            surface_hypotheses,
+        )
         all_invariants.extend(guard_parity.invariants)
         all_invariants.extend(idempotency.invariants)
         all_invariants.extend(readonly.invariants)
