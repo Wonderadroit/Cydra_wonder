@@ -63,9 +63,6 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
         else:
             target = function
 
-        if not target.writes:
-            continue
-
         iid = f"INV-CALLBACK-STATE-ORDER-{target.name}"
         invariants.append(Invariant(
             iid,
