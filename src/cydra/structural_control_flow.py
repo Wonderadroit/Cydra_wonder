@@ -74,7 +74,7 @@ def _progress_bypassed(body: str) -> bool:
         return False
 
     increment = re.compile(
-        rf"\b(?:{re.escape(counter)}\+\+|\+\+{re.escape(counter)}|{re.escape(counter)}\s*\+=\s*1)\b"
+        rf"(?:\b{re.escape(counter)}\+\+|\+\+{re.escape(counter)}|\b{re.escape(counter)}\s*\+=\s*1)"
     )
     continue_positions = [m.start() for m in re.finditer(r"\bcontinue\s*;", loop_body)]
     if not continue_positions:
