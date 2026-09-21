@@ -1,6 +1,15 @@
 name: CYDRA Benchmark 040 — Post-Maturity Unfamiliar-Target Batch
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/run_benchmark_blind.py"
+      - "scripts/run_benchmark_040_post_maturity_batch.py"
+      - "benchmarks/040_post_maturity_batch/**"
+      - ".github/workflows/benchmark-040-post-maturity-batch.yml"
   workflow_dispatch:
   push:
     branches: [main]
