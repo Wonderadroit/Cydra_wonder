@@ -63,11 +63,19 @@ class ImpactAssessment:
 
     @property
     def assessed(self) -> bool:
+        # Backward-compatible assessment gate. Richer dimensions are never
+        # silently inferred; complete() reports whether they are all known.
         return (
             self.level is not ImpactLevel.UNKNOWN
             and bool(self.asset_at_risk.strip())
             and bool(self.consequence.strip())
             and bool(self.evidence_ids)
+        )
+
+    @property
+    def complete(self) -> bool:
+        return (
+            self.assessed
             and self.scope is not ImpactScope.UNKNOWN
             and self.attacker_access is not AttackerAccess.UNKNOWN
             and self.exploitability is not Exploitability.UNKNOWN
