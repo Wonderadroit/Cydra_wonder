@@ -17,7 +17,12 @@ def _information_score(
     invariant: Invariant,
     experiment: Experiment,
 ) -> float:
-    evidence_weight = 1.0 + math.log1p(len(hypothesis.evidence_ids))
+    # Existing evidence is context, not additional information gained by the
+    # next experiment. Rewarding evidence density can cause an unresolved,
+    # evidence-rich hypothesis to crowd out a fresh candidate. Treat evidence
+    # density as a mild uncertainty penalty instead while retaining confidence,
+    # discrimination and cost as selection signals.
+    evidence_weight = 1.0 / (1.0 + 0.5 * math.log1p(len(hypothesis.evidence_ids)))
     discrimination_weight = max(1, len(experiment.discriminates))
     cost = max(experiment.cost, 0.1)
     return invariant.confidence * evidence_weight * discrimination_weight / cost
