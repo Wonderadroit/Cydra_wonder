@@ -83,14 +83,32 @@ def generate_unbounded_iteration_hypotheses(
 
     storage_arrays = _storage_array_names(source)
     loop_arrays = _loop_arrays(source)
-    candidates = storage_arrays & {name.split(".")[-1].split("[")[0] for name in loop_arrays}
+    aliases: dict[str, str] = {}
+    for match in re.finditer(
+        r"\b(?:address|uint\d*|bytes\d*|bool|[A-Za-z_]\w*)\s*\[\]\s+memory\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*\[[^\]]+\]",
+        source,
+    ):
+        if match.group(2) in storage_arrays:
+            aliases[match.group(1)] = match.group(2)
+    normalized_loop_arrays = {
+        aliases.get(name.split(".")[-1].split("[")[0], name.split(".")[-1].split("[")[0])
+        for name in loop_arrays
+    }
+    candidates = storage_arrays & normalized_loop_arrays
     if not candidates:
         return UnboundedIterationContribution((), ())
 
     loop_functions = {
-        fn.name: tuple(name for name in candidates if re.search(
-            rf"\b{re.escape(name)}(?:\[[^\]]+\])?\.length\b", _body(source, fn.name)
-        ))
+        fn.name: tuple(
+            name for name in candidates
+            if re.search(
+                rf"\b{re.escape(name)}(?:\[[^\]]+\])?\.length\b", _body(source, fn.name)
+            )
+            or any(
+                alias == name and re.search(rf"\b{re.escape(alias_name)}\.length\b", _body(source, fn.name))
+                for alias_name, alias in aliases.items()
+            )
+        )
         for fn in contract.functions
     }
     loop_functions = {name: arrays for name, arrays in loop_functions.items() if arrays}
