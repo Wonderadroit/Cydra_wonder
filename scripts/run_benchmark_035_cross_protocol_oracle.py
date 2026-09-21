@@ -30,7 +30,7 @@ contract CydraCrossProtocolVulnerableTest is Test {
         TransientPool pool = new TransientPool();
         CrossProtocolOracle oracle = new CrossProtocolOracle(pool);
         CollateralLending lending = new CollateralLending(oracle);
-        CrossProtocolAttacker attacker = new CrossProtocolAttacker(pool, lending);
+        CrossProtocolAttacker attacker = new CrossProtocolAttacker(pool, ILending(address(lending)));
 
         lending.seedPosition(address(attacker), 1, 1000, 150);
         vm.deal(address(pool), 1 wei);
