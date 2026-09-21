@@ -8,10 +8,10 @@ from pathlib import Path
 
 from cydra.canonical_cycle import run_canonical_differential_cycle
 from cydra.finding_gate import FindingCandidate, evaluate_finding_graph
-from cydra.hypothesis_selection import select_next_hypothesis
 from cydra.hypotheses import Hypothesis as CanonicalHypothesis
 from cydra.impact import ImpactAssessment, ImpactLevel
 from cydra.pipeline import investigate
+from cydra.research_loop import run_research_loop
 from cydra.system_model import Edge, Node, SystemModel
 
 TARGET_REPO = "https://github.com/code-423n4/2022-06-nested.git"
@@ -195,17 +195,30 @@ def main() -> int:
         target = clone_target(Path(tmp) / "target")
         source = target / TARGET_PATH
         investigation = investigate(source, target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_PATH}")
-        selection = select_next_hypothesis(
-            investigation.hypotheses, investigation.invariants, investigation.experiments
+        def execute(hypothesis, experiment):
+            if not hypothesis.invariant_id.startswith("INV-EXTERNAL-OUTCOME-"):
+                raise RuntimeError(
+                    "strict blind selector did not choose external-outcome hypothesis: "
+                    + hypothesis.hypothesis_id + "/" + hypothesis.target_function
+                )
+            return run_target(target, "vulnerable")
+
+        loop = run_research_loop(
+            investigation.hypotheses,
+            investigation.invariants,
+            investigation.experiments,
+            execute=execute,
+            status_of=lambda observation: observation["status"],
+            stop_when=lambda _observation: True,
+            max_rounds=1,
         )
-        hypothesis = selection.hypothesis
-        if not hypothesis.invariant_id.startswith("INV-EXTERNAL-OUTCOME-"):
-            raise SystemExit(
-                "strict blind selector did not choose external-outcome hypothesis: "
-                + hypothesis.hypothesis_id + "/" + hypothesis.target_function
-            )
+        if len(loop.rounds) != 1:
+            raise RuntimeError("expected exactly one blind research round")
+        round_ = loop.rounds[0]
+        hypothesis = round_.selection.hypothesis
         experiment = next(e for e in investigation.experiments if e.hypothesis_id == hypothesis.hypothesis_id)
-        vulnerable = run_target(target, "vulnerable")
+        selection = round_.selection
+        vulnerable = round_.observation
 
     with tempfile.TemporaryDirectory(prefix="cydra-nested-blind-p-") as tmp:
         target = clone_target(Path(tmp) / "target")
