@@ -40,3 +40,5 @@ jobs:
           path: backtest-artifacts/open-ended-blind/
 
 # Open-ended benchmark: rerun on harness changes.
+
+# retrigger after canonical userOpHash signing correction
