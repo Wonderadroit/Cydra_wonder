@@ -111,7 +111,7 @@ def generate_unbounded_iteration_hypotheses(
     storage_arrays |= {
         match.group(1)
         for match in re.finditer(
-            r"\\b([A-Za-z_]\\w*)\\s*\\[[^\\]]+\\]\\s*\\.push\\s*\\(", source
+            r"\b([A-Za-z_]\w*)\s*\[[^\]]+\]\s*\.push\s*\(", source
         )
     }
     loop_arrays = _loop_arrays(source)
