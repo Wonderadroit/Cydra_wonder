@@ -69,14 +69,14 @@ def generate_resource_authorization_hypotheses(contract: ContractModel, semantic
         # state through the identifier and can mutate/withdraw that resource.
         resolves_resource = bool(
             re.search(
-                rf"\b(?:positions|ownerOf|balanceOf|approve|collect|decreaseLiquidity|increaseLiquidity|safeTransferFrom)\s*\([^)]*\b{re.escape(token_name)}\b",
+                rf"\b(?:positions|ownerOf|balanceOf|approve|collect|_collectFees|decreaseLiquidity|_decreaseLiquidity|increaseLiquidity|safeTransferFrom)\s*\([^)]*\b{re.escape(token_name)}\b",
                 body,
                 re.S,
             )
         )
         mutates_resource = bool(
             re.search(
-                rf"\b(?:decreaseLiquidity|increaseLiquidity|collect|safeTransferFrom|transferFrom|burn|withdraw)\s*\([^)]*\b{re.escape(token_name)}\b",
+                rf"\b(?:decreaseLiquidity|_decreaseLiquidity|increaseLiquidity|collect|_collectFees|safeTransferFrom|transferFrom|burn|withdraw)\s*\([^)]*\b{re.escape(token_name)}\b",
                 body,
                 re.S,
             )
