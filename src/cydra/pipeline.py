@@ -42,6 +42,8 @@ from .structural_cross_contract_economic import generate_cross_contract_economic
 from .structural_cross_contract_attribution import generate_cross_contract_attribution_hypotheses
 from .structural_signature_reuse import generate_signature_reuse_hypotheses
 from .structural_signed_metadata import generate_signed_metadata_hypotheses
+from .structural_intent_parity import generate_intent_parity_hypotheses
+from .intent_parity_planning import plan_intent_parity_experiment
 from .signature_reuse_planning import plan_signature_reuse_experiment
 from .signed_metadata_planning import plan_signed_metadata_experiment
 
@@ -103,6 +105,8 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_signature_reuse_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-SIGNED-METADATA-"):
         return plan_signed_metadata_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-INTENT-PARITY-"):
+        return plan_intent_parity_experiment(hypothesis)
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -217,6 +221,7 @@ def investigate(
         redemption_rounding = generate_redemption_rounding_hypotheses(contract, contract_semantic)
         signature_reuse = generate_signature_reuse_hypotheses(contract, contract_semantic)
         signed_metadata = generate_signed_metadata_hypotheses(contract, contract_semantic)
+        intent_invariants, intent_hypotheses = generate_intent_parity_hypotheses(contract, contract_semantic)
 
         if auth:
             all_invariants.append(access_control_invariant(contract))
@@ -236,7 +241,7 @@ def investigate(
             surface_invariants.extend(contribution.invariants)
             surface_hypotheses.extend(contribution.hypotheses)
 
-        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *idempotency.hypotheses, *readonly.hypotheses, *transfer_accounting.hypotheses, *redemption_rounding.hypotheses, *signature_reuse.hypotheses, *signed_metadata.hypotheses, *surface_hypotheses)
+        hypotheses = (*auth, *init, *arith, *rounding, *guard_parity.hypotheses, *idempotency.hypotheses, *readonly.hypotheses, *transfer_accounting.hypotheses, *redemption_rounding.hypotheses, *signature_reuse.hypotheses, *signed_metadata.hypotheses, *intent_hypotheses, *surface_hypotheses)
         all_invariants.extend(guard_parity.invariants)
         all_invariants.extend(idempotency.invariants)
         all_invariants.extend(readonly.invariants)
@@ -244,6 +249,7 @@ def investigate(
         all_invariants.extend(redemption_rounding.invariants)
         all_invariants.extend(signature_reuse.invariants)
         all_invariants.extend(signed_metadata.invariants)
+        all_invariants.extend(intent_invariants)
         all_invariants.extend(surface_invariants)
         all_hypotheses.extend(hypotheses)
         for hypothesis in hypotheses:
