@@ -40,21 +40,25 @@ contract CydraControlFlowTest is Test {
 
     function _setup() internal {
         accessControl = new CydraAccessControlManager();
-        prime = new Prime(address(0x2001), address(0x2002), 1);
-
-        prime.initialize(
-            address(0x3001),
-            address(0x3002),
-            0,
-            1,
-            2,
-            address(accessControl),
-            address(0x3003),
-            address(0x3004),
-            address(0x3005),
-            address(0x3006),
-            10
+        Prime implementation = new Prime(address(0x2001), address(0x2002), 1);
+        bytes memory initData = abi.encodeCall(
+            Prime.initialize,
+            (
+                address(0x3001),
+                address(0x3002),
+                0,
+                1,
+                2,
+                address(accessControl),
+                address(0x3003),
+                address(0x3004),
+                address(0x3005),
+                address(0x3006),
+                10
+            )
         );
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
+        prime = Prime(address(proxy));
 
         prime.setLimit(10, 10);
         prime.issue(false, _single(user1));
