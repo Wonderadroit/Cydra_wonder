@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .models import Experiment, Hypothesis
+from .models import Experiment, ExperimentStep, Hypothesis
 
 
 def plan_cross_function_state_experiment(hypothesis: Hypothesis) -> Experiment:
@@ -23,5 +23,5 @@ def plan_cross_function_state_experiment(hypothesis: Hypothesis) -> Experiment:
         ),
         cost=1.0,
         target_function=hypothesis.target_function,
-        steps=(),
+        steps=tuple(\n            [ExperimentStep(function=peer) for peer in hypothesis.related_functions]\n            + [ExperimentStep(function=hypothesis.target_function)]\n        ),
     )
