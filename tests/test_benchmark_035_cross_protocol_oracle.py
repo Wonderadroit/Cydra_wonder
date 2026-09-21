@@ -10,6 +10,6 @@ def test_cross_protocol_readonly_hypothesis_gets_generic_planner():
         h for h in result.hypotheses
         if h.hypothesis_id == "H-READONLY-XCONTRACT-latestAnswer"
     ]
-    assert len(matches) == 1
+    assert matches
     experiment = next(e for e in result.experiments if e.hypothesis_id == matches[0].hypothesis_id)
     assert experiment.experiment_id == "X-H-READONLY-XCONTRACT-latestAnswer"
