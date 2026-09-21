@@ -59,7 +59,7 @@ def _storage_array_names(source: str) -> set[str]:
     return names
 
 
-def _caller_growth_evidence(contract: ContractModel, array_name: str)(contract: ContractModel, array_name: str) -> bool:
+def _caller_growth_evidence(contract: ContractModel, array_name: str) -> bool:
     source = _source(contract)
     # A loop is materially more concerning when a public/external entry point can
     # append to the same storage collection. This is a structural witness, not a
