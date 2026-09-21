@@ -199,6 +199,13 @@ def _extract_interface(
         declared_type = declaration.group("struct") or declaration.group("enum") or declaration.group("type")
         if declared_type and declared_type not in declared_types:
             declared_types.append(declared_type)
+    # A Solidity source file may declare ABI structs/enums alongside the
+    # interface and use them in interface methods. Preserve those top-level
+    # declarations too so generated stubs can import them by name.
+    for declaration in _DECLARED_TYPE_RE.finditer(source):
+        declared_type = declaration.group("struct") or declaration.group("enum") or declaration.group("type")
+        if declared_type and declared_type not in declared_types:
+            declared_types.append(declared_type)
 
     # Preserve provenance for named symbols imported by the interface source.
     # Interface method signatures may use a top-level struct/enum/value type
