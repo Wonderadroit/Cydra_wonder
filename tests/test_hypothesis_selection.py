@@ -11,3 +11,19 @@ def test_selector_is_class_neutral_and_prefers_information_per_cost():
     e_b = Experiment("X-H-B", "H-B", "b", ("one", "two"), 1.0)
     selected = select_next_hypothesis((h_a, h_b), (invariant_a, invariant_b), (e_a, e_b))
     assert selected.hypothesis.hypothesis_id == "H-B"
+
+
+def test_selection_can_reject_a_contradicted_candidate_and_choose_the_next_one():
+    invariant_a = Invariant("INV-A", "a", "test", 0.9)
+    invariant_b = Invariant("INV-B", "b", "test", 0.8)
+    h_a = Hypothesis("H-A", "a", "INV-A", "a", "caller", "impact")
+    h_b = Hypothesis("H-B", "b", "INV-B", "b", "caller", "impact")
+    e_a = Experiment("X-H-A", "H-A", "a", ("one",), 1.0)
+    e_b = Experiment("X-H-B", "H-B", "b", ("one",), 1.0)
+
+    selected = select_next_hypothesis(
+        (h_a, h_b), (invariant_a, invariant_b), (e_a, e_b),
+        excluded_hypothesis_ids=("H-A",),
+    )
+
+    assert selected.hypothesis.hypothesis_id == "H-B"
