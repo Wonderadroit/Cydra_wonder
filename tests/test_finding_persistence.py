@@ -3,7 +3,7 @@ from cydra.causal_chain import CausalChain, persist_causal_chain
 from cydra.finding import Finding
 from cydra.finding_gate import FindingCandidate
 from cydra.finding_persistence import persist_finding
-from cydra.impact import ImpactAssessment, ImpactLevel
+from cydra.impact import ImpactAssessment, ImpactLevel, ImpactScope, AttackerAccess, Exploitability, Repeatability, Recoverability
 from cydra.system_model import Edge, Node, SystemModel
 
 
@@ -20,7 +20,7 @@ def build(support=True):
 
 
 def finding():
-    return Finding("finding:1","Unauthorized state transition","causally verified", "HIGH", ImpactAssessment(ImpactLevel.HIGH,"vault","protected funds can be altered"),("contract:Vault",),("evidence:e1",),"hypothesis:h1",causal_chain_id="causal:c1")
+    return Finding("finding:1","Unauthorized state transition","causally verified", "HIGH", ImpactAssessment(ImpactLevel.HIGH,"vault","protected funds can be altered",(),("evidence:e1",),ImpactScope.PROTOCOL_WIDE,AttackerAccess.PERMISSIONLESS,Exploitability.DEMONSTRATED,Repeatability.REPEATABLE,Recoverability.IRREVERSIBLE),("contract:Vault",),("evidence:e1",),"hypothesis:h1",causal_chain_id="causal:c1")
 
 
 def test_ready_finding_is_persisted_and_model_remains_valid():
