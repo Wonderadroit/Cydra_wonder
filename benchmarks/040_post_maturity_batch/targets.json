@@ -15,7 +15,7 @@
     {"id":"panoptic-hypovault","repo":"https://github.com/code-423n4/2025-06-panoptic.git","ref":"eea2c931b1cbce1da01586e42ba298814de40d31","project":".","path":"src/HypoVault.sol"},
     {"id":"gte-clob","repo":"https://github.com/code-423n4/2025-07-gte-clob.git","ref":"23ee9e9786710a136bb44d8893b094d1b7fe4534","project":".","path":"contracts/clob/CLOB.sol"},
     {"id":"virtuals-agentfactory","repo":"https://github.com/code-423n4/2025-04-virtuals-protocol.git","ref":"f8d4b0dbcce83e2fbbdf3f9d5b150b44947a8dfa","project":".","path":"contracts/virtualPersona/AgentFactory.sol"},
-    {"id":"malda-mtoken","repo":"https://github.com/sherlock-audit/2025-07-malda.git","ref":"798d00b879b8412ca4049ba09dba5ae42464cfe7","project":"malda-lending","path":"src/mToken/mErc20.sol"},
+    {"id":"malda-mtoken","repo":"https://github.com/sherlock-audit/2025-07-malda.git","ref":"798d00b879b8412ca4049ba09dba5ae42464cfe7","project":"malda-lending","path":"malda-lending/src/mToken/mErc20.sol"},
     {"id":"forte-float128","repo":"https://github.com/code-423n4/2025-04-forte.git","ref":"f0d79045a34291cc2cfe7516aeb1e64386d77cd6","project":".","path":"src/Float128.sol"},
     {"id":"sukukfi-vault","repo":"https://github.com/code-423n4/2025-11-sukukfi.git","ref":"18fe2578cf1c6203dac7ff21513533010f3dda3e","project":".","path":"src/ERC7575VaultUpgradeable.sol"}
   ]
