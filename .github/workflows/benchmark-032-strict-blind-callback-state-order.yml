@@ -3,6 +3,7 @@ name: Benchmark 032 strict blind callback state order
 on:
   push:
     branches:
+      - main
       - feat/benchmark-032-callback-state-order-2026-09-21
   pull_request:
     paths:
