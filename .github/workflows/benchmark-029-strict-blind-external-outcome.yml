@@ -75,3 +75,24 @@ jobs:
         with:
           name: benchmark-032-strict-blind-callback-state-order
           path: backtest-artifacts/strict-blind-callback-state-order/
+      - if: always()
+        uses: actions/github-script@v9
+        env:
+          RESULT_PATH: backtest-artifacts/strict-blind-callback-state-order/result.json
+        with:
+          script: |
+            const fs = require('fs');
+            const path = process.env.RESULT_PATH;
+            let body = 'Benchmark 032 did not produce result.json.';
+            if (fs.existsSync(path)) {
+              const r = JSON.parse(fs.readFileSync(path, 'utf8'));
+              body = '## CYDRA Benchmark 032 result\\n' +
+                '- blind hypothesis: \`' + r.blind_selection.hypothesis.hypothesis_id + '\`\\n' +
+                '- vulnerable: \`' + r.vulnerable.status + '\`\\n' +
+                '- patched: \`' + r.patched.status + '\`\\n' +
+                '- causal verification: \`' + r.causal_verification.state + '\`\\n' +
+                '- independent vulnerable: \`' + r.independent_vulnerable.status + '\`\\n' +
+                '- independent patched: \`' + r.independent_patched.status + '\`\\n' +
+                '- finding gate: \`' + r.finding_gate + '\`';
+            }
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
