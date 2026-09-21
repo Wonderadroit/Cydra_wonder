@@ -201,11 +201,8 @@ def prepare_target_project(project: Path) -> None:
             command = ("npm", "install", "--ignore-scripts")
         subprocess.run(command, cwd=project, check=True)
 
-    # Generated Foundry experiments import forge-std/Test.sol. Some otherwise
-    # valid Solidity targets use Hardhat/npm dependencies and do not vendor
-    # forge-std at all. Materialize the standard Foundry test library only when
-    # the target lacks it; never replace an existing target dependency.
-    # The generated harness is a Foundry test regardless of whether the target\n    # repository declares a foundry.toml. Install forge-std only when the target\n    # does not already provide the standard library under the canonical lib path.\n    forge_std = project / "lib" / "forge-std"
+    # Generated Foundry experiments import forge-std/Test.sol. Materialize
+    # the standard library only when the target does not already vendor it.
     forge_std = project / "lib" / "forge-std"
     if not forge_std.exists():
         subprocess.run(
