@@ -89,8 +89,8 @@ def _caller_growth_evidence(contract: ContractModel, array_name: str) -> bool:
                 continue
             body = _body(source, fn.name)
             if any(
-                re.search(rf"\b{re.escape(caller)}\s*\(", body)
-                for caller in reachable
+                re.search(rf"\b{re.escape(fn.name)}\s*\(", _body(source, reachable_fn))
+                for reachable_fn in reachable
             ):
                 reachable.add(fn.name)
                 changed = True
