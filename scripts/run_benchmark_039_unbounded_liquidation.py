@@ -10,7 +10,7 @@ from cydra.pipeline import investigate
 
 
 TARGET_REPO = "https://github.com/sherlock-audit/2023-05-ironbank.git"
-TARGET_REF = "main"
+TARGET_REF = "20527bc2568ef67ca50c5e3c5fa158ce6bee22a3"
 TARGET_PATH = "ib-v2/src/protocol/pool/IronBank.sol"
 
 
@@ -49,14 +49,6 @@ def main() -> int:
         for hypothesis in result.hypotheses
         if hypothesis.invariant_id.startswith("INV-UNBOUNDED-ITERATION-")
     ]
-    selected = max(
-        candidates,
-        key=lambda hypothesis: next(
-            selection_score
-            for selection_score in [0.0]
-        ),
-        default=None,
-    )
     # Selection itself is performed by the same generic selector used by the
     # research loop. Do not inject the historical function name into selection.
     from cydra.hypothesis_selection import select_next_hypothesis
