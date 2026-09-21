@@ -1,0 +1,26 @@
+name: CYDRA strict blind epoch-boundary research
+
+on:
+  pull_request:
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_028_strict_blind_epoch_boundary.py"
+      - "benchmarks/028_strict_blind_epoch_boundary/**"
+      - ".github/workflows/benchmark-028-strict-blind-epoch-boundary.yml"
+  workflow_dispatch:
+
+jobs:
+  strict-blind-epoch-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+      - run: python -m pip install -e . pytest
+      - run: pytest -q tests
+      - run: PYTHONPATH=src python scripts/run_benchmark_028_strict_blind_epoch_boundary.py --output backtest-artifacts/strict-blind-epoch-boundary
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-028-strict-blind-epoch-boundary
+          path: backtest-artifacts/strict-blind-epoch-boundary/
