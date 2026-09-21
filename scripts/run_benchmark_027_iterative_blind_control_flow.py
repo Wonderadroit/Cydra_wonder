@@ -88,6 +88,8 @@ def main() -> int:
                     (execution, outcome),
                 )
 
+            if not hypothesis.invariant_id.startswith("INV-CONTROL-FLOW-"):
+                raise RuntimeError("no benchmark executor is bound for selected hypothesis: " + hypothesis.hypothesis_id)
             payload = run_target(target, "vulnerable")
             return IterationObservation(payload["status"], "target", payload)
 
