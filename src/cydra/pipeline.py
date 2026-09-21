@@ -105,7 +105,7 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_temporal_precondition_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-IDEMPOTENCY-"):
         return plan_idempotency_experiment(hypothesis)
-    if hypothesis.invariant_id.startswith("INV-READONLY-REENTRANCY-"):
+    if hypothesis.invariant_id.startswith(("INV-READONLY-REENTRANCY-", "INV-READONLY-XCONTRACT-")):
         return plan_read_only_reentrancy_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-"):
         return plan_transfer_accounting_experiment(hypothesis)
