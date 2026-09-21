@@ -1335,3 +1335,13 @@ Benchmark 022 completed the first true class-hidden blind campaign. CYDRA invest
 This milestone is materially different from the prior specialized benchmarks because the benchmark selection boundary is class-hidden: the benchmark does not tell CYDRA what mechanism to look for. The benchmark harness retains the historical oracle only for evaluation and causal-control construction after CYDRA has selected and tested its own hypothesis.
 
 **Maturity gate:** still open. This milestone establishes the first open-ended selection-and-verification result, but it is one bounded class-hidden campaign. Solidity maturity should close only after repeated open-ended unfamiliar-target campaigns demonstrate that CYDRA can choose and causally verify findings across materially different mechanisms without benchmark-provided vulnerability-class guidance.
+
+## Milestone 63 — class-hidden role-intent blind finding (Benchmark 023)
+- Benchmark 023 exercised a stricter open-ended blind campaign against unfamiliar pinned Blackhole target contracts/SetterTopNPoolsStrategy.sol at revision 92fff849d3b266e609e6d63478c4164d9f608e91.
+- CYDRA received only the pinned source target. The benchmark did not supply the vulnerability class, target function, exploit sequence, or expected answer.
+- A new class-neutral reasoning surface, role-intent parity, identified a documented caller boundary (owner or AVM) that was narrower in enforcement (onlyExecutor). The blind selector selected H-INTENT-PARITY-setTopNPools as its only candidate.
+- Real pinned target execution: vulnerable FAIL (owner caller rejected); causal control PASS after changing only the setter modifier to onlyOwnerOrExecutor; canonical causal verification VERIFIED.
+- Independent vulnerable reproduction FAIL and independent patched reproduction PASS. Finding gate READY.
+- Target execution used the actual pinned source and dependency versions, with an isolated Foundry harness to avoid unrelated compilation failures elsewhere in the historical repository.
+- This is a reproduced historical benchmark finding, not a claim of a newly discovered production vulnerability.
+- The Solidity maturity gate remains open: this adds another class-hidden blind success, but closure still requires repeated genuinely open-ended campaigns across materially different mechanisms without benchmark-specific detectors being introduced solely for the target.
