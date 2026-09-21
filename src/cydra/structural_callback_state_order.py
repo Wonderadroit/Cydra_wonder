@@ -18,7 +18,7 @@ def _body(contract: ContractModel, function) -> str:
         source = Path(contract.source).read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return ""
-    marker = re.search(rf"\\bfunction\\s+{re.escape(function.name)}\\s*\\([^)]*\\)[^{{;]*\\{{", source, re.S)
+    marker = re.search(rf"\bfunction\s+{re.escape(function.name)}\s*\([^)]*\)[^{{;]*\{{", source, re.S)
     if not marker:
         return ""
     start = marker.end() - 1
@@ -34,15 +34,15 @@ def _body(contract: ContractModel, function) -> str:
 
 
 def _external_value_transfer(body: str) -> bool:
-    return bool(re.search(r"(?:\\.call\\s*\\{\\s*value\\s*:|\\.transfer\\s*\\(|\\.send\\s*\\(|\\.safeTransferETH\\s*\\()", body))
+    return bool(re.search(r"(?:\.call\s*\{\s*value\s*:|\.transfer\s*\(|\.send\s*\(|\.safeTransferETH\s*\()", body))
 
 
 def _state_write_after_external_transfer(body: str) -> bool:
-    transfer = re.search(r"(?:\\.call\\s*\\{\\s*value\\s*:|\\.transfer\\s*\\(|\\.send\\s*\\(|\\.safeTransferETH\\s*\\()", body)
+    transfer = re.search(r"(?:\.call\s*\{\s*value\s*:|\.transfer\s*\(|\.send\s*\(|\.safeTransferETH\s*\()", body)
     if not transfer:
         return False
     tail = body[transfer.end():]
-    return bool(re.search(r"\\b[A-Za-z_]\\w*(?:\\s*\\[[^\\]]+\\])*\\s*(?:=|\\+=|-=|\\*=|/=|%=|\\+\\+|--)", tail))
+    return bool(re.search(r"\b[A-Za-z_]\w*(?:\s*\[[^\]]+\])*\s*(?:=|\+=|-=|\*=|/=|%=|\+\+|--)", tail))
 
 
 def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=()) -> CallbackStateOrderContribution:
@@ -56,7 +56,7 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
             continue
 
         if function.visibility not in {"public", "external"}:
-            callers = [f for f in public_functions if re.search(rf"\\b{re.escape(function.name)}\\s*\\(", _body(contract, f))]
+            callers = [f for f in public_functions if re.search(rf"\b{re.escape(function.name)}\s*\(", _body(contract, f))]
             if not callers:
                 continue
             target = callers[0]
