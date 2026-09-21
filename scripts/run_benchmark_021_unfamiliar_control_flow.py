@@ -20,7 +20,7 @@ TARGET_REF = "23f5db740d8a794ac563ac32195b675c53042bb4"
 TARGET_PATH = "contracts/Tokens/Prime/Prime.sol"
 
 TEST_SOURCE = r"""// SPDX-License-Identifier: BSD-3-Clause
-pragma solidity 0.8.19;
+pragma solidity 0.8.13;
 
 import "forge-std/Test.sol";
 import "../Tokens/Prime/Prime.sol";
