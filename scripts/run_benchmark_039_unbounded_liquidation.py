@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from cydra.pipeline import investigate
+from cydra.structural_unbounded_iteration import generate_unbounded_iteration_hypotheses
 
 
 TARGET_REPO = "https://github.com/sherlock-audit/2023-05-ironbank.git"
@@ -43,6 +44,7 @@ def main() -> int:
         target = clone_target(Path(tmp) / "ironbank")
         source = target / TARGET_PATH
         result = investigate(source, target=f"{TARGET_REPO}@{TARGET_REF}:{TARGET_PATH}")
+        direct = [generate_unbounded_iteration_hypotheses(contract) for contract in result.contracts]
 
     candidates = [
         hypothesis
@@ -70,6 +72,8 @@ def main() -> int:
             "selector_override": False,
         },
         "candidate_count": len(result.hypotheses),
+        "contracts": [{"name": contract.name, "functions": [fn.name for fn in contract.functions]} for contract in result.contracts],
+        "direct_unbounded": [{"invariants": [item.invariant_id for item in contribution.invariants], "hypotheses": [item.hypothesis_id for item in contribution.hypotheses]} for contribution in direct],
         "unbounded_candidates": [
             {
                 "hypothesis_id": item.hypothesis_id,
