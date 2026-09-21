@@ -1549,3 +1549,28 @@ This campaign is materially different from Benchmark 032. Benchmark 032 tested c
 The Solidity maturity/generalization gate remains open. The next maturity step is not to add another target-shaped detector merely to increase the benchmark count. The evidence now supports continuing toward broader open-ended campaigns where CYDRA must generate, test, reject, and reselection hypotheses across unfamiliar targets while preserving causal verification and independent reproduction.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+## Milestone 72 — strict blind incentive-state divergence finding (Benchmark 036)
+
+Benchmark 036 completed a strict-blind holdout for permissionless incentive payout coupled to caller-manufactured work. The campaign required blind selection, vulnerable/patched differential execution, causal verification, independent reproduction, and READY finding-gate promotion. The campaign exposed and repaired execution-model and economic-measurement issues before the final green run. It is evidence for generic incentive-state reasoning, not evidence that the maturity gate is closed.
+
+## Milestone 73 — strict blind keeper zero-work incentive finding (Benchmark 037)
+
+Benchmark 037 completed a strict-blind holdout derived from the security-relevant shape documented in Sherlock's 2023 Perennial V2 judging material: a reward-bearing keeper path could pay after a zero-iteration settlement call. The CYDRA fixture is an executable reduction rather than the historical deployment itself.
+
+The benchmark forced the generic incentive-liveness capability to recognize reward flow through a modifier and work through iterable execution rather than relying on a direct payout in the function body. The blind boundary supplied no vulnerability class, target function, exploit sequence, invariant, patch, historical answer, or selector override.
+
+The final validated campaign on PR #158 completed all repository checks with zero failures and reached:
+- blind selection: generic incentive-liveness hypothesis for settle;
+- vulnerable execution: FAIL with the security assertion triggered by reward paid for zero work;
+- patched execution: PASS;
+- causal verification: VERIFIED;
+- independent vulnerable reproduction: FAIL with the same security assertion;
+- independent patched reproduction: PASS;
+- finding gate: READY.
+
+The campaign also exposed and repaired two harness defects before acceptance: an initially non-executable abstract fixture and an incorrect caller-balance baseline taken before target funding. This is precisely the required diagnose → repair → retest loop.
+
+The result strengthens evidence for generic incentive-state reasoning and adversarial execution measurement. It does not close the Solidity maturity/generalization gate. Further unfamiliar targets must continue to test whether the reasoning generalizes without benchmark-shaped selection or target-specific detectors.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
