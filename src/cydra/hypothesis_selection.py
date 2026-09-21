@@ -27,14 +27,18 @@ def select_next_hypothesis(
     hypotheses: tuple[Hypothesis, ...],
     invariants: tuple[Invariant, ...],
     experiments: tuple[Experiment, ...],
+    excluded_hypothesis_ids: tuple[str, ...] = (),
 ) -> HypothesisSelection:
     """Choose the next experiment without knowing or naming a vulnerability class."""
     if not hypotheses:
         raise ValueError("no hypotheses available")
+    excluded = set(excluded_hypothesis_ids)
     invariant_by_id = {item.invariant_id: item for item in invariants}
     experiment_by_id = {item.hypothesis_id: item for item in experiments}
     ranked = []
     for hypothesis in hypotheses:
+        if hypothesis.hypothesis_id in excluded:
+            continue
         invariant = invariant_by_id.get(hypothesis.invariant_id)
         experiment = experiment_by_id.get(hypothesis.hypothesis_id)
         if invariant is None or experiment is None:
@@ -46,6 +50,8 @@ def select_next_hypothesis(
             hypothesis,
         ))
     if not ranked:
+        if excluded:
+            raise ValueError("no non-excluded hypothesis has a bound invariant and experiment")
         raise ValueError("no hypothesis has a bound invariant and experiment")
     ranked.sort(reverse=True)
     score, _, _, hypothesis = ranked[0]

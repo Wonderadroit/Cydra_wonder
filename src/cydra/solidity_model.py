@@ -359,7 +359,7 @@ def _project_root(path: Path) -> Path:
     """
     resolved = path.resolve()
     for parent in (resolved.parent, *resolved.parents):
-        if (parent / "remappings.txt").is_file():
+        if any((parent / marker).exists() for marker in ("remappings.txt", "foundry.toml", "package.json", ".git")):
             return parent
     return resolved.parent
 

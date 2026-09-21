@@ -293,6 +293,37 @@ def _layout_aware_import_path(target_import: str, output_path: str | Path) -> st
     return target_import
 
 
+def _resolved_interface_import_path(source_path: str, output_path: str | Path) -> str:
+    """Resolve repository-relative interface provenance against the target project root."""
+    output = Path(output_path)
+    project_root = next(
+        (
+            ancestor
+            for ancestor in (output.parent, *output.parents)
+            if (ancestor / "foundry.toml").exists()
+        ),
+        None,
+    )
+    raw = Path(source_path)
+    if project_root is not None and not raw.is_absolute():
+        candidate = project_root / raw
+        if candidate.exists():
+            return Path(os.path.relpath(candidate.resolve(), output.parent.resolve())).as_posix()
+
+        # Some legacy resolver records contain an importer-relative path such
+        # as Interfaces/Foo.sol. At emission time the target project root is
+        # known, so resolve that already-identified file beneath contracts/
+        # without guessing an interface by name or changing provenance.
+        matches = sorted(
+            (project_root / "contracts").rglob(raw.as_posix())
+            if (project_root / "contracts").is_dir()
+            else ()
+        )
+        if len(matches) == 1:
+            return Path(os.path.relpath(matches[0].resolve(), output.parent.resolve())).as_posix()
+    return _layout_aware_import_path(source_path, output_path)
+
+
 def _source_text(contract_model: ContractModel) -> str:
     try:
         return Path(contract_model.source).read_text(encoding="utf-8")
@@ -447,7 +478,7 @@ def _runtime_stub_source(
         imported_interfaces.setdefault(interface.name, interface)
 
     interface_imports = [
-        f'import {{ {interface_name} }} from "{_layout_aware_import_path(interface.source_path, output_path)}";'
+        f'import {{ {interface_name} }} from "{_resolved_interface_import_path(interface.source_path, output_path)}";'
         for interface_name, interface in imported_interfaces.items()
     ]
 
@@ -567,7 +598,6 @@ def _model_initialization_source(
         )
         if match:
             raw_import = match.group(1)
-            source_path = Path(contract_model.source).parent / raw_import
             project_root = None
             if output_path is not None:
                 output = Path(output_path)
@@ -575,6 +605,20 @@ def _model_initialization_source(
                     if (ancestor / "foundry.toml").exists():
                         project_root = ancestor
                         break
+
+            # ContractModel.source may be repository-relative while the generated
+            # test lives under the target project. Resolve source-defined imports
+            # against that project root before falling back to the legacy layout
+            # resolver. This preserves provenance without emitting imports such as
+            # "Interfaces/Foo.sol" relative to the project root when the real file
+            # lives under contracts/Tokens/.../Interfaces.
+            source_file = Path(contract_model.source)
+            if not source_file.is_absolute() and project_root is not None:
+                candidate_source = project_root / source_file
+                if candidate_source.exists():
+                    source_file = candidate_source
+            source_path = source_file.parent / raw_import
+
             if project_root is not None and source_path.exists():
                 import_path = source_path.resolve().relative_to(project_root.resolve()).as_posix()
             else:
