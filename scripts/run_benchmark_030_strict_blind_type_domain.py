@@ -30,7 +30,7 @@ contract CydraTypeDomainTest is Test {
         bytes memory data = abi.encodeWithSignature("reRoll(uint8,uint8)", 256, 0);
         (bool ok, bytes memory ret) = address(farm).call(data);
         assertFalse(ok, "boundary call unexpectedly succeeded");
-        assertEq(ret.length, 0, "vulnerable target should reject 256 at ABI boundary");
+        assertGt(ret.length, 0, "boundary identifier could not reach reRoll logic");
     }
 }
 """
