@@ -1,0 +1,36 @@
+name: CYDRA strict blind control-flow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_026_strict_blind_control_flow.py"
+      - "benchmarks/026_strict_blind_control_flow/**"
+      - ".github/workflows/benchmark-026-strict-blind-control-flow.yml"
+  pull_request:
+    paths:
+      - "src/cydra/**"
+      - "scripts/run_benchmark_026_strict_blind_control_flow.py"
+      - "benchmarks/026_strict_blind_control_flow/**"
+      - ".github/workflows/benchmark-026-strict-blind-control-flow.yml"
+  workflow_dispatch:
+
+jobs:
+  strict-blind-control-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: python -m pip install -e . pytest
+      - run: pytest -q tests
+      - run: PYTHONPATH=src python scripts/run_benchmark_026_strict_blind_control_flow.py --output backtest-artifacts/strict-blind-control-flow
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-026-strict-blind-control-flow
+          path: backtest-artifacts/strict-blind-control-flow/
