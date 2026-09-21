@@ -71,7 +71,7 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
             iid,
             "Security-critical state establishing a temporal or authorization condition must be updated before an externally observable value transfer can invoke attacker-controlled code.",
             "external callback topology plus state-write ordering",
-            0.75,
+            0.60,
         ))
         hypotheses.append(Hypothesis(
             f"H-CALLBACK-STATE-ORDER-{target.name}",
