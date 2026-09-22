@@ -52,6 +52,10 @@ class FunctionModel:
     parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
     authorization_predicates: tuple[str, ...] = field(default_factory=tuple)
     state_predicates: tuple[str, ...] = field(default_factory=tuple)
+    # Each entry is (predicate, polarity), where polarity records whether the
+    # predicate must hold, must not hold, or has unknown reachability semantics.
+    # This preserves guard semantics without changing the legacy predicate surface.
+    state_predicate_polarities: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
