@@ -134,12 +134,12 @@ def test_authorization_renderer_resolves_indirect_contract_constructor_type(tmp_
     (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
     (tmp_path / "interfaces").mkdir()
     (tmp_path / "interfaces" / "Token.sol").write_text(
-        "contract MockToken {}\n", encoding="utf-8"
+        "contract ERC20 { constructor(string memory, string memory, uint8) {} }\n", encoding="utf-8"
     )
     source = tmp_path / "Target.sol"
     source.write_text(
-        'pragma solidity ^0.8.20;\nimport { MockToken } from "./interfaces/Token.sol";\n'
-        'contract Target { constructor(MockToken token) {} '
+        'pragma solidity ^0.8.20;\nimport { ERC20 } from "./interfaces/Token.sol";\n'
+        'contract Target { constructor(ERC20 token) {} '
         'function withdraw(uint256 amount) external {} }\n',
         encoding="utf-8",
     )
@@ -157,7 +157,7 @@ def test_authorization_renderer_resolves_indirect_contract_constructor_type(tmp_
                 parameters=(ParameterModel("amount", "uint256"),),
             ),
         ),
-        constructor=ConstructorModel((ParameterModel("token", "MockToken"),), 1),
+        constructor=ConstructorModel((ParameterModel("token", "ERC20"),), 1),
         pragma="^0.8.20",
     )
     generated = generate_authorization_test_from_experiment(
@@ -169,5 +169,5 @@ def test_authorization_renderer_resolves_indirect_contract_constructor_type(tmp_
         model,
     )
     rendered = generated.read_text(encoding="utf-8")
-    assert 'import { MockToken } from "../interfaces/Token.sol";' in rendered
-    assert "target = new Target(MockToken(address(0)));" in rendered
+    assert 'import { ERC20 } from "../interfaces/Token.sol";' in rendered
+    assert "target = new Target(ERC20(address(constructorAsset)));" in rendered
