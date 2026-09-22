@@ -214,6 +214,36 @@ def run_foundry(
         capture_output=True,
         check=False,
     )
+
+    # Historical projects can contain unrelated contracts that no longer
+    # compile with the pinned dependency/compiler combination even though the
+    # selected target does. If Solidity reports override-topology errors from
+    # files other than the selected target, retry while excluding those
+    # unrelated files. This preserves the target and its imported dependency
+    # graph; it only narrows compilation away from unrelated project surface.
+    if completed.returncode != 0 and "Error (4327)" in completed.stderr:
+        paths = set(
+            re.findall(r"-->\\s+([^:\\n]+\\.sol):\\d+", completed.stderr)
+        )
+        target_name = str(target_source).replace("\\\\", "/")
+        skip_stems = sorted(
+            Path(path).stem
+            for path in paths
+            if path.replace("\\\\", "/") != target_name
+            and (project / path).exists()
+        )
+        if skip_stems:
+            retry_command = list(command)
+            for stem in skip_stems:
+                retry_command.extend(["--skip", stem])
+            completed = subprocess.run(
+                retry_command,
+                cwd=project,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
     return {
         "label": label,
         "status": "PASS" if completed.returncode == 0 else "FAIL",
