@@ -17,3 +17,6 @@ Causal validation then uses independently authored controls:
 The campaign deliberately preserves misses and execution blockers instead of teaching the selector the historical answer. A target that is not selected correctly is a measured generalization failure, not silently converted into a pass.
 
 Success requires every target in the campaign to reach an evidence-backed READY gate and the campaign to contain at least two distinct targets with reproducible causal findings.
+
+
+Canonical validation rerun after generic execution/planning repairs merged to main (PRs #178 and #179).
