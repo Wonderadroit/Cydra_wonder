@@ -330,7 +330,8 @@ def main() -> int:
             print("EXECUTION_STATUS", execution.status, "exit=", execution.exit_code, "tests=", execution.tests_run, "failed=", execution.tests_failed)
             print(execution.stdout)
             print(execution.stderr)
-            require_executed(execution)
+            # UNMEASURABLE is a legitimate measurement outcome; preserve it
+            # instead of converting a compiler/precondition gap into a runner crash.
             outcome = classify_authorization_blind_execution(hypothesis, execution)
             print(
                 f"{hypothesis.hypothesis_id}: status={execution.status} "

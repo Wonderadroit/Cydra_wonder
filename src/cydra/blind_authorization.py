@@ -9,6 +9,7 @@ from .authorization_runtime import security_assertion_marker
 
 
 def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
+    """Return a compiler-valid constructor value, or fail closed if the model is incomplete."""
     parameter_type = str(parameter.type or "").strip()
     if not parameter_type:
         raise ValueError(
@@ -31,7 +32,9 @@ def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
         return 'bytes("")'
     if base.startswith("bytes") and base[5:].isdigit():
         return "bytes32(uint256(1))" if base == "bytes32" else f"{base}(0)"
-    # ABI encoding accepts an address for interface/contract constructor\n    # parameters, avoiding extra source imports in historical harnesses.\n    return "address(0x1001)"
+    # ABI encoding accepts an address for interface/contract constructor
+    # parameters, avoiding extra source imports in historical harnesses.
+    return "address(0x1001)"
 
 
 def _constructor_arguments(contract_model: ContractModel, *, abi_only: bool = False) -> str:
@@ -40,7 +43,12 @@ def _constructor_arguments(contract_model: ContractModel, *, abi_only: bool = Fa
         return ""
     arguments = []
     for parameter in constructor.parameters:
-        arguments.append(_constructor_argument(parameter, abi_only=abi_only))
+        rendered = _constructor_argument(parameter, abi_only=abi_only)
+        if rendered is None:
+            raise ValueError(
+                f"constructor parameter {parameter.name or '<unnamed>'} could not be rendered"
+            )
+        arguments.append(rendered)
     return ", ".join(arguments)
 
 
@@ -159,7 +167,7 @@ contract CydraBlindAuthorizationTest {{
             deployed := create(0, add(initCode, 0x20), mload(initCode))
         }}
         require(deployed != address(0), "CYDRA: constructor deployment failed");
-        target = {target_type}(deployed);
+        target = {target_type}(payable(deployed));
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
