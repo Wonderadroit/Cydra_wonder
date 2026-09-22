@@ -1,4 +1,4 @@
-from cydra.impact import ImpactLevel
+from cydra.impact_priority import FindingCollection, ImpactPriority, priority_for_potential
 from cydra.impact_priority import FindingCollection, ImpactPriority, priority_for_potential
 
 
@@ -35,3 +35,17 @@ def test_potential_impact_is_available_on_hypothesis_without_being_final_severit
     from cydra.models import Hypothesis
     h = Hypothesis("h", "claim", "i", "target", "permissionless", "asset loss", potential_impact="CRITICAL")
     assert h.potential_impact == "CRITICAL"
+
+
+def test_finding_collection_exact_duplicate_is_idempotent():
+    first = type("Finding", (), {"finding_id": "F-1"})()
+    collection = FindingCollection("target-A").add(first)
+    assert collection.add(first) == collection
+
+
+def test_finding_collection_rejects_conflicting_duplicate_identity():
+    first = type("Finding", (), {"finding_id": "F-1", "detail": "original"})()
+    conflicting = type("Finding", (), {"finding_id": "F-1", "detail": "different"})()
+    collection = FindingCollection("target-A").add(first)
+    with pytest.raises(ValueError, match="conflicting finding"):
+        collection.add(conflicting)
