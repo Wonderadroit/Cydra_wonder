@@ -143,9 +143,13 @@ import {{ {target_type} }} from "{target_import}";
 contract CydraBlindAuthorizationTest {{
     {target_declaration}
 
+    function _targetCreationCode() internal pure returns (bytes memory) {{
+        return type({target_type}).creationCode;
+    }}
+
     function setUp() public {{
         bytes memory initCode = abi.encodePacked(
-            type({target_type}).creationCode,
+            _targetCreationCode(),
             {constructor_suffix}
         );
         address deployed;
