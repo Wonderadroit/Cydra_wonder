@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from .interface_resolver import resolve_interface, resolve_named_type_source
+from .execution_readiness import _address_role
 
 from .models import ContractModel, Experiment, Hypothesis
 from .planned_call import render_function_call
@@ -47,6 +48,7 @@ def generate_authorization_test_from_experiment(
         (ancestor for ancestor in (path.parent, *path.parents) if (ancestor / "foundry.toml").exists()),
         None,
     )
+    role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     constructor_arguments: list[str] = []
     constructor_imports: list[str] = []
     inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
@@ -74,7 +76,8 @@ def generate_authorization_test_from_experiment(
         if parameter_type.endswith("[]"):
             raise ValueError(f"unsupported authorization constructor array type: {parameter.type}")
         if base == "address":
-            constructor_arguments.append("address(0)")
+            role = _address_role(parameter.name)
+            constructor_arguments.append(role_addresses.get(role, "address(0)"))
         elif parameter_type == "address payable":
             constructor_arguments.append("payable(address(0))")
         elif base == "bool":
