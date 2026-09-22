@@ -1659,3 +1659,35 @@ The canonical result demonstrates that the post-maturity loop can reach reproduc
 Benchmark 043 is evidence of generalization across targets, not a claim that every arbitrary target will yield a finding. Future failures remain subject to the same diagnose → classify → generic repair → regression → blind retest discipline. The maturity gate remains closed; this is post-maturity validation.
 
 Doctrine remains: LLMs propose. Tools test. Evidence decides.
+
+## Milestone 77 — post-maturity negative-control campaign (Benchmark 044)
+
+Benchmark 044 added an explicit post-maturity false-positive/negative-control gate using the two unfamiliar real targets from Benchmark 043.
+
+The campaign first ran the normal blind selection stage with no vulnerability class, target function, exploit sequence, patch, historical answer, or selector override. After blind selection, the selected hypotheses were bound only to their patched counterfactual controls:
+
+- RabbitHole Quest Protocol: authorization hypothesis for `mint`;
+- Debt DAO Line of Credit: keyed-configuration hypothesis for `claimRevenue`.
+
+Final canonical Benchmark 044 workflow run `35734084452` completed successfully with:
+
+- full Python regression: PASS;
+- RabbitHole blind selection: `H-AUTH-mint`;
+- RabbitHole patched negative control: PASS;
+- RabbitHole false-positive control: PASS;
+- RabbitHole finding gate: `NOT_READY`;
+- Debt DAO blind selection: `H-CONFIG-BINDING-claimRevenue-settings`;
+- Debt DAO patched negative control: PASS;
+- Debt DAO false-positive control: PASS;
+- Debt DAO finding gate: `NOT_READY`;
+- 2/2 targets passed;
+- no READY findings;
+- causal verification correctly remained false/not claimed;
+- blind boundary preserved.
+
+The campaign therefore adds evidence that a previously demonstrated vulnerable mechanism does not automatically become a finding when its causal defect is removed. This is negative-control evidence, not a new vulnerability claim.
+
+The maturity/generalization gate remains closed. Future post-maturity work should continue testing search exhaustion, adversarial self-challenge, execution resilience, duplicate/overlap handling, reproducibility across broader target sets, and real researcher dogfood.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+\n
