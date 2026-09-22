@@ -103,6 +103,22 @@ The adapter is responsible for understanding and correctly operating the target 
 
 The first production adapter is **Solidity/EVM + Foundry**. Future adapters such as Solidity/Hardhat or Solana/Rust must implement the same boundary without weakening provenance, causal verification, reproducibility, uncertainty, or authorization rules.
 
+### 7.1 Execution readiness
+
+Target understanding continues after environment detection. Before generated experiments are treated as meaningful, CYDRA should derive a deterministic execution-readiness model for the selected contract/function.
+
+The readiness model records, without making vulnerability claims:
+
+- constructor dependencies and deployable dependency requirements;
+- constructor role/dependency bindings where the declared target exposes them;
+- caller roles and caller-identity predicates;
+- external runtime dependencies and trust-boundary calls;
+- unresolved prerequisites and their provenance.
+
+The execution planner must distinguish three states: prerequisites already satisfied, prerequisites deterministically constructible by the adapter/harness, and prerequisites unresolved. An unresolved prerequisite is an execution/environment gap, not evidence of a vulnerability.
+
+This layer is generic and must not contain target-specific exceptions. Adapter work should progressively turn constructible prerequisites into deterministic fixtures/configuration; reasoning remains responsible for choosing security hypotheses; deterministic execution remains responsible for evidence.
+
 ## 8. Invariants
 
 CYDRA asks what must remain true for the system to behave as intended.
