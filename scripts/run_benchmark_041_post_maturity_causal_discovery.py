@@ -62,7 +62,7 @@ contract CydraDiscoveryPoC is PoC {
         token1.setBalance(address(vault), 0);
         mockPool.collateralToken0().setBalance(address(vault), 0);
         mockPool.collateralToken0().setPreviewRedeemReturn(0);
-        mockPool.collateralToken1().setBalance(vault, 0);
+        mockPool.collateralToken1().setBalance(address(vault), 0);
         mockPool.collateralToken1().setPreviewRedeemReturn(0);
 
         uint256 shortPremiumRight = 200 ether;
