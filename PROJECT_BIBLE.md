@@ -1734,3 +1734,18 @@ Next post-maturity validation should stress adversarial self-challenge, duplicat
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
 \n
+
+## Milestone 80 — post-maturity duplicate-finding resilience (Benchmark 047)
+
+Benchmark 047 hardened target-scoped finding collection against repeated emission of the same finding identity.
+
+The generic collection behavior is now:
+- an exact re-emission of an already-collected finding is idempotent and does not create a duplicate report;
+- reuse of an existing finding ID with different content is rejected explicitly rather than silently merged;
+- existing multi-finding accumulation remains unchanged.
+
+The benchmark and focused regression passed locally/through CI before acceptance. This is an evidence/data-integrity control only; it does not classify vulnerabilities or encode a target-specific answer.
+
+The maturity/generalization gate remains closed. This milestone is post-maturity hardening.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
