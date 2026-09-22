@@ -6,6 +6,7 @@ detector or changing their semantics.
 from __future__ import annotations
 
 import json
+import concurrent.futures
 import subprocess
 import sys
 import time
@@ -21,8 +22,8 @@ CASES = (
 def main() -> int:
     root = Path("backtest-artifacts/benchmark-050")
     root.mkdir(parents=True, exist_ok=True)
-    records = []
-    for name, runner in CASES:
+    def run_case(case: tuple[str, str]) -> dict:
+        name, runner = case
         started = time.monotonic()
         completed = subprocess.run(
             [sys.executable, runner],
@@ -30,26 +31,30 @@ def main() -> int:
             capture_output=True,
             check=False,
         )
-        elapsed = time.monotonic() - started
-        record = {
+        return {
             "name": name,
             "runner": runner,
             "exit_code": completed.returncode,
-            "elapsed_seconds": round(elapsed, 3),
+            "elapsed_seconds": round(time.monotonic() - started, 3),
             "stdout_tail": completed.stdout[-12000:],
             "stderr_tail": completed.stderr[-12000:],
         }
-        records.append(record)
-        (root / f"{name}.json").write_text(
+
+    # These campaigns are independent. Run them concurrently so a slow
+    # unfamiliar-target batch cannot prevent causal and negative-control
+    # evidence from being collected.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(CASES)) as pool:
+        records = list(pool.map(run_case, CASES))
+
+    records.sort(key=lambda item: item["name"])
+    for record in records:
+        (root / (record["name"] + ".json")).write_text(
             json.dumps(record, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        if completed.returncode != 0:
-            # Preserve the first failed campaign's evidence and stop rather
-            # than allowing a later green campaign to hide a blocker.
-            break
 
     passed = len(records) == len(CASES) and all(x["exit_code"] == 0 for x in records)
+
     result = {
         "campaign": "050-post-maturity-discovery-batch",
         "status": "PASS" if passed else "BLOCKED",
