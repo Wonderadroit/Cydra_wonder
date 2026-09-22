@@ -164,3 +164,20 @@ def test_revert_guard_nonzero_address_allows_zero_address():
         function_name="close",
     )
     assert result == ("address(0)",)
+
+
+def test_revert_guard_collection_bound_selects_zero_index():
+    parameters = (ParameterModel("index", "uint256"),)
+    constraints = (
+        ConstraintEvidence(
+            contract="Target",
+            function="setItem",
+            parameter="index",
+            parameter_index=0,
+            predicate="index >= items.length",
+            source="solc-json-ast:test",
+            kind="revert_guard",
+        ),
+    )
+    candidates = select_parameter_candidates(parameters, constraints, function_name="setItem")
+    assert candidates[0].value == "0"
