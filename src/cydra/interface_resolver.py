@@ -265,3 +265,71 @@ def _extract_interface(
         imported_types=tuple(imported_types),
         top_level_types=tuple(top_level_types),
     )
+
+
+def resolve_named_type_source(root: str | Path, importer: str | Path, name: str) -> tuple[str, str]:
+    """Resolve a user-defined Solidity type through the import graph.
+
+    Constructor parameters may use a contract/library/interface type that is
+    imported indirectly (for example LendingPool imports ERC20 from DebtToken,
+    while DebtToken imports ERC20 from Solmate). The generated harness only
+    needs the defining source path so it can emit an explicit Type(address)
+    constructor value. This resolver follows declared imports recursively and
+    records the first source unit that actually declares the requested type.
+    """
+    root = Path(root).resolve()
+    start = Path(importer).resolve()
+    visited: set[Path] = set()
+
+    declaration = re.compile(
+        rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(name)}\b"
+    )
+    named_import = re.compile(
+        r'import\s*\{([^}]+)\}\s*from\s*"([^"]+)"\s*;',
+        re.MULTILINE,
+    )
+
+    def walk(path: Path) -> tuple[str, str] | None:
+        path = path.resolve()
+        if path in visited or not path.is_file():
+            return None
+        visited.add(path)
+        try:
+            source = _strip_comments(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            return None
+
+        if declaration.search(source):
+            return path.relative_to(root).as_posix(), "declaration"
+
+        for match in named_import.finditer(source):
+            symbols_text, import_path = match.groups()
+            symbols = []
+            for symbol in _split_parameters(symbols_text):
+                token = re.split(r"\s+as\s+", symbol.strip(), maxsplit=1)[-1].strip()
+                if token:
+                    symbols.append(token)
+            if name not in symbols:
+                continue
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            found = walk(resolved[0])
+            if found is not None:
+                return found
+
+        for import_path in _imports_for(path):
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            found = walk(resolved[0])
+            if found is not None:
+                return found
+        return None
+
+    found = walk(start)
+    if found is None:
+        raise FileNotFoundError(
+            f"Unable to resolve user-defined type {name} through imports from {start}"
+        )
+    return found
