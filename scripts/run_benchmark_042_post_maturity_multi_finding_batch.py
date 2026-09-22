@@ -241,7 +241,7 @@ def patch_h02(source: str) -> str:
 
 
 def run_case(
-    root: Path,
+    project: Path,
     finding: str,
     poc: str,
     contract: str,
@@ -249,11 +249,24 @@ def run_case(
     patcher,
     label: str,
 ) -> dict:
-    project = root / label
-    clone(project)
+    # Reuse one prepared target checkout for the whole batch. Only the pinned
+    # source file is reset between controls; installed dependencies remain
+    # intact. This makes failures accumulate quickly without hiding execution
+    # differences behind repeated dependency installation.
+    source = project / SOURCE
+    source.write_text(
+        subprocess.run(
+            ["git", "show", f"{REF}:{SOURCE}"],
+            cwd=project,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+    )
+    for generated in (project / "test").glob("CydraMultiFinding*.t.sol"):
+        generated.unlink()
     (project / "test" / f"Cydra{finding}.t.sol").write_text(poc)
     if label.endswith("-patched") or label.endswith("-independent-patched"):
-        source = project / SOURCE
         source.write_text(patcher(source.read_text()))
     return run_foundry(project, label, contract, test)
 
@@ -339,10 +352,12 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="cydra-042-") as tmp:
         root = Path(tmp)
+        project = root / "project"
+        clone(project)
         results = {
             "H-01": {
                 "vulnerable": run_case(
-                    root, "H01", H01_POC, "CydraMultiFindingH01",
+                    project, "H01", H01_POC, "CydraMultiFindingH01",
                     "test_cydra_h01", patch_h01, "h01-vulnerable"
                 ),
                 "patched": run_case(
@@ -360,7 +375,7 @@ def main() -> int:
             },
             "H-02": {
                 "vulnerable": run_case(
-                    root, "H02", H02_POC, "CydraMultiFindingH02",
+                    project, "H02", H02_POC, "CydraMultiFindingH02",
                     "test_cydra_h02", patch_h02, "h02-vulnerable"
                 ),
                 "patched": run_case(
