@@ -150,3 +150,28 @@ def test_sequence_renderer_resolves_indirect_contract_constructor_type(tmp_path)
     source = generated.read_text(encoding="utf-8")
     assert 'import { ERC20 } from "../interfaces/Token.sol";' in source
     assert "new SequenceWithToken(ERC20(address(constructorAsset)))" in source
+
+
+def test_sequence_renderer_satisfies_owner_role_and_binds_owner_constructor(tmp_path):
+    from cydra.models import ConstructorModel, ParameterModel, FunctionModel
+    model = ContractModel(
+        name="OwnedSequence",
+        source=str(tmp_path / "Target.sol"),
+        constructor=ConstructorModel((ParameterModel("owner_", "address"),), 1),
+        functions=(
+            FunctionModel("configure", "external", ("onlyOwner",), ("value",), (), 3),
+        ),
+    )
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    hypothesis = Hypothesis("H-STATE-owned", "candidate", "INV-STATE-owned", "configure", "owner", "candidate")
+    experiment = Experiment(
+        "X-H-STATE-owned", hypothesis.hypothesis_id, "configure", ("violation",), 1.0,
+        steps=(ExperimentStep("configure", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "OwnedSequence",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    source = generated.read_text(encoding="utf-8")
+    assert "target = new OwnedSequence(address(0x1001));" in source
+    assert "vm.prank(owner);" in source
