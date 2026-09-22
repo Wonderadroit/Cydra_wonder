@@ -29,6 +29,7 @@ from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_expe
 from cydra.sequence_foundry import generate_sequence_test_from_experiment
 from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
+from cydra.target_adapter import inspect_target
 from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
@@ -95,6 +96,7 @@ INVARIANT_CLASS = {
 
 FREEZE_FILES = (
     "provenance.json",
+    "target-intake.json",
     "target-checkout.txt",
     "parse-output.json",
     "invariants.json",
@@ -524,6 +526,9 @@ def main() -> int:
         source = checkout / args.target_path
 
         prepare_target_project(project)
+        target_intake = inspect_target(project, source)
+        if target_intake.adapter == "unsupported":
+            raise RuntimeError("target intake could not select a supported execution adapter")
         compiler_evidence: CompilerEvidenceResult = compile_state_effects(project, source)
         surfaces = tuple(
             surface
@@ -625,6 +630,7 @@ def main() -> int:
         }
         files = {
             "provenance.json": provenance,
+            "target-intake.json": target_intake.to_dict(),
             "parse-output.json": {"target": args.target_path, "contracts": _json(result.contracts)},
             "invariants.json": result.invariants,
             "hypotheses.json": result.hypotheses,
