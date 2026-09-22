@@ -56,11 +56,11 @@ contract CydraDiscoveryPoC is PoC {
 
     function test_cydra_discovered_nav_invariant() external {
         PanopticVaultAccountant.PoolInfo[] memory pools = _pools();
-        accountant.updatePoolsHash(vault, keccak256(abi.encode(pools)));
+        accountant.updatePoolsHash(address(vault), keccak256(abi.encode(pools)));
 
-        underlyingToken.setBalance(vault, 1000 ether);
-        token1.setBalance(vault, 0);
-        mockPool.collateralToken0().setBalance(vault, 0);
+        underlyingToken.setBalance(address(vault), 1000 ether);
+        token1.setBalance(address(vault), 0);
+        mockPool.collateralToken0().setBalance(address(vault), 0);
         mockPool.collateralToken0().setPreviewRedeemReturn(0);
         mockPool.collateralToken1().setBalance(vault, 0);
         mockPool.collateralToken1().setPreviewRedeemReturn(0);
@@ -74,10 +74,10 @@ contract CydraDiscoveryPoC is PoC {
             LeftRightUnsigned.wrap((shortPremiumLeft << 128) | shortPremiumRight),
             LeftRightUnsigned.wrap((longPremiumLeft << 128) | longPremiumRight)
         );
-        mockPool.setNumberOfLegs(vault, 0);
+        mockPool.setNumberOfLegs(address(vault), 0);
         mockPool.setMockPositionBalanceArray(new uint256[2][](0));
 
-        uint256 nav = accountant.computeNAV(vault, address(underlyingToken), _managerInput(pools));
+        uint256 nav = accountant.computeNAV(address(vault), address(underlyingToken), _managerInput(pools));
 
         assertApproxEqAbs(
             nav,
