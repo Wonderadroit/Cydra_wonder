@@ -159,6 +159,19 @@ def run_blind(target: dict, output: Path) -> dict:
     return record
 
 
+def _foundry_remappings(project: Path) -> list[str]:
+    candidates = {
+        "@openzeppelin/contracts/": project / "lib/openzeppelin-contracts/contracts",
+        "@openzeppelin/contracts-upgradeable/": project / "lib/openzeppelin-contracts-upgradeable/contracts",
+        "forge-std/": project / "lib/forge-std/src",
+    }
+    return [
+        f"{prefix}={path.relative_to(project).as_posix()}/"
+        for prefix, path in candidates.items()
+        if path.is_dir()
+    ]
+
+
 def run_foundry(
     project: Path,
     contract: str,
@@ -169,18 +182,22 @@ def run_foundry(
     # Some historical Solidity repositories also contain unrelated Vyper
     # sources. Scope Foundry to the directory containing the selected target
     # so unrelated language sources cannot block the Solidity experiment.
+    command = [
+        "forge",
+        "test",
+        "--contracts",
+        str(contracts_dir),
+        "--match-contract",
+        contract,
+        "--match-test",
+        test,
+        "-vvv",
+    ]
+    remappings = _foundry_remappings(project)
+    if remappings:
+        command.extend(["--remappings", ",".join(remappings)])
     completed = subprocess.run(
-        [
-            "forge",
-            "test",
-            "--contracts",
-            str(contracts_dir),
-            "--match-contract",
-            contract,
-            "--match-test",
-            test,
-            "-vvv",
-        ],
+        command,
         cwd=project,
         text=True,
         capture_output=True,
