@@ -655,7 +655,7 @@ def _model_initialization_source(
         # traverse an unusual remapping/alias. The source import itself is
         # authoritative provenance and avoids fabricating a bare Solidity type.
         if re.search(
-            rf'import\\s*\\{{[^}}]*\\b{re.escape(base)}\\b[^}}]*\\}}\\s*from\\s*"[^"]+"\\s*;',
+            rf'import\s*\{{[^}}]*\b{re.escape(base)}\b[^}}]*\}}\s*from\s*"[^"]+"\s*;',
             source_text,
         ):
             custom_namespaces.add(base)
