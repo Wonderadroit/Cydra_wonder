@@ -650,6 +650,15 @@ def _model_initialization_source(
         base = parameter.type.strip().split()[0].rstrip("[]")
         if base in resolved_interface_names or base in direct_parameter_interfaces:
             custom_namespaces.add(base)
+            continue
+        # Preserve direct source imports even when the interface resolver cannot
+        # traverse an unusual remapping/alias. The source import itself is
+        # authoritative provenance and avoids fabricating a bare Solidity type.
+        if re.search(
+            rf'import\\s*\\{{[^}}]*\\b{re.escape(base)}\\b[^}}]*\\}}\\s*from\\s*"[^"]+"\\s*;',
+            source_text,
+        ):
+            custom_namespaces.add(base)
     custom_imports: list[str] = []
     for namespace in sorted(custom_namespaces):
         inherited_interface = resolved_interface_names.get(namespace)
