@@ -1691,3 +1691,24 @@ The maturity/generalization gate remains closed. Future post-maturity work shoul
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
 \n
+
+## Milestone 78 — explicit research-loop search exhaustion (Benchmark 045)
+
+Benchmark 045 hardened the post-maturity research loop with an explicit terminal state for normal hypothesis exhaustion.
+
+Before this change, a loop whose investigation budget exceeded the number of executable candidates could raise a selection error after all candidates had already been contradicted. The generic repair now records `termination_reason` and returns `hypothesis_exhausted` when every remaining executable candidate has been eliminated after investigation has begun. Empty or unbound investigations still fail closed.
+
+Benchmark 045 acceptance:
+- two executable candidates were selected exactly once;
+- both produced `contradicted` evidence;
+- a five-round budget terminated after two rounds;
+- termination reason: `hypothesis_exhausted`;
+- empty investigation remained a fail-closed error;
+- dedicated regression and integration workflow passed.
+
+The repair is control-plane generic and does not encode a vulnerability class, target, historical answer, or selector. The maturity/generalization gate remains closed.
+
+This adds explicit evidence for search-exhaustion handling; broader post-maturity work must still validate exhaustion behavior in real multi-finding target campaigns and continue adversarial/reproducibility testing.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+\n
