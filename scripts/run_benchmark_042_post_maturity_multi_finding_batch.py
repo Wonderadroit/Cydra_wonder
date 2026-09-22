@@ -247,6 +247,7 @@ def run_case(
     contract: str,
     test: str,
     patcher,
+    pristine_source: str,
     label: str,
 ) -> dict:
     # Reuse one prepared target checkout for the whole batch. Only the pinned
@@ -254,13 +255,7 @@ def run_case(
     # intact. This makes failures accumulate quickly without hiding execution
     # differences behind repeated dependency installation.
     source = project / SOURCE
-    subprocess.run(
-        ["git", "checkout", "--", SOURCE],
-        cwd=project,
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    (project / SOURCE).write_text(pristine_source)
     for generated in (project / "test").glob("CydraMultiFinding*.t.sol"):
         generated.unlink()
     (project / "test" / f"Cydra{finding}.t.sol").write_text(poc)
@@ -352,6 +347,7 @@ def main() -> int:
         root = Path(tmp)
         project = root / "project"
         clone(project)
+        pristine_source = (project / SOURCE).read_text(encoding="utf-8")
         results = {
             "H-01": {
                 "vulnerable": run_case(
