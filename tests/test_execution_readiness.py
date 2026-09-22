@@ -97,7 +97,7 @@ def test_execution_readiness_uses_compiler_collection_constraints_for_setup_disc
         functions=(
             FunctionModel("target", "external", (), (), (), 1,
                           parameters=(ParameterModel("index", "uint256"),)),
-            FunctionModel("seed", "external", ("onlyOwner",), (), (), 2,
+            FunctionModel("seed", "external", ("onlyOwner",), ("items",), (), 2,
                           parameters=(ParameterModel("item", "address"),)),
         ),
     )
