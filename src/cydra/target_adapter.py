@@ -90,9 +90,24 @@ def inspect_target(project: str | Path, source: str | Path) -> TargetEnvironment
     framework = "foundry" if config.exists() else "unknown"
     if framework != "foundry":
         return TargetEnvironment(
-            "solidity", framework, "unknown", str(root), str(source_path.parent),
-            None, None, None, None, None, (), len(_imports(source_path)),
-            (), (), "unsupported", 0.0, ("no supported Solidity project adapter",),
+            language="solidity",
+            framework=framework,
+            compiler="unknown",
+            project_root=str(root),
+            source_root=str(source_path.parent),
+            test_root=None,
+            config_file=None,
+            remappings_file=None,
+            compiler_version=None,
+            optimizer_enabled=None,
+            via_ir=None,
+            dependency_roots=(),
+            import_count=len(_imports(source_path)),
+            deployable_contracts=(),
+            unresolved_constructor_types=(),
+            adapter="unsupported",
+            confidence=0.0,
+            blockers=("no supported Solidity project adapter",),
         )
 
     forge = _foundry_config(root)
