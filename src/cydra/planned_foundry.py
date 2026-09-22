@@ -147,38 +147,5 @@ contract CydraAuthInvariantTest is Test {{
     }}
 }}
 '''
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity {pragma};
-// Hypothesis: {hypothesis.hypothesis_id}
-// Experiment: {experiment.experiment_id}
-// Planned inputs are authoritative for this concrete target call.
-import {{Test}} from "forge-std/Test.sol";
-import {{ {target_type} }} from "{target_import}";
-{constructor_import_text}
-
-contract CydraAuthInvariantTest is Test {{
-    {target_type} internal target;
-    address internal attacker = address(0xBEEF);
-
-    function setUp() public {{
-        target = {constructor_call};
-    }}
-
-    function testUnauthorizedCallerMutationSurface() public {{
-        vm.record();
-        vm.prank(attacker);
-        bool ok;
-        try target.{function.name}({arguments}) {{
-            ok = true;
-        }} catch {{
-            ok = false;
-        }}
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(target));
-        reads;
-        assertTrue(ok, "candidate call reverted; unauthorized mutation not demonstrated");
-        assertGt(writes.length, 0, "candidate call did not mutate target storage");
-    }}
-}}
-'''
     path.write_text(source, encoding="utf-8")
     return path
