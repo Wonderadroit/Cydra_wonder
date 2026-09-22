@@ -1625,3 +1625,37 @@ The combined evidence satisfies the behavioral proof obligation recorded in Mile
 This closure means the current architecture has crossed the project's defined maturity gate; it does not mean future targets cannot expose new reasoning gaps. The doctrine remains unchanged: new failures must be diagnosed from evidence, repaired generically where possible, and regression-tested rather than patched with benchmark-specific selectors or detectors.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 76 — post-maturity multi-target causal discovery (Benchmark 043)
+
+Benchmark 043 completed the next post-maturity behavioral proof: multiple unfamiliar real targets were investigated independently through the same blind-to-causal research loop.
+
+The pinned targets were RabbitHole Quest Protocol (RabbitHoleTickets.sol) and Debt DAO Line of Credit (SpigotLib.sol). Blind selection received no vulnerability class, target function, exploit sequence, patch, historical answer, or selector override. The campaign preserved the strict blind boundary.
+
+The first canonical campaign exposed two generic gaps before acceptance:
+- RabbitHole execution was initially blocked by unrelated Vyper sources in the historical repository; generic Foundry source scoping was added so the selected Solidity target and its imports could be measured without requiring an unrelated Vyper compiler.
+- Debt DAO configuration-binding hypotheses were initially emitted as prose-only experiments and therefore could not reach execution; generic keyed-configuration planning was changed to emit a structured executable ExperimentStep, with normal generic input binding supplying arguments.
+
+Those repairs were merged generically in PRs #178 and #179 and then validated by the fresh canonical Benchmark 043 rerun in PR #180.
+
+Final canonical Benchmark 043 result (workflow run 35727326459):
+- full Python regression: PASS;
+- RabbitHole blind selection: matching authorization hypothesis for mint;
+- RabbitHole vulnerable execution: FAIL; patched execution: PASS;
+- RabbitHole causal verification: true;
+- RabbitHole independent vulnerable reproduction: FAIL; independent patched reproduction: PASS;
+- RabbitHole finding gate: READY;
+- Debt DAO blind selection: matching keyed-configuration hypothesis for claimRevenue;
+- Debt DAO vulnerable execution: FAIL; patched execution: PASS;
+- Debt DAO causal verification: true;
+- Debt DAO independent vulnerable reproduction: FAIL; independent patched reproduction: PASS;
+- Debt DAO finding gate: READY;
+- multi-target gate: READY;
+- blind boundary preserved: true.
+
+The canonical result demonstrates that the post-maturity loop can reach reproducible, causally verified findings on more than one unfamiliar target in the same campaign. The two findings are distinct mechanisms: a missing caller predicate in a minter modifier and an unvalidated keyed configuration used by an effectful revenue-claim path.
+
+Benchmark 043 is evidence of generalization across targets, not a claim that every arbitrary target will yield a finding. Future failures remain subject to the same diagnose → classify → generic repair → regression → blind retest discipline. The maturity gate remains closed; this is post-maturity validation.
+
+Doctrine remains: LLMs propose. Tools test. Evidence decides.
