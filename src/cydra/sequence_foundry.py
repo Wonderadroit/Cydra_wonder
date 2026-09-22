@@ -5,6 +5,7 @@ import os
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source
+from .execution_readiness import _address_role
 
 
 def generate_sequence_test_from_experiment(
@@ -31,6 +32,7 @@ def generate_sequence_test_from_experiment(
 
     functions = {function.name: function for function in contract_model.functions}
     rendered: list[str] = []
+    role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
             raise ValueError(f"sequence step {index} has no function")
@@ -88,7 +90,8 @@ def generate_sequence_test_from_experiment(
         if parameter_type.endswith("[]"):
             raise ValueError(f"unsupported sequence constructor array type: {parameter.type}")
         if base == "address":
-            constructor_arguments.append("address(0)")
+            role = _address_role(parameter.name)
+            constructor_arguments.append(role_addresses.get(role, "address(0)"))
         elif parameter_type == "address payable":
             constructor_arguments.append("payable(address(0))")
         elif base == "bool":
