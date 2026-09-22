@@ -310,7 +310,7 @@ def run_target(target: dict, output: Path) -> dict:
             contract,
             test,
             "vulnerable",
-            Path(target["source"]).parent,
+            Path(target["source"]),
             Path(target["source"]),
         )
 
