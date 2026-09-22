@@ -135,3 +135,27 @@ def test_state_surface_excludes_modifier_protected_entries():
     )
     result = generate_cross_function_state_hypotheses(contract)
     assert {h.target_function for h in result.hypotheses} == {"open", "peer"}
+
+
+def test_cross_function_state_surface_does_not_reintroduce_modifier_protected_semantic_writers():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel("open", "external", (), ("shared",), (), 1),
+            FunctionModel("admin", "external", ("onlyOwner",), ("shared",), (), 2),
+            FunctionModel("peer", "external", (), ("shared",), (), 3),
+        ),
+    )
+    semantic = (
+        SemanticRelationshipEvidence(
+            contract="Target",
+            function="admin",
+            relation="writes",
+            target="shared",
+            confidence=0.98,
+            source="solc-json-ast:test",
+        ),
+    )
+    result = generate_cross_function_state_hypotheses(contract, semantic)
+    assert {h.target_function for h in result.hypotheses} == {"open", "peer"}
