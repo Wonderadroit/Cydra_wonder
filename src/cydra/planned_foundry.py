@@ -109,11 +109,11 @@ def generate_authorization_test_from_experiment(
     constructor_import_text = "\n".join(dict.fromkeys(constructor_imports))
 
     stub_declaration = (
-        '    contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\\n'
+        '    contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\n'
         if erc20_stub_needed else ""
     )
-    asset_declaration = "    ERC20 internal constructorAsset;\\n" if erc20_stub_needed else ""
-    asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\\n" if erc20_stub_needed else ""
+    asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
+    asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
