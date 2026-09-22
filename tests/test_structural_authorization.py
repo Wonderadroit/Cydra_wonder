@@ -84,3 +84,38 @@ contract Target {
     )
     hypotheses = generate_structural_access_control_hypotheses(contract)
     assert [item.target_function for item in hypotheses] == ["configure"]
+
+
+def test_modifier_with_unenforced_caller_expression_is_flagged(tmp_path):
+    contract = _parse(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract Target {
+    address public minter;
+    modifier onlyMinter() {
+        msg.sender == minter;
+        _;
+    }
+    function mint(address to) external onlyMinter { }
+}
+""",
+    )
+    hypotheses = generate_structural_access_control_hypotheses(contract)
+    assert [item.target_function for item in hypotheses] == ["mint"]
+
+
+def test_modifier_with_require_enforcement_is_not_flagged_as_weak(tmp_path):
+    contract = _parse(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract Target {
+    address public minter;
+    modifier onlyMinter() {
+        require(msg.sender == minter);
+        _;
+    }
+    function mint(address to) external onlyMinter { }
+}
+""",
+    )
+    assert generate_structural_access_control_hypotheses(contract) == ()

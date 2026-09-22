@@ -1,0 +1,50 @@
+name: CYDRA Benchmark 043 — Post-Maturity Multi-Target Causal Discovery
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/run_benchmark_blind.py"
+      - "scripts/run_benchmark_043_multi_target_causal_discovery.py"
+      - "benchmarks/043_post_maturity_multi_target_causal_discovery/**"
+      - ".github/workflows/benchmark-043-post-maturity-multi-target-causal-discovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: oven-sh/setup-bun@v2
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Full regression
+        run: python -m pytest -q
+      - name: Multi-target causal campaign
+        env:
+          PYTHONPATH: .
+        run: |
+          set +e
+          python scripts/run_benchmark_043_multi_target_causal_discovery.py
+          rc=$?
+          printf '{"campaign":"043","exit_code":%s}\n' "$rc" > backtest-artifacts/benchmark-043/ci-result.json
+          exit "$rc"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-043-post-maturity-multi-target-causal-discovery
+          path: backtest-artifacts/benchmark-043
+          if-no-files-found: error
