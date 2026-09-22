@@ -1776,3 +1776,16 @@ Selection now:
 This is not a vulnerability detector and does not encode a target-specific answer. It improves information-gain discipline and prevents budget waste on identical non-measurable executions.
 
 The maturity/generalization gate remains closed.
+
+
+## Milestone 81 — post-maturity hardening batch campaign (Benchmark 049)
+
+The post-maturity resilience controls are now grouped into one auditable batch campaign.
+
+The batch executes Benchmarks 046, 047, and the two independent Benchmark 048 controls in one run, after the focused research-loop/finding regressions. Acceptance requires every control to pass together.
+
+This is validation orchestration, not a new vulnerability detector. It exists to expose interaction failures between execution resilience, hypothesis exhaustion, finding deduplication, and the research-loop boundary.
+
+The maturity/generalization gate remains closed. The batch is a post-maturity hardening gate.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
