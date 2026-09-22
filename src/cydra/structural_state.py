@@ -38,7 +38,11 @@ def _shared_state_writers(
             continue
         if item.relation not in {"writes", "transition_expression"}:
             continue
-        if item.function in {f.name for f in contract.functions if f.visibility in {"public", "external"}}:
+        if item.function in {
+            f.name
+            for f in contract.functions
+            if f.visibility in {"public", "external"} and not f.modifiers
+        }:
             writers[item.target].add(item.function)
 
     return {
