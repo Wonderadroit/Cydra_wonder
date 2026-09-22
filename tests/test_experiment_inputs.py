@@ -132,3 +132,35 @@ def test_fixed_bytes_defaults_preserve_declared_width():
         "referrer": 'bytes3(hex"010000")',
         "digest": 'bytes32(hex"0100000000000000000000000000000000000000000000000000000000000000")',
     }
+
+
+def test_revert_guard_zero_requires_nonzero_execution_value():
+    parameters = (ParameterModel(name="amount", type="uint256"),)
+    result = plan_parameter_inputs(
+        parameters,
+        (
+            ConstraintEvidence(
+                "Target", "borrow", "amount", 0, "amount == 0",
+                "solc-json-ast:Target.sol", kind="revert_guard"
+            ),
+        ),
+        {"amount": "0"},
+        function_name="borrow",
+    )
+    assert result == ("1",)
+
+
+def test_revert_guard_nonzero_address_allows_zero_address():
+    parameters = (ParameterModel(name="account", type="address"),)
+    result = plan_parameter_inputs(
+        parameters,
+        (
+            ConstraintEvidence(
+                "Target", "close", "account", 0, "account != 0",
+                "solc-json-ast:Target.sol", kind="revert_guard"
+            ),
+        ),
+        {"account": "address(0xCAFE)"},
+        function_name="close",
+    )
+    assert result == ("address(0)",)
