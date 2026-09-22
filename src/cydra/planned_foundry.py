@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from .interface_resolver import resolve_interface
+from .interface_resolver import resolve_interface, resolve_named_type_source
 
 from .models import ContractModel, Experiment, Hypothesis
 from .planned_call import render_function_call
@@ -51,6 +51,7 @@ def generate_authorization_test_from_experiment(
     constructor_imports: list[str] = []
     inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
     direct_interfaces: dict[str, object] = {}
+    named_type_sources: dict[str, str] = {}
     if project_root is not None and contract_model.constructor is not None:
         for parameter in contract_model.constructor.parameters:
             base = parameter.type.strip().split()[0].rstrip("[]")
@@ -60,7 +61,11 @@ def generate_authorization_test_from_experiment(
                 try:
                     direct_interfaces[base] = resolve_interface(project_root, contract_model.source, base)
                 except (FileNotFoundError, ValueError, OSError, UnicodeError):
-                    pass
+                    try:
+                        source_path, _ = resolve_named_type_source(project_root, contract_model.source, base)
+                        named_type_sources[base] = source_path
+                    except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                        pass
 
     for parameter in (contract_model.constructor.parameters if contract_model.constructor else ()):
         parameter_type = parameter.type.strip()
@@ -85,6 +90,11 @@ def generate_authorization_test_from_experiment(
             constructor_arguments.append(f"{base}(address(0))")
             resolved = direct_interfaces[base]
             relative = Path(__import__("os").path.relpath(project_root / resolved.source_path, path.parent)).as_posix()
+            constructor_imports.append(f'import {{ {base} }} from "{relative}";')
+        elif base in named_type_sources:
+            constructor_arguments.append(f"{base}(address(0))")
+            resolved_path = Path(project_root / named_type_sources[base])
+            relative = Path(__import__("os").path.relpath(resolved_path, path.parent)).as_posix()
             constructor_imports.append(f'import {{ {base} }} from "{relative}";')
         else:
             raise ValueError(f"unsupported authorization constructor type: {parameter.type}")
