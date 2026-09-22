@@ -12,7 +12,7 @@ import shutil
 from cydra.authorization_runtime import classify_authorization_blind_execution
 from cydra.blind_authorization import generate_blind_authorization_test_from_experiment
 from cydra.compiler_state import compile_state_effects
-from cydra.foundry import require_executed, run_foundry_test, test_path_for
+from cydra.foundry import ExecutionResult, require_executed, run_foundry_test, test_path_for
 from cydra.pipeline import investigate
 from cydra.reasoning import plan_access_control_experiment
 
