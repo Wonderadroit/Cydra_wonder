@@ -28,6 +28,7 @@ class ExecutionReadiness:
     constructor_requirements: tuple[ExecutionRequirement, ...] = ()
     caller_requirements: tuple[ExecutionRequirement, ...] = ()
     runtime_requirements: tuple[ExecutionRequirement, ...] = ()
+    state_requirements: tuple[ExecutionRequirement, ...] = ()
 
     @property
     def blockers(self) -> tuple[ExecutionRequirement, ...]:
@@ -137,6 +138,19 @@ def _runtime_requirements(function: FunctionModel) -> tuple[ExecutionRequirement
     )
 
 
+def _state_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+    return tuple(
+        ExecutionRequirement(
+            "state_predicate",
+            predicate,
+            f"{function.name}:body",
+            "required",
+            "function contains a predicate over modeled target state",
+        )
+        for predicate in function.state_predicates
+    )
+
+
 def inspect_execution_readiness(
     contract: ContractModel,
     function: FunctionModel | None = None,
@@ -148,4 +162,5 @@ def inspect_execution_readiness(
         constructor_requirements=_constructor_requirements(contract),
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(selected) if selected else (),
+        state_requirements=_state_requirements(selected) if selected else (),
     )
