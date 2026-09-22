@@ -29,6 +29,7 @@ class ExecutionReadiness:
     caller_requirements: tuple[ExecutionRequirement, ...] = ()
     runtime_requirements: tuple[ExecutionRequirement, ...] = ()
     state_requirements: tuple[ExecutionRequirement, ...] = ()
+    state_setup_candidates: tuple[ExecutionRequirement, ...] = ()
 
     @property
     def blockers(self) -> tuple[ExecutionRequirement, ...]:
@@ -38,6 +39,7 @@ class ExecutionReadiness:
                 *self.constructor_requirements,
                 *self.caller_requirements,
                 *self.runtime_requirements,
+                *self.state_requirements,
             )
             if item.status == "unresolved"
         )
@@ -164,6 +166,61 @@ def _state_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, 
     )
 
 
+def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
+    names: list[str] = []
+    for predicate in function.state_predicates:
+        for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate):
+            if name in {"true", "false", "address", "bytes", "uint", "int"}:
+                continue
+            if name not in names:
+                names.append(name)
+    return tuple(names)
+
+
+def _state_setup_candidates(
+    contract: ContractModel,
+    function: FunctionModel,
+) -> tuple[ExecutionRequirement, ...]:
+    """Identify generic writer functions that may establish required state.
+
+    This is a planning surface, not proof that the writer can satisfy the
+    predicate. A candidate is constructible only when its ABI is composed of
+    primitive values; guarded writers remain usable through the generic caller
+    role model.
+    """
+    state_names = _state_names_from_predicates(function)
+    if not state_names:
+        return ()
+
+    candidates: list[ExecutionRequirement] = []
+    for state in state_names:
+        for writer in contract.functions:
+            if writer.name == function.name or writer.visibility not in {"public", "external"}:
+                continue
+            touched = state in writer.writes or any(
+                receiver == state and method in {"push", "pop"}
+                for receiver, method in writer.external_calls
+            )
+            if not touched:
+                continue
+            primitive_abi = all(
+                parameter.type.strip().split()[0].rstrip("[]") in {"address", "bool", "string", "bytes"}
+                or parameter.type.strip().split()[0].rstrip("[]").startswith(("uint", "int", "bytes"))
+                for parameter in writer.parameters
+            )
+            status = "constructible" if primitive_abi else "unresolved"
+            candidates.append(
+                ExecutionRequirement(
+                    "state_setup_candidate",
+                    writer.name,
+                    f"{function.name}:state:{state}",
+                    status,
+                    f"candidate transition that touches modeled prerequisite state {state}",
+                )
+            )
+    return tuple(dict.fromkeys(candidates))
+
+
 def inspect_execution_readiness(
     contract: ContractModel,
     function: FunctionModel | None = None,
@@ -176,4 +233,5 @@ def inspect_execution_readiness(
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(selected) if selected else (),
         state_requirements=_state_requirements(selected) if selected else (),
+        state_setup_candidates=_state_setup_candidates(contract, selected) if selected else (),
     )
