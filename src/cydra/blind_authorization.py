@@ -10,6 +10,10 @@ from .authorization_runtime import security_assertion_marker
 
 def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
     parameter_type = str(parameter.type or "").strip()
+    if not parameter_type:
+        raise ValueError(
+            f"constructor parameter {parameter.name or '<unnamed>'} has no resolved Solidity type"
+        )
     base = parameter_type.split()[0].rstrip("[]")
     if parameter_type.endswith("[]"):
         return f"new {base}[](0)"
@@ -34,10 +38,10 @@ def _constructor_arguments(contract_model: ContractModel, *, abi_only: bool = Fa
     constructor = contract_model.constructor
     if constructor is None:
         return ""
-    return ", ".join(
-        _constructor_argument(parameter, abi_only=abi_only)
-        for parameter in constructor.parameters
-    )
+    arguments = []
+    for parameter in constructor.parameters:
+        arguments.append(_constructor_argument(parameter, abi_only=abi_only))
+    return ", ".join(arguments)
 
 
 def generate_blind_authorization_test_from_experiment(
