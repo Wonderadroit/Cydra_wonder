@@ -72,7 +72,7 @@ def _run_init(root: Path) -> dict:
     target = _project(source, root)
     generated = generate_initialization_test(
         hypothesis,
-        f"../src/{target.name}",
+        f"../../src/{target.name}",
         "WormholeInitializationFixture",
         test_path_for(root, f"generated/{hypothesis.hypothesis_id}.t.sol"),
     )
@@ -105,7 +105,7 @@ def _run_temporal(root: Path) -> dict:
     generated = generate_temporal_precondition_test(
         hypothesis,
         contract,
-        f"../src/{target.name}",
+        f"../../src/{target.name}",
         contract.name,
         test_path_for(root, f"generated/{hypothesis.hypothesis_id}.t.sol"),
         experiment=experiment,
