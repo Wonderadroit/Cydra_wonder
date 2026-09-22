@@ -467,3 +467,24 @@ def test_constant_comparisons_are_not_lifecycle_state_predicates(tmp_path: Path)
     function = contract.functions[0]
     assert contract.state_variables == ("owner",)
     assert function.state_predicates == ()
+
+
+def test_state_predicate_polarity_distinguishes_require_and_revert_guard(tmp_path: Path) -> None:
+    path = tmp_path / "GuardPolarity.sol"
+    path.write_text(
+        """
+        contract GuardPolarity {
+            uint256 public count;
+            function requirePositive() external {
+                require(count > 0);
+            }
+            function revertWhenPositive() external {
+                if (count > 0) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    functions = {item.name: item for item in parse_solidity(path)[0].functions}
+    assert functions["requirePositive"].state_predicate_polarities == (("count > 0", "must_hold"),)
+    assert functions["revertWhenPositive"].state_predicate_polarities == (("count > 0", "must_not_hold"),)
