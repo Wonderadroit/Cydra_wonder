@@ -325,7 +325,7 @@ def run_target(target: dict, output: Path) -> dict:
             contract,
             test,
             "patched",
-            Path(target["source"]).parent,
+            Path(target["source"]),
             Path(target["source"]),
         )
 
@@ -338,7 +338,7 @@ def run_target(target: dict, output: Path) -> dict:
             contract,
             test,
             "independent-vulnerable",
-            Path(target["source"]).parent,
+            Path(target["source"]),
             Path(target["source"]),
         )
 
@@ -353,7 +353,7 @@ def run_target(target: dict, output: Path) -> dict:
             contract,
             test,
             "independent-patched",
-            Path(target["source"]).parent,
+            Path(target["source"]),
             Path(target["source"]),
         )
 
