@@ -31,8 +31,16 @@ class FindingCollection:
         finding_id = getattr(finding, "finding_id", "")
         if not finding_id:
             raise ValueError("finding must expose a non-empty finding_id")
-        if any(getattr(item, "finding_id", None) == finding_id for item in self.findings):
-            raise ValueError(f"finding already exists in target collection: {finding_id}")
+        for item in self.findings:
+            if getattr(item, "finding_id", None) != finding_id:
+                continue
+            # Exact re-emission of the same finding is idempotent: repeated
+            # observations must not crash collection or create duplicate reports.
+            if item == finding:
+                return self
+            # Same identity with different content is unsafe to merge silently.
+            # Preserve fail-closed behavior for an identity collision.
+            raise ValueError(f"conflicting finding already exists in target collection: {finding_id}")
         return FindingCollection(self.target, self.findings + (finding,))
 
     def ordered_by_severity(self) -> tuple[object, ...]:
