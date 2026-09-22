@@ -88,7 +88,7 @@ def test_observed_nonterminal_hypothesis_remains_eligible_but_is_deprioritized()
     assert selected.hypothesis.hypothesis_id == "H-B"
 
 
-def test_unmeasurable_observation_is_strongly_deprioritized_without_being_discarded():
+def test_unmeasurable_observation_prefers_another_candidate():
     invariant_a = Invariant("INV-A", "a", "test", 0.95)
     invariant_b = Invariant("INV-B", "b", "test", 0.8)
     h_a = Hypothesis("H-A", "a", "INV-A", "a", "caller", "impact")
@@ -102,3 +102,16 @@ def test_unmeasurable_observation_is_strongly_deprioritized_without_being_discar
     )
 
     assert selected.hypothesis.hypothesis_id == "H-B"
+
+
+def test_unmeasurable_only_candidate_is_exhausted():
+    invariant = Invariant("INV-A", "a", "test", 0.95)
+    hypothesis = Hypothesis("H-A", "a", "INV-A", "a", "caller", "impact")
+    experiment = Experiment("X-H-A", "H-A", "a", ("one",), 1.0)
+
+    import pytest
+    with pytest.raises(ValueError, match="no non-excluded hypothesis"):
+        select_next_hypothesis(
+            (hypothesis,), (invariant,), (experiment,),
+            observed_statuses={"H-A": "UNMEASURABLE"},
+        )
