@@ -196,3 +196,39 @@ contract DcntEth {
     assert "target.router()" in rendered
     assert "beforeState" in rendered
     assert "unauthorized caller mutated modeled administrative state" in rendered
+
+
+def test_blind_auth_renderer_fails_closed_on_unresolved_constructor_type(tmp_path: Path):
+    model = ContractModel(
+        "Legacy",
+        str(tmp_path / "Legacy.sol"),
+        (
+            FunctionModel(
+                "setWhitelist",
+                "external",
+                (),
+                ("whitelist",),
+                (),
+                8,
+                (ParameterModel("accounts", "address[]"),),
+            ),
+        ),
+        constructor=ConstructorModel(
+            (ParameterModel("_token", None),),
+            20,
+        ),
+    )
+    hypothesis = _hypothesis()
+    experiment = Experiment(
+        "X-H-AUTH-setWhitelist",
+        hypothesis.hypothesis_id,
+        "call",
+        ("violation", "preservation"),
+        1.0,
+        planned_inputs=("new address[](0)",),
+    )
+    import pytest
+    with pytest.raises(ValueError, match="no resolved Solidity type"):
+        generate_blind_authorization_test_from_experiment(
+            hypothesis, experiment, "../Legacy.sol", "Legacy", tmp_path / "generated.t.sol", model
+        )
