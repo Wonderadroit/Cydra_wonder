@@ -223,13 +223,13 @@ def run_foundry(
     # graph; it only narrows compilation away from unrelated project surface.
     if completed.returncode != 0 and "Error (4327)" in completed.stderr:
         paths = set(
-            re.findall(r"-->\\s+([^:\\n]+\\.sol):\\d+", completed.stderr)
+            re.findall(r"-->\s+([^:\n]+\.sol):\d+", completed.stderr)
         )
-        target_name = str(target_source).replace("\\\\", "/")
+        target_name = str(target_source).replace("\\", "/")
         skip_stems = sorted(
             Path(path).stem
             for path in paths
-            if path.replace("\\\\", "/") != target_name
+            if path.replace("\\", "/") != target_name
             and (project / path).exists()
         )
         if skip_stems:
