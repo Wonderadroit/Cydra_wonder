@@ -194,8 +194,8 @@ def run_foundry(
         "-vvv",
     ]
     remappings = _foundry_remappings(project)
-    if remappings:
-        command.extend(["--remappings", ",".join(remappings)])
+    for remapping in remappings:
+        command.extend(["--remappings", remapping])
     completed = subprocess.run(
         command,
         cwd=project,
