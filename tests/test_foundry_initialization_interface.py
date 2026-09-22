@@ -1,5 +1,5 @@
 from cydra.foundry import generate_initialization_test
-from cydra.interface_resolver import ResolvedInterface
+from cydra.interface_resolver import InterfaceMethod, ResolvedInterface
 from cydra.models import ConstructorModel, ContractModel, Experiment, FunctionModel, Hypothesis, ParameterModel
 
 
@@ -247,3 +247,31 @@ def test_initializer_probe_synthesizes_aligned_future_timestamp(tmp_path):
     output = generate_initialization_test(_hypothesis(), "../src/TimedInitializer.sol", "TimedInitializer", tmp_path / "generated.t.sol", contract_model=model)
     source = output.read_text(encoding="utf-8")
     assert "((block.timestamp / 86400) + 2) * 86400" in source
+
+
+def test_model_aware_generator_imports_bare_resolved_interface_initializer_type(tmp_path):
+    interface = ResolvedInterface(
+        name="IERC20Metadata",
+        source_path="lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol",
+        resolution_method="project_relative",
+        methods=(InterfaceMethod("decimals", (), ("uint8",)),),
+    )
+    model = _model(
+        "VaultFixture",
+        (),
+        (
+            ParameterModel("asset_", "IERC20Metadata"),
+            ParameterModel("owner", "address"),
+        ),
+        inherited_resolved_interfaces=(interface,),
+    )
+    output = generate_initialization_test(
+        _hypothesis(),
+        "../src/Vault.sol",
+        "VaultFixture",
+        tmp_path / "generated.t.sol",
+        contract_model=model,
+    )
+    source = output.read_text(encoding="utf-8")
+    assert 'import { IERC20Metadata } from "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";' in source
+    assert "IERC20Metadata memory parameter0;" in source

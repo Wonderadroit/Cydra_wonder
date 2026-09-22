@@ -133,8 +133,12 @@ def test_blind_auth_renderer_handles_legacy_constructor_and_no_forge_std(tmp_pat
     source = output.read_text(encoding="utf-8")
     assert "pragma solidity ^0.6.12;" in source
     assert 'import {Test} from "forge-std/Test.sol";' not in source
-    assert "type(Legacy).creationCode" in source
-    assert "abi.encode(IERC20(address(0x1001)), AlEth(address(0x1001)), address(0x1001), address(0x1001))" in source
+    assert "function _targetCreationCode() internal pure" in source
+    assert "return type(Legacy).creationCode;" in source
+    assert "deployed := create(0, add(initCode, 0x20), mload(initCode))" in source
+    assert "abi.encode(address(0x1001), address(0x1001), address(0x1001), address(0x1001))" in source
+    assert "target = Legacy(deployed);" in source
+    assert "target = new Legacy(" not in source
 
 
 def test_blind_auth_renderer_asserts_modeled_public_state(tmp_path: Path):
@@ -189,7 +193,42 @@ contract DcntEth {
         creation_bytecode="6000",
     )
     rendered = output.read_text(encoding="utf-8")
-    assert "CydraBlindAuthorizationStateView(target).router()" in rendered
-    assert "interface CydraBlindAuthorizationStateView" in rendered
+    assert "target.router()" in rendered
     assert "beforeState" in rendered
     assert "unauthorized caller mutated modeled administrative state" in rendered
+
+
+def test_blind_auth_renderer_fails_closed_on_unresolved_constructor_type(tmp_path: Path):
+    model = ContractModel(
+        "Legacy",
+        str(tmp_path / "Legacy.sol"),
+        (
+            FunctionModel(
+                "setWhitelist",
+                "external",
+                (),
+                ("whitelist",),
+                (),
+                8,
+                (ParameterModel("accounts", "address[]"),),
+            ),
+        ),
+        constructor=ConstructorModel(
+            (ParameterModel("_token", None),),
+            20,
+        ),
+    )
+    hypothesis = _hypothesis()
+    experiment = Experiment(
+        "X-H-AUTH-setWhitelist",
+        hypothesis.hypothesis_id,
+        "call",
+        ("violation", "preservation"),
+        1.0,
+        planned_inputs=("new address[](0)",),
+    )
+    import pytest
+    with pytest.raises(ValueError, match="no resolved Solidity type"):
+        generate_blind_authorization_test_from_experiment(
+            hypothesis, experiment, "../Legacy.sol", "Legacy", tmp_path / "generated.t.sol", model
+        )

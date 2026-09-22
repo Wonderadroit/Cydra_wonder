@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cydra.models import ContractModel, Experiment, FunctionModel, Hypothesis, ParameterModel
+from cydra.models import ConstructorModel, ContractModel, Experiment, FunctionModel, Hypothesis, ParameterModel
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 
 
@@ -85,3 +85,46 @@ def test_partial_planned_vector_fails_closed(tmp_path: Path):
             tmp_path / "generated.t.sol",
             model,
         )
+
+
+def test_authorization_renderer_emits_constructor_arguments_and_imports_interface(tmp_path: Path):
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    (tmp_path / "IERC20.sol").write_text("interface IERC20 {}\n", encoding="utf-8")
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20;\nimport "./IERC20.sol";\n'
+        'contract Target { constructor(IERC20 token, uint256 value) {} '
+        'function withdraw(uint256 amount) external {} }\n',
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                name="withdraw",
+                visibility="external",
+                modifiers=(),
+                writes=(),
+                external_calls=(),
+                line=4,
+                parameters=(ParameterModel("amount", "uint256"), ParameterModel("recipient", "address")),
+            ),
+        ),
+        constructor=ConstructorModel(
+            (ParameterModel("token", "IERC20"), ParameterModel("value", "uint256")),
+            1,
+        ),
+        pragma="^0.8.20",
+    )
+    generated = generate_authorization_test_from_experiment(
+        _hypothesis(),
+        _experiment(("7", "address(0xBEEF)")),
+        "Target.sol",
+        "Target",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { IERC20 } from "../IERC20.sol";' in rendered
+    assert "target = new Target(IERC20(address(0)), 0);" in rendered

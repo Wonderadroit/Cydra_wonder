@@ -19,6 +19,8 @@ class ResolvedInterface:
     resolution_method: str
     methods: tuple[InterfaceMethod, ...]
     declared_types: tuple[str, ...] = ()
+    imported_types: tuple[tuple[str, str], ...] = ()
+    top_level_types: tuple[str, ...] = ()
 
 
 _INTERFACE_RE = re.compile(r"\binterface\s+(\w+)")
@@ -146,7 +148,8 @@ def _imports_for(path: Path) -> tuple[str, ...]:
 def resolve_interface(root: str | Path, importer: str | Path, name: str) -> ResolvedInterface:
     root = Path(root).resolve()
     importer = Path(importer).resolve()
-    for import_path in _imports_for(importer):
+    imports = _imports_for(importer)
+    for import_path in imports:
         if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
             continue
         resolved = resolve_import(root, importer, import_path)
@@ -157,6 +160,21 @@ def resolve_interface(root: str | Path, importer: str | Path, name: str) -> Reso
             )
         path, method = resolved
         return _extract_interface(name, path, method, root)
+
+    # Some repositories alias or aggregate interface declarations in files
+    # whose filename does not match the symbol. Inspect resolved imports as a
+    # generic fallback rather than requiring filename/name coincidence.
+    for import_path in imports:
+        resolved = resolve_import(root, importer, import_path)
+        if resolved is None:
+            continue
+        path, method = resolved
+        try:
+            source = _strip_comments(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            continue
+        if re.search(rf"\binterface\s+{re.escape(name)}\b", source):
+            return _extract_interface(name, path, method, root)
 
     raise FileNotFoundError(
         f"Unable to resolve interface {name}: no declared import matching {name}.sol in {importer}"
@@ -198,10 +216,52 @@ def _extract_interface(
         declared_type = declaration.group("struct") or declaration.group("enum") or declaration.group("type")
         if declared_type and declared_type not in declared_types:
             declared_types.append(declared_type)
+    # A Solidity source file may declare ABI structs/enums alongside the
+    # interface and use them in interface methods. Preserve only declarations
+    # at source scope separately; declarations belonging to an interface body
+    # remain in declared_types and must be referenced as Interface.Type.
+    top_level_types: list[str] = []
+    for declaration in _DECLARED_TYPE_RE.finditer(source):
+        prefix = source[:declaration.start()]
+        depth = prefix.count("{") - prefix.count("}")
+        if depth != 0:
+            continue
+        declared_type = declaration.group("struct") or declaration.group("enum") or declaration.group("type")
+        if declared_type and declared_type not in top_level_types:
+            top_level_types.append(declared_type)
+
+    # Preserve provenance for named symbols imported by the interface source.
+    # Interface method signatures may use a top-level struct/enum/value type
+    # declared in an imported file; a generated runtime stub must import that
+    # symbol too or the otherwise-correct signature becomes uncompilable.
+    imported_types: list[tuple[str, str]] = []
+    for import_match in re.finditer(
+        r'import\s*\{([^}]+)\}\s*from\s*"([^"]+)"\s*;',
+        source,
+        re.MULTILINE,
+    ):
+        symbols_text, import_path = import_match.groups()
+        resolved_import = resolve_import(root, path, import_path)
+        if resolved_import is None:
+            continue
+        imported_path, _ = resolved_import
+        for symbol in _split_parameters(symbols_text):
+            token = symbol.strip()
+            if not token:
+                continue
+            parts = re.split(r'\s+as\s+', token, maxsplit=1)
+            imported_name = parts[-1].strip()
+            if imported_name and imported_name not in {item[0] for item in imported_types}:
+                imported_types.append(
+                    (imported_name, imported_path.relative_to(root).as_posix())
+                )
+
     return ResolvedInterface(
         name=name,
         source_path=path.relative_to(root).as_posix(),
         resolution_method=resolution_method,
         methods=tuple(methods),
         declared_types=tuple(declared_types),
+        imported_types=tuple(imported_types),
+        top_level_types=tuple(top_level_types),
     )

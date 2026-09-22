@@ -101,3 +101,37 @@ def test_declared_types_are_scoped_to_resolved_interface_body(tmp_path: Path) ->
     assert resolved.declared_types == ("AirdropParams", "Mode", "Amount")
     assert "OtherType" not in resolved.declared_types
     assert [method.name for method in resolved.methods] == ["initialize"]
+
+
+def test_preserves_named_imported_signature_types(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "IAccountManager.sol",
+        'import {FeeTiers} from "./FeeTiers.sol";\n'
+        "interface IAccountManager {\n"
+        "    function getFeeTier(address account) external view returns (FeeTiers);\n"
+        "}\n",
+    )
+    _write(
+        root / "contracts" / "FeeTiers.sol",
+        "enum FeeTiers { ZERO, ONE }\n",
+    )
+    _write(
+        root / "contracts" / "Target.sol",
+        'import {IAccountManager} from "./IAccountManager.sol";\ncontract Target {}\n',
+    )
+    resolved = resolve_interface(root, root / "contracts" / "Target.sol", "IAccountManager")
+    assert resolved.imported_types == (("FeeTiers", "contracts/FeeTiers.sol"),)
+
+
+def test_preserves_top_level_types_separately_from_interface_types(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "IManager.sol",
+        "struct SettingsParams { uint256 value; }\n"
+        "interface IManager { struct Nested { uint256 value; } }\n",
+    )
+    _write(root / "contracts" / "Target.sol", 'import {IManager} from "./IManager.sol";\ncontract Target {}\n')
+    resolved = resolve_interface(root, root / "contracts" / "Target.sol", "IManager")
+    assert resolved.declared_types == ("Nested",)
+    assert resolved.top_level_types == ("SettingsParams",)

@@ -63,7 +63,7 @@ def test_empty_plan_uses_the_same_canonical_defaults_for_multiple_types():
         ),
     )
     assert render_function_call(_experiment(), function) == (
-        'target.configure(payable(address(0xCAFE)), false, "CYDRA", bytes32(0x01));'
+        'target.configure(payable(address(0xCAFE)), false, "CYDRA", bytes32(uint256(1)));'
     )
 
 

@@ -9,7 +9,11 @@ from .authorization_runtime import security_assertion_marker
 
 
 def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
-    parameter_type = parameter.type.strip()
+    parameter_type = str(parameter.type or "").strip()
+    if not parameter_type:
+        raise ValueError(
+            f"constructor parameter {parameter.name or '<unnamed>'} has no resolved Solidity type"
+        )
     base = parameter_type.split()[0].rstrip("[]")
     if parameter_type.endswith("[]"):
         return f"new {base}[](0)"
@@ -26,20 +30,18 @@ def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
     if base == "bytes":
         return 'bytes("")'
     if base.startswith("bytes") and base[5:].isdigit():
-        return f"{base}(0)"
-    if abi_only:
-        return "address(0x1001)"
-    return f"{base}(address(0x1001))"
+        return "bytes32(uint256(1))" if base == "bytes32" else f"{base}(0)"
+    # ABI encoding accepts an address for interface/contract constructor\n    # parameters, avoiding extra source imports in historical harnesses.\n    return "address(0x1001)"
 
 
 def _constructor_arguments(contract_model: ContractModel, *, abi_only: bool = False) -> str:
     constructor = contract_model.constructor
     if constructor is None:
         return ""
-    return ", ".join(
-        _constructor_argument(parameter, abi_only=abi_only)
-        for parameter in constructor.parameters
-    )
+    arguments = []
+    for parameter in constructor.parameters:
+        arguments.append(_constructor_argument(parameter, abi_only=abi_only))
+    return ", ".join(arguments)
 
 
 def generate_blind_authorization_test_from_experiment(
@@ -79,18 +81,15 @@ def generate_blind_authorization_test_from_experiment(
         if constructor_arguments
         else 'bytes("")'
     )
-    if creation_bytecode:
-        init_expression = f'abi.encodePacked(hex"{creation_bytecode}", {constructor_encoding})'
-        target_declaration = "address internal target;"
-        import_line = ""
-        target_cast = "deployed"
-    else:
-        init_expression = (
-            f"abi.encodePacked(type({target_type}).creationCode, {constructor_encoding})"
-        )
-        target_declaration = f"{target_type} internal target;"
-        import_line = f'import {{ {target_type} }} from "{target_import}";'
-        target_cast = f"{target_type}(deployed)"
+    # Prefer typed deployment for blind authorization harnesses. A raw
+    # creation-bytecode path can cause Foundry to synthesize constructor-argument
+    # helper structs whose ABI shape is lost for multi-parameter constructors.
+    # The target import is already part of the authorized harness boundary, so
+    # direct deployment preserves the constructor ABI exactly.
+    init_expression = ""
+    target_declaration = f"{target_type} internal target;"
+    import_line = f'import {{ {target_type} }} from "{target_import}";'
+    target_cast = target_type
 
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
@@ -114,17 +113,8 @@ def generate_blind_authorization_test_from_experiment(
 
     state_view = ""
     if state_getter is not None:
-        if creation_bytecode:
-            state_view = f"""
-interface CydraBlindAuthorizationStateView {{
-    function {state_getter}() external view returns ({state_type});
-}}
-"""
-            state_snapshot = f"        {state_type} beforeState = CydraBlindAuthorizationStateView(target).{state_getter}();"
-            post_state = f"CydraBlindAuthorizationStateView(target).{state_getter}()"
-        else:
-            state_snapshot = f"        {state_type} beforeState = target.{state_getter}();"
-            post_state = f"target.{state_getter}()"
+        state_snapshot = f"        {state_type} beforeState = target.{state_getter}();"
+        post_state = f"target.{state_getter}()"
         call_assertion = f'''        require(ok, "{security_assertion_marker()}: authorization call reverted before invariant observation");
         require(
             {post_state} == beforeState,
@@ -137,29 +127,44 @@ interface CydraBlindAuthorizationStateView {{
             "{security_assertion_marker()}: unauthorized caller successfully invoked protected administrative operation"
         );'''
 
+    # Avoid Solidity's `new Target(...)` syntax here. Foundry's preprocessor
+    # rewrites nested `new` expressions into generated free-function helpers;
+    # those helpers are not parseable by historical Solidity 0.6.x targets.
+    # Assemble the target creation bytecode explicitly so constructor execution
+    # remains real while the harness stays compiler-version neutral.
+    constructor_suffix = (
+        f"abi.encode({constructor_arguments})" if constructor_arguments else 'bytes("")'
+    )
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Experiment: {experiment.experiment_id}
 // One-sided invariant test: no patched target or benchmark answer is imported.
-{import_line}
-{state_view}
+import {{ {target_type} }} from "{target_import}";
+
 contract CydraBlindAuthorizationTest {{
     {target_declaration}
 
+    function _targetCreationCode() internal pure returns (bytes memory) {{
+        return type({target_type}).creationCode;
+    }}
+
     function setUp() public {{
-        bytes memory init = {init_expression};
+        bytes memory initCode = abi.encodePacked(
+            _targetCreationCode(),
+            {constructor_suffix}
+        );
         address deployed;
         assembly {{
-            deployed := create(0, add(init, 32), mload(init))
+            deployed := create(0, add(initCode, 0x20), mload(initCode))
         }}
-        require(deployed != address(0), "CYDRA target deployment failed");
-        target = {target_cast};
+        require(deployed != address(0), "CYDRA: constructor deployment failed");
+        target = {target_type}(deployed);
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
 {state_snapshot}
-        (bool ok,) = target.call(
+        (bool ok,) = address(target).call(
             abi.encodeWithSignature(
                 "{function.name}({','.join(parameter.type.split()[0] for parameter in function.parameters)})",
                 {arguments}

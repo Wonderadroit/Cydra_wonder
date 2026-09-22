@@ -74,3 +74,45 @@ def test_sequence_renderer_rejects_unknown_step():
         assert "no sequence function" in str(exc)
     else:
         raise AssertionError("unknown sequence step must fail closed")
+
+
+def test_sequence_renderer_emits_constructor_arguments_for_interface_dependency(tmp_path):
+    from cydra.models import ConstructorModel, ParameterModel
+    from cydra.interface_resolver import ResolvedInterface
+    model = _model()
+    root = tmp_path
+    model = ContractModel(
+        name="SequenceWithConstructor",
+        source=str(root / "contracts" / "SequenceWithConstructor.sol"),
+        constructor=ConstructorModel(
+            (
+                ParameterModel("_accountant", "IVaultAccountant"),
+                ParameterModel("_fee", "uint256"),
+            ),
+            2,
+        ),
+        functions=model.functions,
+        inherited_resolved_interfaces=(
+            ResolvedInterface(
+                name="IVaultAccountant",
+                source_path="contracts/interfaces/IVaultAccountant.sol",
+                resolution_method="relative_import",
+                methods=(),
+            ),
+        ),
+    )
+    (root / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    (root / "contracts" / "interfaces").mkdir(parents=True)
+    (root / "contracts" / "interfaces" / "IVaultAccountant.sol").write_text(
+        "interface IVaultAccountant {}\n", encoding="utf-8"
+    )
+    output = generate_sequence_test_from_experiment(
+        _experiment()[0],
+        _experiment()[1],
+        "../contracts/SequenceWithConstructor.sol",
+        "SequenceWithConstructor",
+        root / "test" / "generated.t.sol",
+        model,
+    )
+    source = output.read_text(encoding="utf-8")
+    assert "new SequenceWithConstructor(IVaultAccountant(address(0)), 0)" in source

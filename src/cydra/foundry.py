@@ -11,6 +11,7 @@ from typing import Literal
 
 from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothesis, ParameterModel
 from .initialization_shapes import render_initialization_test_body
+from .interface_resolver import resolve_import, resolve_interface
 
 
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
@@ -87,7 +88,7 @@ def _function_argument(parameter: ParameterModel, index: int) -> str:
     if base == "bytes":
         return "bytes(\"\")"
     if base.startswith("bytes") and base[5:].isdigit():
-        return "bytes32(0x01)" if base == "bytes32" else f"{base}(0x01)"
+        return "bytes32(uint256(1))" if base == "bytes32" else f"{base}(0x01)"
     raise ValueError(f"unsupported authorization argument type: {parameter.type}")
 
 
@@ -206,7 +207,7 @@ def _resolve_custom_type(parameter_type: str, target_type: str, contract_model: 
             (
                 interface.name
                 for interface in contract_model.inherited_resolved_interfaces
-                if base in interface.declared_types
+                if base == interface.name or base in interface.declared_types
             ),
             None,
         )
@@ -384,6 +385,14 @@ def _qualify_type(type_declaration: str, interface_name: str, known_interfaces: 
     base = type_token.rstrip("[]")
     if _builtin_type(base):
         return type_declaration
+    # Imported interface-signature symbols are top-level names in their
+    # defining source. If a prior model representation qualified such a
+    # symbol as Interface.Symbol, restore the compiler-valid unqualified form.
+    if "." in base:
+        namespace, member = base.split(".", 1)
+        if member in known_interfaces:
+            tokens[0] = member + ("[]" if type_token.endswith("[]") else "")
+            return " ".join(tokens)
     if base not in known_interfaces and "." not in base:
         tokens[0] = f"{interface_name}.{type_token}"
     return " ".join(tokens)
@@ -442,6 +451,9 @@ def _runtime_stub_source(
     interfaces: dict[str, object] = dict(resolved)
     interfaces.update(derived_targets)
     known_interfaces = set(interfaces)
+    for interface in interfaces.values():
+        known_interfaces.update(name for name, _ in getattr(interface, "imported_types", ()))
+        known_interfaces.update(getattr(interface, "top_level_types", ()))
 
     derived_by_source: dict[str, list[tuple[str, object]]] = {}
     for source_interface, source_method, target_interface in derived_interface_casts:
@@ -477,10 +489,24 @@ def _runtime_stub_source(
     for interface in inherited_resolved_interfaces:
         imported_interfaces.setdefault(interface.name, interface)
 
+    # Imported signature types (e.g. FeeTiers used by IAccountManager) need
+    # their own provenance-preserving imports in the generated stub.
+    imported_signature_types: dict[str, str] = {}
+    for interface in imported_interfaces.values():
+        for imported_name, imported_source in getattr(interface, "imported_types", ()):
+            imported_signature_types.setdefault(imported_name, imported_source)
+        for declared_name in getattr(interface, "top_level_types", ()):
+            imported_signature_types.setdefault(declared_name, interface.source_path)
+
     interface_imports = [
         f'import {{ {interface_name} }} from "{_resolved_interface_import_path(interface.source_path, output_path)}";'
         for interface_name, interface in imported_interfaces.items()
     ]
+    interface_imports.extend(
+        f'import {{ {name} }} from "{_resolved_interface_import_path(source, output_path)}";'
+        for name, source in sorted(imported_signature_types.items())
+        if name not in imported_interfaces
+    )
 
     if need_erc20:
         declarations.append('''contract CydraERC20Stub {
@@ -590,8 +616,59 @@ def _model_initialization_source(
         for parameter in function.parameters
         if "." in parameter.type
     }
+    # Imported interface types can appear as bare ABI parameter types (for
+    # example IERC20Metadata) even when the resolver records the interface
+    # itself rather than a declared struct/enum. Preserve that provenance and
+    # import the exact resolved interface instead of emitting an unresolved
+    # bare type into the generated harness.
+    resolved_interface_names = {
+        interface.name: interface for interface in contract_model.inherited_resolved_interfaces
+    }
+    # Resolve bare imported interface ABI types directly from the target source,
+    # not only through inheritance. Initializers commonly accept an interface
+    # imported by the concrete contract without inheriting it.
+    direct_parameter_interfaces: dict[str, object] = {}
+    project_root = None
+    if output_path is not None:
+        output = Path(output_path)
+        project_root = next(
+            (ancestor for ancestor in (output.parent, *output.parents) if (ancestor / "foundry.toml").exists()),
+            None,
+        )
+    if project_root is not None:
+        for parameter in function.parameters:
+            base = parameter.type.strip().split()[0].rstrip("[]")
+            if base in resolved_interface_names or _builtin_type(base) or "." in base:
+                continue
+            try:
+                direct_parameter_interfaces[base] = resolve_interface(
+                    project_root, contract_model.source, base
+                )
+            except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                continue
+    for parameter in function.parameters:
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if base in resolved_interface_names or base in direct_parameter_interfaces:
+            custom_namespaces.add(base)
+            continue
+        # Preserve direct source imports even when the interface resolver cannot
+        # traverse an unusual remapping/alias. The source import itself is
+        # authoritative provenance and avoids fabricating a bare Solidity type.
+        if re.search(
+            rf'import\s*\{{[^}}]*\b{re.escape(base)}\b[^}}]*\}}\s*from\s*"[^"]+"\s*;',
+            source_text,
+        ):
+            custom_namespaces.add(base)
     custom_imports: list[str] = []
     for namespace in sorted(custom_namespaces):
+        inherited_interface = resolved_interface_names.get(namespace)
+        direct_interface = direct_parameter_interfaces.get(namespace)
+        resolved_parameter_interface = inherited_interface or direct_interface
+        if resolved_parameter_interface is not None and namespace == resolved_parameter_interface.name:
+            custom_imports.append(
+                f'import {{ {namespace} }} from "{_resolved_interface_import_path(resolved_parameter_interface.source_path, output_path or "generated.t.sol")}";'
+            )
+            continue
         match = re.search(
             rf'import\s*\{{\s*{re.escape(namespace)}\s*\}}\s*from\s*"([^"]+)"\s*;',
             source_text,
@@ -790,6 +867,15 @@ def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_
         relative_test = relative_test.relative_to(project)
     command = ("forge", "test", "--match-path", str(relative_test), "-vv")
     completed = subprocess.run(command, cwd=project, text=True, capture_output=True, check=False)
+    # Some unfamiliar targets are internally valid but their default Foundry
+    # compilation profile fails on unrelated stack-depth limits. Retry the
+    # exact generated test with Solidity IR only when the compiler explicitly
+    # reports that capability condition. This changes compiler strategy, not
+    # the hypothesis, inputs, target, or blind information boundary.
+    combined = f"{completed.stdout}\\n{completed.stderr}"
+    if completed.returncode != 0 and "Stack too deep" in combined:
+        command = ("forge", "test", "--via-ir", "--match-path", str(relative_test), "-vv")
+        completed = subprocess.run(command, cwd=project, text=True, capture_output=True, check=False)
     executed, tests_run, tests_failed, status = _parse_execution(completed.stdout, completed.stderr, completed.returncode)
     return ExecutionResult(experiment_id, target, command, completed.returncode, executed, tests_run, tests_failed, status, completed.stdout, completed.stderr)
 
