@@ -1,0 +1,20 @@
+{
+  "campaign": "041",
+  "name": "post-maturity blind-to-causal discovery",
+  "blind_policy": {
+    "vulnerability_class": false,
+    "target_function": false,
+    "state_surface": false,
+    "exploit_sequence": false,
+    "patch": false,
+    "historical_answer": false,
+    "specialized_reasoning_surface": false
+  },
+  "target": {
+    "id": "panoptic-accountant",
+    "repo": "https://github.com/code-423n4/2025-06-panoptic.git",
+    "ref": "eea2c931b1cbce1da01586e42ba298814de40d31",
+    "project": ".",
+    "path": "src/accountants/PanopticVaultAccountant.sol"
+  }
+}
