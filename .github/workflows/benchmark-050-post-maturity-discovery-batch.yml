@@ -1,0 +1,42 @@
+name: CYDRA post-maturity discovery batch campaign
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/run_benchmark_040_post_maturity_batch.py"
+      - "scripts/run_benchmark_043_multi_target_causal_discovery.py"
+      - "scripts/run_benchmark_044_post_maturity_negative_controls.py"
+      - "scripts/run_benchmark_050_post_maturity_discovery_batch.py"
+      - "benchmarks/040_post_maturity_batch/**"
+      - "benchmarks/043_post_maturity_multi_target_causal_discovery/**"
+      - "benchmarks/044_post_maturity_negative_controls/**"
+      - "benchmarks/050_post_maturity_discovery_batch/**"
+      - ".github/workflows/benchmark-050-post-maturity-discovery-batch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discovery-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: oven-sh/setup-bun@v2
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Focused regression
+        run: python -m pytest -q tests/test_research_loop.py tests/test_impact_priority.py
+      - name: Post-maturity discovery batch
+        run: PYTHONPATH=src python scripts/run_benchmark_050_post_maturity_discovery_batch.py

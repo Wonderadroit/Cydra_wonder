@@ -8,6 +8,7 @@ import platform
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -205,7 +206,26 @@ def prepare_target_project(project: Path) -> None:
             command = ("yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-engines")
         else:
             command = ("npm", "install", "--ignore-scripts")
-        subprocess.run(command, cwd=project, check=True)
+        # Historical target dependency installation can fail transiently on
+        # registry/network access. Retry the exact frozen dependency command a
+        # small bounded number of times; never change the lockfile semantics or
+        # fall back to a different dependency resolver.
+        last_error: subprocess.CalledProcessError | None = None
+        for attempt in range(3):
+            try:
+                environment = None
+                if command and command[0] == "yarn":
+                    environment = os.environ.copy()
+                    environment["YARN_CACHE_FOLDER"] = str(project / ".cydra-yarn-cache")
+                subprocess.run(command, cwd=project, check=True, env=environment)
+                break
+            except subprocess.CalledProcessError as error:
+                last_error = error
+                if attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
+        if last_error is not None and attempt == 2:
+            raise last_error
 
     # Generated Foundry experiments import forge-std/Test.sol. Materialize
     # the standard library only when the target does not already vendor it.

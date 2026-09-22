@@ -1789,3 +1789,47 @@ This is validation orchestration, not a new vulnerability detector. It exists to
 The maturity/generalization gate remains closed. The batch is a post-maturity hardening gate.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## 32. Human + LLM + GitHub Actions operating model
+
+CYDRA is intentionally operated as a three-layer research system with deterministic tooling underneath:
+
+- **Human researcher:** owns authorization, program scope, target intake, ethical boundaries, final interpretation, and every external submission.
+- **LLM/research chat:** interprets CYDRA, helps plan investigations, diagnoses failures, explains evidence, proposes generic repairs, and maintains continuity through the repository's durable state. The chat is not the authoritative state store.
+- **GitHub/CYDRA:** stores the durable implementation, tests, benchmarks, Project Bible, artifacts, and merged history.
+- **GitHub Actions:** provides the reproducible execution environment for regression, blind campaigns, batch campaigns, and long-running validation.
+- **Deterministic security tools:** produce measurements and evidence; they do not independently decide that a vulnerability exists.
+
+If the chat ends, another agent must be able to resume from the repository. The durable continuation surface is the Project Bible, docs/CYDRA_OPERATING_PROTOCOL.md, code/tests, benchmark runners, workflows, CI records/artifacts, merged history, and currently open PRs.
+
+Before any continuation or implementation, the agent must inspect the current Bible, main, open PRs, recent commits, and active CI. For a failure, inspect the actual failing job/log first. The required loop is:
+
+**inspect → diagnose → generic repair → focused test → benchmark → batch/full CI → wait for all required jobs → merge → record durable state**
+
+No required campaign is declared green while jobs remain queued or running.
+
+For real authorized bug-bounty research, the operating loop is:
+
+**authorization/scope → target snapshot → system model → invariants → competing hypotheses → information-gain experiments → deterministic execution → evidence → causal verification → independent reproduction → finding package → human review/submission**
+
+CYDRA is intended for supervised bug-bounty dogfood once a target is explicitly authorized and in scope. It is not an autonomous submission system. Human review remains mandatory before external reporting.
+
+GitHub Actions is the canonical execution environment for the repository's reproducible campaigns. Independent campaigns may be batched concurrently when their target state is isolated, but batching must not alter individual benchmark semantics or blind boundaries. A blocked campaign keeps the batch fail-closed until diagnosed and retested.
+
+Solidity/EVM remains the current production adapter. Solana/Rust and other language adapters may be added later using the same evidence-driven architecture and must not weaken provenance, causal verification, reproducibility, or authorization boundaries.
+
+The detailed operating contract is maintained in docs/CYDRA_OPERATING_PROTOCOL.md.
+
+## Milestone 82 — durable human/LLM/GitHub Actions operating contract
+
+The project now explicitly records how CYDRA is meant to be used in practice:
+
+- the human researcher owns authorization, scope, final review, and submission;
+- the LLM/research chat interprets and orchestrates reasoning but is not the durable state store;
+- GitHub/CYDRA is the durable project state;
+- GitHub Actions is the reproducible execution environment;
+- deterministic security tools provide evidence;
+- another agent must be able to resume from the repository if the chat ends.
+
+This is an operating-model decision, not a new vulnerability detector. It exists to prevent agent/chat discontinuity from becoming project-state loss and to keep real bug-bounty dogfood aligned with the Project Bible.
