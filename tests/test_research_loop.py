@@ -110,3 +110,38 @@ def test_research_loop_accumulates_multiple_verified_findings():
     assert result.findings is not None
     assert result.findings.target == "target-A"
     assert [f.finding_id for f in result.findings.findings] == ["F-1", "F-2"]
+
+def test_research_loop_records_hypothesis_exhaustion_after_all_candidates_rejected():
+    hypotheses, invariants, experiments = _fixtures()
+    seen = []
+
+    def execute(hypothesis, experiment):
+        seen.append(hypothesis.hypothesis_id)
+        return Observation("contradicted")
+
+    result = run_research_loop(
+        hypotheses,
+        invariants,
+        experiments,
+        execute=execute,
+        status_of=lambda o: o.status,
+        max_rounds=5,
+    )
+
+    assert seen == ["H-FIRST", "H-SECOND"]
+    assert len(result.rounds) == 2
+    assert result.termination_reason == "hypothesis_exhausted"
+
+
+def test_research_loop_preserves_fail_closed_empty_investigation():
+    _, invariants, experiments = _fixtures()
+    with pytest.raises(ValueError, match="no hypotheses available"):
+        run_research_loop(
+            (),
+            invariants,
+            experiments,
+            execute=lambda h, e: Observation("contradicted"),
+            status_of=lambda o: o.status,
+            max_rounds=3,
+        )
+\n
