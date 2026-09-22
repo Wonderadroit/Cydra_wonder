@@ -882,7 +882,14 @@ def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_
 
 def require_executed(result: ExecutionResult) -> ExecutionResult:
     if not result.executed or result.tests_run == 0 or result.status == "UNMEASURABLE":
-        raise RuntimeError(f"Foundry experiment {result.experiment_id} is UNMEASURABLE: executed={result.executed}, tests_run={result.tests_run}, exit_code={result.exit_code}")
+        stdout_tail = result.stdout[-4000:].strip()
+        stderr_tail = result.stderr[-4000:].strip()
+        detail = f" stdout_tail={stdout_tail!r} stderr_tail={stderr_tail!r}"
+        raise RuntimeError(
+            f"Foundry experiment {result.experiment_id} is UNMEASURABLE: "
+            f"executed={result.executed}, tests_run={result.tests_run}, "
+            f"exit_code={result.exit_code}.{detail}"
+        )
     return result
 
 
