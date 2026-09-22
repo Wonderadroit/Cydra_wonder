@@ -867,6 +867,15 @@ def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_
         relative_test = relative_test.relative_to(project)
     command = ("forge", "test", "--match-path", str(relative_test), "-vv")
     completed = subprocess.run(command, cwd=project, text=True, capture_output=True, check=False)
+    # Some unfamiliar targets are internally valid but their default Foundry
+    # compilation profile fails on unrelated stack-depth limits. Retry the
+    # exact generated test with Solidity IR only when the compiler explicitly
+    # reports that capability condition. This changes compiler strategy, not
+    # the hypothesis, inputs, target, or blind information boundary.
+    combined = f"{completed.stdout}\\n{completed.stderr}"
+    if completed.returncode != 0 and "Stack too deep" in combined:
+        command = ("forge", "test", "--via-ir", "--match-path", str(relative_test), "-vv")
+        completed = subprocess.run(command, cwd=project, text=True, capture_output=True, check=False)
     executed, tests_run, tests_failed, status = _parse_execution(completed.stdout, completed.stderr, completed.returncode)
     return ExecutionResult(experiment_id, target, command, completed.returncode, executed, tests_run, tests_failed, status, completed.stdout, completed.stderr)
 
