@@ -1712,3 +1712,25 @@ This adds explicit evidence for search-exhaustion handling; broader post-maturit
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
 \n
+
+## Milestone 79 — unmeasurable execution resilience (Benchmark 046)
+
+Benchmark 046 validated the research-loop boundary around non-measurable experiments.
+
+The campaign supplied two candidates. The first returned `UNMEASURABLE`; the generic loop recorded that outcome and selected a different candidate rather than treating the execution gap as confirmation or exhausting the investigation. The second candidate returned `confirmed`, and the loop terminated through the normal stop condition.
+
+Final canonical Benchmark 046 workflow run `35739606336` passed. The full PR-triggered workflow matrix for the change completed with 16/16 workflows successful and no failures.
+
+Acceptance demonstrated:
+- `UNMEASURABLE` is retained as an execution/evidence boundary;
+- an available alternative hypothesis can be selected after an unmeasurable experiment;
+- the unmeasurable observation is not promoted to a finding;
+- later confirmation can terminate the loop normally;
+- the recorded termination reason is `stop_condition`.
+
+This is execution-resilience evidence, not a vulnerability claim. The maturity/generalization gate remains closed.
+
+Next post-maturity validation should stress adversarial self-challenge, duplicate/overlap control, broader search exhaustion on real targets, reproducibility, and researcher dogfood.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+\n
