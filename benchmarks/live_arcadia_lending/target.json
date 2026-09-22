@@ -1,0 +1,18 @@
+{
+  "program": "HackenProof — Arcadia Finance Smart Contracts",
+  "target_repo": "https://github.com/arcadia-finance/lending-v2",
+  "target_ref": "def3c94995773e2feb48b6d8a02dc603d96fd96c",
+  "target_project": ".",
+  "target_path": "src/LendingPool.sol",
+  "scope_basis": "Program lists lending-v2 as in scope; only Arcadia-developed code of deployed contracts is in scope.",
+  "excluded": [
+    "tests",
+    "mocks",
+    "scripts",
+    "deployment tooling",
+    "third-party dependencies/imports",
+    "accounts-v2/src/accounts/helpers/SpotToMarginMigrator.sol"
+  ],
+  "research_boundary": "Source/system-model and local deterministic experiment generation only. No live-chain exploit execution is authorized by this artifact.",
+  "classes": ["authorization", "initialization", "state", "guard_parity"]
+}
