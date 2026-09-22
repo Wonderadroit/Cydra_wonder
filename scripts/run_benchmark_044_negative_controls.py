@@ -46,7 +46,7 @@ def _run_auth(root: Path) -> dict:
     target = _project(source, root)
     generated = generate_access_control_test(
         hypothesis,
-        f"../src/{target.name}",
+        f"../../src/{target.name}",
         "AlchemixAccessControlSafeFixture",
         test_path_for(root, f"generated/{hypothesis.hypothesis_id}.t.sol"),
     )
