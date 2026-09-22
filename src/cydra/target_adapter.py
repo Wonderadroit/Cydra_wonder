@@ -62,7 +62,7 @@ def _imports(source: Path) -> tuple[str, ...]:
     return tuple(dict.fromkeys(re.findall(r"\bimport\s+(?:[^;]*?\s+from\s+)?[\"']([^\"']+)[\"']", text)))
 
 
-def _constructor_unresolved(contract) -> tuple[str, ...]:
+def _constructor_unresolved(root: Path, contract) -> tuple[str, ...]:
     if contract.constructor is None:
         return ()
     primitive = {"address", "bool", "string", "bytes"}
@@ -122,7 +122,7 @@ def inspect_target(project: str | Path, source: str | Path) -> TargetEnvironment
         if contract.constructor is not None or contract.functions
     )
     unresolved = tuple(
-        name for contract in contracts for name in _constructor_unresolved(contract)
+        name for contract in contracts for name in _constructor_unresolved(root, contract)
     )
     import_count = len(_imports(source_path))
     test_dir = forge.get("test") or "test"
