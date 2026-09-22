@@ -2,6 +2,9 @@ name: CYDRA Public-Code Blind Research — Arcadia Lending
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - pilot/arcadia-lending-dogfood
   pull_request:
     paths:
       - ".github/workflows/live-arcadia-lending-dogfood.yml"
