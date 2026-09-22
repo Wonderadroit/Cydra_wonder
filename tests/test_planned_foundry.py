@@ -62,7 +62,7 @@ def _experiment(inputs=("1", "address(0xCAFE)")) -> Experiment:
 def test_planned_constraint_value_reaches_generated_target_call(tmp_path: Path):
     generated = generate_authorization_test_from_experiment(
         _hypothesis(),
-        _experiment(("7",)),
+        _experiment(("7", "address(0xBEEF)")),
         "Target.sol",
         "Target",
         tmp_path / "generated.t.sol",
@@ -162,7 +162,7 @@ def test_authorization_renderer_resolves_indirect_contract_constructor_type(tmp_
     )
     generated = generate_authorization_test_from_experiment(
         _hypothesis(),
-        _experiment(("7", "address(0xBEEF)")),
+        _experiment(("7",)),
         "Target.sol",
         "Target",
         tmp_path / "test" / "generated.t.sol",
