@@ -8,6 +8,7 @@ import platform
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -212,7 +213,11 @@ def prepare_target_project(project: Path) -> None:
         last_error: subprocess.CalledProcessError | None = None
         for attempt in range(3):
             try:
-                subprocess.run(command, cwd=project, check=True)
+                environment = None
+                if command and command[0] == "yarn":
+                    environment = os.environ.copy()
+                    environment["YARN_CACHE_FOLDER"] = str(project / ".cydra-yarn-cache")
+                subprocess.run(command, cwd=project, check=True, env=environment)
                 break
             except subprocess.CalledProcessError as error:
                 last_error = error
