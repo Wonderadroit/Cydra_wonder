@@ -1762,3 +1762,17 @@ No target, vulnerability class, selector, historical answer, or severity decisio
 The maturity/generalization gate remains closed. This is post-maturity data-integrity hardening.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 81 — post-maturity unmeasurable exhaustion (Benchmark 048)
+
+Benchmark 048 closes a generic execution-resilience edge case discovered after Benchmark 046: within one research run, an UNMEASURABLE hypothesis must not consume repeated rounds replaying the same non-renderable experiment.
+
+Selection now:
+- prefers another executable candidate when one exists;
+- treats an UNMEASURABLE-only remaining candidate as exhausted for that run;
+- preserves the ability to retry in a new run if the execution environment materially changes.
+
+This is not a vulnerability detector and does not encode a target-specific answer. It improves information-gain discipline and prevents budget waste on identical non-measurable executions.
+
+The maturity/generalization gate remains closed.
