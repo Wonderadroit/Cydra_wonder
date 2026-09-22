@@ -174,7 +174,7 @@ def _foundry_remappings(project: Path) -> list[str]:
 
 def _target_solc_version(project: Path, source_path: Path) -> str | None:
     source = (project / source_path).read_text()
-    match = re.search(r"pragma\\s+solidity\\s+(?:\\^|>=)?(\\d+\\.\\d+\\.\\d+)", source)
+    match = re.search(r"pragma\s+solidity\s+(?:\^|>=)?(\d+\.\d+\.\d+)", source)
     return match.group(1) if match else None
 
 
@@ -353,6 +353,7 @@ def run_target(target: dict, output: Path) -> dict:
             test,
             "independent-patched",
             Path(target["source"]).parent,
+            Path(target["source"]),
         )
 
     causal = vulnerable_result["status"] == "FAIL" and patched_result["status"] == "PASS"
