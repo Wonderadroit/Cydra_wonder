@@ -124,7 +124,7 @@ def test_sequence_renderer_resolves_indirect_contract_constructor_type(tmp_path)
         name="SequenceWithToken",
         source=str(tmp_path / "Target.sol"),
         constructor=ConstructorModel(
-            (ParameterModel("token", "MockToken"),),
+            (ParameterModel("token", "ERC20"),),
             1,
         ),
         functions=_model().functions,
@@ -132,11 +132,11 @@ def test_sequence_renderer_resolves_indirect_contract_constructor_type(tmp_path)
     (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
     (tmp_path / "interfaces").mkdir()
     (tmp_path / "interfaces" / "Token.sol").write_text(
-        "contract MockToken {}\n", encoding="utf-8"
+        "contract ERC20 { constructor(string memory, string memory, uint8) {} }\n", encoding="utf-8"
     )
     (tmp_path / "Target.sol").write_text(
-        'pragma solidity ^0.8.20;\nimport { MockToken } from "./interfaces/Token.sol";\n'
-        'contract SequenceWithToken { constructor(MockToken token) {} }\n',
+        'pragma solidity ^0.8.20;\nimport { ERC20 } from "./interfaces/Token.sol";\n'
+        'contract SequenceWithToken { constructor(ERC20 token) {} }\n',
         encoding="utf-8",
     )
     generated = generate_sequence_test_from_experiment(
@@ -148,5 +148,5 @@ def test_sequence_renderer_resolves_indirect_contract_constructor_type(tmp_path)
         model,
     )
     source = generated.read_text(encoding="utf-8")
-    assert 'import { MockToken } from "../interfaces/Token.sol";' in source
-    assert "new SequenceWithToken(MockToken(address(0)))" in source
+    assert 'import { ERC20 } from "../interfaces/Token.sol";' in source
+    assert "new SequenceWithToken(ERC20(address(constructorAsset)))" in source
