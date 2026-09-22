@@ -27,9 +27,7 @@ def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
         return 'bytes("")'
     if base.startswith("bytes") and base[5:].isdigit():
         return "bytes32(uint256(1))" if base == "bytes32" else f"{base}(0)"
-    if abi_only:
-        return "address(0x1001)"
-    return f"{base}(address(0x1001))"
+    # ABI encoding accepts an address for interface/contract constructor\n    # parameters, avoiding extra source imports in historical harnesses.\n    return "address(0x1001)"
 
 
 def _constructor_arguments(contract_model: ContractModel, *, abi_only: bool = False) -> str:
