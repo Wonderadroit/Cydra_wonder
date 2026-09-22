@@ -1,4 +1,4 @@
-from cydra.impact_priority import FindingCollection, ImpactPriority, priority_for_potential
+from cydra.impact import ImpactLevel
 from cydra.impact_priority import FindingCollection, ImpactPriority, priority_for_potential
 
 
@@ -47,5 +47,6 @@ def test_finding_collection_rejects_conflicting_duplicate_identity():
     first = type("Finding", (), {"finding_id": "F-1", "detail": "original"})()
     conflicting = type("Finding", (), {"finding_id": "F-1", "detail": "different"})()
     collection = FindingCollection("target-A").add(first)
+    import pytest
     with pytest.raises(ValueError, match="conflicting finding"):
         collection.add(conflicting)
