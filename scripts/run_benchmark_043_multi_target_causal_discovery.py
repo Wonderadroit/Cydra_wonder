@@ -172,12 +172,19 @@ def _foundry_remappings(project: Path) -> list[str]:
     ]
 
 
+def _target_solc_version(project: Path, source_path: Path) -> str | None:
+    source = (project / source_path).read_text()
+    match = re.search(r"pragma\\s+solidity\\s+(?:\\^|>=)?(\\d+\\.\\d+\\.\\d+)", source)
+    return match.group(1) if match else None
+
+
 def run_foundry(
     project: Path,
     contract: str,
     test: str,
     label: str,
     contracts_dir: Path,
+    target_source: Path,
 ) -> dict:
     # Some historical Solidity repositories also contain unrelated Vyper
     # sources. Scope Foundry to the directory containing the selected target
@@ -196,6 +203,9 @@ def run_foundry(
     remappings = _foundry_remappings(project)
     for remapping in remappings:
         command.extend(["--remappings", remapping])
+    solc_version = _target_solc_version(project, target_source)
+    if solc_version:
+        command.extend(["--use", solc_version])
     completed = subprocess.run(
         command,
         cwd=project,
@@ -295,7 +305,12 @@ def run_target(target: dict, output: Path) -> dict:
         (vulnerable / "test").mkdir(parents=True, exist_ok=True)
         (vulnerable / "test" / "Cydra043.t.sol").write_text(poc)
         vulnerable_result = run_foundry(
-            vulnerable, contract, test, "vulnerable", Path(target["source"]).parent
+            vulnerable,
+            contract,
+            test,
+            "vulnerable",
+            Path(target["source"]).parent,
+            Path(target["source"]),
         )
 
         patched = root / "patched"
@@ -305,7 +320,12 @@ def run_target(target: dict, output: Path) -> dict:
         (patched / "test").mkdir(parents=True, exist_ok=True)
         (patched / "test" / "Cydra043.t.sol").write_text(poc)
         patched_result = run_foundry(
-            patched, contract, test, "patched", Path(target["source"]).parent
+            patched,
+            contract,
+            test,
+            "patched",
+            Path(target["source"]).parent,
+            Path(target["source"]),
         )
 
         independent_v = root / "independent-vulnerable"
@@ -318,6 +338,7 @@ def run_target(target: dict, output: Path) -> dict:
             test,
             "independent-vulnerable",
             Path(target["source"]).parent,
+            Path(target["source"]),
         )
 
         independent_p = root / "independent-patched"
