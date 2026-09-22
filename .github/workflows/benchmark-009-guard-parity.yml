@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   pull_request:
   push:
+    branches-ignore:
+      - pilot/arcadia-lending-dogfood
     paths:
       - "src/cydra/**"
       - "scripts/run_benchmark_009_guard_parity.py"
