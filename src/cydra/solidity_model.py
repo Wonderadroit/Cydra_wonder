@@ -172,6 +172,19 @@ def _balanced_parenthesized(source: str, opening: int) -> str:
     return source[opening + 1 :]
 
 
+def _balanced_parenthesized_end(source: str, opening: int) -> int:
+    """Return the index immediately after a balanced parenthesized expression."""
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "(":
+            depth += 1
+        elif source[index] == ")":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return len(source)
+
+
 def _balanced_parenthesized_span(source: str, opening: int) -> tuple[str, int] | None:
     """Return an argument and matching close index for an opening parenthesis."""
     depth = 0
@@ -320,11 +333,19 @@ def _state_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> 
     for match in re.finditer(r"\bif\s*\(", body):
         opening = body.find("(", match.start())
         predicate = _balanced_parenthesized(body, opening).strip()
+        # Solidity permits both braced and single-statement if bodies.
+        # The function body has already been isolated, so the latter has no
+        # branch brace to inspect. Only classify it when the next statement
+        # is explicitly a revert; otherwise retain unknown polarity.
         brace = body.find("{", opening)
         polarity = "unknown"
         if brace >= 0:
             branch = _body(body, brace)
             if re.search(r"\brevert\b", branch):
+                polarity = "must_not_hold"
+        else:
+            tail = body[_balanced_parenthesized_end(body, opening):].lstrip()
+            if re.match(r"revert\s*(?:\(|;)", tail):
                 polarity = "must_not_hold"
         add(predicate, polarity)
 
