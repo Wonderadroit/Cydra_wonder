@@ -22,7 +22,7 @@ from cydra.foundry import (
     test_path_for,
 )
 from cydra.initialization_runtime import classify_initialization_execution
-from cydra.pipeline import _default_experiment_planner, investigate
+from cydra.pipeline import ReasoningContribution, _default_experiment_planner, investigate
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment, plan_guard_parity_experiment
 from cydra.sequence_foundry import generate_sequence_test_from_experiment
@@ -505,7 +505,7 @@ def main() -> int:
             surface
             for enabled, surface in (
                 ("state" in classes, generate_cross_function_state_hypotheses),
-                ("arithmetic" in classes, generate_pair_symmetry_hypotheses),
+                ("arithmetic" in classes, lambda contract, _evidence: ReasoningContribution((), generate_pair_symmetry_hypotheses(contract))),
             )
             if enabled
         )
