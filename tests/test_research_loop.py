@@ -145,3 +145,25 @@ def test_research_loop_preserves_fail_closed_empty_investigation():
             max_rounds=3,
         )
 
+
+
+def test_research_loop_idempotently_collects_repeated_identical_finding():
+    hypotheses, invariants, experiments = _fixtures()
+
+    @dataclass(frozen=True)
+    class Finding:
+        finding_id: str
+
+    finding = Finding("F-REPEAT")
+    result = run_research_loop(
+        hypotheses,
+        invariants,
+        experiments,
+        execute=lambda h, e: Observation("confirmed"),
+        status_of=lambda o: o.status,
+        finding_of=lambda o: finding,
+        finding_target="target-A",
+        max_rounds=2,
+    )
+    assert result.findings is not None
+    assert result.findings.findings == (finding,)
