@@ -1,0 +1,20 @@
+{
+  "campaign": "042",
+  "target": {
+    "repo": "https://github.com/code-423n4/2025-06-panoptic.git",
+    "ref": "eea2c931b1cbce1da01586e42ba298814de40d31",
+    "source": "src/accountants/PanopticVaultAccountant.sol"
+  },
+  "findings": [
+    {
+      "id": "H-01",
+      "invariant": "INV-PAIR-SYMMETRY-001",
+      "function": "computeNAV"
+    },
+    {
+      "id": "H-02",
+      "invariant": "INV-AGGREGATION-ORDER-001",
+      "function": "computeNAV"
+    }
+  ]
+}
