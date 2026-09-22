@@ -352,37 +352,37 @@ def main() -> int:
             "H-01": {
                 "vulnerable": run_case(
                     project, "H01", H01_POC, "CydraMultiFindingH01",
-                    "test_cydra_h01", patch_h01, "h01-vulnerable"
+                    "test_cydra_h01", patch_h01, pristine_source, "h01-vulnerable"
                 ),
                 "patched": run_case(
-                    root, "H01", H01_POC, "CydraMultiFindingH01",
-                    "test_cydra_h01", patch_h01, "h01-patched"
+                    project, "H01", H01_POC, "CydraMultiFindingH01",
+                    "test_cydra_h01", patch_h01, pristine_source, "h01-patched"
                 ),
                 "independent_vulnerable": run_case(
-                    root, "H01", H01_POC, "CydraMultiFindingH01",
-                    "test_cydra_h01", patch_h01, "h01-independent-vulnerable"
+                    project, "H01", H01_POC, "CydraMultiFindingH01",
+                    "test_cydra_h01", patch_h01, pristine_source, "h01-independent-vulnerable"
                 ),
                 "independent_patched": run_case(
-                    root, "H01", H01_POC, "CydraMultiFindingH01",
-                    "test_cydra_h01", patch_h01, "h01-independent-patched"
+                    project, "H01", H01_POC, "CydraMultiFindingH01",
+                    "test_cydra_h01", patch_h01, pristine_source, "h01-independent-patched"
                 ),
             },
             "H-02": {
                 "vulnerable": run_case(
                     project, "H02", H02_POC, "CydraMultiFindingH02",
-                    "test_cydra_h02", patch_h02, "h02-vulnerable"
+                    "test_cydra_h02", patch_h02, pristine_source, "h02-vulnerable"
                 ),
                 "patched": run_case(
-                    root, "H02", H02_POC, "CydraMultiFindingH02",
-                    "test_cydra_h02", patch_h02, "h02-patched"
+                    project, "H02", H02_POC, "CydraMultiFindingH02",
+                    "test_cydra_h02", patch_h02, pristine_source, "h02-patched"
                 ),
                 "independent_vulnerable": run_case(
-                    root, "H02", H02_POC, "CydraMultiFindingH02",
-                    "test_cydra_h02", patch_h02, "h02-independent-vulnerable"
+                    project, "H02", H02_POC, "CydraMultiFindingH02",
+                    "test_cydra_h02", patch_h02, pristine_source, "h02-independent-vulnerable"
                 ),
                 "independent_patched": run_case(
-                    root, "H02", H02_POC, "CydraMultiFindingH02",
-                    "test_cydra_h02", patch_h02, "h02-independent-patched"
+                    project, "H02", H02_POC, "CydraMultiFindingH02",
+                    "test_cydra_h02", patch_h02, pristine_source, "h02-independent-patched"
                 ),
             },
         }
