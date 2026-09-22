@@ -197,7 +197,12 @@ def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
     names: list[str] = []
     polarities = dict(function.state_predicate_polarities)
     for predicate in function.state_predicates:
-        if polarities.get(predicate) != "must_hold":
+        polarity = polarities.get(predicate)
+        # ``state_predicates`` predates explicit polarity metadata. Legacy
+        # models therefore represent a required state without a polarity
+        # entry; preserve that meaning for readiness planning. An explicit
+        # ``unknown`` remains unknown and must not create a setup candidate.
+        if polarity is not None and polarity != "must_hold":
             continue
         for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate):
             if name in {"true", "false", "address", "bytes", "uint", "int"}:
