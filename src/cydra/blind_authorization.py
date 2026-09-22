@@ -9,6 +9,7 @@ from .authorization_runtime import security_assertion_marker
 
 
 def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
+    """Return a compiler-valid constructor value, or fail closed if the model is incomplete."""
     parameter_type = str(parameter.type or "").strip()
     if not parameter_type:
         raise ValueError(
@@ -40,7 +41,12 @@ def _constructor_arguments(contract_model: ContractModel, *, abi_only: bool = Fa
         return ""
     arguments = []
     for parameter in constructor.parameters:
-        arguments.append(_constructor_argument(parameter, abi_only=abi_only))
+        rendered = _constructor_argument(parameter, abi_only=abi_only)
+        if rendered is None:
+            raise ValueError(
+                f"constructor parameter {parameter.name or '<unnamed>'} could not be rendered"
+            )
+        arguments.append(rendered)
     return ", ".join(arguments)
 
 
