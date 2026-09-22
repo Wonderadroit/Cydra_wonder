@@ -258,11 +258,14 @@ def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[
         contract,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
-    require_executed(execution)
     return {
         "generated_path": str(generated),
         "execution": execution,
         "classification": "NOT_REACHED",
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
         "classification_blocked_reason": CLASS_CAPABILITIES["authorization"]["classify_block_reason"],
     }
 
@@ -273,11 +276,14 @@ def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any
         hypothesis, experiment, _target_import(contract, project), contract.name, output, contract
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
-    require_executed(execution)
     return {
         "generated_path": str(generated),
         "execution": execution,
         "classification": "NOT_REACHED",
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
         "classification_blocked_reason": CLASS_CAPABILITIES["state"]["classify_block_reason"],
     }
 
@@ -292,7 +298,6 @@ def _run_initialization(project: Path, hypothesis, experiment, contract) -> dict
         experiment=experiment,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
-    require_executed(execution)
     outcome = classify_initialization_execution(hypothesis, execution)
     return {
         "generated_path": str(generated),
@@ -300,6 +305,10 @@ def _run_initialization(project: Path, hypothesis, experiment, contract) -> dict
         "classification": outcome.benchmark_status,
         "classification_path": CLASS_CAPABILITIES["initialization"]["classification_path"],
         "internal_status": outcome.internal_status,
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
         "evidence": outcome.evidence,
     }
 
@@ -313,11 +322,14 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         output_path=output,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
-    require_executed(execution)
     return {
         "generated_path": str(generated),
         "execution": execution,
         "classification": "NOT_REACHED",
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
