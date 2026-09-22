@@ -1,0 +1,64 @@
+name: CYDRA Live Dogfood — Arcadia Lending
+
+on:
+  workflow_dispatch:
+    inputs:
+      authorization_confirmed:
+        description: "Confirm you are authorized/eligible to research this target under the active program rules."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  dogfood:
+    if: ${{ inputs.authorization_confirmed == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout CYDRA
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+
+      - name: Full regression baseline
+        run: python -m pytest -q
+
+      - name: Run frozen Arcadia blind dogfood
+        env:
+          PYTHONPATH: .
+        run: |
+          set +e
+          python scripts/run_benchmark_blind.py             --target-repo https://github.com/arcadia-finance/lending-v2             --target-ref def3c94995773e2feb48b6d8a02dc603d96fd96c             --target-path src/LendingPool.sol             --target-project .             --classes authorization initialization state guard_parity             --freeze backtest-artifacts/arcadia-lending/freeze
+          rc=$?
+          printf '{"campaign":"arcadia-lending-dogfood","exit_code":%s,"target_ref":"def3c94995773e2feb48b6d8a02dc603d96fd96c"}\n' "$rc" > backtest-artifacts/arcadia-lending/ci-result.json
+          exit "$rc"
+
+      - name: Upload Arcadia dogfood evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-arcadia-lending-dogfood
+          path: backtest-artifacts/arcadia-lending
+          if-no-files-found: error
