@@ -1,0 +1,53 @@
+name: CYDRA Benchmark 044 — Post-Maturity Negative Controls
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/run_benchmark_blind.py"
+      - "scripts/run_benchmark_043_multi_target_causal_discovery.py"
+      - "scripts/run_benchmark_044_post_maturity_negative_controls.py"
+      - "benchmarks/043_post_maturity_multi_target_causal_discovery/**"
+      - "benchmarks/044_post_maturity_negative_controls/**"
+      - ".github/workflows/benchmark-044-post-maturity-negative-controls.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  negative-controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: oven-sh/setup-bun@v2
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Full regression
+        run: python -m pytest -q
+      - name: Negative-control campaign
+        env:
+          PYTHONPATH: .
+        run: |
+          set +e
+          python scripts/run_benchmark_044_post_maturity_negative_controls.py
+          rc=$?
+          mkdir -p backtest-artifacts/benchmark-044
+          printf '{"campaign":"044","exit_code":%s}\n' "$rc" > backtest-artifacts/benchmark-044/ci-result.json
+          exit "$rc"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-044-post-maturity-negative-controls
+          path: backtest-artifacts/benchmark-044
+          if-no-files-found: error
