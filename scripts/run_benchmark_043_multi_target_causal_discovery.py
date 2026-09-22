@@ -256,6 +256,7 @@ def run_target(target: dict, output: Path) -> dict:
 
         vulnerable = root / "vulnerable"
         clone(target["repo"], target["ref"], vulnerable)
+        (vulnerable / "test").mkdir(parents=True, exist_ok=True)
         (vulnerable / "test" / "Cydra043.t.sol").write_text(poc)
         vulnerable_result = run_foundry(vulnerable, contract, test, "vulnerable")
 
@@ -263,11 +264,13 @@ def run_target(target: dict, output: Path) -> dict:
         clone(target["repo"], target["ref"], patched)
         source = patched / target["source"]
         source.write_text(patcher(source.read_text()))
+        (patched / "test").mkdir(parents=True, exist_ok=True)
         (patched / "test" / "Cydra043.t.sol").write_text(poc)
         patched_result = run_foundry(patched, contract, test, "patched")
 
         independent_v = root / "independent-vulnerable"
         clone(target["repo"], target["ref"], independent_v)
+        (independent_v / "test").mkdir(parents=True, exist_ok=True)
         (independent_v / "test" / "Cydra043.t.sol").write_text(poc)
         independent_v_result = run_foundry(
             independent_v, contract, test, "independent-vulnerable"
@@ -277,6 +280,7 @@ def run_target(target: dict, output: Path) -> dict:
         clone(target["repo"], target["ref"], independent_p)
         source = independent_p / target["source"]
         source.write_text(patcher(source.read_text()))
+        (independent_p / "test").mkdir(parents=True, exist_ok=True)
         (independent_p / "test" / "Cydra043.t.sol").write_text(poc)
         independent_p_result = run_foundry(
             independent_p, contract, test, "independent-patched"
