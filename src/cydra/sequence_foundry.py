@@ -66,6 +66,7 @@ def generate_sequence_test_from_experiment(
     inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
     direct_interfaces: dict[str, object] = {}
     named_type_sources: dict[str, str] = {}
+    erc20_stub_needed = False
     if project_root is not None and contract_model.constructor is not None:
         for parameter in contract_model.constructor.parameters:
             base = parameter.type.strip().split()[0].rstrip("[]")
@@ -107,7 +108,11 @@ def generate_sequence_test_from_experiment(
                 f'import {{ {base} }} from "{Path(os.path.relpath(project_root / resolved.source_path, path.parent)).as_posix()}";'
             )
         elif base in named_type_sources:
-            constructor_arguments.append(f"{base}(address(0))")
+            if base == "ERC20":
+                erc20_stub_needed = True
+                constructor_arguments.append("ERC20(address(constructorAsset))")
+            else:
+                constructor_arguments.append(f"{base}(address(0))")
             resolved_path = Path(project_root / named_type_sources[base])
             relative = Path(os.path.relpath(resolved_path, path.parent)).as_posix()
             constructor_imports.append(f'import {{ {base} }} from "{relative}";')
@@ -120,6 +125,12 @@ def generate_sequence_test_from_experiment(
     constructor_call = f"new {target_type}({constructor_args_text})" if constructor_arguments else f"new {target_type}()"
     import_text = "\n".join(dict.fromkeys(constructor_imports))
 
+    stub_declaration = (
+        '    contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\\n'
+        if erc20_stub_needed else ""
+    )
+    asset_declaration = "    ERC20 internal constructorAsset;\\n" if erc20_stub_needed else ""
+    asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\\n" if erc20_stub_needed else ""
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -132,9 +143,33 @@ import {{ {target_type} }} from "{target_import}";
 contract CydraSequenceExperimentTest is Test {{
     {target_type} internal target;
     address internal attacker = address(0xBEEF);
+{asset_declaration}{stub_declaration}
+    function setUp() public {{
+{asset_setup}        target = {constructor_call};
+    }}
+
+    function testOrderedExperimentSequence() public {{
+{chr(10).join(rendered)}
+    }}
+}}
+'''
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity {pragma};
+// Hypothesis: {hypothesis.hypothesis_id}
+// Experiment: {experiment.experiment_id}
+// Structured ordered steps are authoritative for this execution.
+import {{Test}} from "forge-std/Test.sol";
+import {{ {target_type} }} from "{target_import}";
+{import_text}
+
+contract CydraSequenceExperimentTest is Test {{
+    {target_type} internal target;
+    address internal attacker = address(0xBEEF);
+    ERC20 internal constructorAsset;
+    {("contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20(\"CYDRA\", \"CYDRA\", 18) {} }" if True else "")}
 
     function setUp() public {{
-        target = {constructor_call};
+        {"constructorAsset = new CydraERC20ConstructorStub(); " if True else ""}target = {constructor_call};
     }}
 
     function testOrderedExperimentSequence() public {{
