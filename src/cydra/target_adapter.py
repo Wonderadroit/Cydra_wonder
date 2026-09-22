@@ -58,7 +58,7 @@ def _foundry_config(project: Path) -> dict[str, Any]:
 
 def _imports(source: Path) -> tuple[str, ...]:
     text = source.read_text(encoding="utf-8")
-    return tuple(dict.fromkeys(re.findall(r"\\bimport\\s+(?:[^;]*?\\s+from\\s+)?[\\\"']([^\\\"']+)[\\\"']", text)))
+    return tuple(dict.fromkeys(re.findall(r"\bimport\s+(?:[^;]*?\s+from\s+)?["']([^"']+)["']", text)))
 
 
 def _constructor_unresolved(contract) -> tuple[str, ...]:
