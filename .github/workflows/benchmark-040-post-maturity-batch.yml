@@ -54,6 +54,22 @@ jobs:
           rc=$?
           printf '{"campaign":"040","exit_code":%s}\n' "$rc" > backtest-artifacts/benchmark-040/ci-result.json
           exit "$rc"
+      - name: Run Benchmark 041 blind-to-causal discovery
+        env:
+          PYTHONPATH: .
+        run: |
+          set +e
+          python scripts/run_benchmark_041_post_maturity_causal_discovery.py
+          rc=$?
+          printf '{"campaign":"041","exit_code":%s}\n' "$rc" > backtest-artifacts/benchmark-041/ci-result.json
+          exit "$rc"
+      - name: Upload Benchmark 041 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-041-post-maturity-causal-discovery
+          path: backtest-artifacts/benchmark-041
+          if-no-files-found: error
       - name: Upload campaign evidence
         if: always()
         uses: actions/upload-artifact@v4
