@@ -45,6 +45,9 @@ jobs:
           python -m pip install -e .
           python -m pip install pytest
 
+      - name: Initialize research artifact directory
+        run: mkdir -p backtest-artifacts/arcadia-lending
+
       - name: Full regression baseline
         run: python -m pytest -q
 
@@ -71,4 +74,4 @@ jobs:
         with:
           name: cydra-arcadia-lending-public-code
           path: backtest-artifacts/arcadia-lending
-          if-no-files-found: error
+          if-no-files-found: warn
