@@ -1,5 +1,5 @@
 from cydra.ast_dataflow import SemanticRelationshipEvidence
-from cydra.models import Experiment
+from cydra.models import ContractModel, Experiment, FunctionModel
 from cydra.pipeline import investigate
 from cydra.solidity_model import parse_solidity
 from cydra.state_experiments import plan_cross_function_state_experiment
