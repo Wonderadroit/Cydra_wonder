@@ -200,7 +200,7 @@ def prepare_target_project(project: Path) -> None:
         if (project / "package-lock.json").exists():
             command = ("npm", "ci", "--ignore-scripts")
         elif (project / "yarn.lock").exists():
-            command = ("yarn", "install", "--frozen-lockfile", "--ignore-scripts")
+            command = ("yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--ignore-engines")
         else:
             command = ("npm", "install", "--ignore-scripts")
         subprocess.run(command, cwd=project, check=True)
