@@ -10,15 +10,6 @@ on:
       - "scripts/run_benchmark_041_post_maturity_causal_discovery.py"
       - "benchmarks/041_post_maturity_causal_discovery/**"
       - ".github/workflows/benchmark-041-post-maturity-causal-discovery.yml"
-  push:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/run_benchmark_blind.py"
-      - "scripts/run_benchmark_041_post_maturity_causal_discovery.py"
-      - "benchmarks/041_post_maturity_causal_discovery/**"
-      - ".github/workflows/benchmark-041-post-maturity-causal-discovery.yml"
   workflow_dispatch:
 
 permissions:
@@ -51,8 +42,7 @@ jobs:
           set +e
           python scripts/run_benchmark_041_post_maturity_causal_discovery.py
           rc=$?
-          printf '{"campaign":"041","exit_code":%s}
-' "$rc" > backtest-artifacts/benchmark-041/ci-result.json
+          printf '{"campaign":"041","exit_code":%s}\n' "$rc" > backtest-artifacts/benchmark-041/ci-result.json
           exit "$rc"
       - name: Upload evidence
         if: always()
