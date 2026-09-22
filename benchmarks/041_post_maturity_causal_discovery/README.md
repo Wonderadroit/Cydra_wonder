@@ -14,3 +14,5 @@ The campaign is successful only if:
 - the final result remains evidence-backed.
 
 A green CI result without those observations is not considered success.
+
+The blind and causal stages are intentionally separated so ground truth cannot influence hypothesis selection.
