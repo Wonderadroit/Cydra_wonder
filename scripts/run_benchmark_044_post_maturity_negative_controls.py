@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from scripts.run_benchmark_043_multi_target_causal_discovery import (
+from run_benchmark_043_multi_target_causal_discovery import (
     DEBT_POC,
     RABBIT_POC,
     TARGETS,
