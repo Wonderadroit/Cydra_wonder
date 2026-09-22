@@ -77,7 +77,7 @@ def paired_subtraction_invariant(contract: ContractModel) -> Invariant | None:
     return None
 
 
-def generate_pair_symmetry_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
+def generate_pair_symmetry_hypotheses(contract: ContractModel, _semantic=()) -> tuple[Hypothesis, ...]:
     invariant = paired_subtraction_invariant(contract)
     if invariant is None:
         return ()
