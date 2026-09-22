@@ -69,3 +69,21 @@ def test_execution_readiness_identifies_constructible_state_setup_candidates():
     readiness = inspect_execution_readiness(contract, contract.functions[0])
     assert [item.subject for item in readiness.state_setup_candidates] == ["seed"]
     assert readiness.state_setup_candidates[0].status == "constructible"
+
+
+def test_execution_readiness_preserves_revert_guard_polarity():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel(
+                "target", "external", (), (), (), 1,
+                state_predicates=("count > 0",),
+                state_predicate_polarities=(("count > 0", "must_not_hold"),),
+            ),
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0])
+    assert readiness.state_requirements[0].status == "required"
+    assert "must not hold" in readiness.state_requirements[0].detail
+    assert readiness.state_setup_candidates == ()
