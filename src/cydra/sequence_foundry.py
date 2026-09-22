@@ -153,29 +153,5 @@ contract CydraSequenceExperimentTest is Test {{
     }}
 }}
 '''
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity {pragma};
-// Hypothesis: {hypothesis.hypothesis_id}
-// Experiment: {experiment.experiment_id}
-// Structured ordered steps are authoritative for this execution.
-import {{Test}} from "forge-std/Test.sol";
-import {{ {target_type} }} from "{target_import}";
-{import_text}
-
-contract CydraSequenceExperimentTest is Test {{
-    {target_type} internal target;
-    address internal attacker = address(0xBEEF);
-    ERC20 internal constructorAsset;
-    {("contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20(\"CYDRA\", \"CYDRA\", 18) {} }" if True else "")}
-
-    function setUp() public {{
-        {"constructorAsset = new CydraERC20ConstructorStub(); " if True else ""}target = {constructor_call};
-    }}
-
-    function testOrderedExperimentSequence() public {{
-{chr(10).join(rendered)}
-    }}
-}}
-'''
     path.write_text(source, encoding="utf-8")
     return path
