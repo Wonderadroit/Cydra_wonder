@@ -5,7 +5,7 @@ import os
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source
-from .execution_readiness import _address_role
+from .execution_readiness import _address_role, caller_role
 
 
 def generate_sequence_test_from_experiment(
@@ -49,7 +49,9 @@ def generate_sequence_test_from_experiment(
         if any(not argument.strip() for argument in step.arguments):
             raise ValueError(f"sequence step {step.function} contains an empty argument")
         arguments = ", ".join(step.arguments)
-        rendered.append(f"        vm.prank(attacker);\n        target.{step.function}({arguments});")
+        role = caller_role(function)
+        caller = role_addresses.get(role, "attacker") if role else "attacker"
+        rendered.append(f"        vm.prank({caller});\n        target.{step.function}({arguments});")
 
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
