@@ -54,3 +54,18 @@ def test_readiness_records_modeled_state_predicates():
     model = ContractModel("Target", "/tmp/Target.sol", (function,))
     readiness = inspect_execution_readiness(model, function)
     assert readiness.state_requirements[0].subject == "limit > 0"
+
+
+def test_execution_readiness_identifies_constructible_state_setup_candidates():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel("target", "external", (), (), (), 1, state_predicates=("items > 0",)),
+            FunctionModel("seed", "external", ("onlyOwner",), ("items",), (), 2,
+                          parameters=(ParameterModel("item", "address"),)),
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0])
+    assert [item.subject for item in readiness.state_setup_candidates] == ["seed"]
+    assert readiness.state_setup_candidates[0].status == "constructible"
