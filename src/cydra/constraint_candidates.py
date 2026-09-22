@@ -57,6 +57,12 @@ def _constraint_value(predicate: str, parameter: ParameterModel, kind: str = "pr
             not_zero = re.search(rf"\b{name}\s*!=\s*0\b", predicate)
             greater_zero = re.search(rf"\b{name}\s*>\s*0\b", predicate)
             greater_equal_one = re.search(rf"\b{name}\s*>=\s*1\b", predicate)
+            collection_bound = re.search(rf"\b{name}\s*>=\s*[A-Za-z_]\w*\.length\b", predicate)
+            if kind == "revert_guard" and collection_bound:
+                # A non-empty collection setup may be supplied by the ordered
+                # experiment. Zero is the lowest valid index and therefore the
+                # safest generic value satisfying index < collection.length.
+                return "0"
             less_equal_zero = re.search(rf"\b{name}\s*<=\s*0\b", predicate)
             equality = re.search(rf"\b{name}\s*==\s*(\d+)\b", predicate)
             if equality_zero or greater_zero or greater_equal_one:
