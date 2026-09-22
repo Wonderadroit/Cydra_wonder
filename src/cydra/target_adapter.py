@@ -7,6 +7,7 @@ import re
 import subprocess
 from typing import Any
 
+from .interface_resolver import resolve_named_type_source
 from .solidity_model import parse_solidity
 
 
@@ -70,7 +71,11 @@ def _constructor_unresolved(contract) -> tuple[str, ...]:
         base = parameter.type.strip().split()[0].rstrip("[]")
         if base in primitive or base.startswith(("uint", "int", "bytes")):
             continue
-        if base not in {item.name for item in contract.inherited_resolved_interfaces}:
+        if base in {item.name for item in contract.inherited_resolved_interfaces}:
+            continue
+        try:
+            resolve_named_type_source(root, contract.source, base)
+        except (FileNotFoundError, ValueError):
             unresolved.append(base)
     return tuple(dict.fromkeys(unresolved))
 
