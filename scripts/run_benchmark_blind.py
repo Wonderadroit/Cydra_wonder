@@ -30,6 +30,7 @@ from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
+from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
 from cydra.guard_parity_execution import generate_guard_parity_test
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
@@ -88,6 +89,7 @@ INVARIANT_CLASS = {
     "INV-ARITH-001": "arithmetic",
     "INV-PAIR-SYMMETRY-001": "arithmetic",
     "INV-AGGREGATION-ORDER-001": "arithmetic",
+    "INV-CONFIG-BINDING-001": "state",
 }
 
 FREEZE_FILES = (
@@ -509,6 +511,7 @@ def main() -> int:
                 ("state" in classes, generate_cross_function_state_hypotheses),
                 ("arithmetic" in classes, lambda contract, _evidence: ReasoningContribution((), generate_pair_symmetry_hypotheses(contract))),
                 ("arithmetic" in classes, lambda contract, _evidence: ReasoningContribution((), generate_aggregation_order_hypotheses(contract))),
+                (bool(classes), lambda contract, _evidence: ReasoningContribution((), generate_configuration_binding_hypotheses(contract))),
             )
             if enabled
         )
