@@ -87,3 +87,28 @@ def test_execution_readiness_preserves_revert_guard_polarity():
     assert readiness.state_requirements[0].status == "required"
     assert "must not hold" in readiness.state_requirements[0].detail
     assert readiness.state_setup_candidates == ()
+
+
+def test_execution_readiness_uses_compiler_collection_constraints_for_setup_discovery():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel("target", "external", (), (), (), 1,
+                          parameters=(ParameterModel("index", "uint256"),)),
+            FunctionModel("seed", "external", ("onlyOwner",), (), (), 2,
+                          parameters=(ParameterModel("item", "address"),)),
+        ),
+    )
+    constraint = ConstraintEvidence(
+        contract="Target",
+        function="target",
+        parameter="index",
+        parameter_index=0,
+        predicate="index >= items.length",
+        source="solc-json-ast:test",
+        kind="revert_guard",
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0], (constraint,))
+    assert any(item.subject == "index >= items.length" for item in readiness.state_requirements)
+    assert any(item.subject == "seed" for item in readiness.state_setup_candidates)
