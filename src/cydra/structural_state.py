@@ -22,6 +22,12 @@ def _shared_state_writers(
     for function in contract.functions:
         if function.visibility not in {"public", "external"}:
             continue
+        # An arbitrary external caller is only a valid capability model for
+        # unmodified entry points. Privileged/custom-guarded functions require
+        # a separate authorization-aware actor model; do not generate
+        # executable state hypotheses that knowingly invoke them as attacker.
+        if function.modifiers:
+            continue
         for state in function.writes:
             writers[state].add(function.name)
 
