@@ -2,9 +2,12 @@ name: CYDRA Public-Code Blind Research — Arcadia Lending
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
-      - pilot/arcadia-lending-dogfood
+      - pilot/arcadia-execution-readiness-v2
 
 permissions:
   contents: read
