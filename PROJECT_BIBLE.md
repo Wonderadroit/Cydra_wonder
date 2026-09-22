@@ -82,7 +82,28 @@ Before deep vulnerability hunting, CYDRA builds a system model containing, where
 
 The model must preserve source provenance and confidence.
 
-## 7. Invariants
+## 7. Target understanding and adapters
+
+Before deep reasoning or experiment generation, CYDRA must build a deterministic target-environment snapshot.
+
+For the current Solidity/EVM adapter this includes, where available:
+
+- project/framework detection;
+- compiler and compiler configuration;
+- source/test/dependency roots;
+- import/remapping surface;
+- deployable contract candidates;
+- constructor dependency requirements;
+- unresolved environment blockers;
+- selected execution adapter and confidence.
+
+Target-specific execution failures must first be evaluated as evidence of an adapter/environment gap. Generic fixes belong in the adapter boundary rather than in target-specific generators.
+
+The adapter is responsible for understanding and correctly operating the target environment. It must not decide whether the target is vulnerable. The reasoning layer consumes the normalized target/system model; deterministic tools produce evidence.
+
+The first production adapter is **Solidity/EVM + Foundry**. Future adapters such as Solidity/Hardhat or Solana/Rust must implement the same boundary without weakening provenance, causal verification, reproducibility, uncertainty, or authorization rules.
+
+## 8. Invariants
 
 CYDRA asks what must remain true for the system to behave as intended.
 
@@ -102,7 +123,7 @@ Invariant candidates may arise from:
 
 An invariant is not accepted merely because an LLM invented it. Its provenance and confidence must be recorded.
 
-## 8. Structural reasoning
+## 9. Structural reasoning
 
 CYDRA must systematically compare related behavior, including:
 
@@ -119,7 +140,7 @@ CYDRA must systematically compare related behavior, including:
 
 The engine should actively ask whether an inconsistency is intentional, harmless, protected elsewhere, or exploitable.
 
-## 9. Hypotheses
+## 10. Hypotheses
 
 Each hypothesis must be structured, not free-form prose.
 
@@ -143,7 +164,7 @@ Minimum conceptual fields:
 
 A hypothesis can be rejected, weakened, strengthened, or confirmed. Evidence must not be silently discarded.
 
-## 10. Competing hypotheses
+## 11. Competing hypotheses
 
 CYDRA should prefer explicit alternatives over premature certainty.
 
@@ -156,7 +177,7 @@ Example:
 
 The test planner should select experiments capable of distinguishing these explanations.
 
-## 11. Information-gain testing
+## 12. Information-gain testing
 
 The engine should not blindly execute every available scanner. It should select the next investigation step based on:
 
@@ -170,7 +191,7 @@ The engine should not blindly execute every available scanner. It should select 
 
 Possible actions include code inspection, static analysis, targeted Foundry tests, fuzzing, symbolic execution, formal checking, forked execution where permitted, or additional system-model extraction.
 
-## 12. Tool orchestration
+## 13. Tool orchestration
 
 CYDRA should reuse mature tools rather than reinventing them.
 
@@ -188,7 +209,7 @@ Initial tool families include:
 
 The engine chooses tools according to hypotheses and evidence requirements. Tool output becomes evidence, not truth by itself.
 
-## 13. Execution and PoC discipline
+## 14. Execution and PoC discipline
 
 For an exploitable claim, CYDRA must seek executable reproduction in an authorized environment.
 
