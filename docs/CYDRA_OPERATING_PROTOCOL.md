@@ -57,6 +57,8 @@ For real authorized research the operating loop is:
 
 A negative or unmeasurable result is evidence about the current hypothesis/execution, not permission to invent a result.
 
+Before executing a generated experiment, CYDRA should derive **execution readiness** from the target model. This includes constructor/deployment dependencies, caller-role requirements, caller-identity predicates, and external runtime dependencies. Each prerequisite is classified as already satisfied, constructible by the adapter/harness, or unresolved. Unresolved prerequisites produce an explicit execution/environment blocker rather than being interpreted as security evidence. This layer is generic and target-independent.
+
 A real finding requires reproducible evidence and must survive adversarial challenge.
 
 ## Blindness and the LLM
