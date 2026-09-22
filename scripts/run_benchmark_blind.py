@@ -30,6 +30,7 @@ from cydra.sequence_foundry import generate_sequence_test_from_experiment
 from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 from cydra.target_adapter import inspect_target
+from cydra.execution_readiness import inspect_execution_readiness
 from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
@@ -97,6 +98,7 @@ INVARIANT_CLASS = {
 FREEZE_FILES = (
     "provenance.json",
     "target-intake.json",
+    "execution-readiness.json",
     "target-checkout.txt",
     "parse-output.json",
     "invariants.json",
@@ -549,6 +551,25 @@ def main() -> int:
             reasoning_surfaces=surfaces,
         )
         statuses, executions, evidence = run_layers(result, project, classes)
+        experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
+        execution_readiness = []
+        for hypothesis in result.hypotheses:
+            class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
+            if class_name is None and hypothesis.invariant_id.startswith("INV-STATE-"):
+                class_name = "state"
+            if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
+                class_name = "guard_parity"
+            if class_name is None or class_name not in classes:
+                continue
+            contract = _contract_for_hypothesis(result, hypothesis)
+            function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+            readiness = inspect_execution_readiness(contract, function)
+            execution_readiness.append({
+                "hypothesis_id": hypothesis.hypothesis_id,
+                "class": class_name,
+                "target_function": hypothesis.target_function,
+                "readiness": readiness,
+            })
         build_capture = _command_capture(project, "forge", "build")
         provenance_env, _, forge_config_text = _environment_provenance(root, project)
 
@@ -631,6 +652,7 @@ def main() -> int:
         files = {
             "provenance.json": provenance,
             "target-intake.json": target_intake.to_dict(),
+            "execution-readiness.json": execution_readiness,
             "parse-output.json": {"target": args.target_path, "contracts": _json(result.contracts)},
             "invariants.json": result.invariants,
             "hypotheses.json": result.hypotheses,
