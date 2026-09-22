@@ -159,9 +159,28 @@ def run_blind(target: dict, output: Path) -> dict:
     return record
 
 
-def run_foundry(project: Path, contract: str, test: str, label: str) -> dict:
+def run_foundry(
+    project: Path,
+    contract: str,
+    test: str,
+    label: str,
+    contracts_dir: Path,
+) -> dict:
+    # Some historical Solidity repositories also contain unrelated Vyper
+    # sources. Scope Foundry to the directory containing the selected target
+    # so unrelated language sources cannot block the Solidity experiment.
     completed = subprocess.run(
-        ["forge", "test", "--match-contract", contract, "--match-test", test, "-vvv"],
+        [
+            "forge",
+            "test",
+            "--contracts",
+            str(contracts_dir),
+            "--match-contract",
+            contract,
+            "--match-test",
+            test,
+            "-vvv",
+        ],
         cwd=project,
         text=True,
         capture_output=True,
@@ -258,7 +277,9 @@ def run_target(target: dict, output: Path) -> dict:
         clone(target["repo"], target["ref"], vulnerable)
         (vulnerable / "test").mkdir(parents=True, exist_ok=True)
         (vulnerable / "test" / "Cydra043.t.sol").write_text(poc)
-        vulnerable_result = run_foundry(vulnerable, contract, test, "vulnerable")
+        vulnerable_result = run_foundry(
+            vulnerable, contract, test, "vulnerable", Path(target["source"]).parent
+        )
 
         patched = root / "patched"
         clone(target["repo"], target["ref"], patched)
@@ -266,14 +287,20 @@ def run_target(target: dict, output: Path) -> dict:
         source.write_text(patcher(source.read_text()))
         (patched / "test").mkdir(parents=True, exist_ok=True)
         (patched / "test" / "Cydra043.t.sol").write_text(poc)
-        patched_result = run_foundry(patched, contract, test, "patched")
+        patched_result = run_foundry(
+            patched, contract, test, "patched", Path(target["source"]).parent
+        )
 
         independent_v = root / "independent-vulnerable"
         clone(target["repo"], target["ref"], independent_v)
         (independent_v / "test").mkdir(parents=True, exist_ok=True)
         (independent_v / "test" / "Cydra043.t.sol").write_text(poc)
         independent_v_result = run_foundry(
-            independent_v, contract, test, "independent-vulnerable"
+            independent_v,
+            contract,
+            test,
+            "independent-vulnerable",
+            Path(target["source"]).parent,
         )
 
         independent_p = root / "independent-patched"
@@ -283,7 +310,11 @@ def run_target(target: dict, output: Path) -> dict:
         (independent_p / "test").mkdir(parents=True, exist_ok=True)
         (independent_p / "test" / "Cydra043.t.sol").write_text(poc)
         independent_p_result = run_foundry(
-            independent_p, contract, test, "independent-patched"
+            independent_p,
+            contract,
+            test,
+            "independent-patched",
+            Path(target["source"]).parent,
         )
 
     causal = vulnerable_result["status"] == "FAIL" and patched_result["status"] == "PASS"
