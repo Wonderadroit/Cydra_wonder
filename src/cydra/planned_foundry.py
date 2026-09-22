@@ -52,6 +52,7 @@ def generate_authorization_test_from_experiment(
     inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
     direct_interfaces: dict[str, object] = {}
     named_type_sources: dict[str, str] = {}
+    erc20_stub_needed = False
     if project_root is not None and contract_model.constructor is not None:
         for parameter in contract_model.constructor.parameters:
             base = parameter.type.strip().split()[0].rstrip("[]")
@@ -103,7 +104,46 @@ def generate_authorization_test_from_experiment(
     constructor_call = f"new {target_type}({constructor_args_text})" if constructor_arguments else f"new {target_type}()"
     constructor_import_text = "\n".join(dict.fromkeys(constructor_imports))
 
+    stub_declaration = (
+        '    contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\\n'
+        if erc20_stub_needed else ""
+    )
+    asset_declaration = "    ERC20 internal constructorAsset;\\n" if erc20_stub_needed else ""
+    asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\\n" if erc20_stub_needed else ""
     source = f'''// SPDX-License-Identifier: UNLICENSED
+pragma solidity {pragma};
+// Hypothesis: {hypothesis.hypothesis_id}
+// Experiment: {experiment.experiment_id}
+// Planned inputs are authoritative for this concrete target call.
+import {{Test}} from "forge-std/Test.sol";
+import {{ {target_type} }} from "{target_import}";
+{constructor_import_text}
+
+contract CydraAuthInvariantTest is Test {{
+    {target_type} internal target;
+    address internal attacker = address(0xBEEF);
+{asset_declaration}{stub_declaration}
+    function setUp() public {{
+{asset_setup}        target = {constructor_call};
+    }}
+
+    function testUnauthorizedCallerMutationSurface() public {{
+        vm.record();
+        vm.prank(attacker);
+        bool ok;
+        try target.{function.name}({arguments}) {{
+            ok = true;
+        }} catch {{
+            ok = false;
+        }}
+        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(target));
+        reads;
+        assertTrue(ok, "candidate call reverted; unauthorized mutation not demonstrated");
+        assertGt(writes.length, 0, "candidate call did not mutate target storage");
+    }}
+}}
+'''
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Experiment: {experiment.experiment_id}
