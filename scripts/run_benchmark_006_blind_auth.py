@@ -269,20 +269,12 @@ def main() -> int:
                 c for c in result.contracts
                 if any(f.name == hypothesis.target_function for f in c.functions)
             )
-            contract_identifier = f"src/{source_relative}:{contract.name}"
-            bytecode_result = subprocess.run(
-                ("forge", "inspect", contract_identifier, "bytecode"),
-                cwd=execution_project,
-                text=True,
-                capture_output=True,
-            )
-            if bytecode_result.returncode != 0:
-                raise RuntimeError(
-                    "isolated target compilation failed before authorization execution"
-                    f"\\nSTDOUT:\\n{bytecode_result.stdout}"
-                    f"\\nSTDERR:\\n{bytecode_result.stderr}"
-                )
-            creation_bytecode = bytecode_result.stdout.strip().removeprefix("0x")
+            # The blind harness now deploys the modeled contract directly.
+            # Avoid a separate forge-inspect preflight: Foundry's generated
+            # constructor helper can fail before the actual experiment even
+            # when the typed deployment is valid. Execution itself remains the
+            # authoritative compilation/execution measurement.
+            creation_bytecode = None
             output = test_path_for(execution_project, f"generated/{hypothesis.hypothesis_id}.t.sol")
             generated = generate_blind_authorization_test_from_experiment(
                 hypothesis,
@@ -294,7 +286,6 @@ def main() -> int:
                 contract.name,
                 output,
                 contract,
-                creation_bytecode=creation_bytecode,
             )
             execution = run_foundry_test(execution_project, generated, experiment.experiment_id, "blind")
             print("EXECUTION_STATUS", execution.status, "exit=", execution.exit_code, "tests=", execution.tests_run, "failed=", execution.tests_failed)
