@@ -50,7 +50,8 @@ def generate_sequence_test_from_experiment(
             raise ValueError(f"sequence step {step.function} contains an empty argument")
         arguments = ", ".join(step.arguments)
         role = caller_role(function)
-        caller = role_addresses.get(role, "attacker") if role else "attacker"
+        caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
+        caller = caller_bindings.get(role, "attacker") if role else "attacker"
         rendered.append(f"        vm.prank({caller});\n        target.{step.function}({arguments});")
 
     pragma = contract_model.pragma or "^0.8.20"
@@ -147,7 +148,7 @@ import {{ {target_type} }} from "{target_import}";
 
 {stub_declaration}contract CydraSequenceExperimentTest is Test {{
     {target_type} internal target;
-    address internal attacker = address(0xBEEF);
+    address internal attacker = address(0xBEEF);\n    address internal owner = address(0x1001);\n    address internal admin = address(0x1002);\n    address internal guardian = address(0x1003);\n    address internal riskManager = address(0x1004);\n    address internal liquidator = address(0x1005);\n    address internal factory = address(0x1006);
 {asset_declaration}    function setUp() public {{
 {asset_setup}        target = {constructor_call};
     }}
