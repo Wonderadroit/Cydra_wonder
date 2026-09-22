@@ -137,7 +137,7 @@ def test_blind_auth_renderer_handles_legacy_constructor_and_no_forge_std(tmp_pat
     assert "return type(Legacy).creationCode;" in source
     assert "deployed := create(0, add(initCode, 0x20), mload(initCode))" in source
     assert "abi.encode(address(0x1001), address(0x1001), address(0x1001), address(0x1001))" in source
-    assert "target = Legacy(deployed);" in source
+    assert "target = Legacy(payable(deployed));" in source
     assert "target = new Legacy(" not in source
 
 
