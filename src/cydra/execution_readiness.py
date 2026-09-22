@@ -98,6 +98,19 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
     return tuple(requirements)
 
 
+def caller_role(function: FunctionModel) -> str | None:
+    """Infer a deterministic role binding from a modeled authorization modifier."""
+    for modifier in function.modifiers:
+        role = _address_role(modifier)
+        if role is not None:
+            return role
+    for predicate in function.authorization_predicates:
+        role = _address_role(predicate)
+        if role is not None:
+            return role
+    return None
+
+
 def _caller_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
     for modifier in function.modifiers:
