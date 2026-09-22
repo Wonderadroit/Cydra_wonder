@@ -126,7 +126,7 @@ def generate_sequence_test_from_experiment(
     import_text = "\n".join(dict.fromkeys(constructor_imports))
 
     stub_declaration = (
-        '    contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\n'
+        'contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\n'
         if erc20_stub_needed else ""
     )
     asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
@@ -140,11 +140,10 @@ import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
 {import_text}
 
-contract CydraSequenceExperimentTest is Test {{
+{stub_declaration}contract CydraSequenceExperimentTest is Test {{
     {target_type} internal target;
     address internal attacker = address(0xBEEF);
-{asset_declaration}{stub_declaration}
-    function setUp() public {{
+{asset_declaration}    function setUp() public {{
 {asset_setup}        target = {constructor_call};
     }}
 
