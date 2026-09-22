@@ -9,7 +9,7 @@ from .authorization_runtime import security_assertion_marker
 
 
 def _constructor_argument(parameter, *, abi_only: bool = False) -> str:
-    parameter_type = parameter.type.strip()
+    parameter_type = str(parameter.type or "").strip()
     base = parameter_type.split()[0].rstrip("[]")
     if parameter_type.endswith("[]"):
         return f"new {base}[](0)"
