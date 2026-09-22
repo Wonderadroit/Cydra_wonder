@@ -176,7 +176,7 @@ def generate_structural_access_control_hypotheses(contract: ContractModel, seman
     for function in contract.functions:
         if function.visibility not in _VISIBILITIES or not _declared_modifiers(contract, function): continue
         protected.update(_writes_for(function, contract, semantic_effects))
-    if not protected: return ()
+    if not protected: return tuple(hypotheses)
     for function in contract.functions:
         writes = _writes_for(function, contract, semantic_effects)
         if function.visibility not in _VISIBILITIES or not writes: continue
