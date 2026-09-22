@@ -254,14 +254,12 @@ def run_case(
     # intact. This makes failures accumulate quickly without hiding execution
     # differences behind repeated dependency installation.
     source = project / SOURCE
-    source.write_text(
-        subprocess.run(
-            ["git", "show", f"{REF}:{SOURCE}"],
-            cwd=project,
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout
+    subprocess.run(
+        ["git", "checkout", "--", SOURCE],
+        cwd=project,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for generated in (project / "test").glob("CydraMultiFinding*.t.sol"):
         generated.unlink()
