@@ -1833,3 +1833,15 @@ The project now explicitly records how CYDRA is meant to be used in practice:
 - another agent must be able to resume from the repository if the chat ends.
 
 This is an operating-model decision, not a new vulnerability detector. It exists to prevent agent/chat discontinuity from becoming project-state loss and to keep real bug-bounty dogfood aligned with the Project Bible.
+
+## Milestone 83 — post-maturity discovery batch closure (Benchmark 050)
+
+Benchmark 050 composed the already-demonstrated post-maturity discovery controls into one fail-closed validation campaign: the six-target unfamiliar-target batch (Benchmark 040), the multi-target blind-to-causal discovery campaign with independent reproduction (Benchmark 043), and the corresponding patched negative controls (Benchmark 044).
+
+PR #194 passed its complete pull-request workflow matrix, including the Benchmark 050 discovery-batch workflow (run 35761624933), and was merged to main as commit c945094c0f7a6e8d82dace94beb0ea52c903794c. The post-merge main matrix for that commit completed with 16/16 workflows successful and no queued or running required jobs.
+
+Benchmark 050 is validation orchestration, not a new vulnerability detector. It preserves the constituent blind boundaries and fail-closed semantics. Its acceptance closes the current post-maturity batch-validation gap, but it does not claim that CYDRA is ready for unattended production use or that every real target will yield a finding.
+
+The next evidence boundary is supervised real-world dogfood on an explicitly authorized, in-scope target. The human researcher must provide authorization and scope before execution. The first pilot should preserve the same evidence chain used in the benchmarks and should be treated as a research observation campaign, not as an autonomous submission workflow. Any new implementation need discovered by the pilot must be driven by the observed failure and repaired generically.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
