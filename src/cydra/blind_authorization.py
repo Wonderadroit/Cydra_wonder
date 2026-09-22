@@ -167,7 +167,7 @@ contract CydraBlindAuthorizationTest {{
             deployed := create(0, add(initCode, 0x20), mload(initCode))
         }}
         require(deployed != address(0), "CYDRA: constructor deployment failed");
-        target = {target_type}(deployed);
+        target = {target_type}(payable(deployed));
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
