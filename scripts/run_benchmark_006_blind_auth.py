@@ -276,17 +276,56 @@ def main() -> int:
             # authoritative compilation/execution measurement.
             creation_bytecode = None
             output = test_path_for(execution_project, f"generated/{hypothesis.hypothesis_id}.t.sol")
-            generated = generate_blind_authorization_test_from_experiment(
-                hypothesis,
-                experiment,
-                os.path.relpath(
-                    execution_project / "src" / Path(contract.source).relative_to(source_root),
-                    output.parent,
-                ).replace(os.sep, "/"),
-                contract.name,
-                output,
-                contract,
-            )
+            try:
+                generated = generate_blind_authorization_test_from_experiment(
+                    hypothesis,
+                    experiment,
+                    os.path.relpath(
+                        execution_project / "src" / Path(contract.source).relative_to(source_root),
+                        output.parent,
+                    ).replace(os.sep, "/"),
+                    contract.name,
+                    output,
+                    contract,
+                )
+            except ValueError as exc:
+                # A missing constructor type is a modeling/execution-precondition
+                # gap, not evidence about the target. Preserve it explicitly as
+                # UNMEASURABLE instead of fabricating an ABI value or crashing the
+                # benchmark before an evidence artifact can be written.
+                execution = ExecutionResult(
+                    experiment_id=experiment.experiment_id,
+                    target=str(source),
+                    command=("cydra", "render_authorization_test"),
+                    exit_code=2,
+                    executed=False,
+                    tests_run=0,
+                    tests_failed=0,
+                    status="UNMEASURABLE",
+                    stdout="",
+                    stderr=f"authorization experiment could not be rendered faithfully: {exc}",
+                )
+                print("EXECUTION_STATUS", execution.status, "reason=", execution.stderr)
+                outcome = classify_authorization_blind_execution(hypothesis, execution)
+                payload = {
+                    "target": f"{args.target_repo}@{args.target_ref}:{args.target_path}",
+                    "hypothesis": _json(hypothesis),
+                    "experiment": _json(experiment),
+                    "blind_execution": _json(execution),
+                    "classification": outcome.benchmark_status,
+                    "finding_gate": "NOT_READY",
+                }
+                if args.output:
+                    args.output.parent.mkdir(parents=True, exist_ok=True)
+                    args.output.write_text(
+                        json.dumps(_json(payload), indent=2) + "\\n",
+                        encoding="utf-8",
+                    )
+                print(
+                    f"{hypothesis.hypothesis_id}: status={execution.status} "
+                    f"classification={outcome.benchmark_status} evidence={outcome.evidence.evidence_id}"
+                )
+                return 2
             execution = run_foundry_test(execution_project, generated, experiment.experiment_id, "blind")
             print("EXECUTION_STATUS", execution.status, "exit=", execution.exit_code, "tests=", execution.tests_run, "failed=", execution.tests_failed)
             print(execution.stdout)
