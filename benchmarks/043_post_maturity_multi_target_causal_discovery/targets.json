@@ -1,0 +1,20 @@
+{
+  "campaign": "043",
+  "targets": [
+    {
+      "id": "rabbithole",
+      "repo": "https://github.com/rabbitholegg/quest-protocol.git",
+      "ref": "8c4c1f71221570b14a0479c216583342bd652d8d",
+      "source": "contracts/RabbitHoleTickets.sol",
+      "expected_function": "mint",
+      "expected_invariant": "INV-AUTH-001"
+    },
+    {
+      "id": "debtdao",
+      "repo": "https://github.com/debtdao/Line-of-Credit.git",
+      "ref": "e8aa08b44f6132a5ed901f8daa231700c5afeb3a",
+      "source": "contracts/utils/SpigotLib.sol",
+      "expected_function": "claimRevenue"
+    }
+  ]
+}
