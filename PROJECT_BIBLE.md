@@ -1749,3 +1749,16 @@ The benchmark and focused regression passed locally/through CI before acceptance
 The maturity/generalization gate remains closed. This milestone is post-maturity hardening.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 81 — research-loop duplicate-finding integration (Benchmark 048)
+
+Benchmark 048 validates the duplicate-finding control through the generic research loop itself.
+
+Two confirmed research rounds deliberately emit the same finding identity. Acceptance requires the loop to complete normally while retaining exactly one finding. This proves the collection hardening is effective at the orchestration boundary, not only in an isolated collection unit.
+
+No target, vulnerability class, selector, historical answer, or severity decision is encoded.
+
+The maturity/generalization gate remains closed. This is post-maturity data-integrity hardening.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
