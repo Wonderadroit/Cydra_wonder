@@ -121,3 +121,17 @@ contract StateSurface {
     assert set(experiments) == {"H-STATE-balance-deposit", "H-STATE-balance-withdraw"}
     assert tuple(step.function for step in experiments["H-STATE-balance-deposit"].steps) == ("withdraw", "deposit")
     assert tuple(step.function for step in experiments["H-STATE-balance-withdraw"].steps) == ("deposit", "withdraw")
+
+
+def test_state_surface_excludes_modifier_protected_entries():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel("open", "external", (), ("shared",), (), 1),
+            FunctionModel("admin", "external", ("onlyOwner",), ("shared",), (), 2),
+            FunctionModel("peer", "external", (), ("shared",), (), 3),
+        ),
+    )
+    result = generate_cross_function_state_hypotheses(contract)
+    assert {h.target_function for h in result.hypotheses} == {"open", "peer"}
