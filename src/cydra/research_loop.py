@@ -16,6 +16,7 @@ from .models import Experiment, Hypothesis, Invariant
 
 Observation = TypeVar("Observation")
 
+
 @dataclass(frozen=True)
 class ResearchRound(Generic[Observation]):
     """One auditable selection/execution observation."""
@@ -23,11 +24,14 @@ class ResearchRound(Generic[Observation]):
     observation: Observation
     status: str
 
+
 @dataclass(frozen=True)
 class ResearchLoopResult(Generic[Observation]):
     """The complete sequence of selections and measured observations."""
     rounds: tuple[ResearchRound[Observation], ...]
     findings: FindingCollection | None = None
+    termination_reason: str = "budget_exhausted"
+
 
 def run_research_loop(
     hypotheses: tuple[Hypothesis, ...],
@@ -48,13 +52,29 @@ def run_research_loop(
     rounds: list[ResearchRound[Observation]] = []
     findings = FindingCollection(finding_target) if finding_of is not None else None
     experiment_by_id = {item.hypothesis_id: item for item in experiments}
+    termination_reason = "budget_exhausted"
+
     for _ in range(max_rounds):
-        selection = select_next_hypothesis(
-            hypotheses, invariants, experiments, observed_statuses=observed_statuses
-        )
+        try:
+            selection = select_next_hypothesis(
+                hypotheses, invariants, experiments, observed_statuses=observed_statuses
+            )
+        except ValueError as error:
+            # Once investigation has actually started, exhausting every
+            # executable candidate is a normal research outcome, not a crash.
+            # Preserve the existing fail-closed behavior for an empty/unbound
+            # investigation before any evidence exists.
+            if rounds and str(error).startswith("no non-excluded hypothesis"):
+                termination_reason = "hypothesis_exhausted"
+                break
+            raise
+
         experiment = experiment_by_id.get(selection.hypothesis.hypothesis_id)
         if experiment is None:
-            raise ValueError("selected hypothesis has no bound experiment: " + selection.hypothesis.hypothesis_id)
+            raise ValueError(
+                "selected hypothesis has no bound experiment: "
+                + selection.hypothesis.hypothesis_id
+            )
         observation = execute(selection.hypothesis, experiment)
         status = status_of(observation)
         if not status:
@@ -68,5 +88,7 @@ def run_research_loop(
                     raise AssertionError("finding collection was not initialized")
                 findings = findings.add(finding)
         if stop_when is not None and stop_when(observation):
+            termination_reason = "stop_condition"
             break
-    return ResearchLoopResult(tuple(rounds), findings)
+
+    return ResearchLoopResult(tuple(rounds), findings, termination_reason)
