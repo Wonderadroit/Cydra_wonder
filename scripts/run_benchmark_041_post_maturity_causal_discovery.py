@@ -128,7 +128,7 @@ def main() -> int:
         "--target-ref", REF,
         "--target-path", SOURCE,
         "--target-project", ".",
-        "--classes", "authorization", "state",
+        "--classes", "authorization", "state", "arithmetic",
         "--freeze", str(blind / "freeze"),
     ]
     selected = subprocess.run(command, text=True, capture_output=True, check=False)
