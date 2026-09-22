@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
+from .compiler_constraints import ConstraintEvidence
 from .models import ContractModel, FunctionModel
 
 
@@ -171,6 +172,27 @@ def _state_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, 
     )
 
 
+def _constraint_state_requirements(
+    function: FunctionModel,
+    constraints: tuple[ConstraintEvidence, ...],
+) -> tuple[ExecutionRequirement, ...]:
+    requirements: list[ExecutionRequirement] = []
+    for constraint in constraints:
+        if constraint.function != function.name:
+            continue
+        if ".length" in constraint.predicate:
+            requirements.append(
+                ExecutionRequirement(
+                    "state_predicate",
+                    constraint.predicate,
+                    f"{function.name}:compiler-constraint",
+                    "required",
+                    "compiler-linked collection bound requires sufficient initialized state",
+                )
+            )
+    return tuple(requirements)
+
+
 def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
     names: list[str] = []
     polarities = dict(function.state_predicate_polarities)
@@ -188,6 +210,7 @@ def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
 def _state_setup_candidates(
     contract: ContractModel,
     function: FunctionModel,
+    constraints: tuple[ConstraintEvidence, ...] = (),
 ) -> tuple[ExecutionRequirement, ...]:
     """Identify generic writer functions that may establish required state.
 
@@ -196,7 +219,13 @@ def _state_setup_candidates(
     primitive values; guarded writers remain usable through the generic caller
     role model.
     """
-    state_names = _state_names_from_predicates(function)
+    state_names = set(_state_names_from_predicates(function))
+    for constraint in constraints:
+        if constraint.function != function.name or ".length" not in constraint.predicate:
+            continue
+        match = re.search(r"\b([A-Za-z_]\w*)\.length\b", constraint.predicate)
+        if match:
+            state_names.add(match.group(1))
     if not state_names:
         return ()
 
@@ -232,6 +261,7 @@ def _state_setup_candidates(
 def inspect_execution_readiness(
     contract: ContractModel,
     function: FunctionModel | None = None,
+    constraints: tuple[ConstraintEvidence, ...] = (),
 ) -> ExecutionReadiness:
     """Derive target execution prerequisites without making vulnerability claims."""
     selected = function
@@ -240,6 +270,9 @@ def inspect_execution_readiness(
         constructor_requirements=_constructor_requirements(contract),
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(selected) if selected else (),
-        state_requirements=_state_requirements(selected) if selected else (),
-        state_setup_candidates=_state_setup_candidates(contract, selected) if selected else (),
+        state_requirements=(
+            (*_state_requirements(selected), *_constraint_state_requirements(selected, constraints))
+            if selected else ()
+        ),
+        state_setup_candidates=_state_setup_candidates(contract, selected, constraints) if selected else (),
     )
