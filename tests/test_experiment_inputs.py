@@ -1,4 +1,5 @@
 from cydra.compiler_constraints import ConstraintEvidence
+from cydra.constraint_candidates import select_parameter_candidates
 from cydra.experiment_inputs import plan_parameter_inputs
 from cydra.models import ParameterModel
 
