@@ -119,3 +119,16 @@ def test_contradictory_zero_and_positive_constraints_fail_closed():
         function_name="withdraw",
     )
     assert result == ("0",)
+
+
+def test_fixed_bytes_defaults_preserve_declared_width():
+    from cydra.experiment_inputs import conservative_defaults
+    parameters = (
+        ParameterModel(name="referrer", type="bytes3"),
+        ParameterModel(name="digest", type="bytes32"),
+    )
+    defaults = conservative_defaults(parameters)
+    assert defaults == {
+        "referrer": 'bytes3(hex"010000")',
+        "digest": 'bytes32(hex"0100000000000000000000000000000000000000000000000000000000000000")',
+    }
