@@ -28,6 +28,7 @@ from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_expe
 from cydra.sequence_foundry import generate_sequence_test_from_experiment
 from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
+from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.guard_parity_execution import generate_guard_parity_test
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
@@ -84,6 +85,7 @@ INVARIANT_CLASS = {
     "INV-AUTH-001": "authorization",
     "INV-INIT-001": "initialization",
     "INV-ARITH-001": "arithmetic",
+    "INV-PAIR-SYMMETRY-001": "arithmetic",
 }
 
 FREEZE_FILES = (
@@ -499,7 +501,14 @@ def main() -> int:
 
         prepare_target_project(project)
         compiler_evidence: CompilerEvidenceResult = compile_state_effects(project, source)
-        surfaces = (generate_cross_function_state_hypotheses,) if "state" in classes else ()
+        surfaces = tuple(
+            surface
+            for enabled, surface in (
+                ("state" in classes, generate_cross_function_state_hypotheses),
+                ("arithmetic" in classes, generate_pair_symmetry_hypotheses),
+            )
+            if enabled
+        )
         result = investigate(
             source,
             target=f"{args.target_repo}@{args.target_ref}",
