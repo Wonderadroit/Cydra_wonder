@@ -1,0 +1,20 @@
+name: benchmark-048-post-maturity-unmeasurable-exhaustion
+on:
+  pull_request:
+    paths:
+      - "src/cydra/hypothesis_selection.py"
+      - "tests/test_hypothesis_selection.py"
+      - "scripts/run_benchmark_048_unmeasurable_exhaustion.py"
+      - "benchmarks/048_post_maturity_unmeasurable_exhaustion/**"
+      - ".github/workflows/benchmark-048-post-maturity-unmeasurable-exhaustion.yml"
+  workflow_dispatch:
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install -e . pytest
+      - run: python scripts/run_benchmark_048_unmeasurable_exhaustion.py
+      - run: pytest -q tests/test_hypothesis_selection.py
