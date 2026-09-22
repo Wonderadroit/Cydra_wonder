@@ -154,13 +154,18 @@ def _runtime_requirements(function: FunctionModel) -> tuple[ExecutionRequirement
 
 
 def _state_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+    polarities = dict(function.state_predicate_polarities)
     return tuple(
         ExecutionRequirement(
             "state_predicate",
             predicate,
             f"{function.name}:body",
             "required",
-            "function contains a predicate over modeled target state",
+            {
+                "must_hold": "state predicate must hold for the normal execution path",
+                "must_not_hold": "state predicate is a guarded revert condition and must not hold",
+                "unknown": "state predicate polarity could not be established statically",
+            }.get(polarities.get(predicate, "unknown"), "state predicate polarity is unknown"),
         )
         for predicate in function.state_predicates
     )
@@ -168,7 +173,10 @@ def _state_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, 
 
 def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
     names: list[str] = []
+    polarities = dict(function.state_predicate_polarities)
     for predicate in function.state_predicates:
+        if polarities.get(predicate) != "must_hold":
+            continue
         for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate):
             if name in {"true", "false", "address", "bytes", "uint", "int"}:
                 continue
