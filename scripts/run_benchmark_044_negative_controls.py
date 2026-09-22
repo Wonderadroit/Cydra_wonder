@@ -29,6 +29,7 @@ def _project(source: Path, root: Path) -> Path:
         "[profile.default]\nsrc='src'\ntest='test'\nlibs=[]\n",
         encoding="utf-8",
     )
+    subprocess.run(("forge", "install", "foundry-rs/forge-std", "--no-commit"), cwd=root, check=True)
     destination = root / "src" / source.name
     shutil.copy2(source, destination)
     return destination
