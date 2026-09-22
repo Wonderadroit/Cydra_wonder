@@ -141,7 +141,7 @@ contract CydraBlindAuthorizationTest {{
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
 {state_snapshot}
-        (bool ok,) = target.call(
+        (bool ok,) = address(target).call(
             abi.encodeWithSignature(
                 "{function.name}({','.join(parameter.type.split()[0] for parameter in function.parameters)})",
                 {arguments}
