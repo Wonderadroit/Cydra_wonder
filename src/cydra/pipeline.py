@@ -31,6 +31,7 @@ from .reasoning import (
 from .solidity_model import parse_solidity
 from .structural_arithmetic import arithmetic_rounding_invariant, generate_arithmetic_hypotheses
 from .structural_pair_symmetry import paired_subtraction_invariant, generate_pair_symmetry_hypotheses
+from .structural_aggregation_order import aggregation_order_invariant, generate_aggregation_order_hypotheses
 from .structural_rounding import weighted_average_rounding_invariant, generate_weighted_average_rounding_hypotheses
 from .structural_authorization import generate_structural_access_control_hypotheses
 from .structural_initialization import generate_structural_initialization_hypotheses
@@ -102,6 +103,7 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         "INV-INIT-001": plan_initialization_experiment,
         "INV-ARITH-001": plan_arithmetic_experiment,
         "INV-PAIR-SYMMETRY-001": plan_arithmetic_experiment,
+        "INV-AGGREGATION-ORDER-001": plan_arithmetic_experiment,
         "INV-ROUND-001": plan_weighted_average_rounding_experiment,
     }
     if hypothesis.invariant_id.startswith("INV-CONTROL-FLOW-"):
@@ -251,6 +253,7 @@ def investigate(
         )
         arith = generate_arithmetic_hypotheses(contract)
         pair_symmetry = generate_pair_symmetry_hypotheses(contract)
+        aggregation_order = generate_aggregation_order_hypotheses(contract)
         rounding = generate_weighted_average_rounding_hypotheses(contract)
         guard_parity = generate_guard_parity_hypotheses(contract, contract_semantic)
         idempotency = generate_idempotency_hypotheses(contract, contract_semantic)
@@ -274,6 +277,9 @@ def investigate(
         pair_symmetry_invariant = paired_subtraction_invariant(contract)
         if pair_symmetry and pair_symmetry_invariant is not None:
             all_invariants.append(pair_symmetry_invariant)
+        aggregation_order_invariant_result = aggregation_order_invariant(contract)
+        if aggregation_order and aggregation_order_invariant_result is not None:
+            all_invariants.append(aggregation_order_invariant_result)
         rounding_invariant = weighted_average_rounding_invariant(contract)
         if rounding and rounding_invariant is not None:
             all_invariants.append(rounding_invariant)
@@ -290,6 +296,7 @@ def investigate(
             init,
             arith,
             pair_symmetry,
+            aggregation_order,
             rounding,
             guard_parity.hypotheses,
             idempotency.hypotheses,

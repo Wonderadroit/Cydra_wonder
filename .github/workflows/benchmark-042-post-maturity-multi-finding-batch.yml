@@ -1,0 +1,53 @@
+name: CYDRA Benchmark 042 — Post-Maturity Multi-Finding Batch
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/run_benchmark_blind.py"
+      - "scripts/run_benchmark_042_post_maturity_multi_finding_batch.py"
+      - "benchmarks/042_post_maturity_multi_finding_batch/**"
+      - ".github/workflows/benchmark-042-post-maturity-multi-finding-batch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: oven-sh/setup-bun@v2
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Full regression
+        run: python -m pytest -q
+      - name: Multi-finding batch campaign
+        env:
+          PYTHONPATH: .
+        run: |
+          set +e
+          python scripts/run_benchmark_042_post_maturity_multi_finding_batch.py
+          rc=$?
+          printf '{"campaign":"042","exit_code":%s}\n' "$rc" > backtest-artifacts/benchmark-042/ci-result.json
+          exit "$rc"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-042-post-maturity-multi-finding-batch
+          path: backtest-artifacts/benchmark-042
+          if-no-files-found: error
