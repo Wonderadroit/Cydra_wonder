@@ -48,6 +48,12 @@ def select_next_hypothesis(
     # eligible for further information-gain testing.
     contradictory_statuses = {"contradicted", "rejected"}
     excluded.update(hid for hid, status in observed.items() if status in contradictory_statuses)
+    # Within one research run, an unmeasurable experiment has produced no
+    # executable evidence. Do not spend the remaining budget replaying the
+    # identical non-renderable experiment; let the loop either try another
+    # hypothesis or report exhaustion. A caller can start a new run when the
+    # execution environment has materially changed.
+    excluded.update(hid for hid, status in observed.items() if status.lower() == "unmeasurable")
     invariant_by_id = {item.invariant_id: item for item in invariants}
     experiment_by_id = {item.hypothesis_id: item for item in experiments}
     ranked = []
