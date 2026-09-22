@@ -1,18 +1,26 @@
 {
-  "program": "HackenProof — Arcadia Finance Smart Contracts",
+  "research_type": "public_code_blind_research",
+  "program_reference": "HackenProof — Arcadia Finance Smart Contracts",
+  "eligibility_status": "not_claimed",
   "target_repo": "https://github.com/arcadia-finance/lending-v2",
   "target_ref": "def3c94995773e2feb48b6d8a02dc603d96fd96c",
   "target_project": ".",
   "target_path": "src/LendingPool.sol",
-  "scope_basis": "Program lists lending-v2 as in scope; only Arcadia-developed code of deployed contracts is in scope.",
+  "scope_basis": "Frozen public source for a non-submission research experiment; historical program scope is retained only as provenance.",
   "excluded": [
     "tests",
     "mocks",
     "scripts",
     "deployment tooling",
-    "third-party dependencies/imports",
+    "unrelated third-party code",
     "accounts-v2/src/accounts/helpers/SpotToMarginMigrator.sol"
   ],
-  "research_boundary": "Source/system-model and local deterministic experiment generation only. No live-chain exploit execution is authorized by this artifact.",
-  "classes": ["authorization", "initialization", "state", "guard_parity"]
+  "research_boundary": "Local source/system-model and deterministic experiment generation/execution only. No live Arcadia deployment exploitation, live-state mutation, funds interaction, or HackenProof submission is authorized by this artifact.",
+  "historical_knowledge_boundary": "Historical audit reports, known findings, and public PoCs must remain outside the blind input until the initial run is complete.",
+  "classes": [
+    "authorization",
+    "initialization",
+    "state",
+    "guard_parity"
+  ]
 }
