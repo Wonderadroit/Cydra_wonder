@@ -93,7 +93,11 @@ def generate_authorization_test_from_experiment(
             relative = Path(__import__("os").path.relpath(project_root / resolved.source_path, path.parent)).as_posix()
             constructor_imports.append(f'import {{ {base} }} from "{relative}";')
         elif base in named_type_sources:
-            constructor_arguments.append(f"{base}(address(0))")
+            if base == "ERC20":
+                erc20_stub_needed = True
+                constructor_arguments.append("ERC20(address(constructorAsset))")
+            else:
+                constructor_arguments.append(f"{base}(address(0))")
             resolved_path = Path(project_root / named_type_sources[base])
             relative = Path(__import__("os").path.relpath(resolved_path, path.parent)).as_posix()
             constructor_imports.append(f'import {{ {base} }} from "{relative}";')
