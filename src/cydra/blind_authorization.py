@@ -125,18 +125,35 @@ def generate_blind_authorization_test_from_experiment(
             "{security_assertion_marker()}: unauthorized caller successfully invoked protected administrative operation"
         );'''
 
+    # Avoid Solidity's `new Target(...)` syntax here. Foundry's preprocessor
+    # rewrites nested `new` expressions into generated free-function helpers;
+    # those helpers are not parseable by historical Solidity 0.6.x targets.
+    # Assemble the target creation bytecode explicitly so constructor execution
+    # remains real while the harness stays compiler-version neutral.
+    constructor_suffix = (
+        f"abi.encode({constructor_arguments})" if constructor_arguments else 'bytes("")'
+    )
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Experiment: {experiment.experiment_id}
 // One-sided invariant test: no patched target or benchmark answer is imported.
-{import_line}
-{state_view}
+import {{ {target_type} }} from "{target_import}";
+
 contract CydraBlindAuthorizationTest {{
     {target_declaration}
 
     function setUp() public {{
-        target = new {target_type}({constructor_arguments});
+        bytes memory initCode = abi.encodePacked(
+            type({target_type}).creationCode,
+            {constructor_suffix}
+        );
+        address deployed;
+        assembly {{
+            deployed := create(0, add(initCode, 0x20), mload(initCode))
+        }}
+        require(deployed != address(0), "CYDRA: constructor deployment failed");
+        target = {target_type}(deployed);
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
