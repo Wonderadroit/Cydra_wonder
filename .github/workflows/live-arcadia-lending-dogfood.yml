@@ -5,13 +5,6 @@ on:
   push:
     branches:
       - pilot/arcadia-lending-dogfood
-  pull_request:
-    paths:
-      - ".github/workflows/live-arcadia-lending-dogfood.yml"
-      - "benchmarks/live_arcadia_lending/**"
-      - "scripts/run_benchmark_blind.py"
-      - "src/**"
-      - "tests/**"
 
 permissions:
   contents: read
