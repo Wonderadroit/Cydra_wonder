@@ -116,3 +116,37 @@ def test_sequence_renderer_emits_constructor_arguments_for_interface_dependency(
     )
     source = output.read_text(encoding="utf-8")
     assert "new SequenceWithConstructor(IVaultAccountant(address(0)), 0)" in source
+
+
+def test_sequence_renderer_resolves_indirect_contract_constructor_type(tmp_path):
+    from cydra.models import ConstructorModel, ParameterModel
+    model = ContractModel(
+        name="SequenceWithToken",
+        source=str(tmp_path / "Target.sol"),
+        constructor=ConstructorModel(
+            (ParameterModel("token", "MockToken"),),
+            1,
+        ),
+        functions=_model().functions,
+    )
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "Token.sol").write_text(
+        "contract MockToken {}\n", encoding="utf-8"
+    )
+    (tmp_path / "Target.sol").write_text(
+        'pragma solidity ^0.8.20;\nimport { MockToken } from "./interfaces/Token.sol";\n'
+        'contract SequenceWithToken { constructor(MockToken token) {} }\n',
+        encoding="utf-8",
+    )
+    generated = generate_sequence_test_from_experiment(
+        _experiment()[0],
+        _experiment()[1],
+        "../Target.sol",
+        "SequenceWithToken",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+    )
+    source = generated.read_text(encoding="utf-8")
+    assert 'import { MockToken } from "../interfaces/Token.sol";' in source
+    assert "new SequenceWithToken(MockToken(address(0)))" in source
