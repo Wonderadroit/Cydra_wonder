@@ -144,4 +144,4 @@ def test_research_loop_preserves_fail_closed_empty_investigation():
             status_of=lambda o: o.status,
             max_rounds=3,
         )
-\n
+
