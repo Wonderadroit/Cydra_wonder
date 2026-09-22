@@ -138,8 +138,7 @@ def main() -> int:
             "exit_code": selected.returncode,
             "stdout": selected.stdout,
             "stderr": selected.stderr,
-        }, indent=2) + "
-")
+        }, indent=2) + "\\n")
         return selected.returncode
 
     hypotheses = json.loads((blind / "freeze" / "hypotheses.json").read_text())
@@ -153,16 +152,14 @@ def main() -> int:
         "hypothesis_count": len(hypotheses),
         "matching_hypotheses": matched,
         "blind_boundary_preserved": True,
-    }, indent=2) + "
-")
+    }, indent=2) + "\\n")
 
     if not matched:
         (output / "result.json").write_text(json.dumps({
             "status": "NOT_CONFIRMED",
             "reason": "blind selection did not bind the evaluated security-relevant computation",
             "hypothesis_count": len(hypotheses),
-        }, indent=2) + "
-")
+        }, indent=2) + "\\n")
         return 1
 
     with tempfile.TemporaryDirectory(prefix="cydra-041-") as tmp:
@@ -223,8 +220,7 @@ def main() -> int:
         "blind_boundary_preserved": True,
         "target": {"repo": REPO, "ref": REF, "source": SOURCE},
     }
-    (output / "result.json").write_text(json.dumps(result, indent=2) + "
-")
+    (output / "result.json").write_text(json.dumps(result, indent=2) + "\\n")
     return 0 if ready else 1
 
 
