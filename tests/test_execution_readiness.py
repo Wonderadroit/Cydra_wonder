@@ -44,3 +44,13 @@ def test_readiness_discovers_caller_and_runtime_prerequisites():
     assert ("runtime_dependency", "LIQUIDATOR.liquidate") in {
         (x.kind, x.subject) for x in readiness.runtime_requirements
     }
+
+
+def test_readiness_records_modeled_state_predicates():
+    function = FunctionModel(
+        "configure", "external", (), ("limit",), (), 20,
+        state_predicates=("limit > 0",),
+    )
+    model = ContractModel("Target", "/tmp/Target.sol", (function,))
+    readiness = inspect_execution_readiness(model, function)
+    assert readiness.state_requirements[0].subject == "limit > 0"
