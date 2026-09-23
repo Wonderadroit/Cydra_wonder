@@ -196,3 +196,34 @@ def test_execution_readiness_keeps_unknown_execution_producer_unresolved():
     dataflow = [item for item in readiness.execution_requirements if item.kind == "execution_dataflow"]
     assert len(dataflow) == 1
     assert dataflow[0].status == "required"
+
+
+def test_execution_readiness_uses_inherited_producer_models():
+    inherited = FunctionModel(
+        "maxWithdraw",
+        "public",
+        (),
+        (),
+        (),
+        1,
+        return_expressions=("debt",),
+    )
+    consumer = FunctionModel(
+        "start",
+        "external",
+        (),
+        (),
+        (),
+        5,
+        execution_predicates=("startDebt == 0",),
+        execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+        execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
+    )
+    contract = ContractModel("Derived", "Derived.sol", (consumer,), inherited_functions=(inherited,))
+
+    readiness = inspect_execution_readiness(contract, consumer)
+    assert any(
+        item.kind == "execution_value_producer"
+        and item.subject == "startDebt <- maxWithdraw(debt)"
+        for item in readiness.execution_requirements
+    )
