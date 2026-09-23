@@ -80,6 +80,9 @@ class ContractModel:
     inherits: tuple[str, ...] = field(default_factory=tuple)
     declared_types: tuple[str, ...] = field(default_factory=tuple)
     inherited_resolved_interfaces: tuple[ResolvedInterface, ...] = field(default_factory=tuple)
+    # Concrete inherited functions discovered through the source import/inheritance graph.
+    # This is model provenance, not a claim that an inherited path is executable.
+    inherited_functions: tuple[FunctionModel, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
