@@ -1951,3 +1951,23 @@ This campaign therefore produced **no confirmed vulnerability**. It did produce 
 The next development boundary is generic dependency-aware fixture construction and verification for unresolved prerequisite transitions. The implementation must remain target-agnostic: do not add Arcadia-specific mocks, addresses, function names, or exploit sequences. The fixture planner should first model required interface methods and runtime dependencies, then construct minimal deterministic stubs only where their semantics are explicit and sufficient for the experiment, verify the prerequisite state, and only then execute the security hypothesis.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 87 — Arcadia public-code dogfood: state coverage reached, findings still unconfirmed
+
+The supervised Arcadia Finance `lending-v2` public-code campaign was rerun after the generic execution-readiness and compiler-state-effect repairs. The target remained frozen at commit `def3c94995773e2feb48b6d8a02dc603d96fd96c4`; CYDRA ran from commit `7b8392d860ac81a95ababbdfc95762fb353dfdea`. GitHub Actions run `35846821143` completed successfully, including the full regression baseline and the frozen research step, and uploaded artifact `10743678951`.
+
+Observed result:
+- target intake remained `solidity-foundry-v1`, confidence 0.95, with no intake blockers;
+- the target compiled successfully with Solc 0.8.37;
+- authorization coverage: 1 hypothesis extracted and executed, `H-AUTH-startLiquidation`; the unprivileged call reverted, so unauthorized mutation was not demonstrated;
+- state coverage: 23 hypotheses were extracted and executed, including ordered state-sequence experiments across `interestWeight`, `totalInterestWeight`, `realisedLiquidityOf`, `totalRealisedLiquidity`, and `creditAllowance`;
+- the state experiments failed closed on reverts/authorization preconditions rather than being promoted to findings;
+- the blind classifiers therefore produced no confirmed vulnerability. Authorization remained `NOT_REACHED` because there is no patched counterpart in the blind target; state sequences likewise remained `NOT_REACHED` because their required independent relation/patched comparison was unavailable;
+- execution-readiness now exposes the `startLiquidation` producer chain (`startDebt <- maxWithdraw(...)`) and identifies `tranches.length > 0` with `addTranche` as a constructible prerequisite surface, but the campaign still cannot establish all dependency-rich conditions needed to make the security-relevant path execute.
+
+This is a successful **research observation campaign**, not a vulnerability result. It demonstrates that CYDRA can ingest a real unfamiliar Foundry target, compile it, derive compiler-backed hypotheses, generate experiments, execute them, and fail closed when the target path is not reachable. It also exposes the next generic capability boundary: dependency-aware prerequisite construction and verification for state/value producers, especially when a reachable path depends on nested protocol state rather than a single writer call.
+
+No Arcadia-specific exploit, mock, or hard-coded target answer is to be added. Any repair must remain generic and evidence-driven.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
