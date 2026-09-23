@@ -128,3 +128,46 @@ def test_authorization_renderer_emits_constructor_arguments_and_imports_interfac
     rendered = generated.read_text(encoding="utf-8")
     assert 'import { IERC20 } from "../IERC20.sol";' in rendered
     assert "target = new Target(IERC20(address(0)), 0);" in rendered
+
+
+def test_authorization_renderer_resolves_indirect_contract_constructor_type(tmp_path: Path):
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "Token.sol").write_text(
+        "contract ERC20 { constructor(string memory, string memory, uint8) {} }\n", encoding="utf-8"
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20;\nimport { ERC20 } from "./interfaces/Token.sol";\n'
+        'contract Target { constructor(ERC20 token) {} '
+        'function withdraw(uint256 amount) external {} }\n',
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                name="withdraw",
+                visibility="external",
+                modifiers=(),
+                writes=(),
+                external_calls=(),
+                line=3,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        constructor=ConstructorModel((ParameterModel("token", "ERC20"),), 1),
+        pragma="^0.8.20",
+    )
+    generated = generate_authorization_test_from_experiment(
+        _hypothesis(),
+        _experiment(("7",)),
+        "Target.sol",
+        "Target",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { ERC20 } from "../interfaces/Token.sol";' in rendered
+    assert "target = new Target(ERC20(address(constructorAsset)));" in rendered

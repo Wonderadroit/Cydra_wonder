@@ -1,4 +1,5 @@
 from cydra.compiler_constraints import ConstraintEvidence
+from cydra.constraint_candidates import select_parameter_candidates
 from cydra.experiment_inputs import plan_parameter_inputs
 from cydra.models import ParameterModel
 
@@ -119,3 +120,65 @@ def test_contradictory_zero_and_positive_constraints_fail_closed():
         function_name="withdraw",
     )
     assert result == ("0",)
+
+
+def test_fixed_bytes_defaults_preserve_declared_width():
+    from cydra.experiment_inputs import conservative_defaults
+    parameters = (
+        ParameterModel(name="referrer", type="bytes3"),
+        ParameterModel(name="digest", type="bytes32"),
+    )
+    defaults = conservative_defaults(parameters)
+    assert defaults == {
+        "referrer": 'bytes3(hex"010000")',
+        "digest": 'bytes32(hex"0100000000000000000000000000000000000000000000000000000000000000")',
+    }
+
+
+def test_revert_guard_zero_requires_nonzero_execution_value():
+    parameters = (ParameterModel(name="amount", type="uint256"),)
+    result = plan_parameter_inputs(
+        parameters,
+        (
+            ConstraintEvidence(
+                "Target", "borrow", "amount", 0, "amount == 0",
+                "solc-json-ast:Target.sol", kind="revert_guard"
+            ),
+        ),
+        {"amount": "0"},
+        function_name="borrow",
+    )
+    assert result == ("1",)
+
+
+def test_revert_guard_nonzero_address_allows_zero_address():
+    parameters = (ParameterModel(name="account", type="address"),)
+    result = plan_parameter_inputs(
+        parameters,
+        (
+            ConstraintEvidence(
+                "Target", "close", "account", 0, "account != 0",
+                "solc-json-ast:Target.sol", kind="revert_guard"
+            ),
+        ),
+        {"account": "address(0xCAFE)"},
+        function_name="close",
+    )
+    assert result == ("address(0)",)
+
+
+def test_revert_guard_collection_bound_selects_zero_index():
+    parameters = (ParameterModel("index", "uint256"),)
+    constraints = (
+        ConstraintEvidence(
+            contract="Target",
+            function="setItem",
+            parameter="index",
+            parameter_index=0,
+            predicate="index >= items.length",
+            source="solc-json-ast:test",
+            kind="revert_guard",
+        ),
+    )
+    candidates = select_parameter_candidates(parameters, constraints, function_name="setItem")
+    assert candidates[0].value == "0"

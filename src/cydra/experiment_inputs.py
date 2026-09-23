@@ -27,7 +27,8 @@ def _default_for(parameter: ParameterModel) -> str | None:
     if base == "bytes":
         return "bytes(\"\")"
     if base.startswith("bytes") and base[5:].isdigit():
-        return "bytes32(uint256(1))" if base == "bytes32" else f"{base}(0x01)"
+        width = int(base[5:])
+        return f'{base}(hex"{("01" + "00" * (width - 1))}")'
     return None
 
 

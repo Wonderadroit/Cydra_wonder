@@ -32,16 +32,47 @@ def _is_integer(parameter: ParameterModel) -> bool:
     return _base_type(parameter).startswith(("uint", "int"))
 
 
-def _constraint_value(predicate: str, parameter: ParameterModel) -> str | None:
+def _constraint_value(predicate: str, parameter: ParameterModel, kind: str = "precondition") -> str | None:
     name = re.escape(parameter.name)
     if _is_address(parameter):
-        if re.search(rf"\b{name}\s*!=\s*(?:address\s*\(\s*)?0(?:\s*\))?", predicate):
-            return _NONZERO_ADDRESS
-        if re.search(rf"(?:address\s*\(\s*)?0(?:\s*\))?\s*!=\s*\b{name}\b", predicate):
+        equals_zero = re.search(rf"\b{name}\s*==\s*(?:address\s*\(\s*)?0(?:\s*\))?", predicate) or re.search(
+            rf"(?:address\s*\(\s*)?0(?:\s*\))?\s*==\s*\b{name}\b", predicate
+        )
+        not_zero = re.search(rf"\b{name}\s*!=\s*(?:address\s*\(\s*)?0(?:\s*\))?", predicate) or re.search(
+            rf"(?:address\s*\(\s*)?0(?:\s*\))?\s*!=\s*\b{name}\b", predicate
+        )
+        if kind == "revert_guard":
+            if equals_zero:
+                return _NONZERO_ADDRESS
+            if not_zero:
+                return "address(0)"
+            return None
+        if not_zero:
             return _NONZERO_ADDRESS
         return None
 
     if _is_integer(parameter):
+        if kind == "revert_guard":
+            equality_zero = re.search(rf"\b{name}\s*==\s*0\b", predicate)
+            not_zero = re.search(rf"\b{name}\s*!=\s*0\b", predicate)
+            greater_zero = re.search(rf"\b{name}\s*>\s*0\b", predicate)
+            greater_equal_one = re.search(rf"\b{name}\s*>=\s*1\b", predicate)
+            collection_bound = re.search(rf"\b{name}\s*>=\s*[A-Za-z_]\w*\.length\b", predicate)
+            if kind == "revert_guard" and collection_bound:
+                # A non-empty collection setup may be supplied by the ordered
+                # experiment. Zero is the lowest valid index and therefore the
+                # safest generic value satisfying index < collection.length.
+                return "0"
+            less_equal_zero = re.search(rf"\b{name}\s*<=\s*0\b", predicate)
+            equality = re.search(rf"\b{name}\s*==\s*(\d+)\b", predicate)
+            if equality_zero or greater_zero or greater_equal_one:
+                return "1" if equality_zero else "0"
+            if not_zero or less_equal_zero:
+                return "0" if not_zero else "1"
+            if equality:
+                value = int(equality.group(1))
+                return str(value + 1)
+            return None
         if re.search(rf"\b{name}\s*>\s*0\b", predicate):
             return "1"
         if re.search(rf"\b{name}\s*>=\s*1\b", predicate):
@@ -85,7 +116,7 @@ def select_parameter_candidates(
     for index, parameter in enumerate(parameters):
         matches = by_key.get((parameter.name, index), [])
         candidates = [
-            (constraint, _constraint_value(constraint.predicate, parameter))
+            (constraint, _constraint_value(constraint.predicate, parameter, constraint.kind))
             for constraint in matches
         ]
         supported = [(constraint, value) for constraint, value in candidates if value is not None]

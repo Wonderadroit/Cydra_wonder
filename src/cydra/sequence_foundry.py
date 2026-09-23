@@ -4,7 +4,8 @@ from pathlib import Path
 import os
 
 from .models import ContractModel, Experiment, Hypothesis
-from .interface_resolver import resolve_interface
+from .interface_resolver import resolve_interface, resolve_named_type_source
+from .execution_readiness import _address_role, caller_role
 
 
 def generate_sequence_test_from_experiment(
@@ -31,6 +32,7 @@ def generate_sequence_test_from_experiment(
 
     functions = {function.name: function for function in contract_model.functions}
     rendered: list[str] = []
+    role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
             raise ValueError(f"sequence step {index} has no function")
@@ -47,7 +49,10 @@ def generate_sequence_test_from_experiment(
         if any(not argument.strip() for argument in step.arguments):
             raise ValueError(f"sequence step {step.function} contains an empty argument")
         arguments = ", ".join(step.arguments)
-        rendered.append(f"        vm.prank(attacker);\n        target.{step.function}({arguments});")
+        role = caller_role(function)
+        caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
+        caller = caller_bindings.get(role, "attacker") if role else "attacker"
+        rendered.append(f"        vm.prank({caller});\n        target.{step.function}({arguments});")
 
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
@@ -65,6 +70,8 @@ def generate_sequence_test_from_experiment(
     )
     inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
     direct_interfaces: dict[str, object] = {}
+    named_type_sources: dict[str, str] = {}
+    erc20_stub_needed = False
     if project_root is not None and contract_model.constructor is not None:
         for parameter in contract_model.constructor.parameters:
             base = parameter.type.strip().split()[0].rstrip("[]")
@@ -74,7 +81,11 @@ def generate_sequence_test_from_experiment(
                 try:
                     direct_interfaces[base] = resolve_interface(project_root, contract_model.source, base)
                 except (FileNotFoundError, ValueError, OSError, UnicodeError):
-                    pass
+                    try:
+                        source_path, _ = resolve_named_type_source(project_root, contract_model.source, base)
+                        named_type_sources[base] = source_path
+                    except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                        pass
 
     for parameter in (contract_model.constructor.parameters if contract_model.constructor else ()):
         parameter_type = parameter.type.strip()
@@ -82,7 +93,8 @@ def generate_sequence_test_from_experiment(
         if parameter_type.endswith("[]"):
             raise ValueError(f"unsupported sequence constructor array type: {parameter.type}")
         if base == "address":
-            constructor_arguments.append("address(0)")
+            role = _address_role(parameter.name)
+            constructor_arguments.append(role_addresses.get(role, "address(0)"))
         elif parameter_type == "address payable":
             constructor_arguments.append("payable(address(0))")
         elif base == "bool":
@@ -101,6 +113,15 @@ def generate_sequence_test_from_experiment(
             constructor_imports.append(
                 f'import {{ {base} }} from "{Path(os.path.relpath(project_root / resolved.source_path, path.parent)).as_posix()}";'
             )
+        elif base in named_type_sources:
+            if base == "ERC20":
+                erc20_stub_needed = True
+                constructor_arguments.append("ERC20(address(constructorAsset))")
+            else:
+                constructor_arguments.append(f"{base}(address(0))")
+            resolved_path = Path(project_root / named_type_sources[base])
+            relative = Path(os.path.relpath(resolved_path, path.parent)).as_posix()
+            constructor_imports.append(f'import {{ {base} }} from "{relative}";')
         elif "." in base:
             raise ValueError(f"unsupported sequence constructor namespaced type: {parameter.type}")
         else:
@@ -110,6 +131,12 @@ def generate_sequence_test_from_experiment(
     constructor_call = f"new {target_type}({constructor_args_text})" if constructor_arguments else f"new {target_type}()"
     import_text = "\n".join(dict.fromkeys(constructor_imports))
 
+    stub_declaration = (
+        'contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\n'
+        if erc20_stub_needed else ""
+    )
+    asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
+    asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -119,12 +146,11 @@ import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
 {import_text}
 
-contract CydraSequenceExperimentTest is Test {{
+{stub_declaration}contract CydraSequenceExperimentTest is Test {{
     {target_type} internal target;
-    address internal attacker = address(0xBEEF);
-
-    function setUp() public {{
-        target = {constructor_call};
+    address internal attacker = address(0xBEEF);\n    address internal owner = address(0x1001);\n    address internal admin = address(0x1002);\n    address internal guardian = address(0x1003);\n    address internal riskManager = address(0x1004);\n    address internal liquidator = address(0x1005);\n    address internal factory = address(0x1006);
+{asset_declaration}    function setUp() public {{
+{asset_setup}        target = {constructor_call};
     }}
 
     function testOrderedExperimentSequence() public {{

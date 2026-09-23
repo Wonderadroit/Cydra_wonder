@@ -172,6 +172,19 @@ def _balanced_parenthesized(source: str, opening: int) -> str:
     return source[opening + 1 :]
 
 
+def _balanced_parenthesized_end(source: str, opening: int) -> int:
+    """Return the index immediately after a balanced parenthesized expression."""
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "(":
+            depth += 1
+        elif source[index] == ")":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return len(source)
+
+
 def _balanced_parenthesized_span(source: str, opening: int) -> tuple[str, int] | None:
     """Return an argument and matching close index for an opening parenthesis."""
     depth = 0
@@ -295,34 +308,94 @@ def _state_variables(contract_body: str) -> tuple[str, ...]:
     return tuple(variables)
 
 
-def _state_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[str, ...]:
-    """Extract comparison predicates whose LHS is an explicit state variable.
+def _state_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+    """Extract state predicates with conservative reachability polarity.
 
-    This milestone deliberately accepts only literal/constant RHS forms:
-    address/bytes/int/uint casts of literals, integer/hex literals, and
-    booleans. Parameters, locals, state-to-state comparisons, caller tokens,
-    computed expressions, and named constants are not inferred here.
+    A predicate in a require() must hold. A predicate guarding a revert in an
+    if() must not hold for the normal path. Other if() branches remain unknown.
     """
     state_names = set(state_variables)
-    predicates: list[str] = []
+    results: list[tuple[str, str]] = []
 
-    candidates: list[str] = []
-    for match in re.finditer(r"\bif\s*\(", body):
-        opening = body.find("(", match.start())
-        candidates.append(_balanced_parenthesized(body, opening).strip())
-    for match in re.finditer(r"\brequire\s*\(", body):
-        opening = body.find("(", match.start())
-        candidates.append(_first_argument(_balanced_parenthesized(body, opening)))
-
-    for candidate in candidates:
+    def add(candidate: str, polarity: str) -> None:
         for match in _STATE_COMPARISON_RE.finditer(candidate):
             if match.group("name") not in state_names:
                 continue
             predicate = match.group(0).strip()
-            if predicate not in predicates:
-                predicates.append(predicate)
+            item = (predicate, polarity)
+            if item not in results:
+                results.append(item)
 
-    return tuple(predicates)
+    for match in re.finditer(r"\brequire\s*\(", body):
+        opening = body.find("(", match.start())
+        add(_first_argument(_balanced_parenthesized(body, opening)), "must_hold")
+
+    for match in re.finditer(r"\bif\s*\(", body):
+        opening = body.find("(", match.start())
+        predicate = _balanced_parenthesized(body, opening).strip()
+        # Solidity permits both braced and single-statement if bodies.
+        # The function body has already been isolated, so the latter has no
+        # branch brace to inspect. Only classify it when the next statement
+        # is explicitly a revert; otherwise retain unknown polarity.
+        brace = body.find("{", opening)
+        polarity = "unknown"
+        if brace >= 0:
+            branch = _body(body, brace)
+            if re.search(r"\brevert\b", branch):
+                polarity = "must_not_hold"
+        else:
+            tail = body[_balanced_parenthesized_end(body, opening):].lstrip()
+            if re.match(r"revert\s*(?:\(|;)", tail):
+                polarity = "must_not_hold"
+        add(predicate, polarity)
+
+    return tuple(results)
+
+
+def _state_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(predicate for predicate, _ in _state_predicate_polarities(body, state_variables))
+
+
+def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+    """Extract path predicates that are not persistent-state predicates."""
+    results: list[tuple[str, str]] = []
+    state_names = set(state_variables)
+
+    def add(candidate: str, polarity: str) -> None:
+        text = candidate.strip()
+        if not text:
+            return
+        identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", text))
+        if identifiers and identifiers.issubset(state_names):
+            return
+        item = (text, polarity)
+        if item not in results:
+            results.append(item)
+
+    for match in re.finditer(r"\brequire\s*\(", body):
+        opening = body.find("(", match.start())
+        add(_first_argument(_balanced_parenthesized(body, opening)), "must_hold")
+
+    for match in re.finditer(r"\bif\s*\(", body):
+        opening = body.find("(", match.start())
+        predicate = _balanced_parenthesized(body, opening).strip()
+        tail_start = _balanced_parenthesized_end(body, opening)
+        tail = body[tail_start:].lstrip()
+        polarity = "unknown"
+        brace = body.find("{", tail_start)
+        if brace >= 0:
+            branch = _body(body, brace)
+            if re.search(r"\brevert\b", branch):
+                polarity = "must_not_hold"
+        elif re.match(r"revert\s*(?:\(|;)", tail):
+            polarity = "must_not_hold"
+        add(predicate, polarity)
+
+    return tuple(results)
+
+
+def _execution_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(predicate for predicate, _ in _execution_predicate_polarities(body, state_variables))
 
 
 def _declared_types(body: str) -> tuple[str, ...]:
@@ -516,6 +589,9 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                     parameters=_parameters(parameter_text),
                     authorization_predicates=_authorization_predicates(body),
                     state_predicates=_state_predicates(body, state_variables),
+                    state_predicate_polarities=_state_predicate_polarities(body, state_variables),
+                    execution_predicates=_execution_predicates(body, state_variables),
+                    execution_predicate_polarities=_execution_predicate_polarities(body, state_variables),
                 )
             )
 

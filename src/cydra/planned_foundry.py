@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from .interface_resolver import resolve_interface
+from .interface_resolver import resolve_interface, resolve_named_type_source
+from .execution_readiness import _address_role
 
 from .models import ContractModel, Experiment, Hypothesis
 from .planned_call import render_function_call
@@ -47,10 +48,13 @@ def generate_authorization_test_from_experiment(
         (ancestor for ancestor in (path.parent, *path.parents) if (ancestor / "foundry.toml").exists()),
         None,
     )
+    role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     constructor_arguments: list[str] = []
     constructor_imports: list[str] = []
     inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
     direct_interfaces: dict[str, object] = {}
+    named_type_sources: dict[str, str] = {}
+    erc20_stub_needed = False
     if project_root is not None and contract_model.constructor is not None:
         for parameter in contract_model.constructor.parameters:
             base = parameter.type.strip().split()[0].rstrip("[]")
@@ -60,7 +64,11 @@ def generate_authorization_test_from_experiment(
                 try:
                     direct_interfaces[base] = resolve_interface(project_root, contract_model.source, base)
                 except (FileNotFoundError, ValueError, OSError, UnicodeError):
-                    pass
+                    try:
+                        source_path, _ = resolve_named_type_source(project_root, contract_model.source, base)
+                        named_type_sources[base] = source_path
+                    except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                        pass
 
     for parameter in (contract_model.constructor.parameters if contract_model.constructor else ()):
         parameter_type = parameter.type.strip()
@@ -68,7 +76,8 @@ def generate_authorization_test_from_experiment(
         if parameter_type.endswith("[]"):
             raise ValueError(f"unsupported authorization constructor array type: {parameter.type}")
         if base == "address":
-            constructor_arguments.append("address(0)")
+            role = _address_role(parameter.name)
+            constructor_arguments.append(role_addresses.get(role, "address(0)"))
         elif parameter_type == "address payable":
             constructor_arguments.append("payable(address(0))")
         elif base == "bool":
@@ -86,6 +95,15 @@ def generate_authorization_test_from_experiment(
             resolved = direct_interfaces[base]
             relative = Path(__import__("os").path.relpath(project_root / resolved.source_path, path.parent)).as_posix()
             constructor_imports.append(f'import {{ {base} }} from "{relative}";')
+        elif base in named_type_sources:
+            if base == "ERC20":
+                erc20_stub_needed = True
+                constructor_arguments.append("ERC20(address(constructorAsset))")
+            else:
+                constructor_arguments.append(f"{base}(address(0))")
+            resolved_path = Path(project_root / named_type_sources[base])
+            relative = Path(__import__("os").path.relpath(resolved_path, path.parent)).as_posix()
+            constructor_imports.append(f'import {{ {base} }} from "{relative}";')
         else:
             raise ValueError(f"unsupported authorization constructor type: {parameter.type}")
 
@@ -93,6 +111,12 @@ def generate_authorization_test_from_experiment(
     constructor_call = f"new {target_type}({constructor_args_text})" if constructor_arguments else f"new {target_type}()"
     constructor_import_text = "\n".join(dict.fromkeys(constructor_imports))
 
+    stub_declaration = (
+        'contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\n'
+        if erc20_stub_needed else ""
+    )
+    asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
+    asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -102,12 +126,11 @@ import {{Test}} from "forge-std/Test.sol";
 import {{ {target_type} }} from "{target_import}";
 {constructor_import_text}
 
-contract CydraAuthInvariantTest is Test {{
+{stub_declaration}contract CydraAuthInvariantTest is Test {{
     {target_type} internal target;
     address internal attacker = address(0xBEEF);
-
-    function setUp() public {{
-        target = {constructor_call};
+{asset_declaration}    function setUp() public {{
+{asset_setup}        target = {constructor_call};
     }}
 
     function testUnauthorizedCallerMutationSurface() public {{

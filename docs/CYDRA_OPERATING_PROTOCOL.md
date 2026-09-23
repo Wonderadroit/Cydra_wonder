@@ -10,7 +10,7 @@ The working arrangement is:
 2. **The LLM in the research chat** interprets CYDRA, plans and explains investigations, diagnoses failures, proposes generic repairs, reviews evidence, and keeps the research direction aligned with the Project Bible.
 3. **CYDRA in GitHub** is the durable reasoning/tooling system. Its code, tests, benchmarks, artifacts, and Project Bible are the persistent state that another agent can inherit.
 4. **GitHub Actions** is the deterministic execution environment for regression, blind campaigns, target backtests, batch campaigns, and long-running validation.
-5. **Security tools** (Foundry, Slither, fuzzers, symbolic/formal tools, compilers, parsers, and custom analyses) generate measurements. They do not by themselves establish a vulnerability.
+5. **Target adapters** must first establish the target's language/framework/compiler/dependency/execution environment and record unresolved blockers before deep reasoning or generated experiments. (Foundry, Slither, fuzzers, symbolic/formal tools, compilers, parsers, and custom analyses) generate measurements. They do not by themselves establish a vulnerability.
 6. **A human reviewer** decides whether a verified result is actually in program scope and whether/how to submit it.
 
 ## Chat continuity and agent handoff
@@ -53,9 +53,11 @@ Never declare a campaign green while required jobs remain queued or running.
 
 For real authorized research the operating loop is:
 
-**Intake/scope → Target snapshot → System model → Invariants → Competing hypotheses → Information-gain experiments → Deterministic execution → Evidence → Causal verification → Independent reproduction → Finding package → Human review**
+**Intake/scope → Environment/adapter discovery → Target snapshot → System model → Invariants → Competing hypotheses → Information-gain experiments → Deterministic execution → Evidence → Causal verification → Independent reproduction → Finding package → Human review**
 
 A negative or unmeasurable result is evidence about the current hypothesis/execution, not permission to invent a result.
+
+Before executing a generated experiment, CYDRA should derive **execution readiness** from the target model. This includes constructor/deployment dependencies, caller-role requirements, caller-identity predicates, and external runtime dependencies. Each prerequisite is classified as already satisfied, constructible by the adapter/harness, or unresolved. Unresolved prerequisites produce an explicit execution/environment blocker rather than being interpreted as security evidence. This layer is generic and target-independent.
 
 A real finding requires reproducible evidence and must survive adversarial challenge.
 
