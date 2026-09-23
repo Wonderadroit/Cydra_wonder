@@ -63,6 +63,8 @@ def generate_cross_function_state_hypotheses(
     invariants: list[Invariant] = []
     hypotheses: list[Hypothesis] = []
 
+    protected_functions = {f.name for f in contract.functions if f.visibility in {"public", "external"} and f.modifiers}
+
     for state, functions in shared.items():
         invariant_id = f"INV-STATE-{state}"
         confidence = 0.60
@@ -94,10 +96,7 @@ def generate_cross_function_state_hypotheses(
                     function,
                     (
                         "authorized caller satisfying the modeled guards"
-                        if any(
-                            function.name == candidate and function.modifiers
-                            for candidate in functions
-                        )
+                        if function in protected_functions
                         else "arbitrary external caller able to invoke the transition"
                     ),
                     f"inconsistent {state} after a valid cross-function transition sequence",
