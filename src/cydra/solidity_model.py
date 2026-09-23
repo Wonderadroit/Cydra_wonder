@@ -367,7 +367,9 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
         if not text:
             return
         identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", text))
-        if identifiers and identifiers.issubset(state_names):
+        state_expression_words = {"length", "true", "false"}
+        non_state = identifiers - state_names - state_expression_words
+        if identifiers and not non_state:
             return
         item = (text, polarity)
         if item not in results:
