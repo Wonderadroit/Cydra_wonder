@@ -293,15 +293,44 @@ def _execution_dataflow_requirements(
             for predicate in function.execution_predicates
         )
         if needs_positive_result and re.search(r"\bmaxWithdraw\s*\(\s*msg\.sender\s*\)", expression):
-            requirements.append(
-                ExecutionRequirement(
-                    "caller_state_dependency",
-                    "balanceOf(msg.sender) > 0",
-                    f"{producer.name}:erc4626-balance",
-                    "unresolved",
-                    "maxWithdraw(msg.sender) can only produce a positive withdrawable amount when the caller has a non-zero share balance; a generic fixture must establish that balance before the consuming path is reachable",
+            balance_writers = []
+            for candidate in (*contract.inherited_functions, *contract.functions):
+                if candidate.name == function.name or candidate.visibility not in {"public", "external"}:
+                    continue
+                writes = state_writes_for_function(semantic_effects, candidate.name, contract.name)
+                if writes is not None and "balanceOf" in writes:
+                    balance_writers.append(candidate.name)
+            if balance_writers:
+                requirements.append(
+                    ExecutionRequirement(
+                        "caller_state_dependency",
+                        "balanceOf(msg.sender) > 0",
+                        f"{producer.name}:erc4626-balance",
+                        "discovered",
+                        "standard ERC-4626 positive-withdraw path requires a non-zero caller share balance; compiler-backed state effects identify candidate transitions that can establish that balance: "
+                        + ", ".join(sorted(set(balance_writers))),
+                    )
                 )
-            )
+                for writer_name in sorted(set(balance_writers)):
+                    requirements.append(
+                        ExecutionRequirement(
+                            "caller_state_setup_candidate",
+                            writer_name,
+                            f"{producer.name}:erc4626-balance",
+                            "discovered",
+                            "compiler-backed transition writes the producer's required caller balance state; its own prerequisites must be solved before execution",
+                        )
+                    )
+            else:
+                requirements.append(
+                    ExecutionRequirement(
+                        "caller_state_dependency",
+                        "balanceOf(msg.sender) > 0",
+                        f"{producer.name}:erc4626-balance",
+                        "unresolved",
+                        "standard ERC-4626 positive-withdraw path requires a non-zero caller share balance and no compiler-backed constructible writer for that caller state was discovered",
+                    )
+                )
         if producer_reads:
             for state in producer_reads:
                 requirements.append(
