@@ -351,14 +351,24 @@ def _state_setup_candidates(
                 or parameter.type.strip().split()[0].rstrip("[]").startswith(("uint", "int", "bytes"))
                 for parameter in writer.parameters
             )
-            status = "constructible" if primitive_abi else "unresolved"
+            runtime_dependencies = tuple(_runtime_requirements(writer))
+            status = "constructible" if primitive_abi and not runtime_dependencies else "unresolved"
+            if not primitive_abi:
+                detail = f"candidate transition {writer.name} has non-primitive parameters and cannot be synthesized generically"
+            elif runtime_dependencies:
+                detail = (
+                    f"candidate transition {writer.name} touches modeled prerequisite state {state} "
+                    "but has unresolved runtime dependencies"
+                )
+            else:
+                detail = f"candidate transition that touches modeled prerequisite state {state}"
             candidates.append(
                 ExecutionRequirement(
                     "state_setup_candidate",
                     writer.name,
                     f"{function.name}:state:{state}",
                     status,
-                    f"candidate transition that touches modeled prerequisite state {state}",
+                    detail,
                 )
             )
     return tuple(dict.fromkeys(candidates))
