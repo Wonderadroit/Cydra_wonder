@@ -11,41 +11,39 @@ def _shared_state_writers(
     contract: ContractModel,
     semantic: tuple[SemanticRelationshipEvidence, ...],
 ) -> dict[str, tuple[str, ...]]:
-    """Return externally callable functions that share a state transition surface.
+    """Return externally callable state-transition/read surfaces.
 
-    The relation is deliberately descriptive: sharing a state variable does not
-    prove a bug. It only identifies a place where independent transitions can
-    interact and therefore deserves an experiment.
+    A state investigation surface may be exposed by one writer plus independent
+    readers. Compiler-linked reads are therefore first-class topology evidence;
+    they do not imply a vulnerability or a satisfiable sequence.
     """
+    externally_callable = {
+        f.name
+        for f in (*contract.functions, *contract.inherited_functions)
+        if f.visibility in {"public", "external"}
+    }
+    touched: dict[str, set[str]] = defaultdict(set)
     writers: dict[str, set[str]] = defaultdict(set)
 
     for function in contract.functions:
         if function.visibility not in {"public", "external"}:
             continue
-        # Protected/custom-guarded entry points remain valid state-transition
-        # surfaces. Their experiment actor is modeled separately from an
-        # arbitrary caller; execution must satisfy the declared guard.
         for state in function.writes:
+            touched[state].add(function.name)
             writers[state].add(function.name)
 
-    # Compiler-linked evidence can recover/strengthen the model when the parser's
-    # write projection is incomplete. It is still evidence, never proof.
     for item in semantic:
-        if item.contract != contract.name:
+        if item.contract != contract.name or item.function not in externally_callable:
             continue
-        if item.relation not in {"writes", "transition_expression"}:
-            continue
-        if item.function in {
-            f.name
-            for f in contract.functions
-            if f.visibility in {"public", "external"} and not f.modifiers
-        }:
+        if item.relation in {"reads", "writes", "transition_expression"}:
+            touched[item.target].add(item.function)
+        if item.relation in {"writes", "transition_expression"}:
             writers[item.target].add(item.function)
 
     return {
         state: tuple(sorted(functions))
-        for state, functions in writers.items()
-        if len(functions) >= 2
+        for state, functions in touched.items()
+        if writers.get(state) and len(functions) >= 2
     }
 
 
