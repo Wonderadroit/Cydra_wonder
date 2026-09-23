@@ -123,7 +123,7 @@ contract StateSurface {
     assert tuple(step.function for step in experiments["H-STATE-balance-withdraw"].steps) == ("deposit", "withdraw")
 
 
-def test_state_surface_excludes_modifier_protected_entries():
+def test_state_surface_retains_modifier_protected_entries_with_authorized_capability():
     contract = ContractModel(
         name="Target",
         source="Target.sol",
@@ -134,7 +134,8 @@ def test_state_surface_excludes_modifier_protected_entries():
         ),
     )
     result = generate_cross_function_state_hypotheses(contract)
-    assert {h.target_function for h in result.hypotheses} == {"open", "peer"}
+    assert {h.target_function for h in result.hypotheses} == {"open", "admin", "peer"}
+    assert next(h for h in result.hypotheses if h.target_function == "admin").attacker_capability == "authorized caller satisfying the modeled guards"
 
 
 def test_cross_function_state_surface_does_not_reintroduce_modifier_protected_semantic_writers():
@@ -158,4 +159,4 @@ def test_cross_function_state_surface_does_not_reintroduce_modifier_protected_se
         ),
     )
     result = generate_cross_function_state_hypotheses(contract, semantic)
-    assert {h.target_function for h in result.hypotheses} == {"open", "peer"}
+    assert {h.target_function for h in result.hypotheses} == {"open", "admin", "peer"}
