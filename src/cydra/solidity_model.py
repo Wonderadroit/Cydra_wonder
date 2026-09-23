@@ -398,6 +398,23 @@ def _execution_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[
     return tuple(predicate for predicate, _ in _execution_predicate_polarities(body, state_variables))
 
 
+def _execution_value_bindings(body: str) -> tuple[tuple[str, str], ...]:
+    """Extract conservative local assignments with call/data-flow expressions."""
+    bindings: list[tuple[str, str]] = []
+    pattern = re.compile(
+        r"(?:\b[A-Za-z_]\w*(?:\s*\[[^\]]+\])?(?:\s+(?:memory|storage|calldata))?\s+)?"
+        r"(?P<name>[A-Za-z_]\w*)\s*=\s*(?P<expression>[^;]+)"
+    )
+    for match in pattern.finditer(body):
+        name = match.group("name")
+        expression = match.group("expression").strip()
+        if expression and ("(" in expression or re.search(r"\b(?:msg|tx|block)\.", expression)):
+            item = (name, expression)
+            if item not in bindings:
+                bindings.append(item)
+    return tuple(bindings)
+
+
 def _declared_types(body: str) -> tuple[str, ...]:
     """Extract only contract-scope struct, enum, and value-type declarations."""
     declared: list[str] = []
@@ -592,6 +609,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                     state_predicate_polarities=_state_predicate_polarities(body, state_variables),
                     execution_predicates=_execution_predicates(body, state_variables),
                     execution_predicate_polarities=_execution_predicate_polarities(body, state_variables),
+                    execution_value_bindings=_execution_value_bindings(body),
                 )
             )
 
