@@ -528,6 +528,7 @@ def test_execution_value_bindings_capture_helper_result_feeding_local_guard(tmp_
     """, encoding="utf-8")
     function = parse_solidity(path)[0].functions[1]
     assert ("startDebt", "maxWithdraw(msg.sender)") in function.execution_value_bindings
+    assert not any(name == "startDebt" and expression.startswith("= 0)") for name, expression in function.execution_value_bindings)
 
 
 def test_execution_value_binding_records_helper_return_expression(tmp_path: Path) -> None:
