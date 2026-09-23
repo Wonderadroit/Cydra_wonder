@@ -634,16 +634,16 @@ def test_constructible_state_setup_plan_allows_verified_state_backed_external_re
 def test_execution_readiness_resolves_configured_interface_runtime_call(tmp_path):
     interface = tmp_path / "IFactory.sol"
     interface.write_text(
-        "interface IFactory { function ownerOfAccount(address account) external view returns (address); }\\n",
+        "interface IFactory { function ownerOfAccount(address account) external view returns (address); }\n",
         encoding="utf-8",
     )
-    (tmp_path / "foundry.toml").write_text("[profile.default]\\nsrc = '.'\\n", encoding="utf-8")
+    (tmp_path / "foundry.toml").write_text("[profile.default]\nsrc = '.'\n", encoding="utf-8")
     source = tmp_path / "Target.sol"
     source.write_text(
-        "import \"./IFactory.sol\";\\n"
-        "contract Target { address public ACCOUNT_FACTORY; \\n"
-        "function borrow(address account) external { IFactory(ACCOUNT_FACTORY).ownerOfAccount(account); }\\n"
-        "}\\n",
+        "import \"./IFactory.sol\";\n"
+        "contract Target { address public ACCOUNT_FACTORY;\n"
+        "function borrow(address account) external { IFactory(ACCOUNT_FACTORY).ownerOfAccount(account); }\n"
+        "}\n",
         encoding="utf-8",
     )
     function = FunctionModel(
