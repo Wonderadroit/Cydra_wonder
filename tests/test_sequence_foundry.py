@@ -230,6 +230,22 @@ def test_sequence_renderer_materializes_transitive_setup_plan(tmp_path):
     assert source.index("target.enable(1);") < source.index("target.seed(address(0xCAFE));") < source.index("target.target();")
 
 
+def test_sequence_renderer_allows_temporal_branch_predicate(tmp_path):
+    from cydra.models import FunctionModel
+    model = ContractModel(
+        name="TemporalBranch", source=str(tmp_path / "Target.sol"),
+        functions=(FunctionModel("target", "external", (), (), (), 1,
+                                 state_predicates=("lastSyncedTimestamp != uint32(block.timestamp)",)),),
+    )
+    hypothesis = Hypothesis("H-STATE-temporal", "candidate", "INV-STATE-temporal", "target", "caller", "candidate")
+    experiment = Experiment("X-H-STATE-temporal", hypothesis.hypothesis_id, "target", ("violation",), 1.0,
+                            steps=(ExperimentStep("target", ()),))
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "TemporalBranch",
+        tmp_path / "test" / "generated.t.sol", model
+    )
+    assert generated.exists()
+
 def test_sequence_renderer_rejects_unresolved_state_prerequisite(tmp_path):
     from cydra.models import FunctionModel
     model = ContractModel(
