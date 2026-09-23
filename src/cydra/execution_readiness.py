@@ -302,8 +302,6 @@ def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
                 )
             ):
                 continue
-        elif polarity is None and not positive_collection_requirement:
-            continue
         for match in re.finditer(r"\b([A-Za-z_]\w*)(?:\.length)?\b", predicate):
             name = match.group(1)
             if name in {"true", "false", "address", "bytes", "uint", "int"}:
