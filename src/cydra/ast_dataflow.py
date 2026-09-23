@@ -117,6 +117,38 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             if isinstance(node.get("name"), str) and isinstance(node_id, int):
                 states[node_id] = node["name"]
 
+    # Build compiler-authoritative inheritance metadata and a function declaration index.
+    # A derived contract can invoke an inherited internal/public function whose
+    # declaration belongs to a base contract; preserve that compiler-resolved edge.
+    contract_bases: dict[int, set[int]] = {}
+    contract_names: dict[int, str] = {}
+    for item in _walk(ast):
+        if item.get("nodeType") != "ContractDefinition" or not isinstance(item.get("id"), int):
+            continue
+        contract_id = item["id"]
+        contract_names[contract_id] = str(item.get("name", "unknown"))
+        bases: set[int] = set()
+        for base in item.get("baseContracts", []) if isinstance(item.get("baseContracts"), list) else []:
+            base_name = base.get("baseName") if isinstance(base, dict) else None
+            ref = base_name.get("referencedDeclaration") if isinstance(base_name, dict) else None
+            if isinstance(ref, int):
+                bases.add(ref)
+        contract_bases[contract_id] = bases
+
+    def _ancestor_contract_ids(contract_id: int, seen: set[int] | None = None) -> set[int]:
+        seen = set() if seen is None else seen
+        for base_id in contract_bases.get(contract_id, set()):
+            if base_id in seen:
+                continue
+            seen.add(base_id)
+            _ancestor_contract_ids(base_id, seen)
+        return seen
+
+    contract_ancestors = {
+        contract_id: _ancestor_contract_ids(contract_id)
+        for contract_id in contract_bases
+    }
+
     # Build a compiler-authoritative function declaration index so internal
     # calls can be represented as data-flow edges. We intentionally resolve only
     # AST declarations present in this compiler unit; unresolved/dynamic calls
@@ -158,6 +190,10 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             if not isinstance(declaration_id, int) or declaration_id not in functions:
                 continue
             target_contract, target_function = functions[declaration_id]
+            inherited_target = False
+            if isinstance(scope, int):
+                target_scope = next((sid for sid, name in contract_names.items() if name == target_contract), None)
+                inherited_target = target_scope in contract_ancestors.get(scope, set()) if target_scope is not None else False
             # Keep only compiler-resolved declarations. Calls to external or
             # dynamically resolved targets that lack a local declaration are
             # deliberately left unresolved for the higher-level readiness
@@ -169,7 +205,8 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
                 source_location=_location(call), function_ast_node_id=function_id,
                 target_ast_node_id=declaration_id,
                 metadata={"function_kind": kind, "semantic_relation": "calls",
-                          "target_contract": target_contract, "target_function": target_function},
+                          "target_contract": target_contract, "target_function": target_function,
+                          "inherited_target": inherited_target},
             ))
         for item in _walk(body):
             if item.get("nodeType") != "Identifier":
