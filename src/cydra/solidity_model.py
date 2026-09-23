@@ -401,9 +401,16 @@ def _execution_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[
 def _execution_value_bindings(body: str) -> tuple[tuple[str, str], ...]:
     """Extract conservative local assignments with call/data-flow expressions."""
     bindings: list[tuple[str, str]] = []
+    # Match one assignment statement at a time. The previous expression-wide
+    # regex could backtrack across `if`/`revert` text and invent bindings
+    # such as `startDebt <- = 0) revert ...`. Keep the extractor deliberately
+    # conservative: only statements beginning after a statement/brace boundary
+    # are considered, and control-flow keywords cannot become declaration types.
     pattern = re.compile(
-        r"(?:\b[A-Za-z_]\w*(?:\s*\[[^\]]+\])?(?:\s+(?:memory|storage|calldata))?\s+)?"
-        r"(?P<name>[A-Za-z_]\w*)\s*=\s*(?P<expression>[^;]+)"
+        r"(?:^|[;{}])\s*"
+        r"(?!if\b|for\b|while\b|return\b|emit\b|revert\b)"
+        r"(?:(?:[A-Za-z_]\w*(?:\s*\[[^\]]+\])?(?:\s+(?:memory|storage|calldata))?)\s+)?"
+        r"(?P<name>[A-Za-z_]\w*)\s*=\s*(?P<expression>[^;{}]+);"
     )
     for match in pattern.finditer(body):
         name = match.group("name")
