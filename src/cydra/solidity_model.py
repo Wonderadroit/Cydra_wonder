@@ -415,6 +415,16 @@ def _execution_value_bindings(body: str) -> tuple[tuple[str, str], ...]:
     return tuple(bindings)
 
 
+def _return_expressions(body: str) -> tuple[str, ...]:
+    """Extract simple return expressions as conservative producer evidence."""
+    expressions: list[str] = []
+    for match in re.finditer(r"\breturn\s+([^;]+);", body):
+        expression = match.group(1).strip()
+        if expression and expression not in expressions:
+            expressions.append(expression)
+    return tuple(expressions)
+
+
 def _declared_types(body: str) -> tuple[str, ...]:
     """Extract only contract-scope struct, enum, and value-type declarations."""
     declared: list[str] = []
@@ -610,6 +620,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                     execution_predicates=_execution_predicates(body, state_variables),
                     execution_predicate_polarities=_execution_predicate_polarities(body, state_variables),
                     execution_value_bindings=_execution_value_bindings(body),
+                    return_expressions=_return_expressions(body),
                 )
             )
 
