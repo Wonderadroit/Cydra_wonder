@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping
 from .compiler_constraints import ConstraintEvidence
 from .constraint_candidates import ParameterCandidate, select_parameter_candidates
 from .models import ParameterModel
+from .execution_readiness import _address_role, role_address_expression
 
 
 def _default_for(parameter: ParameterModel) -> str | None:
@@ -15,9 +16,13 @@ def _default_for(parameter: ParameterModel) -> str | None:
             return f"new {base}[](0)"
         return None
     if parameter_type == "address payable":
-        return "payable(address(0xCAFE))"
+        role = _address_role(parameter.name)
+        expression = role_address_expression(role) if role else None
+        return f"payable({expression})" if expression else "payable(address(0xCAFE))"
     if base == "address":
-        return "address(0xCAFE)"
+        role = _address_role(parameter.name)
+        expression = role_address_expression(role) if role else None
+        return expression or "address(0xCAFE)"
     if base == "bool":
         return "false"
     if base.startswith(("uint", "int")):
