@@ -281,24 +281,7 @@ def _constraint_state_requirements(
     return tuple(requirements)
 
 
-def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
-    names: list[str] = []
-    polarities = dict(function.state_predicate_polarities)
-    for predicate in function.state_predicates:
-        polarity = polarities.get(predicate)
-        # ``state_predicates`` predates explicit polarity metadata. Legacy
-        # models therefore represent a required state without a polarity
-        # entry; preserve that meaning for readiness planning. An explicit
-        # ``unknown`` remains unknown and must not create a setup candidate.
-        if polarity is not None and polarity != "must_hold":
-            continue
-        for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate):
-            if name in {"true", "false", "address", "bytes", "uint", "int"}:
-                continue
-            if name not in names:
-                names.append(name)
-    return tuple(names)
-
+def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:\n    names: list[str] = []\n    polarities = dict(function.state_predicate_polarities)\n    for predicate in function.state_predicates:\n        polarity = polarities.get(predicate)\n        # A positive requirement directly names the state. A reverting guard\n        # such as items.length == 0 also implies a positive setup requirement:\n        # the normal path needs a non-empty collection. Other negative/unknown\n        # predicates remain conservative and do not invent a setup transition.\n        if polarity not in {None, "must_hold"}:\n            if not (\n                polarity == "must_not_hold"\n                and re.search(r"\b[A-Za-z_]\w*\.length\s*==\s*0\b", predicate)\n            ):\n                continue\n        for match in re.finditer(r"\b([A-Za-z_]\w*)(?:\.length)?\b", predicate):\n            name = match.group(1)\n            if name in {"true", "false", "address", "bytes", "uint", "int"}:\n                continue\n            if name not in names:\n                names.append(name)\n    return tuple(names)
 
 def _state_setup_candidates(
     contract: ContractModel,
