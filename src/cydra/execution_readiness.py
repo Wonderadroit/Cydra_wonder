@@ -290,12 +290,20 @@ def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
         # such as items.length == 0 also implies a positive setup requirement:
         # the normal path needs a non-empty collection. Other negative/unknown
         # predicates remain conservative and do not invent a setup transition.
+        positive_collection_requirement = bool(
+            re.search(r"\b[A-Za-z_]\w*\.length\s*(?:>|>=)\s*(?:0|1)\b", predicate)
+        )
         if polarity not in {None, "must_hold"}:
             if not (
-                polarity == "must_not_hold"
-                and re.search(r"\b[A-Za-z_]\w*\.length\s*==\s*0\b", predicate)
+                positive_collection_requirement
+                or (
+                    polarity == "must_not_hold"
+                    and re.search(r"\b[A-Za-z_]\w*\.length\s*==\s*0\b", predicate)
+                )
             ):
                 continue
+        elif polarity is None and not positive_collection_requirement:
+            continue
         for match in re.finditer(r"\b([A-Za-z_]\w*)(?:\.length)?\b", predicate):
             name = match.group(1)
             if name in {"true", "false", "address", "bytes", "uint", "int"}:
