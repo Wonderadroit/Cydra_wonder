@@ -145,17 +145,37 @@ def _caller_requirements(function: FunctionModel) -> tuple[ExecutionRequirement,
     return tuple(dict.fromkeys(requirements))
 
 
-def _runtime_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
-    return tuple(
-        ExecutionRequirement(
-            "runtime_dependency",
-            f"{receiver}.{method}",
-            f"{function.name}:external_call",
-            "required",
-            "function performs an external call whose target/state may be required for execution",
+def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool:
+    """Resolve a call receiver and exclude deterministic library calls from runtime blockers."""
+    root = Path(contract.source).resolve()
+    # The source resolver follows declared imports/remappings, so this remains
+    # target-agnostic and does not depend on library naming conventions.
+    try:
+        source_path, _ = resolve_named_type_source(root.parent, root, receiver)
+    except (FileNotFoundError, ValueError, OSError, UnicodeError):
+        return False
+    try:
+        source = source_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False
+    return bool(re.search(r"\\blibrary\\s+" + re.escape(receiver) + r"\\b", source))
+
+
+def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+    requirements: list[ExecutionRequirement] = []
+    for receiver, method in function.external_calls:
+        if _runtime_receiver_is_library(contract, receiver):
+            continue
+        requirements.append(
+            ExecutionRequirement(
+                "runtime_dependency",
+                f"{receiver}.{method}",
+                f"{function.name}:external_call",
+                "required",
+                "function performs an external call whose target/state may be required for execution",
+            )
         )
-        for receiver, method in function.external_calls
-    )
+    return tuple(dict.fromkeys(requirements))
 
 
 def _execution_dataflow_requirements(
@@ -390,7 +410,7 @@ def inspect_execution_readiness(
         contract=contract.name,
         constructor_requirements=_constructor_requirements(contract),
         caller_requirements=_caller_requirements(selected) if selected else (),
-        runtime_requirements=_runtime_requirements(selected) if selected else (),
+        runtime_requirements=_runtime_requirements(contract, selected) if selected else (),
         execution_requirements=(
             (*_execution_requirements(selected), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
             if selected else ()
