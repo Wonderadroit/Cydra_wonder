@@ -69,3 +69,26 @@ The next Arcadia rerun must verify whether `addTranche` moves from unresolved to
 - PR #207 is a draft validation PR only; it must not be merged until its complete CI fan-out is inspected. Main remains the maturity baseline.
 - The latest validation fan-out is intentionally being monitored. Any failing job must be diagnosed from its actual log and repaired generically before the validation milestone is considered green.
 - Do not add Arcadia-specific exploit logic, mocks, or hard-coded answers. The next legitimate boundary is generic dependency-aware fixture construction and verification.
+
+## Latest continuation — compiler state import closure
+
+- Current branch: research/arcadia-lending.
+- Latest CYDRA commit before this handoff update: 471623053b3dda426c984a124a4c42ff2fa58b26; subsequent docs-only commit: 427bac4e6e36eb309e5f3932b19b9875196719c7.
+- Latest Arcadia research run: 35854583623; artifact 10747426250; SHA-256 914478d4965476455f24dd817232c61c438b5accd8f0d51651e2ac1d37415667.
+- Research completed successfully: 1 authorization + 23 state hypotheses executed; no confirmed vulnerability. Execution artifact contained 24 experiments: 5 PASS / 19 FAIL.
+- H-AUTH-startLiquidation still reverts because the positive caller-state prerequisite behind maxWithdraw(msg.sender) is not constructed. addTranche is identified as constructible for the separate tranches.length > 0 prerequisite.
+- Generic repair: compiler_state.py now consumes compiler-backed state effects from all build-info source ASTs through extract_state_effects_from_all_sources; target-scoped extraction remains available. Regression added for imported-source state effects.
+- PR #207 validation fan-out finished with 71 checks: 68 success, 3 baseline failures (benchmark, negative-controls, post-maturity batch). Their logs were inspected; they are unrelated to this repair. PR remains draft and unmerged.
+- Next implementation boundary: generic dependency-aware caller-state construction and verification for resolved value producers. Do not add Arcadia-specific mocks, storage-slot writes, exploit sequences, or historical-answer logic to the blind path.
+
+## Resume protocol
+1. Inspect PR #207 and current branch head.
+2. Inspect latest Arcadia research artifact before changing the planner.
+3. Keep the blind target frozen at arcadia-finance/lending-v2@def3c94995773e2feb48b6d8a02dc603d96fd96c4.
+4. Use compiler evidence to resolve the minimum state-producing transition for balanceOf(msg.sender) > 0 without assuming target-specific storage layout.
+5. Construct only deterministic interface-complete stubs whose required semantics are explicit.
+6. Verify prerequisite state/value before the security experiment.
+7. Re-run full regression and supervised Arcadia research; inspect the artifact, not just workflow success.
+8. Preserve fail-closed behavior and do not promote execution failure to a finding.
+
+Doctrine: LLMs propose. Tools test. Evidence decides.
