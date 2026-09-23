@@ -228,3 +228,24 @@ def test_sequence_renderer_materializes_transitive_setup_plan(tmp_path):
     )
     source = generated.read_text(encoding="utf-8")
     assert source.index("target.enable(0);") < source.index("target.seed(address(0xCAFE));") < source.index("target.target();")
+
+
+def test_sequence_renderer_rejects_unresolved_state_prerequisite(tmp_path):
+    from cydra.models import FunctionModel
+    model = ContractModel(
+        name="BlockedSequence", source=str(tmp_path / "Target.sol"),
+        functions=(FunctionModel("target", "external", (), (), (), 1,
+                                 state_predicates=("auctionsInProgress > 0",)),),
+    )
+    hypothesis = Hypothesis("H-STATE-blocked", "candidate", "INV-STATE-blocked", "target", "caller", "candidate")
+    experiment = Experiment("X-H-STATE-blocked", hypothesis.hypothesis_id, "target", ("violation",), 1.0,
+                            steps=(ExperimentStep("target", ()),))
+    try:
+        generate_sequence_test_from_experiment(
+            hypothesis, experiment, "../Target.sol", "BlockedSequence",
+            tmp_path / "test" / "generated.t.sol", model
+        )
+    except ValueError as exc:
+        assert "unresolved state prerequisite" in str(exc)
+    else:
+        raise AssertionError("ambiguous state prerequisite must fail closed")
