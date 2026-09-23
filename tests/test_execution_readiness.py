@@ -558,3 +558,50 @@ def test_constructible_state_setup_plan_resolves_discovered_caller_balance_write
         contract, contract.functions[0], semantic_evidence=semantic
     )
     assert [item.function for item in plan] == ["borrow"]
+
+
+def test_execution_readiness_fails_closed_on_unresolved_member_value_source(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "interface IFactory { function ownerOfAccount(address account) external view returns (address); }\\n"
+        "contract Target {\\n"
+        "    address constant ACCOUNT_FACTORY = address(1);\\n"
+        "    function borrow(address account) external {\\n"
+        "        address accountOwner = IFactory(ACCOUNT_FACTORY).ownerOfAccount(account);\\n"
+        "        if (accountOwner == address(0)) revert();\\n"
+        "    }\\n"
+        "}\\n",
+        encoding="utf-8",
+    )
+    function = FunctionModel(
+        "borrow", "external", (), (), (), 1,
+        execution_predicates=("accountOwner == address(0)",),
+        execution_predicate_polarities=(("accountOwner == address(0)", "must_not_hold"),),
+        execution_value_bindings=(("accountOwner", "IFactory(ACCOUNT_FACTORY).ownerOfAccount(account)"),),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", str(source), (function,)), function)
+    assert any(
+        item.kind == "execution_value_runtime_dependency"
+        and item.status == "unresolved"
+        and "IFactory(ACCOUNT_FACTORY).ownerOfAccount" in item.subject
+        for item in readiness.execution_requirements
+    )
+
+
+def test_constructible_state_setup_plan_rejects_unresolved_value_source():
+    contract = ContractModel(
+        name="Target", source="Target.sol", functions=(
+            FunctionModel(
+                "target", "external", (), (), (), 1,
+                state_predicates=("ready > 0",),
+                state_predicate_polarities=(("ready > 0", "must_hold"),),
+            ),
+            FunctionModel(
+                "seed", "external", (), ("ready",), (), 2,
+                execution_predicates=("owner == address(0)",),
+                execution_predicate_polarities=(("owner == address(0)", "must_not_hold"),),
+                execution_value_bindings=(("owner", "IFactory(factory).ownerOfAccount(msg.sender)"),),
+            ),
+        ),
+    )
+    assert constructible_state_setup_plan(contract, contract.functions[0]) == ()
