@@ -527,3 +527,34 @@ def test_constructible_state_setup_plan_fails_closed_on_prerequisite_cycle():
         ),
     )
     assert constructible_state_setup_plan(contract, contract.functions[0]) == ()
+
+
+def test_constructible_state_setup_plan_resolves_discovered_caller_balance_writer():
+    contract = ContractModel(
+        name="Target", source="Target.sol", functions=(
+            FunctionModel(
+                "start", "external", (), (), (), 1,
+                execution_predicates=("startDebt == 0",),
+                execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+                execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
+            ),
+            FunctionModel(
+                "borrow", "external", (), ("balanceOf",), (), 2,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+            FunctionModel(
+                "maxWithdraw", "public", (), (), (), 3,
+                return_expressions=("convertToAssets(balanceOf(owner))",),
+            ),
+        ),
+    )
+    semantic = (
+        SemanticRelationshipEvidence(
+            contract="Target", function="borrow", relation="writes", target="balanceOf",
+            confidence=0.99, source="solc-json-ast:test",
+        ),
+    )
+    plan = constructible_state_setup_plan(
+        contract, contract.functions[0], semantic_evidence=semantic
+    )
+    assert [item.function for item in plan] == ["borrow"]
