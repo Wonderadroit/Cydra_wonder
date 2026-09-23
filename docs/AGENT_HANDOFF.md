@@ -98,3 +98,10 @@ The canonical loop is:
 **Observe → Diagnose → Understand Intent → Model → Identify Preconditions → Use Target Mechanisms → Experiment → Evidence → Update Model → Generalize**
 
 The goal is not maximum execution count. The goal is increasingly accurate target understanding and meaningful, reachable, reproducible, causally informative experiments.
+
+
+## Execution-readiness producer-solver checkpoint
+
+The execution-readiness layer now resolves positive caller-state prerequisites from compiler-backed state writers instead of leaving them as opaque blockers. For a consumer whose execution value requires a positive maxWithdraw(msg.sender), CYDRA discovers compiler-backed transitions that write balanceOf, records those transitions with provenance, and feeds the discovered state dependency into the existing recursive state-setup planner. The planner remains fail-closed: a discovered writer is not treated as reachable merely because it writes the right state; its own caller, state, execution, and runtime prerequisites must still be solved.
+
+The next frontier is therefore runtime/value-dependency construction for otherwise valid producer transitions. This must remain target-generic and diagnosis-first: determine which dependency the producer actually requires, identify whether the target itself provides a construction path, and only then generalize the smallest reusable resolver. Controlled-state/cheat-code experiments, if introduced, must remain explicitly diagnostic and must not be confused with ordinary protocol reachability evidence.
