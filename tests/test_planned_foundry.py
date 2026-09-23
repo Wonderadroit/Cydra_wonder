@@ -98,7 +98,7 @@ def test_authorization_renderer_materializes_constructible_state_setup(tmp_path:
         state_predicate_polarities=(("items.length == 0", "must_not_hold"),),
     )
     seed = FunctionModel(
-        name="seed", visibility="external", modifiers=(), writes=(), external_calls=(("items", "push"),), line=1,
+        name="seed", visibility="external", modifiers=(), writes=("items",), external_calls=(), line=1,
         parameters=(ParameterModel("item", "address"),),
     )
     model = ContractModel("Target", str(source), (target, seed), pragma="^0.8.20")
