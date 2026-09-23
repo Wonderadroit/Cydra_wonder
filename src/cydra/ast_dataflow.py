@@ -82,6 +82,14 @@ def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int
         elif node.get("nodeType") == "UnaryOperation" and node.get("operator") in {"++", "--", "delete"}:
             _mark_lvalue_roles(node.get("subExpression"), states, roles,
                                 "read_write" if node.get("operator") in {"++", "--"} else "write")
+        elif node.get("nodeType") == "MemberAccess" and node.get("memberName") in {"push", "pop"}:
+            # Array push/pop mutate the storage root through MemberAccess.
+            _mark_lvalue_roles(
+                node.get("expression"),
+                states,
+                roles,
+                "write" if node.get("memberName") == "push" else "read_write",
+            )
     return roles
 
 
