@@ -1885,3 +1885,26 @@ Benchmark 050 is validation orchestration, not a new vulnerability detector. It 
 The next evidence boundary is supervised real-world dogfood on an explicitly authorized, in-scope target. The human researcher must provide authorization and scope before execution. The first pilot should preserve the same evidence chain used in the benchmarks and should be treated as a research observation campaign, not as an autonomous submission workflow. Any new implementation need discovered by the pilot must be driven by the observed failure and repaired generically.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 84 — execution value producer and inheritance resolution
+
+The post-maturity execution-readiness work exposed a generic data-flow gap from unfamiliar-target research: a local call-result predicate could be modeled, but CYDRA did not yet resolve the function that produces that value when the producer was inherited through the Solidity source graph.
+
+The execution-readiness model now:
+- records conservative local/call-result bindings used by transient path predicates;
+- records simple return expressions as producer evidence;
+- resolves matching local call expressions to modeled producer functions when available;
+- follows concrete Solidity inheritance/import relationships to expose inherited producer functions;
+- keeps producer discovery separate from satisfiability, fixture construction, and security conclusions;
+- fails closed when the producer cannot be resolved.
+
+This is intentionally generic. It is useful for inherited ERC4626-style producers, helper functions, and future language adapters without encoding Arcadia names or vulnerability answers.
+
+The current boundary is therefore:
+
+**call-result data flow → producer resolution → producer dependency analysis → constructible prerequisite transition → prerequisite execution → state/value verification → security experiment**
+
+The remaining proof obligation is behavioral: use the repaired model against the frozen unfamiliar target, confirm that the readiness artifact identifies the producer/dependency chain, and then determine whether the generic planner can construct and verify the required prerequisite rather than merely naming it.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
