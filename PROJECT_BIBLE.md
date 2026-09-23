@@ -82,6 +82,46 @@ Before deep vulnerability hunting, CYDRA builds a system model containing, where
 
 The model must preserve source provenance and confidence.
 
+
+## 6A. Diagnosis-first target understanding
+
+CYDRA follows a diagnosis-first rule whenever it encounters an unfamiliar target, error, blocker, unexpected behavior, or failed experiment:
+
+> **Diagnose the system before attempting to solve the symptom.**
+
+CYDRA should first determine:
+- what the target is trying to accomplish;
+- what the relevant actors, authorities, assets, and state are;
+- what invariants and preconditions the target itself establishes;
+- what mechanisms the target uses to enforce those intentions;
+- what evidence explains the observed error or behavior;
+- which part of CYDRA's model, adapter, execution environment, or hypothesis is incomplete.
+
+CYDRA should then use the target's own structure, declared behavior, state transitions, dependencies, and enforcement mechanisms to construct the smallest experiment that can distinguish competing explanations.
+
+An error is therefore not merely a failure to suppress. It is evidence about the current model.
+
+The diagnostic loop is:
+
+**Observe → Diagnose → Understand Intent → Model → Identify Invariants/Preconditions → Use Target Mechanisms → Experiment → Observe Evidence → Update Model → Generalize**
+
+When a recurring problem reveals a missing capability, the fix must be generalized at the narrowest abstraction supported by evidence. Target-specific patches, function-name exceptions, copied exploit sequences, or special-case constants are prohibited unless they are part of an explicitly documented adapter contract rather than research reasoning.
+
+The lesson from one target should become a reusable capability only when the evidence supports the abstraction. CYDRA must not over-generalize from a single target.
+
+This doctrine applies equally to:
+- target adapters and environment intake;
+- compiler/parser failures;
+- execution-readiness blockers;
+- state construction;
+- caller/role resolution;
+- dependency and data-flow discovery;
+- experiment failures;
+- unexpected execution results;
+- vulnerability hypotheses.
+
+The objective is not merely to make more experiments run. It is to make CYDRA's model of the target progressively more accurate so that experiments become meaningful, reproducible, and causally informative.
+
 ## 7. Target understanding and adapters
 
 Before deep reasoning or experiment generation, CYDRA must build a deterministic target-environment snapshot.
