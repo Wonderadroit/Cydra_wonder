@@ -55,3 +55,23 @@ def test_compiler_backed_candidate_records_ast_provenance(tmp_path):
     hypotheses = generate_structural_access_control_hypotheses(contract, evidence)
     assert [h.target_function for h in hypotheses] == ["mutator"]
     assert hypotheses[0].evidence_ids == ("E-AST-STATE-mutator",)
+
+
+def test_compiler_call_edges_propagate_state_reads_and_writes():
+    evidence = [
+        _evidence("balanceOf", "reads", "_balances"),
+        _evidence("maxWithdraw", "calls", "balanceOf"),
+        _evidence("mint", "writes", "_balances"),
+        _evidence("deposit", "calls", "mint"),
+    ]
+    index = build_state_effect_index(evidence)
+    assert state_reads_for_function(index, "maxWithdraw") == ("_balances",)
+    assert state_writes_for_function(index, "deposit") == ("_balances",)
+
+
+def test_unresolved_call_does_not_invent_state_effect():
+    index = build_state_effect_index([
+        _evidence("maxWithdraw", "calls", "unknownHelper"),
+    ])
+    assert state_reads_for_function(index, "maxWithdraw") == ()
+    assert state_writes_for_function(index, "maxWithdraw") == ()
