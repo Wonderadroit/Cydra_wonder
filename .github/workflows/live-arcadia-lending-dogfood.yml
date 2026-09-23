@@ -52,6 +52,7 @@ jobs:
         env:
           PYTHONPATH: .
           CYDRA_EXPERIMENT_TIMEOUT_SECONDS: "180"
+          PYTHONUNBUFFERED: "1"
         run: |
           set +e
           mkdir -p backtest-artifacts/arcadia-lending
