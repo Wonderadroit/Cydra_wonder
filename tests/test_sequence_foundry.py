@@ -213,9 +213,9 @@ def test_sequence_renderer_materializes_transitive_setup_plan(tmp_path):
     from cydra.models import FunctionModel, ParameterModel
     model = ContractModel(
         name="RecursiveSetup", source=str(tmp_path / "Target.sol"), functions=(
-            FunctionModel("target", "external", (), (), (), 1, state_predicates=("items.length > 0",)),
+            FunctionModel("target", "external", (), (), (), 1, state_predicates=("items.length > 0",), state_predicate_polarities=(("items.length > 0", "must_hold"),)),
             FunctionModel("seed", "external", (), ("items",), (), 2,
-                          parameters=(ParameterModel("item", "address"),), state_predicates=("enabled > 0",)),
+                          parameters=(ParameterModel("item", "address"),), state_predicates=("enabled > 0",), state_predicate_polarities=(("enabled > 0", "must_hold"),)),
             FunctionModel("enable", "external", (), ("enabled",), (), 3,
                           parameters=(ParameterModel("value", "uint256"),)),
         ),
