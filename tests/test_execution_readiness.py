@@ -137,7 +137,7 @@ def test_execution_readiness_marks_external_setup_dependency_unresolved():
         functions=(
             FunctionModel("target", "external", (), (), (), 1, state_predicates=("items.length > 0",)),
             FunctionModel(
-                "seed", "external", (), (), (("tranche", "asset"),), 2,
+                "seed", "external", (), ("items",), (("tranche", "asset"),), 2,
                 parameters=(ParameterModel("tranche", "address"),),
             ),
         ),
