@@ -116,6 +116,44 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
         if not isinstance(body, dict):
             continue
         roles = _operator_contexts(body, states)
+
+        # Preserve compiler-resolved internal/base-contract calls so higher
+        # layers can follow state dependencies through inherited/helper paths.
+        for call in _walk(body):
+            if call.get("nodeType") != "FunctionCall":
+                continue
+            expression = call.get("expression")
+            if not isinstance(expression, dict):
+                continue
+            referenced = expression.get("referencedDeclaration")
+            if not isinstance(referenced, int):
+                continue
+            target_decl = declarations.get(referenced)
+            if not isinstance(target_decl, dict) or target_decl.get("nodeType") != "FunctionDefinition":
+                continue
+            target_name = (
+                target_decl.get("name")
+                if isinstance(target_decl.get("name"), str) and target_decl.get("name")
+                else target_decl.get("kind")
+                if target_decl.get("kind") in {"constructor", "receive", "fallback"}
+                else "anonymous"
+            )
+            target_scope = target_decl.get("scope")
+            target_contract = declarations.get(target_scope, {}).get("name", "unknown") if isinstance(target_scope, int) else "unknown"
+            evidence.append(SemanticRelationshipEvidence(
+                contract=str(contract),
+                function=str(function_name),
+                relation="calls",
+                target=str(target_name),
+                confidence=0.98,
+                source=f"solc-json-ast:{file}",
+                ast_node_id=_node_id(call),
+                source_location=_location(call),
+                function_ast_node_id=function_id,
+                target_ast_node_id=referenced,
+                metadata={"function_kind": kind, "target_contract": str(target_contract)},
+            ))
+
         for item in _walk(body):
             if item.get("nodeType") != "Identifier":
                 continue
