@@ -503,7 +503,7 @@ def test_single_statement_revert_guards_get_must_not_hold_polarity(tmp_path: Pat
         }
     ''', encoding="utf-8")
     function = parse_solidity(path)[0].functions[0]
-    assert ("debt == 0", "must_not_hold") in function.execution_predicate_polarities
+    assert ("startDebt == 0", "must_not_hold") in function.execution_predicate_polarities
 
 
 def test_state_predicate_polarity_models_collection_length_comparisons(tmp_path: Path) -> None:
