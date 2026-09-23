@@ -3,17 +3,16 @@ name: CYDRA Public-Code Blind Research — Arcadia Lending
 on:
   workflow_dispatch:
   pull_request:
-  push:
-    branches:
-      - pilot/arcadia-lending-dogfood
-      - fix/bounded-foundry-experiments
-  pull_request:
     paths:
       - ".github/workflows/live-arcadia-lending-dogfood.yml"
       - "benchmarks/live_arcadia_lending/**"
       - "scripts/run_benchmark_blind.py"
       - "src/**"
       - "tests/**"
+  push:
+    branches:
+      - pilot/arcadia-lending-dogfood
+      - fix/bounded-foundry-experiments
 
 permissions:
   contents: read
