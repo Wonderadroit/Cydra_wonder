@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 from .compiler_constraints import ConstraintEvidence
-from .interface_resolver import resolve_named_type_source
+from .interface_resolver import resolve_named_type_source, _strip_comments
 from .models import ContractModel, FunctionModel
 from .ast_dataflow import SemanticRelationshipEvidence
 from .semantic_state_effects import build_state_effect_index, state_reads_for_function, state_writes_for_function
