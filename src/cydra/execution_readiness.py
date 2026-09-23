@@ -5,6 +5,8 @@ import re
 
 from .compiler_constraints import ConstraintEvidence
 from .models import ContractModel, FunctionModel
+from .ast_dataflow import SemanticRelationshipEvidence
+from .semantic_state_effects import build_state_effect_index, state_writes_for_function
 
 
 @dataclass(frozen=True)
@@ -287,6 +289,7 @@ def _state_setup_candidates(
     contract: ContractModel,
     function: FunctionModel,
     constraints: tuple[ConstraintEvidence, ...] = (),
+    semantic_evidence: tuple[SemanticRelationshipEvidence, ...] = (),
 ) -> tuple[ExecutionRequirement, ...]:
     """Identify generic writer functions that may establish required state.
 
@@ -305,12 +308,14 @@ def _state_setup_candidates(
     if not state_names:
         return ()
 
+    semantic_effects = build_state_effect_index(semantic_evidence)
     candidates: list[ExecutionRequirement] = []
     for state in state_names:
         for writer in contract.functions:
             if writer.name == function.name or writer.visibility not in {"public", "external"}:
                 continue
-            touched = state in writer.writes or any(
+            semantic_writes = state_writes_for_function(semantic_effects, writer.name)
+            touched = state in writer.writes or (semantic_writes is not None and state in semantic_writes) or any(
                 receiver == state and method in {"push", "pop"}
                 for receiver, method in writer.external_calls
             )
@@ -338,6 +343,7 @@ def inspect_execution_readiness(
     contract: ContractModel,
     function: FunctionModel | None = None,
     constraints: tuple[ConstraintEvidence, ...] = (),
+    semantic_evidence: tuple[SemanticRelationshipEvidence, ...] = (),
 ) -> ExecutionReadiness:
     """Derive target execution prerequisites without making vulnerability claims."""
     selected = function
@@ -354,5 +360,5 @@ def inspect_execution_readiness(
             (*_state_requirements(selected), *_constraint_state_requirements(selected, constraints))
             if selected else ()
         ),
-        state_setup_candidates=_state_setup_candidates(contract, selected, constraints) if selected else (),
+        state_setup_candidates=_state_setup_candidates(contract, selected, constraints, semantic_evidence) if selected else (),
     )
