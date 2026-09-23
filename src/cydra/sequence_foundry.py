@@ -60,7 +60,9 @@ def generate_sequence_test_from_experiment(
         readiness = inspect_execution_readiness(contract_model, function, constraints, semantic_evidence)
         unresolved_state_guards = tuple(
             item for item in readiness.state_requirements
-            if item.status == "required" and "polarity could not be established" in item.detail
+            if item.status == "required"
+            and "polarity could not be established" in item.detail
+            and "block.timestamp" not in item.subject
         )
         if unresolved_state_guards:
             subjects = ", ".join(item.subject for item in unresolved_state_guards)
