@@ -24,9 +24,10 @@ _DECLARED_TYPE_RE = re.compile(
 )
 _CALLER_TOKENS = ("msg.sender", "_msgSender()", "tx.origin")
 _STATE_COMPARISON_RE = re.compile(
-    r"\b(?P<name>[A-Za-z_]\w*)\s*(?P<op>==|!=|>=|<=|>|<)\s*(?P<rhs>"
-    r"(?:address|bytes\d+|uint\d*|int\d*)\s*\(\s*(?:0x[0-9A-Fa-f]+|\d+|true|false)\s*\)"
-    r"|0x[0-9A-Fa-f]+|\d+|true|false)"
+    r"\b(?P<name>[A-Za-z_]\w*)(?P<member>(?:\.[A-Za-z_]\w*)*)\s*"
+    r"(?P<op>==|!=|>=|<=|>|<)\s*(?P<rhs>"
+    r"(?:address|bytes\d+|uint\d*|int\d*)\s*\(\s*[^()]+\s*\)"
+    r"|(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)|0x[0-9A-Fa-f]+|\d+|true|false)"
 )
 _STATE_DECLARATION_RE = re.compile(
     r"^\s*(?P<type>mapping\s*\([^;]+\)|[A-Za-z_]\w*(?:\s*\[[^\]]*\])*)\s+"
@@ -366,7 +367,9 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
         if not text:
             return
         identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", text))
-        if identifiers and identifiers.issubset(state_names):
+        state_expression_words = {"length", "true", "false"}
+        non_state = identifiers - state_names - state_expression_words
+        if identifiers and not non_state:
             return
         item = (text, polarity)
         if item not in results:

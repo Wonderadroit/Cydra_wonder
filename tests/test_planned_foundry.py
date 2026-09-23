@@ -87,6 +87,29 @@ def test_partial_planned_vector_fails_closed(tmp_path: Path):
         )
 
 
+def test_authorization_renderer_materializes_constructible_state_setup(tmp_path: Path):
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    source = tmp_path / "Target.sol"
+    source.write_text("pragma solidity ^0.8.20; contract Target { address[] public items; function withdraw(uint256 amount, address recipient) external { amount; recipient; } function seed(address item) external { items.push(item); } }", encoding="utf-8")
+    target = FunctionModel(
+        name="withdraw", visibility="external", modifiers=(), writes=(), external_calls=(), line=1,
+        parameters=(ParameterModel("amount", "uint256"), ParameterModel("recipient", "address")),
+        state_predicates=("items.length == 0",),
+        state_predicate_polarities=(("items.length == 0", "must_not_hold"),),
+    )
+    seed = FunctionModel(
+        name="seed", visibility="external", modifiers=(), writes=("items",), external_calls=(), line=1,
+        parameters=(ParameterModel("item", "address"),),
+    )
+    model = ContractModel("Target", str(source), (target, seed), pragma="^0.8.20")
+    generated = generate_authorization_test_from_experiment(
+        _hypothesis(), _experiment(("7", "address(0xBEEF)")), "Target.sol", "Target", tmp_path / "test" / "generated.t.sol", model
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "vm.prank(attacker);\n        try target.seed(address(0xCAFE)) {} catch { setupOk = false; }" in rendered
+    assert "execution-readiness setup failed" in rendered
+
+
 def test_authorization_renderer_emits_constructor_arguments_and_imports_interface(tmp_path: Path):
     (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
     (tmp_path / "IERC20.sol").write_text("interface IERC20 {}\n", encoding="utf-8")

@@ -286,19 +286,23 @@ def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
     polarities = dict(function.state_predicate_polarities)
     for predicate in function.state_predicates:
         polarity = polarities.get(predicate)
-        # ``state_predicates`` predates explicit polarity metadata. Legacy
-        # models therefore represent a required state without a polarity
-        # entry; preserve that meaning for readiness planning. An explicit
-        # ``unknown`` remains unknown and must not create a setup candidate.
-        if polarity is not None and polarity != "must_hold":
-            continue
-        for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate):
+        # A positive requirement directly names the state. A reverting guard
+        # such as items.length == 0 also implies a positive setup requirement:
+        # the normal path needs a non-empty collection. Other negative/unknown
+        # predicates remain conservative and do not invent a setup transition.
+        if polarity not in {None, "must_hold"}:
+            if not (
+                polarity == "must_not_hold"
+                and re.search(r"\b[A-Za-z_]\w*\.length\s*==\s*0\b", predicate)
+            ):
+                continue
+        for match in re.finditer(r"\b([A-Za-z_]\w*)(?:\.length)?\b", predicate):
+            name = match.group(1)
             if name in {"true", "false", "address", "bytes", "uint", "int"}:
                 continue
             if name not in names:
                 names.append(name)
     return tuple(names)
-
 
 def _state_setup_candidates(
     contract: ContractModel,
