@@ -24,24 +24,50 @@ _CANONICAL_RELATIONS = {"reads", "writes", "transition_expression"}
 def build_state_effect_index(
     evidence: Iterable[SemanticRelationshipEvidence],
 ) -> dict[str, tuple[StateEffect, ...]]:
-    """Index compiler-backed state effects by function.
+    """Index compiler-backed direct and transitive state effects by function.
 
-    Only canonical semantic relations are consumed. Legacy ``reference`` evidence
-    is deliberately ignored because it establishes identity, not mutation semantics.
+    Compiler AST evidence is the authority for direct effects. Resolved internal
+    and inherited calls are then followed to expose state dependencies that are
+    semantically real but occur below a producer (for example a value getter
+    delegating to a balance accessor). This remains evidence, not satisfiability.
     """
     grouped: dict[str, list[StateEffect]] = defaultdict(list)
+    calls: dict[str, set[str]] = defaultdict(set)
+
     for item in evidence:
-        if item.relation not in _CANONICAL_RELATIONS:
-            continue
-        effect = StateEffect(
-            function=item.function,
-            state=item.target,
-            relation=item.relation,
-            confidence=item.confidence,
-            provenance=item.source,
-        )
-        if effect not in grouped[item.function]:
-            grouped[item.function].append(effect)
+        if item.relation in _CANONICAL_RELATIONS:
+            effect = StateEffect(
+                function=item.function,
+                state=item.target,
+                relation=item.relation,
+                confidence=item.confidence,
+                provenance=item.source,
+            )
+            if effect not in grouped[item.function]:
+                grouped[item.function].append(effect)
+        elif item.relation == "calls":
+            calls[item.function].add(item.target)
+
+    # Fixed-point propagation is bounded by the finite compiler evidence graph.
+    # Propagate both reads and writes: a caller that delegates to a helper inherits
+    # the helper's state effects for readiness and setup reasoning.
+    changed = True
+    while changed:
+        changed = False
+        for caller, callees in calls.items():
+            for callee in callees:
+                for effect in grouped.get(callee, ()):
+                    propagated = StateEffect(
+                        function=caller,
+                        state=effect.state,
+                        relation=effect.relation,
+                        confidence=min(effect.confidence, 0.95),
+                        provenance=f"{effect.provenance}:via-call:{callee}",
+                    )
+                    if propagated not in grouped[caller]:
+                        grouped[caller].append(propagated)
+                        changed = True
+
     return {name: tuple(items) for name, items in grouped.items()}
 
 
@@ -49,7 +75,7 @@ def state_writes_for_function(
     effects: dict[str, tuple[StateEffect, ...]],
     function: str,
 ) -> tuple[str, ...] | None:
-    """Return authoritative state roots, or None when no compiler evidence exists."""
+    """Return authoritative direct/transitive state roots, or None when unavailable."""
     items = effects.get(function)
     if items is None:
         return None
@@ -65,7 +91,7 @@ def state_reads_for_function(
     effects: dict[str, tuple[StateEffect, ...]],
     function: str,
 ) -> tuple[str, ...] | None:
-    """Return compiler-backed state reads, or None when evidence is unavailable."""
+    """Return compiler-backed direct/transitive state reads, or None when unavailable."""
     items = effects.get(function)
     if items is None:
         return None
