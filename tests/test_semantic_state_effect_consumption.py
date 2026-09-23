@@ -88,7 +88,7 @@ def test_array_push_and_pop_are_compiler_state_mutations():
                 "expression": {
                     "nodeType": "MemberAccess",
                     "memberName": "push",
-                    "expression": {"nodeType": "Identifier", "referencedDeclaration": 11},
+                    "expression": {"nodeType": "Identifier", "id": 11, "referencedDeclaration": 11},
                 },
                 "arguments": [],
             }},
