@@ -61,13 +61,20 @@ def _mark_lvalue_roles(node: Any, states: dict[int, str], roles: dict[int, str],
     refs = _state_refs(node, states)
     if not refs:
         return
-    first = refs[0].get("referencedDeclaration")
-    if isinstance(first, int):
-        roles[first] = role
+    first = refs[0]
+    first_id = _node_id(first)
+    first_ref = first.get("referencedDeclaration")
+    if isinstance(first_id, int):
+        roles[first_id] = role
+    if isinstance(first_ref, int):
+        roles[first_ref] = role
     for ref in refs[1:]:
-        ref_id = ref.get("referencedDeclaration")
+        ref_id = _node_id(ref)
+        ref_decl = ref.get("referencedDeclaration")
         if isinstance(ref_id, int) and ref_id not in roles:
             roles[ref_id] = "read"
+        if isinstance(ref_decl, int) and ref_decl not in roles:
+            roles[ref_decl] = "read"
 
 
 def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int, str]:
