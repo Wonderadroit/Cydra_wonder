@@ -898,8 +898,11 @@ def _timeout_result(
     timeout: float,
     error: subprocess.TimeoutExpired,
 ) -> ExecutionResult:
-    stdout = error.stdout or ""
-    stderr = (error.stderr or "") + f"\nCYDRA experiment timeout after {timeout:g}s"
+    stdout_raw = error.stdout or ""
+    stderr_raw = error.stderr or ""
+    stdout = stdout_raw.decode(errors="replace") if isinstance(stdout_raw, bytes) else str(stdout_raw)
+    stderr = stderr_raw.decode(errors="replace") if isinstance(stderr_raw, bytes) else str(stderr_raw)
+    stderr += f"\nCYDRA experiment timeout after {timeout:g}s"
     return ExecutionResult(
         experiment_id, target, command, 124, False, 0, 0, "UNMEASURABLE", stdout, stderr
     )
