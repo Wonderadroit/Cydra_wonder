@@ -233,7 +233,7 @@ def _execution_dataflow_requirements(
                 "must be resolved before the consuming path is treated as reachable",
             )
         )
-        producer_reads = state_reads_for_function(semantic_effects, producer.name)
+        producer_reads = state_reads_for_function(semantic_effects, producer.name, contract.name)
         if producer_reads:
             for state in producer_reads:
                 requirements.append(
@@ -365,7 +365,7 @@ def _state_setup_candidates(
         for writer in contract.functions:
             if writer.name == function.name or writer.visibility not in {"public", "external"}:
                 continue
-            semantic_writes = state_writes_for_function(semantic_effects, writer.name)
+            semantic_writes = state_writes_for_function(semantic_effects, writer.name, contract.name)
             touched = state in writer.writes or (semantic_writes is not None and state in semantic_writes) or any(
                 receiver == state and method in {"push", "pop"}
                 for receiver, method in writer.external_calls
