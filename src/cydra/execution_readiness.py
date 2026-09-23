@@ -156,16 +156,28 @@ def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool
     )
     try:
         resolved, _ = resolve_named_type_source(project_root, source_path, receiver)
-    except (FileNotFoundError, ValueError, OSError, UnicodeError):
-        return False
-    resolved_path = Path(resolved)
-    if not resolved_path.is_absolute():
-        resolved_path = (project_root / resolved_path).resolve()
-    try:
+        resolved_path = Path(resolved)
+        if not resolved_path.is_absolute():
+            resolved_path = (project_root / resolved_path).resolve()
         source = resolved_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return False
-    return bool(re.search(r"\blibrary\s+" + re.escape(receiver) + r"\b", source))
+        return bool(re.search(r"\blibrary\s+" + re.escape(receiver) + r"\b", source))
+    except (FileNotFoundError, ValueError, OSError, UnicodeError):
+        # Fail closed on ambiguity, but tolerate resolver limitations by checking
+        # the target's own Solidity dependency tree for a unique library declaration.
+        matches: list[Path] = []
+        try:
+            for candidate in project_root.rglob("*.sol"):
+                try:
+                    text = _strip_comments(candidate.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError):
+                    continue
+                if re.search(r"\blibrary\s+" + re.escape(receiver) + r"\b", text):
+                    matches.append(candidate)
+                    if len(matches) > 1:
+                        return False
+        except OSError:
+            return False
+        return len(matches) == 1
 
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
