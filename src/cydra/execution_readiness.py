@@ -184,7 +184,7 @@ def _execution_dataflow_requirements(
             )
         )
 
-        call_match = re.match(r"^(?:[A-Za-z_]\w*\\.)?(?P<name>[A-Za-z_]\w*)\s*\\(", expression)
+        call_match = re.match(r"^(?:[A-Za-z_]\w*\.)?(?P<name>[A-Za-z_]\w*)\s*\(", expression)
         if not call_match:
             continue
         producer_name = call_match.group("name")
