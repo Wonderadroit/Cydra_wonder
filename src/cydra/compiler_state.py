@@ -53,6 +53,28 @@ def extract_state_effects_from_build_info(build_info: Path, source: Path, projec
     return tuple(evidence)
 
 
+def extract_state_effects_from_all_sources(build_info: Path) -> tuple[SemanticRelationshipEvidence, ...]:
+    """Extract compiler-backed state effects from every source in build-info.
+
+    The selected target-source helper above intentionally remains target-scoped
+    for callers that need that boundary. Compiler-backed call/state resolution,
+    however, needs imported and inherited declarations as evidence too.
+    """
+    payload = json.loads(build_info.read_text(encoding="utf-8"))
+    output = payload.get("output")
+    sources = output.get("sources") if isinstance(output, dict) else None
+    if not isinstance(sources, dict):
+        return ()
+    evidence: list[SemanticRelationshipEvidence] = []
+    for source_key, source_payload in sources.items():
+        if not isinstance(source_key, str) or not isinstance(source_payload, dict):
+            continue
+        ast = source_payload.get("ast")
+        if isinstance(ast, dict):
+            evidence.extend(extract_ast_relationships(ast, source_key))
+    return tuple(evidence)
+
+
 def extract_constraints_from_build_info(build_info: Path, source: Path, project: Path) -> tuple[ConstraintEvidence, ...]:
     payload = json.loads(build_info.read_text(encoding="utf-8"))
     evidence: list[ConstraintEvidence] = []
@@ -104,7 +126,7 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
                 version = payload.get("solcVersion")
                 if isinstance(version, str):
                     versions.add(version)
-                evidence.extend(extract_state_effects_from_build_info(build_file, source_path, project_path))
+                evidence.extend(extract_state_effects_from_all_sources(build_file))
                 constraints.extend(extract_constraints_from_build_info(build_file, source_path, project_path))
             except (OSError, json.JSONDecodeError):
                 continue
