@@ -59,7 +59,7 @@ A negative or unmeasurable result is evidence about the current hypothesis/execu
 
 Before executing a generated experiment, CYDRA should derive **execution readiness** from the target model. This includes constructor/deployment dependencies, caller-role requirements, caller-identity predicates, and external runtime dependencies. Each prerequisite is classified as already satisfied, constructible by the adapter/harness, or unresolved. Unresolved prerequisites produce an explicit execution/environment blocker rather than being interpreted as security evidence. This layer is generic and target-independent.
 
-A real finding requires reproducible evidence and must survive adversarial challenge.
+A real finding requires reproducible evidence and must survive adversarial challenge. Producer state dependencies are execution prerequisites until their values are verified in the target harness.
 
 ## Blindness and the LLM
 
