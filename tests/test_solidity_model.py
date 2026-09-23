@@ -506,6 +506,23 @@ def test_single_statement_revert_guards_get_must_not_hold_polarity(tmp_path: Pat
     assert ("startDebt == 0", "must_not_hold") in function.execution_predicate_polarities
 
 
+def test_custom_error_single_statement_revert_guard_gets_must_not_hold_polarity(tmp_path: Path) -> None:
+    path = tmp_path / "CustomErrorGuard.sol"
+    path.write_text(
+        """
+        contract CustomErrorGuard {
+            uint256 public auctionsInProgress;
+            function addTranche() external {
+                if (auctionsInProgress > 0) revert AuctionOngoing();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    function = parse_solidity(path)[0].functions[0]
+    assert function.state_predicate_polarities == (("auctionsInProgress > 0", "must_not_hold"),)
+
+
 def test_execution_predicate_revert_guard_polarity_is_not_hold(tmp_path: Path) -> None:
     path = tmp_path / "Guard.sol"
     path.write_text('''
