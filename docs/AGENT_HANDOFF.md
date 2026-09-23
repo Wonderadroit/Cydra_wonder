@@ -53,3 +53,9 @@ Inspect the final artifact, not merely workflow success.
 Keep the blind boundary intact: historical findings and external audit answers must not be injected before the independent run is frozen.
 
 Doctrine: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Latest generic readiness repair
+The readiness layer now resolves declared Solidity call receivers through the target import graph and excludes calls resolved to `library` declarations from runtime-dependency blockers. This prevents deterministic internal/library operations such as SafeCast-style and error-library calls from being mistaken for externally constructible runtime dependencies. Actual interface/state receivers remain runtime requirements. The change is covered by a regression test and full PR validation; the three unrelated post-maturity batch failures remain target/campaign-specific and are not caused by this repair.
+
+The next Arcadia rerun must verify whether `addTranche` moves from unresolved to constructible. If it does, the generated setup must execute and verify `tranches.length > 0` before retrying `H-AUTH-startLiquidation`. If setup still fails, preserve the blocker and continue generic dependency analysis; do not add an Arcadia-specific mock.
