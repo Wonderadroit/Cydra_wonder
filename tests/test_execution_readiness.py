@@ -475,7 +475,7 @@ def test_constructible_state_setup_plan_resolves_transitive_writer_prerequisites
             FunctionModel("target", "external", (), (), (), 1, state_predicates=("items.length > 0",)),
             FunctionModel("seed", "external", (), ("items",), (), 2,
                           parameters=(ParameterModel("item", "address"),),
-                          state_predicates=("enabled > 0",)),
+                          state_predicates=("enabled > 0",), state_predicate_polarities=(("enabled > 0", "must_hold"),)),
             FunctionModel("enable", "external", (), ("enabled",), (), 3,
                           parameters=(ParameterModel("value", "uint256"),)),
         ),
