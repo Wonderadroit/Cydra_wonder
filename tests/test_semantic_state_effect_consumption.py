@@ -142,3 +142,31 @@ def test_transitive_internal_call_propagates_state_effects():
     evidence = extract_ast_relationships(ast, "Fixture.sol")
     effects = build_state_effect_index(evidence)
     assert "value" in state_writes_for_function(effects, "entry", "Fixture")
+
+
+def test_inherited_call_propagates_base_state_effect_to_derived_caller():
+    evidence = [
+        SemanticRelationshipEvidence(
+            contract="Base",
+            function="seed",
+            relation="writes",
+            target="balance",
+            confidence=0.98,
+            source="solc-json-ast:base.sol",
+        ),
+        SemanticRelationshipEvidence(
+            contract="Derived",
+            function="entry",
+            relation="calls",
+            target="Base.seed",
+            confidence=0.98,
+            source="solc-json-ast:derived.sol",
+            metadata={
+                "target_contract": "Base",
+                "target_function": "seed",
+                "inherited_target": True,
+            },
+        ),
+    ]
+    index = build_state_effect_index(evidence)
+    assert state_writes_for_function(index, "entry", "Derived") == ("balance",)
