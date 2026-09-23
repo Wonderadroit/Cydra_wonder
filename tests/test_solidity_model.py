@@ -491,6 +491,22 @@ def test_state_predicate_polarity_distinguishes_require_and_revert_guard(tmp_pat
 
 
 
+def test_state_predicate_polarity_models_collection_length_comparisons(tmp_path: Path) -> None:
+    path = tmp_path / "CollectionGuard.sol"
+    path.write_text('''
+        contract CollectionGuard {
+            address[] public items;
+            function target() external {
+                if (items.length > 0) revert();
+                require(items.length == 0);
+            }
+        }
+    ''', encoding="utf-8")
+    function = parse_solidity(path)[0].functions[0]
+    assert ("items.length > 0", "must_not_hold") in function.state_predicate_polarities
+    assert ("items.length == 0", "must_hold") in function.state_predicate_polarities
+
+
 def test_execution_predicates_capture_local_reachability_without_promoting_local_values_to_state(tmp_path: Path) -> None:
     path = tmp_path / "LocalGuard.sol"
     path.write_text(
