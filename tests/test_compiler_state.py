@@ -187,6 +187,6 @@ def test_extracts_selected_source_import_dependencies_without_unrelated_leakage(
         "src/Other.sol": {"ast": unrelated_ast},
     }}}), encoding="utf-8")
 
-    evidence = extract_compiler = extract_state_effects_from_build_info(build, source, project)
+    evidence = extract_state_effects_from_build_info(build, source, project)
     assert any(item.contract == "Base" and item.function == "read" and item.target == "value" for item in evidence)
     assert not any(item.contract == "Other" for item in evidence)
