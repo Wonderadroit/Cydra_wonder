@@ -100,7 +100,13 @@ def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int
     return roles
 
 
-def extract_ast_relationships(\n    ast: dict[str, Any],\n    file: str,\n    *,\n    global_functions: dict[int, tuple[str, str, int]] | None = None,\n    global_contract_ancestors: dict[int, set[int]] | None = None,\n) -> list[SemanticRelationshipEvidence]:
+def extract_ast_relationships(
+    ast: dict[str, Any],
+    file: str,
+    *,
+    global_functions: dict[int, tuple[str, str, int]] | None = None,
+    global_contract_ancestors: dict[int, set[int]] | None = None,
+) -> list[SemanticRelationshipEvidence]:
     """Extract compiler-linked state reads/writes from AST operator context.
 
     Declaration IDs are authoritative. Canonical SystemModel relation names are used
