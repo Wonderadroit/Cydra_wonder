@@ -324,10 +324,20 @@ def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[
     }
 
 
+_RUN_SEMANTIC_EVIDENCE = ()
+_RUN_CONSTRAINT_EVIDENCE = ()
+
 def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_sequence_test_from_experiment(
-        hypothesis, experiment, _target_import(contract, project), contract.name, output, contract
+        hypothesis,
+        experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+        semantic_evidence=_RUN_SEMANTIC_EVIDENCE,
+        constraints=_RUN_CONSTRAINT_EVIDENCE,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
     return {
@@ -574,6 +584,9 @@ def main() -> int:
             experiment_planner=_blind_planner,
             reasoning_surfaces=surfaces,
         )
+        global _RUN_SEMANTIC_EVIDENCE, _RUN_CONSTRAINT_EVIDENCE
+        _RUN_SEMANTIC_EVIDENCE = compiler_evidence.evidence
+        _RUN_CONSTRAINT_EVIDENCE = compiler_evidence.constraints
         statuses, executions, evidence = run_layers(result, project, classes)
         experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
         execution_readiness = []
