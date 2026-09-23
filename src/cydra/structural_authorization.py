@@ -132,7 +132,7 @@ def _has_caller_authorization_predicate(function) -> bool:
 
 def _writes_for(function, contract: ContractModel, semantic_effects: dict[str, tuple] | None) -> tuple[str, ...]:
     if semantic_effects is not None:
-        semantic = state_writes_for_function(semantic_effects, function.name)
+        semantic = state_writes_for_function(semantic_effects, function.name, contract.name)
         if semantic is not None: return semantic
     return _source_state_writes(contract, function)
 
