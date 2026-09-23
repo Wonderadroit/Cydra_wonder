@@ -86,3 +86,19 @@ def test_ast_semantics_ignore_source_comment_or_string_text():
                          "kind": "string", "value": "value = 999;"}}
     ])])
     assert not _relations(ast)
+
+
+def test_compiler_resolved_internal_call_emits_call_edge():
+    callee = _function(40, "seed", [
+        {"nodeType": "Assignment", "id": 50, "operator": "=",
+         "leftHandSide": _identifier(51, 10, "value"),
+         "rightHandSide": {"nodeType": "Literal", "id": 52, "value": "1"}}
+    ])
+    caller = _function(60, "entry", [
+        {"nodeType": "ExpressionStatement", "id": 70,
+         "expression": {"nodeType": "FunctionCall", "id": 71,
+                        "expression": _identifier(72, 40, "seed"),
+                        "arguments": []}}
+    ])
+    relations = _relations(_ast([callee, caller]))
+    assert ("entry", "calls", "Fixture.seed") in relations
