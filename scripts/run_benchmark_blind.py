@@ -192,9 +192,37 @@ def require_frozen_source() -> None:
         raise RuntimeError("run_benchmark_blind.py is not clean in git status")
 
 
+def _setup_timeout_seconds() -> int:
+    raw = os.environ.get("CYDRA_SETUP_TIMEOUT_SECONDS", "300")
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise RuntimeError("CYDRA_SETUP_TIMEOUT_SECONDS must be an integer") from error
+    if value <= 0:
+        raise RuntimeError("CYDRA_SETUP_TIMEOUT_SECONDS must be positive")
+    return value
+
+
+def _run_setup(command: tuple[str, ...], cwd: Path | None = None, *, env=None) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            command,
+            cwd=cwd,
+            text=True,
+            capture_output=True,
+            check=True,
+            env=env,
+            timeout=_setup_timeout_seconds(),
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(
+            f"setup command timed out after {_setup_timeout_seconds()}s: {' '.join(command)}"
+        ) from error
+
+
 def clone_target(repo: str, ref: str, destination: Path) -> None:
-    subprocess.run(("git", "clone", "--no-tags", "--recurse-submodules", repo, str(destination)), check=True)
-    subprocess.run(("git", "-C", str(destination), "checkout", "--detach", ref), check=True)
+    _run_setup(("git", "clone", "--no-tags", "--recurse-submodules", repo, str(destination)))
+    _run_setup(("git", "-C", str(destination), "checkout", "--detach", ref))
 
 
 def prepare_target_project(project: Path) -> None:
@@ -221,7 +249,7 @@ def prepare_target_project(project: Path) -> None:
                 if command and command[0] == "yarn":
                     environment = os.environ.copy()
                     environment["YARN_CACHE_FOLDER"] = str(project / ".cydra-yarn-cache")
-                subprocess.run(command, cwd=project, check=True, env=environment)
+                _run_setup(command, cwd=project, env=environment)
                 break
             except subprocess.CalledProcessError as error:
                 last_error = error
@@ -235,11 +263,7 @@ def prepare_target_project(project: Path) -> None:
     # the standard library only when the target does not already vendor it.
     forge_std = project / "lib" / "forge-std"
     if not forge_std.exists():
-        subprocess.run(
-            ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
-            cwd=project,
-            check=True,
-        )
+        _run_setup(("forge", "install", "foundry-rs/forge-std", "--no-commit"), cwd=project)
 
 
 def _contract_for_hypothesis(result, hypothesis):
