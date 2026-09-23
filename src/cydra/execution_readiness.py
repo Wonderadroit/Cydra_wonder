@@ -212,6 +212,7 @@ def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool
         return walk(source_path) is True
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
+    state_names = set(contract.state_variables)
     for receiver, method in function.external_calls:
         # Solidity array mutations are represented by the parser as calls on
         # synthetic receivers, but push/pop are local state operations, not
@@ -220,13 +221,28 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
             continue
         if _runtime_receiver_is_library(contract, receiver):
             continue
+
+        # A call through a state-backed receiver is not an unknown runtime
+        # target: the target address is part of the target's own state/model.
+        # Keep it as a prerequisite for runtime verification, but do not
+        # misclassify it as an unconstructible external dependency.
+        normalized_receiver = receiver.strip()
+        receiver_root = re.match(r"^([A-Za-z_]\\w*)$", normalized_receiver)
+        configured = bool(receiver_root and receiver_root.group(1) in state_names)
+        status = "discovered" if configured else "required"
+        detail = (
+            "external call receiver is a modeled contract state value; runtime behavior "
+            "must still be verified against the target's configured dependency"
+            if configured
+            else "function performs an external call whose target/state may be required for execution"
+        )
         requirements.append(
             ExecutionRequirement(
                 "runtime_dependency",
                 f"{receiver}.{method}",
                 f"{function.name}:external_call",
-                "required",
-                "function performs an external call whose target/state may be required for execution",
+                status,
+                detail,
             )
         )
     return tuple(dict.fromkeys(requirements))
@@ -601,7 +617,7 @@ def constructible_state_setup_plan(
         if any(item.kind == "caller_state_dependency" and item.status == "unresolved" for item in readiness.execution_requirements):
             memo[key] = None
             return None
-        if readiness.runtime_requirements:
+        if any(item.status == "unresolved" for item in readiness.runtime_requirements):
             memo[key] = None
             return None
         if any(
