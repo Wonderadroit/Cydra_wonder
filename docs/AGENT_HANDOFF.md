@@ -87,3 +87,14 @@ The current milestone is complete only when:
 - Remaining blocker: resolve the caller-state chain `startLiquidation -> maxWithdraw(msg.sender) -> balanceOf(msg.sender) > 0` through generic compiler-backed producer/call-data-flow reasoning, including producer dependencies.
 - Final Arcadia research job and Python baseline are green. Three broader post-maturity checks remain known external-target/campaign blockers (unsupported Rabbithole adapter; Debtdao clone/setup timeout; related target campaign baseline), not regressions from this change.
 - Next capability: compiler-backed intra-contract call-edge propagation into transitive state-effect reasoning, followed by a target-only rerun and artifact comparison.
+
+
+## Diagnosis-first doctrine checkpoint
+
+The project doctrine now explicitly requires CYDRA to diagnose unfamiliar targets, errors, blockers, and unexpected behavior before patching symptoms. The target's intent, state, invariants, preconditions, dependencies, and enforcement mechanisms are treated as evidence-bearing structure. Generic fixes must repair the missing abstraction at the narrowest justified layer, with focused regression coverage. This formalizes the pattern already demonstrated by the adapter and execution-readiness work.
+
+The canonical loop is:
+
+**Observe → Diagnose → Understand Intent → Model → Identify Preconditions → Use Target Mechanisms → Experiment → Evidence → Update Model → Generalize**
+
+The goal is not maximum execution count. The goal is increasingly accurate target understanding and meaningful, reachable, reproducible, causally informative experiments.
