@@ -1988,3 +1988,24 @@ Validation is being performed through the draft PR #207 fan-out. No merge or sec
 The next capability boundary remains generic dependency-aware fixture construction and verification. Arcadia-specific exploit logic is prohibited.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 89 — compiler state-effects import closure validation
+
+The latest supervised Arcadia continuation was executed from CYDRA commit `471623053b3dda426c984a124a4c42ff2fa58b26`. GitHub Actions research run `35854583623` completed successfully and uploaded artifact `10747426250` with SHA-256 `914478d4965476455f24dd817232c61c438b5accd8f0d51651e2ac1d37415667`.
+
+Observed result:
+- target intake and compilation remained successful;
+- authorization coverage remained 1 extracted/executed hypothesis, `H-AUTH-startLiquidation`, with the candidate call reverting;
+- state coverage remained 23 extracted/executed hypotheses;
+- no vulnerability was confirmed;
+- execution readiness still identifies `addTranche` as the constructible transition for the `tranches.length > 0` prerequisite, while the security-relevant `startLiquidation` path remains blocked by the positive `maxWithdraw(msg.sender)` caller-state requirement;
+- the research artifact recorded 24 executions: 5 PASS and 19 FAIL. These execution statuses are experiment measurements, not vulnerability classifications.
+
+A generic compiler-state repair was added in this continuation: build-info state-effect extraction now has an all-source mode so imported/inherited Solidity declarations can contribute compiler-backed state evidence, while the existing target-scoped helper remains available for target-only consumers. A regression covers state effects originating in an imported source. This is intended to support dependency-aware producer resolution without encoding Arcadia-specific answers.
+
+The PR validation fan-out completed with 71 checks: 68 successful and three known pre-existing post-maturity failures (`benchmark`, `negative-controls`, and `post-maturity batch`). The failures are target/campaign baseline failures unrelated to the compiler-state import repair; their logs were inspected. The validation PR remains unmerged/draft until the project's CI acceptance policy is satisfied.
+
+The next generic boundary remains: construct and verify the minimum caller/dependency state required by a resolved value producer, rather than treating a named prerequisite as satisfied. Historical findings may now be used only as a post-blind backtest/oracle for capability measurement; they must not be injected into the blind research path.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
