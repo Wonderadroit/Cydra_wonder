@@ -37,3 +37,22 @@ A particularly important generic capability is propagating prerequisites through
 - Never use a privileged caller to prove an unauthorized-call hypothesis.
 - Do not claim that the Arcadia research found a bug until the artifact's evidence is inspected.
 - When research is complete, inspect the uploaded artifact, classification, execution evidence, integrity/provenance, and all job conclusions.
+
+
+## Diagnosis-first rule
+
+When CYDRA encounters an unfamiliar target, adapter issue, compiler/parser error, execution blocker, unexpected revert, or surprising result:
+
+1. **Diagnose before patching.**
+2. Determine the target's apparent intent, actors, state, invariants, preconditions, and enforcement mechanisms.
+3. Treat the observed error/behavior as evidence about the current system model.
+4. Use the target's own structure and mechanisms to construct the smallest discriminating experiment.
+5. Fix the generic abstraction that the evidence shows is missing; do not patch the target symptom.
+6. Add a focused regression and run the relevant broader regression.
+7. Generalize only to the narrowest reusable capability justified by evidence.
+
+Canonical loop:
+
+**Observe → Diagnose → Understand Intent → Model → Identify Preconditions → Use Target Mechanisms → Experiment → Evidence → Update Model → Generalize**
+
+This rule applies to adapters, execution readiness, compiler semantics, state setup, caller/role resolution, data-flow, and security hypotheses. More executions are not automatically progress; more **meaningful, reachable, evidence-producing, causally verified** executions are the goal.
