@@ -356,6 +356,48 @@ def _state_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[str,
     return tuple(predicate for predicate, _ in _state_predicate_polarities(body, state_variables))
 
 
+def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+    """Extract path predicates that are not persistent-state predicates."""
+    results: list[tuple[str, str]] = []
+    state_names = set(state_variables)
+
+    def add(candidate: str, polarity: str) -> None:
+        text = candidate.strip()
+        if not text:
+            return
+        identifiers = set(re.findall(r"\\b[A-Za-z_]\\w*\\b", text))
+        if identifiers and identifiers.issubset(state_names):
+            return
+        item = (text, polarity)
+        if item not in results:
+            results.append(item)
+
+    for match in re.finditer(r"\\brequire\\s*\\(", body):
+        opening = body.find("(", match.start())
+        add(_first_argument(_balanced_parenthesized(body, opening)), "must_hold")
+
+    for match in re.finditer(r"\\bif\\s*\\(", body):
+        opening = body.find("(", match.start())
+        predicate = _balanced_parenthesized(body, opening).strip()
+        tail_start = _balanced_parenthesized_end(body, opening)
+        tail = body[tail_start:].lstrip()
+        polarity = "unknown"
+        brace = body.find("{", tail_start)
+        if brace >= 0:
+            branch = _body(body, brace)
+            if re.search(r"\\brevert\\b", branch):
+                polarity = "must_not_hold"
+        elif re.match(r"revert\\s*(?:\\(|;)", tail):
+            polarity = "must_not_hold"
+        add(predicate, polarity)
+
+    return tuple(results)
+
+
+def _execution_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(predicate for predicate, _ in _execution_predicate_polarities(body, state_variables))
+
+
 def _declared_types(body: str) -> tuple[str, ...]:
     """Extract only contract-scope struct, enum, and value-type declarations."""
     declared: list[str] = []
@@ -548,6 +590,8 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                     authorization_predicates=_authorization_predicates(body),
                     state_predicates=_state_predicates(body, state_variables),
                     state_predicate_polarities=_state_predicate_polarities(body, state_variables),
+                    execution_predicates=_execution_predicates(body, state_variables),
+                    execution_predicate_polarities=_execution_predicate_polarities(body, state_variables),
                 )
             )
 
