@@ -117,6 +117,23 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             if isinstance(node.get("name"), str) and isinstance(node_id, int):
                 states[node_id] = node["name"]
 
+    # Build a compiler-authoritative function declaration index so internal
+    # calls can be represented as data-flow edges. We intentionally resolve only
+    # AST declarations present in this compiler unit; unresolved/dynamic calls
+    # remain unresolved rather than being guessed from names.
+    functions: dict[int, tuple[str, str]] = {}
+    for item in _walk(ast):
+        if item.get("nodeType") != "FunctionDefinition" or not isinstance(item.get("id"), int):
+            continue
+        scope = item.get("scope")
+        contract_name = declarations.get(scope, {}).get("name", "unknown") if isinstance(scope, int) else "unknown"
+        kind = item.get("kind")
+        function_name = (
+            item.get("name") if isinstance(item.get("name"), str) and item.get("name")
+            else kind if kind in {"constructor", "receive", "fallback"} else "anonymous"
+        )
+        functions[item["id"]] = (str(contract_name), str(function_name))
+
     evidence: list[SemanticRelationshipEvidence] = []
     for node in _walk(ast):
         if node.get("nodeType") != "FunctionDefinition" or not isinstance(node.get("id"), int):
@@ -131,6 +148,29 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
         if not isinstance(body, dict):
             continue
         roles = _operator_contexts(body, states)
+        for call in _walk(body):
+            if call.get("nodeType") != "FunctionCall":
+                continue
+            expression = call.get("expression")
+            if not isinstance(expression, dict):
+                continue
+            declaration_id = expression.get("referencedDeclaration")
+            if not isinstance(declaration_id, int) or declaration_id not in functions:
+                continue
+            target_contract, target_function = functions[declaration_id]
+            # Keep only compiler-resolved declarations. Calls to external or
+            # dynamically resolved targets that lack a local declaration are
+            # deliberately left unresolved for the higher-level readiness
+            # model to handle conservatively.
+            evidence.append(SemanticRelationshipEvidence(
+                contract=str(contract), function=str(function_name), relation="calls",
+                target=f"{target_contract}.{target_function}", confidence=0.98,
+                source=f"solc-json-ast:{file}", ast_node_id=_node_id(call),
+                source_location=_location(call), function_ast_node_id=function_id,
+                target_ast_node_id=declaration_id,
+                metadata={"function_kind": kind, "semantic_relation": "calls",
+                          "target_contract": target_contract, "target_function": target_function},
+            ))
         for item in _walk(body):
             if item.get("nodeType") != "Identifier":
                 continue
