@@ -56,7 +56,11 @@ class FunctionModel:
     # predicate must hold, must not hold, or has unknown reachability semantics.
     # This preserves guard semantics without changing the legacy predicate surface.
     state_predicate_polarities: tuple[tuple[str, str], ...] = field(default_factory=tuple)
-    # Predicates over locals/parameters/call results that constrain whether the\n    # security-relevant path is reachable. Kept separate from persistent state\n    # predicates so readiness never mistakes a transient execution value for\n    # contract state.\n    execution_predicates: tuple[str, ...] = field(default_factory=tuple)
+    # Predicates over locals/parameters/call results that constrain whether the
+    # security-relevant path is reachable. Kept separate from persistent state
+    # predicates so readiness never mistakes a transient execution value for
+    # contract state.
+    execution_predicates: tuple[str, ...] = field(default_factory=tuple)
     execution_predicate_polarities: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
