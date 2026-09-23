@@ -324,10 +324,7 @@ def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[
     }
 
 
-_RUN_SEMANTIC_EVIDENCE = ()
-_RUN_CONSTRAINT_EVIDENCE = ()
-
-def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+def _run_state(project: Path, hypothesis, experiment, contract, semantic_evidence=(), constraints=()) -> dict[str, Any]:
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_sequence_test_from_experiment(
         hypothesis,
@@ -336,8 +333,8 @@ def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any
         contract.name,
         output,
         contract,
-        semantic_evidence=_RUN_SEMANTIC_EVIDENCE,
-        constraints=_RUN_CONSTRAINT_EVIDENCE,
+        semantic_evidence=semantic_evidence,
+        constraints=constraints,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
     return {
@@ -397,7 +394,7 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
-def run_layers(result, project: Path, classes: tuple[str, ...]):
+def run_layers(result, project: Path, classes: tuple[str, ...], semantic_evidence=(), constraints=()):
     experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
     statuses: list[dict[str, Any]] = []
     executions: list[ExecutionResult] = []
@@ -434,7 +431,7 @@ def run_layers(result, project: Path, classes: tuple[str, ...]):
             if class_name == "authorization":
                 run = _run_authorization(project, hypothesis, experiment, contract)
             elif class_name == "state":
-                run = _run_state(project, hypothesis, experiment, contract)
+                run = _run_state(project, hypothesis, experiment, contract, semantic_evidence, constraints)
             elif class_name == "initialization":
                 run = _run_initialization(project, hypothesis, experiment, contract)
             elif class_name == "guard_parity":
@@ -584,10 +581,7 @@ def main() -> int:
             experiment_planner=_blind_planner,
             reasoning_surfaces=surfaces,
         )
-        global _RUN_SEMANTIC_EVIDENCE, _RUN_CONSTRAINT_EVIDENCE
-        _RUN_SEMANTIC_EVIDENCE = compiler_evidence.evidence
-        _RUN_CONSTRAINT_EVIDENCE = compiler_evidence.constraints
-        statuses, executions, evidence = run_layers(result, project, classes)
+        statuses, executions, evidence = run_layers(result, project, classes, compiler_evidence.evidence, compiler_evidence.constraints)
         experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
         execution_readiness = []
         for hypothesis in result.hypotheses:
