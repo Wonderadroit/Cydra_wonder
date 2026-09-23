@@ -237,3 +237,31 @@ def test_hypothesis_stays_unconfirmed_without_measurable_differential():
     patched = _execution("X-H-AUTH-setWhitelist", "patched", 1, "FAIL", 1, 1)
     outcome = classify_access_control_outcome(hypothesis, vulnerable, patched)
     assert outcome.hypothesis.status == "proposed"
+
+
+def test_foundry_execution_timeout_fails_closed(monkeypatch, tmp_path):
+    import cydra.foundry as foundry
+
+    test_path = tmp_path / "generated.t.sol"
+    test_path.write_text("// test", encoding="utf-8")
+
+    def timeout(*args, **kwargs):
+        raise __import__("subprocess").TimeoutExpired(kwargs.get("args", args[0] if args else "forge"), 1, output="partial", stderr="still running")
+
+    monkeypatch.setattr(foundry.subprocess, "run", timeout)
+    monkeypatch.setenv("CYDRA_EXPERIMENT_TIMEOUT_SECONDS", "2")
+
+    result = foundry.run_foundry_test(tmp_path, test_path, "X-timeout", "blind")
+    assert result.status == "UNMEASURABLE"
+    assert result.executed is False
+    assert result.tests_run == 0
+    assert result.exit_code == 124
+    assert "CYDRA experiment timeout after 2s" in result.stderr
+
+
+def test_foundry_execution_timeout_budget_must_be_positive(monkeypatch):
+    import cydra.foundry as foundry
+
+    monkeypatch.setenv("CYDRA_EXPERIMENT_TIMEOUT_SECONDS", "0")
+    with pytest.raises(ValueError, match="greater than zero"):
+        foundry._experiment_timeout_seconds()
