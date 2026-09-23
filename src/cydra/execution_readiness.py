@@ -165,7 +165,7 @@ def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool
         source = resolved_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return False
-    return bool(re.search(r"\\blibrary\\s+" + re.escape(receiver) + r"\\b", source))
+    return bool(re.search(r"\blibrary\s+" + re.escape(receiver) + r"\b", source))
 
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
