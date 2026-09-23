@@ -119,7 +119,6 @@ def generate_authorization_test_from_experiment(
     asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
     asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
     readiness = inspect_execution_readiness(contract_model, function)
-    setup_calls: list[str] = []
     functions_by_name = {item.name: item for item in (*contract_model.inherited_functions, *contract_model.functions)}
     caller_bindings = {
         "owner": "owner",
@@ -129,6 +128,7 @@ def generate_authorization_test_from_experiment(
         "liquidator": "liquidator",
         "factory": "factory",
     }
+    setup_lines: list[str] = []
     for requirement in readiness.state_setup_candidates:
         if requirement.status != "constructible":
             continue
@@ -142,20 +142,15 @@ def generate_authorization_test_from_experiment(
         if any(not argument for argument in defaults.values()):
             continue
         role = caller_bindings.get(caller_role(writer), "attacker")
-        setup_calls.append(
-            f"        vm.prank({role});\\n        target.{writer.name}({arguments});"
+        setup_lines.append(
+            f"        vm.prank({role});\n"
+            f"        try target.{writer.name}({arguments}) {{}} catch {{ setupOk = false; }}"
         )
-    setup_text = "\\n".join(dict.fromkeys(setup_calls))
     setup_guard = (
-        "        bool setupOk = true;\\n"
-        + "".join(
-            f"        try target.{functions_by_name[req.subject].name}({', '.join(conservative_defaults(functions_by_name[req.subject].parameters).values())}) {{}} catch {{ setupOk = false; }}\\n"
-            for req in readiness.state_setup_candidates
-            if req.status == "constructible" and req.subject in functions_by_name and conservative_defaults(functions_by_name[req.subject].parameters) is not None
-        )
-        + "        assertTrue(setupOk, \"execution-readiness setup failed\");\\n"
-    ) if setup_calls else ""
-    source = f'''// SPDX-License-Identifier: UNLICENSED
+        "        bool setupOk = true;\n"
+        + "\n".join(dict.fromkeys(setup_lines))
+        + "\n        assertTrue(setupOk, \"execution-readiness setup failed\");\n"
+    ) if setup_lines else ""    source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Experiment: {experiment.experiment_id}
