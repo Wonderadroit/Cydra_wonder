@@ -150,7 +150,8 @@ def generate_authorization_test_from_experiment(
         "        bool setupOk = true;\n"
         + "\n".join(dict.fromkeys(setup_lines))
         + "\n        assertTrue(setupOk, \"execution-readiness setup failed\");\n"
-    ) if setup_lines else ""    source = f'''// SPDX-License-Identifier: UNLICENSED
+    ) if setup_lines else ""
+    source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Experiment: {experiment.experiment_id}
