@@ -860,25 +860,91 @@ def _parse_execution(stdout: str, stderr: str, exit_code: int) -> tuple[bool, in
     return True, tests_run, tests_failed, "FAIL"
 
 
+def _experiment_timeout_seconds() -> float:
+    """Return the bounded wall-clock budget for one generated experiment."""
+    raw = os.environ.get("CYDRA_EXPERIMENT_TIMEOUT_SECONDS", "180")
+    try:
+        value = float(raw)
+    except ValueError as error:
+        raise ValueError("CYDRA_EXPERIMENT_TIMEOUT_SECONDS must be numeric") from error
+    if value <= 0:
+        raise ValueError("CYDRA_EXPERIMENT_TIMEOUT_SECONDS must be greater than zero")
+    return value
+
+
+def _run_bounded(
+    command: tuple[str, ...], project: Path, timeout: float
+) -> tuple[subprocess.CompletedProcess[str] | None, subprocess.TimeoutExpired | None]:
+    try:
+        return (
+            subprocess.run(
+                command,
+                cwd=project,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=timeout,
+            ),
+            None,
+        )
+    except subprocess.TimeoutExpired as error:
+        return None, error
+
+
+def _timeout_result(
+    experiment_id: str,
+    target: str,
+    command: tuple[str, ...],
+    timeout: float,
+    error: subprocess.TimeoutExpired,
+) -> ExecutionResult:
+    stdout = error.stdout or ""
+    stderr = (error.stderr or "") + f"\nCYDRA experiment timeout after {timeout:g}s"
+    return ExecutionResult(
+        experiment_id, target, command, 124, False, 0, 0, "UNMEASURABLE", stdout, stderr
+    )
+
+
 def run_foundry_test(project_dir: str | Path, test_path: str | Path, experiment_id: str, target: str) -> ExecutionResult:
     project = Path(project_dir)
     relative_test = Path(test_path)
     if relative_test.is_absolute():
         relative_test = relative_test.relative_to(project)
+    timeout = _experiment_timeout_seconds()
     command = ("forge", "test", "--match-path", str(relative_test), "-vv")
-    completed = subprocess.run(command, cwd=project, text=True, capture_output=True, check=False)
+    completed, timed_out = _run_bounded(command, project, timeout)
+    if timed_out is not None:
+        return _timeout_result(experiment_id, target, command, timeout, timed_out)
+
+    assert completed is not None
     # Some unfamiliar targets are internally valid but their default Foundry
     # compilation profile fails on unrelated stack-depth limits. Retry the
     # exact generated test with Solidity IR only when the compiler explicitly
     # reports that capability condition. This changes compiler strategy, not
     # the hypothesis, inputs, target, or blind information boundary.
-    combined = f"{completed.stdout}\\n{completed.stderr}"
+    combined = f"{completed.stdout}\n{completed.stderr}"
     if completed.returncode != 0 and "Stack too deep" in combined:
         command = ("forge", "test", "--via-ir", "--match-path", str(relative_test), "-vv")
-        completed = subprocess.run(command, cwd=project, text=True, capture_output=True, check=False)
-    executed, tests_run, tests_failed, status = _parse_execution(completed.stdout, completed.stderr, completed.returncode)
-    return ExecutionResult(experiment_id, target, command, completed.returncode, executed, tests_run, tests_failed, status, completed.stdout, completed.stderr)
+        completed, timed_out = _run_bounded(command, project, timeout)
+        if timed_out is not None:
+            return _timeout_result(experiment_id, target, command, timeout, timed_out)
 
+    assert completed is not None
+    executed, tests_run, tests_failed, status = _parse_execution(
+        completed.stdout, completed.stderr, completed.returncode
+    )
+    return ExecutionResult(
+        experiment_id,
+        target,
+        command,
+        completed.returncode,
+        executed,
+        tests_run,
+        tests_failed,
+        status,
+        completed.stdout,
+        completed.stderr,
+    )
 
 def require_executed(result: ExecutionResult) -> ExecutionResult:
     if not result.executed or result.tests_run == 0 or result.status == "UNMEASURABLE":
