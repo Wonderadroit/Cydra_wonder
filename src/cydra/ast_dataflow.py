@@ -100,7 +100,7 @@ def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int
     return roles
 
 
-def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRelationshipEvidence]:
+def extract_ast_relationships(\n    ast: dict[str, Any],\n    file: str,\n    *,\n    global_functions: dict[int, tuple[str, str, int]] | None = None,\n    global_contract_ancestors: dict[int, set[int]] | None = None,\n) -> list[SemanticRelationshipEvidence]:
     """Extract compiler-linked state reads/writes from AST operator context.
 
     Declaration IDs are authoritative. Canonical SystemModel relation names are used
@@ -153,7 +153,7 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
     # calls can be represented as data-flow edges. We intentionally resolve only
     # AST declarations present in this compiler unit; unresolved/dynamic calls
     # remain unresolved rather than being guessed from names.
-    functions: dict[int, tuple[str, str]] = {}
+    local_functions: dict[int, tuple[str, str, int]] = {}
     for item in _walk(ast):
         if item.get("nodeType") != "FunctionDefinition" or not isinstance(item.get("id"), int):
             continue
@@ -164,7 +164,9 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             item.get("name") if isinstance(item.get("name"), str) and item.get("name")
             else kind if kind in {"constructor", "receive", "fallback"} else "anonymous"
         )
-        functions[item["id"]] = (str(contract_name), str(function_name))
+        local_functions[item["id"]] = (str(contract_name), str(function_name), scope if isinstance(scope, int) else -1)
+    functions = global_functions if global_functions is not None else local_functions
+    ancestors = global_contract_ancestors if global_contract_ancestors is not None else contract_ancestors
 
     evidence: list[SemanticRelationshipEvidence] = []
     for node in _walk(ast):
@@ -189,11 +191,11 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             declaration_id = expression.get("referencedDeclaration")
             if not isinstance(declaration_id, int) or declaration_id not in functions:
                 continue
-            target_contract, target_function = functions[declaration_id]
-            inherited_target = False
-            if isinstance(scope, int):
-                target_scope = next((sid for sid, name in contract_names.items() if name == target_contract), None)
-                inherited_target = target_scope in contract_ancestors.get(scope, set()) if target_scope is not None else False
+            target_contract, target_function, target_scope = functions[declaration_id]
+            inherited_target = (
+                isinstance(scope, int)
+                and target_scope in ancestors.get(scope, set())
+            )
             # Keep only compiler-resolved declarations. Calls to external or
             # dynamically resolved targets that lack a local declaration are
             # deliberately left unresolved for the higher-level readiness
