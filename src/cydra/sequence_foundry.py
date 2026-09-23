@@ -68,7 +68,7 @@ def generate_sequence_test_from_experiment(
             if any(not value for value in defaults.values()):
                 continue
             writer_role = caller_bindings.get(caller_role(writer), "attacker")
-            setup_rendered.append(f"        vm.prank({writer_role});\\n        target.{writer.name}({writer_args});")
+            setup_rendered.append(f"        vm.prank({writer_role});\n        target.{writer.name}({writer_args});")
             setup_keys.add(requirement.subject)
         role = caller_role(function)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
