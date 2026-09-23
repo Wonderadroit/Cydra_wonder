@@ -553,3 +553,36 @@ def test_execution_value_binding_records_helper_return_expression(tmp_path: Path
 
     assert ("startDebt", "maxWithdraw(msg.sender)") in start.execution_value_bindings
     assert producer.return_expressions == ("debt",)
+
+
+def test_parse_solidity_resolves_inherited_function_producers(tmp_path: Path) -> None:
+    (tmp_path / "Base.sol").write_text(
+        """
+        contract Base {
+            uint256 public debt;
+            function maxWithdraw(address owner) public view returns (uint256) {
+                return debt;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    derived_path = tmp_path / "Derived.sol"
+    derived_path.write_text(
+        """
+        import "./Base.sol";
+        contract Derived is Base {
+            function start() external {
+                uint256 startDebt = maxWithdraw(msg.sender);
+                if (startDebt == 0) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(derived_path)[0]
+    inherited = {function.name: function for function in contract.inherited_functions}
+
+    assert "maxWithdraw" in inherited
+    assert inherited["maxWithdraw"].return_expressions == ("debt",)
