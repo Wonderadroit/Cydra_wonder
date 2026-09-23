@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from .interface_resolver import resolve_interface, resolve_named_type_source
-from .execution_readiness import _address_role
+from .execution_readiness import _address_role, caller_role, inspect_execution_readiness
+from .experiment_inputs import conservative_defaults
 
 from .models import ContractModel, Experiment, Hypothesis
 from .planned_call import render_function_call
@@ -117,6 +118,43 @@ def generate_authorization_test_from_experiment(
     )
     asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
     asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
+    readiness = inspect_execution_readiness(contract_model, function)
+    setup_calls: list[str] = []
+    functions_by_name = {item.name: item for item in (*contract_model.inherited_functions, *contract_model.functions)}
+    caller_bindings = {
+        "owner": "owner",
+        "admin": "admin",
+        "guardian": "guardian",
+        "risk_manager": "riskManager",
+        "liquidator": "liquidator",
+        "factory": "factory",
+    }
+    for requirement in readiness.state_setup_candidates:
+        if requirement.status != "constructible":
+            continue
+        writer = functions_by_name.get(requirement.subject)
+        if writer is None:
+            continue
+        defaults = conservative_defaults(writer.parameters)
+        if defaults is None:
+            continue
+        arguments = ", ".join(defaults.get(parameter.name, "") for parameter in writer.parameters)
+        if any(not argument for argument in defaults.values()):
+            continue
+        role = caller_bindings.get(caller_role(writer), "attacker")
+        setup_calls.append(
+            f"        vm.prank({role});\\n        target.{writer.name}({arguments});"
+        )
+    setup_text = "\\n".join(dict.fromkeys(setup_calls))
+    setup_guard = (
+        "        bool setupOk = true;\\n"
+        + "".join(
+            f"        try target.{functions_by_name[req.subject].name}({', '.join(conservative_defaults(functions_by_name[req.subject].parameters).values())}) {{}} catch {{ setupOk = false; }}\\n"
+            for req in readiness.state_setup_candidates
+            if req.status == "constructible" and req.subject in functions_by_name and conservative_defaults(functions_by_name[req.subject].parameters) is not None
+        )
+        + "        assertTrue(setupOk, \"execution-readiness setup failed\");\\n"
+    ) if setup_calls else ""
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -134,7 +172,7 @@ import {{ {target_type} }} from "{target_import}";
     }}
 
     function testUnauthorizedCallerMutationSurface() public {{
-        vm.record();
+{setup_guard}        vm.record();
         vm.prank(attacker);
         bool ok;
         try target.{function.name}({arguments}) {{
