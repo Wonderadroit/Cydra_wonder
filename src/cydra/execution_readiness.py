@@ -351,7 +351,11 @@ def _state_setup_candidates(
                 or parameter.type.strip().split()[0].rstrip("[]").startswith(("uint", "int", "bytes"))
                 for parameter in writer.parameters
             )
-            runtime_dependencies = tuple(\n                requirement\n                for requirement in _runtime_requirements(writer)\n                if requirement.subject.split(".")[-1] not in {"push", "pop"}\n            )
+            runtime_dependencies = tuple(
+                requirement
+                for requirement in _runtime_requirements(writer)
+                if requirement.subject.split(".")[-1] not in {"push", "pop"}
+            )
             status = "constructible" if primitive_abi and not runtime_dependencies else "unresolved"
             if not primitive_abi:
                 detail = f"candidate transition {writer.name} has non-primitive parameters and cannot be synthesized generically"
