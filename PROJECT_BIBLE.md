@@ -109,6 +109,9 @@ Target understanding continues after environment detection. Before generated exp
 
 The readiness model records, without making vulnerability claims:
 
+- transient execution-path predicates separately from persistent state predicates; local variables, parameters, and helper-call results that control a revert are reachability prerequisites, not automatically state.
+- A measured revert is therefore interpreted only after CYDRA determines whether the security-relevant path was reached; failure to reach that path is an execution/readiness result, not a security conclusion.
+
 - constructor dependencies and deployable dependency requirements;
 - constructor role/dependency bindings where the declared target exposes them;
 - caller roles and caller-identity predicates;
