@@ -1971,3 +1971,20 @@ This is a successful **research observation campaign**, not a vulnerability resu
 No Arcadia-specific exploit, mock, or hard-coded target answer is to be added. Any repair must remain generic and evidence-driven.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 88 — execution-readiness refinement after supervised dogfood
+
+The supervised Arcadia public-code observation exposed a deeper generic prerequisite boundary: a security-relevant call can depend on a transient value whose producer is ERC-4626-style `maxWithdraw(msg.sender)`, while the caller's non-zero share/debt state is itself not yet constructible in the minimal fixture.
+
+CYDRA's generic model was refined to:
+- distinguish single-statement `if (...) revert` guards from unrelated later braces, preserving `must_not_hold` polarity;
+- record an unresolved caller-state prerequisite when a positive path depends on `maxWithdraw(msg.sender)` being non-zero;
+- use distinct deterministic role identities for fixture addresses, including a dedicated tranche identity, so a state-establishing transition cannot accidentally collide with a constructor dependency such as treasury;
+- retain fail-closed semantics: naming a prerequisite is not evidence that it is satisfiable, and an execution failure is not a finding.
+
+Validation is being performed through the draft PR #207 fan-out. No merge or security conclusion is permitted until the full required CI set is complete and any failures are diagnosed and retested.
+
+The next capability boundary remains generic dependency-aware fixture construction and verification. Arcadia-specific exploit logic is prohibited.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
