@@ -5,7 +5,8 @@ import os
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source
-from .execution_readiness import _address_role, caller_role
+from .execution_readiness import _address_role, caller_role, inspect_execution_readiness
+from .experiment_inputs import conservative_defaults
 
 
 def generate_sequence_test_from_experiment(
@@ -33,6 +34,10 @@ def generate_sequence_test_from_experiment(
     functions = {function.name: function for function in contract_model.functions}
     rendered: list[str] = []
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
+    functions_by_name = {function.name: function for function in contract_model.functions}
+    caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
+    setup_keys: set[str] = set()
+    setup_rendered: list[str] = []
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
             raise ValueError(f"sequence step {index} has no function")
@@ -49,6 +54,22 @@ def generate_sequence_test_from_experiment(
         if any(not argument.strip() for argument in step.arguments):
             raise ValueError(f"sequence step {step.function} contains an empty argument")
         arguments = ", ".join(step.arguments)
+        readiness = inspect_execution_readiness(contract_model, function)
+        for requirement in readiness.state_setup_candidates:
+            if requirement.status != "constructible" or requirement.subject in setup_keys:
+                continue
+            writer = functions_by_name.get(requirement.subject)
+            if writer is None:
+                continue
+            defaults = conservative_defaults(writer.parameters)
+            if defaults is None:
+                continue
+            writer_args = ", ".join(defaults.get(parameter.name, "") for parameter in writer.parameters)
+            if any(not value for value in defaults.values()):
+                continue
+            writer_role = caller_bindings.get(caller_role(writer), "attacker")
+            setup_rendered.append(f"        vm.prank({writer_role});\\n        target.{writer.name}({writer_args});")
+            setup_keys.add(requirement.subject)
         role = caller_role(function)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
         caller = caller_bindings.get(role, "attacker") if role else "attacker"
@@ -137,6 +158,7 @@ def generate_sequence_test_from_experiment(
     )
     asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
     asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
+    rendered.insert(0, "\n".join(setup_rendered))
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
