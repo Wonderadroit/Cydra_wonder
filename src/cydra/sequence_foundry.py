@@ -36,9 +36,9 @@ def generate_sequence_test_from_experiment(
 
     functions = {function.name: function for function in (*contract_model.functions, *contract_model.inherited_functions)}
     rendered: list[str] = []
-    role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
+    role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)", "tranche": "address(0x1007)"}
     functions_by_name = {function.name: function for function in (*contract_model.functions, *contract_model.inherited_functions)}
-    caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
+    caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory", "tranche": "tranche"}
     setup_keys: set[str] = set(step.function for step in experiment.steps)
     setup_rendered: list[str] = []
     for index, step in enumerate(experiment.steps):
@@ -179,7 +179,7 @@ import {{ {target_type} }} from "{target_import}";
 
 {stub_declaration}contract CydraSequenceExperimentTest is Test {{
     {target_type} internal target;
-    address internal attacker = address(0xBEEF);\n    address internal owner = address(0x1001);\n    address internal admin = address(0x1002);\n    address internal guardian = address(0x1003);\n    address internal riskManager = address(0x1004);\n    address internal liquidator = address(0x1005);\n    address internal factory = address(0x1006);
+    address internal attacker = address(0xBEEF);\n    address internal owner = address(0x1001);\n    address internal admin = address(0x1002);\n    address internal guardian = address(0x1003);\n    address internal riskManager = address(0x1004);\n    address internal liquidator = address(0x1005);\n    address internal factory = address(0x1006);\n    address internal tranche = address(0x1007);
 {asset_declaration}    function setUp() public {{
 {asset_setup}        target = {constructor_call};
     }}
