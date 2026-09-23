@@ -2028,3 +2028,20 @@ Post-blind external review was performed only after the blind artifact was froze
 The research phase is therefore closed as a **successful capability-observation campaign, not a vulnerability discovery**. The next engineering boundary is generic dependency-aware fixture construction and semantic caller-capability modeling. Do not add Arcadia-specific mocks, exploit sequences, addresses, or historical findings to the blind path.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 91 — recursive execution-readiness setup verification
+
+The supervised Arcadia public-code continuation was run from CYDRA commit `3b0c9762983d7ae8ddf499a8f706b7b3948b18fc` against frozen target commit `def3c94995773e2feb48b6d8a02dc603d96fd96c4`. Research workflow run `35885233651` completed successfully and uploaded artifact `10761559635` (`cydra-arcadia-lending-public-code`) with digest `sha256:66ce125054532ed43ce288675f337f3b1eecd9d56246d4a380860c0861c3a794`.
+
+The generic execution-readiness boundary was advanced from one-level state-writer discovery to recursive setup verification. Sequence experiments now resolve prerequisite state writers recursively, reject cycles and ambiguous state guards, and fail closed before materializing an unverified setup transition. Compiler constraints and semantic state evidence are passed into the sequence setup planner. Focused regressions cover transitive setup ordering and unresolved-prerequisite rejection.
+
+The final artifact was inspected and its `manifest.sha256` entries all verified. Target intake and compilation succeeded. The campaign extracted 71 hypotheses and planned 71 experiments; 27 experiments reached Foundry execution (10 PASS, 17 FAIL) and 44 state hypotheses were rejected at generation as unresolved execution prerequisites. No execution evidence was promoted to a finding; the artifact contains zero causal evidence records and no confirmed/proposed security finding. Authorization remained measured but `NOT_REACHED` because the unprivileged `startLiquidation` call reverted and the blind target has no patched counterpart.
+
+The most important remaining blocker is now explicit and generic: `startLiquidation` requires a positive `maxWithdraw(msg.sender)`, whose modeled producer requires `balanceOf(msg.sender) > 0`; CYDRA can name this caller-state dependency but cannot yet construct and verify the transitive state/value producer chain. Other state experiments are correctly blocked by ambiguous predicates such as `auctionsInProgress > 0` and `lastSyncedTimestamp != uint32(block.timestamp)` rather than being executed as if their prerequisites were satisfied.
+
+Relevant post-maturity CI failures on this branch remain the known external-target campaign blockers: Benchmark 044's Rabbithole target has no supported adapter, Benchmark 043 has an adapter/setup blocker including a Debtdao clone timeout, and the remaining benchmark failure is part of that pre-existing target campaign baseline. The Arcadia research workflow itself and the full Python baseline are green. These failures are not evidence of a CYDRA security regression.
+
+Next generic capability: transitive call/data-flow producer resolution for caller/state prerequisites, including discovering externally callable producers of required state through compiler-backed call edges and then verifying their own runtime/dependency prerequisites before setup. Do not add Arcadia-specific mocks, addresses, or exploit knowledge.
+
+Doctrine remains: **LLMs propose. Deterministic tools test. Evidence decides.**
