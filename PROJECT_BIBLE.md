@@ -2009,3 +2009,22 @@ The PR validation fan-out completed with 71 checks: 68 successful and three know
 The next generic boundary remains: construct and verify the minimum caller/dependency state required by a resolved value producer, rather than treating a named prerequisite as satisfied. Historical findings may now be used only as a post-blind backtest/oracle for capability measurement; they must not be injected into the blind research path.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 90 — Arcadia blind dogfood closure and post-blind diagnosis
+
+The latest supervised Arcadia Finance `lending-v2` public-code run completed successfully from CYDRA commit `c6ca95b755a98c9aa19c11017dc24fde6bab8bdb`, against frozen target commit `def3c94995773e2feb48b6d8a02dc603d96fd96c4`. GitHub Actions research run `35832626013` completed with the full regression baseline successful and uploaded artifact `10737632859` (SHA-256 `057dbcb0262262083a9e0d87d965d3d8ca5a5d95fb1591b3ce2c185ab0d9c41d`).
+
+Observed result:
+- target intake and compilation succeeded; no adapter blockers;
+- one authorization hypothesis, `H-AUTH-startLiquidation`, was extracted and executed;
+- the unprivileged candidate call reverted, so unauthorized mutation was not demonstrated;
+- the blind classifier produced no confirmed vulnerability; authorization remained `NOT_REACHED` because the blind public-code target has no patched counterpart;
+- the artifact's execution-readiness surface identified `tranches.length > 0` and the `addTranche` prerequisite transition, while the deeper caller-state producer chain remained unresolved;
+- the campaign therefore ended with **no confirmed vulnerability** and a concrete generic capability gap: dependency-rich prerequisite construction and verification is still insufficient for the most interesting protocol paths.
+
+Post-blind external review was performed only after the blind artifact was frozen. Existing Arcadia security material documents historical findings in `LendingPool`, including a liquidation-related issue, but those historical findings are not evidence that the current frozen target is vulnerable and were not supplied to the blind run. In particular, the current source documents `startLiquidation` as intentionally externally callable by an Account with debt, with the non-zero debt check providing the capability gate. This means the observed authorization hypothesis was a useful negative/control observation: sibling protected functions alone are insufficient to infer that an externally callable liquidation entry point should itself be owner-authorized.
+
+The research phase is therefore closed as a **successful capability-observation campaign, not a vulnerability discovery**. The next engineering boundary is generic dependency-aware fixture construction and semantic caller-capability modeling. Do not add Arcadia-specific mocks, exploit sequences, addresses, or historical findings to the blind path.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
