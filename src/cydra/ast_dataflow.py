@@ -61,12 +61,12 @@ def _mark_lvalue_roles(node: Any, states: dict[int, str], roles: dict[int, str],
     refs = _state_refs(node, states)
     if not refs:
         return
-    first = _node_id(refs[0])
-    if first is not None:
+    first = refs[0].get("referencedDeclaration")
+    if isinstance(first, int):
         roles[first] = role
     for ref in refs[1:]:
-        ref_id = _node_id(ref)
-        if ref_id is not None and ref_id not in roles:
+        ref_id = ref.get("referencedDeclaration")
+        if isinstance(ref_id, int) and ref_id not in roles:
             roles[ref_id] = "read"
 
 
