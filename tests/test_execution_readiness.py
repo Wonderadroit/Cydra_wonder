@@ -139,7 +139,7 @@ def test_execution_readiness_exposes_call_result_dataflow():
         execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
     )
     readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
-    assert any(r.kind == "execution_dataflow" and "maxWithdraw(msg.sender)" in r.name for r in readiness.execution_requirements)
+    assert any(r.kind == "execution_dataflow" and "maxWithdraw(msg.sender)" in r.subject for r in readiness.execution_requirements)
 
 
 def test_execution_readiness_resolves_local_call_result_producer():
