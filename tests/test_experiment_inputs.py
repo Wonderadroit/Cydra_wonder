@@ -1,6 +1,6 @@
 from cydra.compiler_constraints import ConstraintEvidence
 from cydra.constraint_candidates import select_parameter_candidates
-from cydra.experiment_inputs import plan_parameter_inputs
+from cydra.experiment_inputs import plan_parameter_inputs, conservative_defaults
 from cydra.models import ParameterModel
 
 
@@ -132,6 +132,20 @@ def test_fixed_bytes_defaults_preserve_declared_width():
     assert defaults == {
         "referrer": 'bytes3(hex"010000")',
         "digest": 'bytes32(hex"0100000000000000000000000000000000000000000000000000000000000000")',
+    }
+
+
+def test_address_defaults_bind_modeled_roles_to_distinct_fixture_identities():
+    parameters = (
+        ParameterModel("owner_", "address"),
+        ParameterModel("tranche", "address"),
+        ParameterModel("recipient", "address"),
+    )
+    defaults = conservative_defaults(parameters)
+    assert defaults == {
+        "owner_": "address(0x1001)",
+        "tranche": "address(0x1007)",
+        "recipient": "address(0xCAFE)",
     }
 
 
