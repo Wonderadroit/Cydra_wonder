@@ -1908,3 +1908,21 @@ The current boundary is therefore:
 The remaining proof obligation is behavioral: use the repaired model against the frozen unfamiliar target, confirm that the readiness artifact identifies the producer/dependency chain, and then determine whether the generic planner can construct and verify the required prerequisite rather than merely naming it.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 85 — compiler-backed producer dependency surface
+
+Execution-readiness now consumes canonical compiler-backed state-effect evidence when available. A modeled call-result producer may therefore expose state reads as explicit execution prerequisites, while state-write evidence can continue to identify candidate prerequisite transitions.
+
+This preserves the distinction between:
+- producer discovered;
+- producer state dependency discovered;
+- state-establishing transition identified;
+- transition executed;
+- required value/condition verified.
+
+Compiler evidence is never treated as proof that a prerequisite is satisfiable or already satisfied.
+
+The next implementation boundary is generic prerequisite sequence construction and verification: connect the discovered producer/state dependency to a constructible transition, execute that transition, verify the required state/value, and only then execute the security experiment.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
