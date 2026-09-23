@@ -210,6 +210,24 @@ def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool
             return None
 
         return walk(source_path) is True
+def _resolved_interface_method(contract: ContractModel, receiver: str, method: str) -> bool:
+    """Return True only when a receiver cast resolves to an interface declaring method."""
+    match = re.match(r"^(?P<type>[A-Za-z_]\\w*)\\s*\\(", receiver.strip())
+    if not match:
+        return False
+    type_name = match.group("type")
+    source_path = Path(contract.source).resolve()
+    project_root = next(
+        (parent for parent in (source_path.parent, *source_path.parents) if (parent / "foundry.toml").exists()),
+        source_path.parent,
+    )
+    try:
+        interface = resolve_interface(project_root, source_path, type_name)
+    except (FileNotFoundError, ValueError, OSError, UnicodeError):
+        return False
+    return any(item.name == method for item in interface.methods)
+
+
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
     state_names = set(contract.state_variables)
@@ -229,11 +247,19 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
         normalized_receiver = receiver.strip()
         receiver_root = re.match(r"^([A-Za-z_]\\w*)$", normalized_receiver)
         configured = bool(receiver_root and receiver_root.group(1) in state_names)
-        status = "discovered" if configured else "required"
+        interface_call = _resolved_interface_method(contract, normalized_receiver, method)
+        configured_cast = interface_call and any(
+            token in state_names
+            for token in re.findall(r"\\b[A-Za-z_]\\w*\\b", normalized_receiver)
+        )
+        status = "discovered" if configured or configured_cast else "required"
         detail = (
             "external call receiver is a modeled contract state value; runtime behavior "
             "must still be verified against the target's configured dependency"
             if configured
+            else "compiler/source-resolved interface method uses a modeled target state value; "
+            "runtime behavior must still be verified against that configured address"
+            if configured_cast
             else "function performs an external call whose target/state may be required for execution"
         )
         requirements.append(
