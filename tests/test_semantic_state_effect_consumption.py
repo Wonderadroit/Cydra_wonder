@@ -58,7 +58,14 @@ def test_compiler_backed_candidate_records_ast_provenance(tmp_path):
 
 def test_contract_qualification_prevents_cross_contract_state_leakage():
     index = build_state_effect_index([
-        _evidence("balanceOf", "writes", "balance"),
+        SemanticRelationshipEvidence(
+            contract="BaseA",
+            function="balanceOf",
+            relation="writes",
+            target="balance",
+            confidence=0.98,
+            source="solc-json-ast:basea.sol",
+        ),
         SemanticRelationshipEvidence(
             contract="BaseB",
             function="balanceOf",
@@ -69,4 +76,5 @@ def test_contract_qualification_prevents_cross_contract_state_leakage():
         ),
     ])
     assert state_writes_for_function(index, "balanceOf", "Target") is None
+    assert state_writes_for_function(index, "balanceOf", "BaseA") == ("balance",)
     assert state_writes_for_function(index, "balanceOf", "BaseB") == ("balance",)
