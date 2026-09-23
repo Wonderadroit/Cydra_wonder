@@ -22,12 +22,9 @@ def _shared_state_writers(
     for function in contract.functions:
         if function.visibility not in {"public", "external"}:
             continue
-        # An arbitrary external caller is only a valid capability model for
-        # unmodified entry points. Privileged/custom-guarded functions require
-        # a separate authorization-aware actor model; do not generate
-        # executable state hypotheses that knowingly invoke them as attacker.
-        if function.modifiers:
-            continue
+        # Protected/custom-guarded entry points remain valid state-transition
+        # surfaces. Their experiment actor is modeled separately from an
+        # arbitrary caller; execution must satisfy the declared guard.
         for state in function.writes:
             writers[state].add(function.name)
 
@@ -95,7 +92,14 @@ def generate_cross_function_state_hypotheses(
                     f"{function} may violate the modeled state consistency of {state} when composed with another externally callable transition.",
                     invariant_id,
                     function,
-                    "arbitrary external caller able to invoke the transition",
+                    (
+                        "authorized caller satisfying the modeled guards"
+                        if any(
+                            function.name == candidate and function.modifiers
+                            for candidate in functions
+                        )
+                        else "arbitrary external caller able to invoke the transition"
+                    ),
                     f"inconsistent {state} after a valid cross-function transition sequence",
                     evidence_ids=evidence_ids,
                     related_functions=tuple(peer for peer in functions if peer != function),
