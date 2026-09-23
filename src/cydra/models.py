@@ -64,6 +64,9 @@ class FunctionModel:
     execution_predicate_polarities: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     # Local/call-result bindings used by execution predicates.
     execution_value_bindings: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    # Return expressions are syntax/data-flow evidence for functions that may produce
+    # a value consumed by an execution predicate. They do not prove satisfiability.
+    return_expressions: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
