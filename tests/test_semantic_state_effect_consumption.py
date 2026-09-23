@@ -105,3 +105,40 @@ def test_array_push_and_pop_are_compiler_state_mutations():
     }
     roles = _operator_contexts(body, {11: "items"})
     assert roles[11] == "read_write"
+
+
+def test_transitive_internal_call_propagates_state_effects():
+    from cydra.ast_dataflow import extract_ast_relationships
+    from cydra.semantic_state_effects import build_state_effect_index, state_writes_for_function
+
+    def ident(node_id, declaration, name):
+        return {"nodeType": "Identifier", "id": node_id, "name": name,
+                "referencedDeclaration": declaration, "src": f"{node_id}:1:1"}
+
+    ast = {
+        "nodeType": "SourceUnit", "id": 1, "children": [
+            {"nodeType": "ContractDefinition", "id": 2, "name": "Fixture"},
+            {"nodeType": "VariableDeclaration", "id": 10, "name": "value", "stateVariable": True},
+            {"nodeType": "FunctionDefinition", "id": 20, "name": "leaf", "kind": "function", "scope": 2,
+             "body": {"nodeType": "Block", "id": 120, "statements": [
+                 {"nodeType": "Assignment", "id": 30, "operator": "=",
+                  "leftHandSide": ident(31, 10, "value"),
+                  "rightHandSide": {"nodeType": "Literal", "id": 32, "value": "1"}}
+             ]}},
+            {"nodeType": "FunctionDefinition", "id": 40, "name": "middle", "kind": "function", "scope": 2,
+             "body": {"nodeType": "Block", "id": 140, "statements": [
+                 {"nodeType": "ExpressionStatement", "id": 41,
+                  "expression": {"nodeType": "FunctionCall", "id": 42,
+                                 "expression": ident(43, 20, "leaf"), "arguments": []}}
+             ]}},
+            {"nodeType": "FunctionDefinition", "id": 60, "name": "entry", "kind": "function", "scope": 2,
+             "body": {"nodeType": "Block", "id": 160, "statements": [
+                 {"nodeType": "ExpressionStatement", "id": 61,
+                  "expression": {"nodeType": "FunctionCall", "id": 62,
+                                 "expression": ident(63, 40, "middle"), "arguments": []}}
+             ]}},
+        ]
+    }
+    evidence = extract_ast_relationships(ast, "Fixture.sol")
+    effects = build_state_effect_index(evidence)
+    assert "value" in state_writes_for_function(effects, "entry", "Fixture")
