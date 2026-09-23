@@ -65,7 +65,11 @@ def build_state_effect_index(
             target_contract, target_function = target_function.rsplit(".", 1)
         if target_contract is None:
             continue
-        if target_contract != item.contract:
+        # Same-contract calls are local. A compiler-resolved call into a base
+        # contract is also local to the derived storage layout when the AST
+        # explicitly marks the target as inherited. Never infer this from names.
+        inherited_target = bool(metadata.get("inherited_target"))
+        if target_contract != item.contract and not inherited_target:
             continue
         calls[(item.contract, item.function)].add((target_contract, target_function))
 
