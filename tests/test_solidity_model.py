@@ -510,3 +510,21 @@ def test_execution_predicates_capture_local_reachability_without_promoting_local
     assert function.state_predicates == ()
     assert function.execution_predicates == ("startDebt == 0",)
     assert function.execution_predicate_polarities == (("startDebt == 0", "must_not_hold"),)
+
+
+
+def test_execution_value_bindings_capture_helper_result_feeding_local_guard(tmp_path: Path) -> None:
+    path = tmp_path / "CallGuard.sol"
+    path.write_text("""
+    contract CallGuard {
+        uint256 public total;
+        function maxWithdraw(address) internal view returns (uint256) { return total; }
+        function target() external {
+            uint256 startDebt = maxWithdraw(msg.sender);
+            if (startDebt == 0) revert();
+            total = startDebt - 1;
+        }
+    }
+    """, encoding="utf-8")
+    function = parse_solidity(path)[0].functions[1]
+    assert ("startDebt", "maxWithdraw(msg.sender)") in function.execution_value_bindings
