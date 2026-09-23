@@ -269,7 +269,7 @@ def _execution_dataflow_requirements(
         producer = functions_by_name.get(producer_name)
         if producer is None:
             member_head = re.match(
-                r"^(?P<receiver>[A-Za-z_]\\w*(?:\\([^)]*\\))?)\\.\\s*(?P<method>[A-Za-z_]\\w*)\\s*\\(",
+                r"^(?P<receiver>[A-Za-z_]\w*(?:\([^)]*\))?)\.\s*(?P<method>[A-Za-z_]\w*)\s*\(",
                 expression,
             )
             receiver_type = member_head.group("receiver").split("(")[0] if member_head else None
