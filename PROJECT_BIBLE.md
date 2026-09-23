@@ -1926,3 +1926,8 @@ Compiler evidence is never treated as proof that a prerequisite is satisfiable o
 The next implementation boundary is generic prerequisite sequence construction and verification: connect the discovered producer/state dependency to a constructible transition, execute that transition, verify the required state/value, and only then execute the security experiment.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## CI validation note — current execution-readiness baseline
+
+The current main baseline includes generic execution value-producer and compiler-backed prerequisite evidence. Validation of this baseline must distinguish CI/pipeline health from security conclusions; target-specific execution failures are treated as capability-gap evidence and repaired at the generic abstraction layer.
