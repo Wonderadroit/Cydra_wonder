@@ -123,3 +123,36 @@ def test_compiler_resolved_inherited_internal_call_emits_inherited_edge():
     assert len(calls) == 1
     assert calls[0].target == "Base.seed"
     assert calls[0].metadata["inherited_target"] is True
+
+
+def test_compiler_resolved_call_can_cross_source_units():
+    from cydra.compiler_state import extract_state_effects_from_all_sources
+
+    import json
+    from pathlib import Path
+    import tempfile
+
+    base = {"nodeType": "SourceUnit", "id": 1, "children": [
+        {"nodeType": "ContractDefinition", "id": 2, "name": "Base"},
+        {"nodeType": "FunctionDefinition", "id": 40, "name": "seed", "kind": "function", "scope": 2,
+         "body": {"nodeType": "Block", "id": 140, "statements": []}},
+    ]}
+    derived = {"nodeType": "SourceUnit", "id": 3, "children": [
+        {"nodeType": "ContractDefinition", "id": 4, "name": "Derived",
+         "baseContracts": [{"baseName": {"nodeType": "IdentifierPath", "referencedDeclaration": 2}}]},
+        {"nodeType": "FunctionDefinition", "id": 60, "name": "entry", "kind": "function", "scope": 4,
+         "body": {"nodeType": "Block", "id": 160, "statements": [
+             {"nodeType": "ExpressionStatement", "id": 70,
+              "expression": {"nodeType": "FunctionCall", "id": 71,
+                             "expression": _identifier(72, 40, "seed"), "arguments": []}}
+         ]}},
+    ]}
+    payload = {"output": {"sources": {"Base.sol": {"ast": base}, "Derived.sol": {"ast": derived}}}}
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "build-info.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        evidence = extract_state_effects_from_all_sources(path)
+    calls = [item for item in evidence if item.relation == "calls"]
+    assert len(calls) == 1
+    assert calls[0].target == "Base.seed"
+    assert calls[0].metadata["inherited_target"] is True
