@@ -31,6 +31,10 @@ def _shared_state_writers(
         for state in function.writes:
             touched[state].add(function.name)
             writers[state].add(function.name)
+        for state, operation in function.external_calls:
+            if operation in {"push", "pop"}:
+                touched[state].add(function.name)
+                writers[state].add(function.name)
 
     for item in semantic:
         if item.contract != contract.name or item.function not in externally_callable:
