@@ -131,6 +131,32 @@ def test_execution_readiness_derives_setup_from_unknown_positive_collection_guar
     assert any(item.subject == "seed" and item.status == "constructible" for item in readiness.state_setup_candidates)
 
 
+def test_execution_readiness_models_erc4626_balance_for_positive_max_withdraw_path():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel(
+                "liquidate", "external", (), (), (), 1,
+                execution_predicates=("startDebt == 0",),
+                execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+                execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
+            ),
+            FunctionModel(
+                "maxWithdraw", "public", (), (), (), 2,
+                return_expressions=("convertToAssets(balanceOf(owner))",),
+            ),
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0])
+    assert any(
+        item.kind == "caller_state_dependency"
+        and item.status == "unresolved"
+        and item.subject == "balanceOf(msg.sender) > 0"
+        for item in readiness.execution_requirements
+    )
+
+
 def test_execution_readiness_derives_setup_from_nonempty_collection_guard():
     contract = ContractModel(
         name="Target",
