@@ -75,12 +75,12 @@ The current milestone is complete only when:
 
 
 ## Recursive execution-readiness checkpoint
-- Final research head: `3b0c9762983d7ae8ddf499a8f706b7b3948b18fc`
-- Arcadia run: `35885233651`
-- Artifact ID: `10761559635`
-- Artifact digest: `sha256:66ce125054532ed43ce288675f337f3b1eecd9d56246d4a380860c0861c3a794`
+- Final documented branch head: `aa1f9616745820f3a13963202f8b89828ea0ac4a`
+- Final Arcadia run: `35886648916`
+- Final artifact ID: `10763072880`
+- Final artifact digest: `sha256:4676fc8b356027c254a344421905e980a75c644bab62b8aa848f8f4a505e725a`
 - Target: Arcadia lending-v2 commit `def3c94995773e2feb48b6d8a02dc603d96fd96c4`.
-- 71 hypotheses planned; 27 reached execution (10 PASS, 17 FAIL); 44 state hypotheses were correctly blocked at generation by unresolved prerequisites.
+- 71 hypotheses planned; 27 reached execution (10 PASS, 17 FAIL); 44 state hypotheses were correctly blocked at generation by unresolved prerequisites. Final artifact was regenerated from the documented head and independently inspected.
 - Causal evidence: 0. Confirmed findings: 0. No unsupported finding was produced.
 - Artifact manifest: all 14 entries independently verified.
 - Generic improvement: state setup is now recursively verified and ambiguous state prerequisites fail closed before Foundry materialization.
