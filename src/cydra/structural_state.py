@@ -35,6 +35,11 @@ def _shared_state_writers(
             if operation in {"push", "pop"}:
                 touched[state].add(function.name)
                 writers[state].add(function.name)
+        for predicate in function.state_predicates:
+            for match in __import__("re").finditer(r"\b([A-Za-z_]\w*)(?:\.length)?\b", predicate):
+                state = match.group(1)
+                if state not in {"true", "false", "address", "bytes", "uint", "int"}:
+                    touched[state].add(function.name)
 
     for item in semantic:
         if item.contract != contract.name or item.function not in externally_callable:
