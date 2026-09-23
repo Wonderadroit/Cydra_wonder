@@ -175,3 +175,24 @@ def test_execution_readiness_resolves_local_call_result_producer():
     assert producer_requirements[0].subject == "startDebt <- maxWithdraw(debt)"
     assert producer_requirements[0].status == "discovered"
     assert "satisfiability" in producer_requirements[0].detail
+
+
+def test_execution_readiness_keeps_unknown_execution_producer_unresolved():
+    consumer = FunctionModel(
+        "start",
+        "external",
+        (),
+        (),
+        (),
+        5,
+        execution_predicates=("startDebt == 0",),
+        execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+        execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (consumer,))
+
+    readiness = inspect_execution_readiness(contract, consumer)
+    assert not any(item.kind == "execution_value_producer" for item in readiness.execution_requirements)
+    dataflow = [item for item in readiness.execution_requirements if item.kind == "execution_dataflow"]
+    assert len(dataflow) == 1
+    assert dataflow[0].status == "required"
