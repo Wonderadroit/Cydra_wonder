@@ -605,3 +605,27 @@ def test_constructible_state_setup_plan_rejects_unresolved_value_source():
         ),
     )
     assert constructible_state_setup_plan(contract, contract.functions[0]) == ()
+
+
+def test_execution_readiness_treats_state_backed_external_receiver_as_discovered():
+    function = FunctionModel(
+        "borrow", "external", (), (), (("asset", "safeTransfer"),), 1,
+    )
+    contract = ContractModel(
+        "Target", "Target.sol", (function,), state_variables=("asset",),
+    )
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = next(item for item in readiness.runtime_requirements if item.subject == "asset.safeTransfer")
+    assert requirement.status == "discovered"
+    assert "modeled contract state value" in requirement.detail
+
+
+def test_constructible_state_setup_plan_allows_verified_state_backed_external_receiver():
+    contract = ContractModel(
+        "Target", "Target.sol", (
+            FunctionModel("target", "external", (), (), (), 1, state_predicates=("ready > 0",)),
+            FunctionModel("seed", "external", (), ("ready",), (("asset", "safeTransfer"),), 2),
+        ),
+        state_variables=("asset",),
+    )
+    assert [item.function for item in constructible_state_setup_plan(contract, contract.functions[0])] == ["seed"]
