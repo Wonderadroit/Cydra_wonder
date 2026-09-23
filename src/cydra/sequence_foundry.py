@@ -5,7 +5,7 @@ import os
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source
-from .execution_readiness import _address_role, caller_role, inspect_execution_readiness
+from .execution_readiness import _address_role, caller_role, constructible_state_setup_plan, inspect_execution_readiness
 from .experiment_inputs import conservative_defaults
 
 
@@ -16,6 +16,9 @@ def generate_sequence_test_from_experiment(
     target_type: str,
     output_path: str | Path,
     contract_model: ContractModel,
+    *,
+    semantic_evidence=(),
+    constraints=(),
 ) -> Path:
     """Render a structured ordered experiment into an executable Foundry test.
 
@@ -31,10 +34,10 @@ def generate_sequence_test_from_experiment(
     if not experiment.steps:
         raise ValueError("sequence experiment has no structured steps")
 
-    functions = {function.name: function for function in contract_model.functions}
+    functions = {function.name: function for function in (*contract_model.functions, *contract_model.inherited_functions)}
     rendered: list[str] = []
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
-    functions_by_name = {function.name: function for function in contract_model.functions}
+    functions_by_name = {function.name: function for function in (*contract_model.functions, *contract_model.inherited_functions)}
     caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
     setup_keys: set[str] = set(step.function for step in experiment.steps)
     setup_rendered: list[str] = []
@@ -54,22 +57,21 @@ def generate_sequence_test_from_experiment(
         if any(not argument.strip() for argument in step.arguments):
             raise ValueError(f"sequence step {step.function} contains an empty argument")
         arguments = ", ".join(step.arguments)
-        readiness = inspect_execution_readiness(contract_model, function)
-        for requirement in readiness.state_setup_candidates:
-            if requirement.status != "constructible" or requirement.subject in setup_keys:
+        readiness = inspect_execution_readiness(contract_model, function, constraints, semantic_evidence)
+        setup_plan = constructible_state_setup_plan(contract_model, function, constraints, semantic_evidence)
+        for action in setup_plan:
+            if action.function in setup_keys:
                 continue
-            writer = functions_by_name.get(requirement.subject)
+            writer = functions_by_name.get(action.function)
             if writer is None:
                 continue
             defaults = conservative_defaults(writer.parameters)
-            if defaults is None:
+            if defaults is None or any(not defaults.get(parameter.name, "") for parameter in writer.parameters):
                 continue
             writer_args = ", ".join(defaults.get(parameter.name, "") for parameter in writer.parameters)
-            if any(not value for value in defaults.values()):
-                continue
-            writer_role = caller_bindings.get(caller_role(writer), "attacker")
-            setup_rendered.append(f"        vm.prank({writer_role});\n        target.{writer.name}({writer_args});")
-            setup_keys.add(requirement.subject)
+            writer_role = caller_bindings.get(action.caller_role, "attacker")
+            setup_rendered.append(f"        vm.prank({writer_role});\\n        target.{writer.name}({writer_args});")
+            setup_keys.add(action.function)
         role = caller_role(function)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
         caller = caller_bindings.get(role, "attacker") if role else "attacker"
