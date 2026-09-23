@@ -56,6 +56,7 @@ jobs:
       - name: Run frozen Arcadia public-code blind research
         env:
           PYTHONPATH: .
+          CYDRA_EXPERIMENT_TIMEOUT_SECONDS: "30"
         run: |
           set +e
           mkdir -p backtest-artifacts/arcadia-lending
