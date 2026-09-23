@@ -246,7 +246,7 @@ def test_foundry_execution_timeout_fails_closed(monkeypatch, tmp_path):
     test_path.write_text("// test", encoding="utf-8")
 
     def timeout(*args, **kwargs):
-        raise __import__("subprocess").TimeoutExpired(kwargs.get("args", args[0] if args else "forge"), 1, output="partial", stderr="still running")
+        raise __import__("subprocess").TimeoutExpired(kwargs.get("args", args[0] if args else "forge"), 1, output=b"partial", stderr=b"still running")
 
     monkeypatch.setattr(foundry.subprocess, "run", timeout)
     monkeypatch.setenv("CYDRA_EXPERIMENT_TIMEOUT_SECONDS", "2")
