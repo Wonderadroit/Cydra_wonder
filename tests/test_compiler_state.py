@@ -66,6 +66,33 @@ def test_extracts_compiler_state_effects_for_selected_source(tmp_path):
     assert semantic[0].target_ast_node_id == 3
 
 
+def test_extracts_state_effects_from_imported_source_for_compiler_resolution(tmp_path):
+    project, source, build = _build_info(tmp_path)
+    base_ast = json.loads(json.dumps(json.loads(build.read_text(encoding="utf-8"))["output"]["sources"]["src/Fixture.sol"]["ast"]))
+    base_ast["nodes"][0]["name"] = "Base"
+    base_ast["nodes"][0]["id"] = 20
+    base_ast["nodes"][0]["nodes"][0]["id"] = 21
+    base_ast["nodes"][0]["nodes"][0]["name"] = "balance"
+    base_ast["nodes"][0]["nodes"][0]["referencedDeclaration"] = 21
+    base_ast["nodes"][0]["nodes"][1]["id"] = 22
+    base_ast["nodes"][0]["nodes"][1]["name"] = "mint"
+    base_ast["nodes"][0]["nodes"][1]["scope"] = 20
+    base_ast["nodes"][0]["nodes"][1]["body"]["statements"][0]["expression"]["leftHandSide"] = {
+        "nodeType": "Identifier", "id": 23, "referencedDeclaration": 21, "name": "balance"
+    }
+    payload = json.loads(build.read_text(encoding="utf-8"))
+    payload["output"]["sources"]["lib/Base.sol"] = {"ast": base_ast}
+    build.write_text(json.dumps(payload), encoding="utf-8")
+
+    from cydra.compiler_state import extract_state_effects_from_all_sources
+    evidence = extract_state_effects_from_all_sources(build)
+
+    assert any(
+        item.contract == "Base" and item.function == "mint" and item.target == "balance"
+        for item in evidence
+    )
+
+
 def test_unmatched_source_does_not_invent_semantic_evidence(tmp_path):
     project, _source, build = _build_info(tmp_path)
     other = project / "src" / "Other.sol"
