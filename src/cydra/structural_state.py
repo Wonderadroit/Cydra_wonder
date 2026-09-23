@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .models import ContractModel, Hypothesis, Invariant
@@ -36,7 +37,7 @@ def _shared_state_writers(
                 touched[state].add(function.name)
                 writers[state].add(function.name)
         for predicate in function.state_predicates:
-            for match in __import__("re").finditer(r"\b([A-Za-z_]\w*)(?:\.length)?\b", predicate):
+            for match in re.finditer(r"\b([A-Za-z_]\w*)(?:\.length)?\b", predicate):
                 state = match.group(1)
                 if state not in {"true", "false", "address", "bytes", "uint", "int"}:
                     touched[state].add(function.name)
