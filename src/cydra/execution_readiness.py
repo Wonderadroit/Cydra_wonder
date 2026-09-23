@@ -257,6 +257,20 @@ def _execution_dataflow_requirements(
             )
         )
         producer_reads = state_reads_for_function(semantic_effects, producer.name, contract.name)
+        # ERC-4626's maxWithdraw(owner) is bounded by balanceOf(owner). When
+        # the consumer explicitly rejects a zero result, a non-zero caller
+        # share balance is a deterministic prerequisite. This is a protocol-
+        # agnostic semantic rule, not an Arcadia-specific assumption.
+        if re.search(r"\bmaxWithdraw\s*\(\s*msg\.sender\s*\)", expression):
+            requirements.append(
+                ExecutionRequirement(
+                    "caller_state_dependency",
+                    "balanceOf(msg.sender) > 0",
+                    f"{producer.name}:erc4626-balance",
+                    "unresolved",
+                    "maxWithdraw(msg.sender) can only produce a positive withdrawable amount when the caller has a non-zero share balance; a generic fixture must establish that balance before the consuming path is reachable",
+                )
+            )
         if producer_reads:
             for state in producer_reads:
                 requirements.append(
