@@ -167,7 +167,7 @@ def _execution_dataflow_requirements(
     """
     predicates = " ".join(function.execution_predicates)
     requirements: list[ExecutionRequirement] = []
-    functions_by_name = {item.name: item for item in contract.functions}
+    functions_by_name = {item.name: item for item in (*contract.inherited_functions, *contract.functions)}
 
     for local, expression in function.execution_value_bindings:
         if local not in predicates:
