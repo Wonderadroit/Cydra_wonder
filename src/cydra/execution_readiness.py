@@ -374,14 +374,11 @@ def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
         positive_collection_requirement = bool(
             re.search(r"\b[A-Za-z_]\w*\.length\s*(?:>|>=)\s*(?:0|1)\b", predicate)
         )
-        if polarity not in {None, "must_hold"}:
-            if not (
-                positive_collection_requirement
-                or (
-                    polarity == "must_not_hold"
-                    and re.search(r"\b[A-Za-z_]\w*\.length\s*==\s*0\b", predicate)
-                )
-            ):
+        if polarity == "must_not_hold":
+            if not re.search(r"\b[A-Za-z_]\w*\.length\s*==\s*0\b", predicate):
+                continue
+        elif polarity == "unknown":
+            if not positive_collection_requirement:
                 continue
         for match in re.finditer(r"\b([A-Za-z_]\w*)(?:\.length)?\b", predicate):
             name = match.group(1)
