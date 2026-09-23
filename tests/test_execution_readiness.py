@@ -113,3 +113,18 @@ def test_execution_readiness_uses_compiler_collection_constraints_for_setup_disc
     readiness = inspect_execution_readiness(contract, contract.functions[0], (constraint,))
     assert any(item.subject == "index >= items.length" for item in readiness.state_requirements)
     assert any(item.subject == "seed" for item in readiness.state_setup_candidates)
+
+
+
+def test_execution_readiness_preserves_local_guard_as_path_prerequisite():
+    function = FunctionModel(
+        "start", "external", (), (), (), 1,
+        execution_predicates=("startDebt == 0",),
+        execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.kind == "execution_predicate"
+    assert requirement.status == "required"
+    assert "must not hold" in requirement.detail
+    assert not readiness.state_setup_candidates
