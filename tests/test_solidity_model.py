@@ -528,3 +528,28 @@ def test_execution_value_bindings_capture_helper_result_feeding_local_guard(tmp_
     """, encoding="utf-8")
     function = parse_solidity(path)[0].functions[1]
     assert ("startDebt", "maxWithdraw(msg.sender)") in function.execution_value_bindings
+
+
+def test_execution_value_binding_records_helper_return_expression(tmp_path: Path) -> None:
+    path = tmp_path / "Flow.sol"
+    path.write_text(
+        """
+        contract Flow {
+            uint256 public debt;
+            function maxWithdraw(address account) internal view returns (uint256) {
+                return debt;
+            }
+            function start() external {
+                uint256 startDebt = maxWithdraw(msg.sender);
+                if (startDebt == 0) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    start = parse_solidity(path)[0].functions[1]
+    producer = parse_solidity(path)[0].functions[0]
+
+    assert ("startDebt", "maxWithdraw(msg.sender)") in start.execution_value_bindings
+    assert producer.return_expressions == ("debt",)
