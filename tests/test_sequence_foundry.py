@@ -207,3 +207,24 @@ def test_sequence_renderer_emits_real_newline_for_constructible_setup(tmp_path):
     source = generated.read_text(encoding="utf-8")
     assert "vm.prank(attacker);\n        target.seed(address(0xCAFE));" in source
     assert "vm.prank(attacker);\\n        target.seed" not in source
+
+
+def test_sequence_renderer_materializes_transitive_setup_plan(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+    model = ContractModel(
+        name="RecursiveSetup", source=str(tmp_path / "Target.sol"), functions=(
+            FunctionModel("target", "external", (), (), (), 1, state_predicates=("items.length > 0",)),
+            FunctionModel("seed", "external", (), ("items",), (), 2,
+                          parameters=(ParameterModel("item", "address"),), state_predicates=("enabled > 0",)),
+            FunctionModel("enable", "external", (), ("enabled",), (), 3,
+                          parameters=(ParameterModel("value", "uint256"),)),
+        ),
+    )
+    hypothesis = Hypothesis("H-STATE-recursive", "candidate", "INV-STATE-recursive", "target", "caller", "candidate")
+    experiment = Experiment("X-H-STATE-recursive", hypothesis.hypothesis_id, "target", ("violation",), 1.0,
+                            steps=(ExperimentStep("target", ()),))
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "RecursiveSetup", tmp_path / "test" / "generated.t.sol", model
+    )
+    source = generated.read_text(encoding="utf-8")
+    assert source.index("target.enable(0);") < source.index("target.seed(address(0xCAFE));") < source.index("target.target();")
