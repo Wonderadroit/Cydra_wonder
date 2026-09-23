@@ -629,3 +629,30 @@ def test_constructible_state_setup_plan_allows_verified_state_backed_external_re
         state_variables=("asset",),
     )
     assert [item.function for item in constructible_state_setup_plan(contract, contract.functions[0])] == ["seed"]
+
+
+def test_execution_readiness_resolves_configured_interface_runtime_call(tmp_path):
+    interface = tmp_path / "IFactory.sol"
+    interface.write_text(
+        "interface IFactory { function ownerOfAccount(address account) external view returns (address); }\\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\nsrc = '.'\\n", encoding="utf-8")
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "import \"./IFactory.sol\";\\n"
+        "contract Target { address public ACCOUNT_FACTORY; \\n"
+        "function borrow(address account) external { IFactory(ACCOUNT_FACTORY).ownerOfAccount(account); }\\n"
+        "}\\n",
+        encoding="utf-8",
+    )
+    function = FunctionModel(
+        "borrow", "external", (), (), (("IFactory(ACCOUNT_FACTORY)", "ownerOfAccount"),), 2,
+    )
+    contract = ContractModel(
+        "Target", str(source), (function,), state_variables=("ACCOUNT_FACTORY",),
+    )
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = next(item for item in readiness.runtime_requirements if "ownerOfAccount" in item.subject)
+    assert requirement.status == "discovered"
+    assert "configured address" in requirement.detail
