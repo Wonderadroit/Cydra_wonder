@@ -72,6 +72,18 @@ def _address_role(name: str) -> str | None:
     return None
 
 
+def role_address_expression(role: str) -> str | None:
+    return {
+        "owner": "address(0x1001)",
+        "admin": "address(0x1002)",
+        "guardian": "address(0x1003)",
+        "risk_manager": "address(0x1004)",
+        "liquidator": "address(0x1005)",
+        "factory": "address(0x1006)",
+        "tranche": "address(0x1007)",
+    }.get(role)
+
+
 def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequirement, ...]:
     if contract.constructor is None:
         return ()
