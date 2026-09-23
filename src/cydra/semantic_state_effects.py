@@ -45,7 +45,54 @@ def build_state_effect_index(
         key = (item.contract, item.function)
         if effect not in grouped[key]:
             grouped[key].append(effect)
-    return {name: tuple(items) for name, items in grouped.items()}
+    # Calls are kept separate from canonical state effects, but compiler-
+    # resolved intra-contract calls allow their state effects to propagate to
+    # the caller. This is a transitive closure: A -> B -> C inherits C's
+    # state reads/writes without treating an unresolved or cross-contract call
+    # as local state evidence.
+    calls: dict[tuple[str, str], set[tuple[str, str]]] = defaultdict(set)
+    for item in evidence:
+        if item.relation != "calls":
+            continue
+        target_contract = None
+        target_function = item.target
+        metadata = item.metadata or {}
+        if isinstance(metadata.get("target_contract"), str):
+            target_contract = metadata["target_contract"]
+        if isinstance(metadata.get("target_function"), str):
+            target_function = metadata["target_function"]
+        elif "." in target_function:
+            target_contract, target_function = target_function.rsplit(".", 1)
+        if target_contract is None:
+            continue
+        if target_contract != item.contract:
+            continue
+        calls[(item.contract, item.function)].add((target_contract, target_function))
+
+    resolved = {name: list(items) for name, items in grouped.items()}
+    changed = True
+    while changed:
+        changed = False
+        for caller, callees in calls.items():
+            bucket = resolved.setdefault(caller, [])
+            known = {(item.state, item.relation) for item in bucket}
+            for callee in callees:
+                for effect in resolved.get(callee, ()): 
+                    key = (effect.state, effect.relation)
+                    if key in known:
+                        continue
+                    bucket.append(StateEffect(
+                        contract=effect.contract,
+                        function=caller[1],
+                        state=effect.state,
+                        relation=effect.relation,
+                        confidence=min(effect.confidence, 0.95),
+                        provenance=f"{effect.provenance}; transitive-call:{callee[0]}.{callee[1]}",
+                    ))
+                    known.add(key)
+                    changed = True
+
+    return {name: tuple(items) for name, items in resolved.items()}
 
 
 def state_writes_for_function(
