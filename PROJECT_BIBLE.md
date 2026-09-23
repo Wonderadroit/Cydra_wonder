@@ -2085,3 +2085,14 @@ Relevant post-maturity CI failures on this branch remain the known external-targ
 Next generic capability: transitive call/data-flow producer resolution for caller/state prerequisites, including discovering externally callable producers of required state through compiler-backed call edges and then verifying their own runtime/dependency prerequisites before setup. Do not add Arcadia-specific mocks, addresses, or exploit knowledge.
 
 Doctrine remains: **LLMs propose. Deterministic tools test. Evidence decides.**
+
+
+## Milestone 92 — generic producer runtime-dependency resolution
+
+The execution-readiness solver was advanced beyond compiler-backed state-writer discovery. A discovered state producer is no longer treated as constructible solely because it writes the required state: unresolved call-shaped value producers and unresolved non-library runtime targets remain fail-closed blockers. At the same time, target-configured external receivers are distinguished from genuinely unknown runtime targets. Calls through modeled contract state values are recorded as discovered-but-runtime-verifiable, and compiler/source-resolved interface calls whose cast arguments include modeled target state are likewise discovered without being declared proven executable.
+
+This boundary is intentionally generic. It does not name Arcadia functions, interfaces, addresses, or exploit sequences. The recursive setup planner now blocks unresolved runtime dependencies while permitting discovered target-configured dependencies to proceed to deterministic execution verification. Focused regression coverage was added for state-backed receivers and configured interface calls.
+
+Current branch head after this checkpoint: 472962b5323e787b0171566dac5b50eb79850b24. Validation is pending for the newest head; no green result is recorded here until CI/artifact evidence is available. The next capability boundary is resolving compiler-linked interface/contract call results into concrete producer/state dependencies, then recursively solving those dependencies and comparing the resulting target-only artifact.
+
+Doctrine remains: **LLMs propose. Deterministic tools test. Evidence decides.**
