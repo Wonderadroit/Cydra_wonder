@@ -268,6 +268,19 @@ def _execution_dataflow_requirements(
         producer_name = call_match.group("name")
         producer = functions_by_name.get(producer_name)
         if producer is None:
+            # A call-shaped value binding whose producer is not present in the
+            # local model is itself a reachability dependency. Fail closed
+            # rather than allowing a setup writer to appear constructible.
+            requirements.append(
+                ExecutionRequirement(
+                    "execution_value_dependency",
+                    expression,
+                    f"{function.name}:value-binding",
+                    "unresolved",
+                    "call-shaped execution value has no compiler/model-resolved local producer; "
+                    "the value source must be resolved before reachability is treated as satisfied",
+                )
+            )
             continue
 
         returns = ", ".join(producer.return_expressions) if producer.return_expressions else "<return expression not modeled>"
@@ -331,6 +344,26 @@ def _execution_dataflow_requirements(
                         "standard ERC-4626 positive-withdraw path requires a non-zero caller share balance and no compiler-backed constructible writer for that caller state was discovered",
                     )
                 )
+        # Member-call value sources such as IFactory(...).ownerOfAccount(...)
+        # and IAccount(...).increaseOpenPosition(...) are runtime producers, not
+        # local functions. Libraries are deterministic and already excluded by
+        # the runtime resolver; unresolved member calls must remain blockers.
+        member_call = re.match(
+            r"^(?P<receiver>[A-Za-z_]\\w*(?:\\([^)]*\\))?)\\.\\s*(?P<method>[A-Za-z_]\\w*)\\s*\\(",
+            expression,
+        )
+        if member_call and not _runtime_receiver_is_library(contract, member_call.group("receiver").split("(")[0]):
+            requirements.append(
+                ExecutionRequirement(
+                    "execution_value_runtime_dependency",
+                    f"{member_call.group('receiver')}.{member_call.group('method')}",
+                    f"{function.name}:value-binding",
+                    "unresolved",
+                    "execution value is produced by a non-library member call whose target/state "
+                    "must be resolved before the consumer is considered reachable",
+                )
+            )
+
         if producer_reads:
             for state in producer_reads:
                 requirements.append(
@@ -562,6 +595,13 @@ def constructible_state_setup_plan(
             memo[key] = None
             return None
         if readiness.runtime_requirements:
+            memo[key] = None
+            return None
+        if any(
+            item.kind in {"execution_value_dependency", "execution_value_runtime_dependency"}
+            and item.status == "unresolved"
+            for item in readiness.execution_requirements
+        ):
             memo[key] = None
             return None
         if any(item.kind == "execution_predicate" and "polarity could not be established" in item.detail for item in readiness.execution_requirements):
