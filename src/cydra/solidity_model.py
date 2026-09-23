@@ -344,7 +344,10 @@ def _state_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> 
             branch = _body(body, body.find("{", _balanced_parenthesized_end(body, opening)))
             if re.search(r"\brevert\b", branch):
                 polarity = "must_not_hold"
-        elif re.match(r"revert\s*(?:\(|;)", after_predicate):
+        elif re.match(r"revert\b", after_predicate):
+            # `revert;`, `revert(...)`, and custom-error forms such as
+            # `revert Errors.AuctionOngoing()` are all single-statement
+            # guarded reverts. The prior parser only recognized the first two.
             polarity = "must_not_hold"
         add(predicate, polarity)
 
@@ -393,7 +396,9 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
             branch = _body(body, brace)
             if re.search(r"\brevert\b", branch):
                 polarity = "must_not_hold"
-        elif re.match(r"revert\s*(?:\(|;)", tail):
+        elif re.match(r"revert\b", tail):
+            # Preserve custom-error guarded reverts as must-not-hold path
+            # predicates rather than treating the guard as an unknown state.
             polarity = "must_not_hold"
         elif re.match(r"(?:revert\b|\{\s*revert\b)", tail):
             polarity = "must_not_hold"
