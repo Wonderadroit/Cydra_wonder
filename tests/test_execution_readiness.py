@@ -253,3 +253,46 @@ def test_execution_readiness_uses_compiler_state_effects_for_setup_candidates():
 
     readiness = inspect_execution_readiness(contract, contract.functions[0], semantic_evidence=semantic)
     assert any(item.subject == "borrow" for item in readiness.state_setup_candidates)
+
+
+def test_execution_readiness_exposes_compiler_state_dependencies_of_value_producer():
+    from cydra.ast_dataflow import SemanticRelationshipEvidence
+
+    producer = FunctionModel(
+        "maxWithdraw",
+        "public",
+        (),
+        (),
+        (),
+        1,
+        return_expressions=("convertToAssets(balanceOf[owner])",),
+    )
+    consumer = FunctionModel(
+        "start",
+        "external",
+        (),
+        (),
+        (),
+        5,
+        execution_predicates=("startDebt == 0",),
+        execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+        execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (producer, consumer))
+    semantic = (
+        SemanticRelationshipEvidence(
+            contract="Target",
+            function="maxWithdraw",
+            relation="reads",
+            target="realisedDebt",
+            confidence=0.99,
+            source="solc-json-ast:test",
+        ),
+    )
+
+    readiness = inspect_execution_readiness(contract, consumer, semantic_evidence=semantic)
+    assert any(
+        item.kind == "execution_state_dependency"
+        and item.subject == "maxWithdraw -> realisedDebt"
+        for item in readiness.execution_requirements
+    )
