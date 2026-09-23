@@ -392,6 +392,8 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
             polarity = "must_not_hold"
         elif re.match(r"(?:revert\b|\{\s*revert\b)", tail):
             polarity = "must_not_hold"
+        elif re.match(r"revert\b", tail):
+            polarity = "must_not_hold"
         else:
             # Solidity parser normalization can place the branch terminator
             # immediately after the predicate without preserving the original
