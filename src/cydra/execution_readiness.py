@@ -6,7 +6,7 @@ import re
 from .compiler_constraints import ConstraintEvidence
 from .models import ContractModel, FunctionModel
 from .ast_dataflow import SemanticRelationshipEvidence
-from .semantic_state_effects import build_state_effect_index, state_writes_for_function
+from .semantic_state_effects import build_state_effect_index, state_reads_for_function, state_writes_for_function
 
 
 @dataclass(frozen=True)
@@ -161,6 +161,7 @@ def _runtime_requirements(function: FunctionModel) -> tuple[ExecutionRequirement
 def _execution_dataflow_requirements(
     contract: ContractModel,
     function: FunctionModel,
+    semantic_evidence: tuple[SemanticRelationshipEvidence, ...] = (),
 ) -> tuple[ExecutionRequirement, ...]:
     """Resolve local execution bindings to modeled function producers when possible.
 
@@ -170,6 +171,7 @@ def _execution_dataflow_requirements(
     predicates = " ".join(function.execution_predicates)
     requirements: list[ExecutionRequirement] = []
     functions_by_name = {item.name: item for item in (*contract.inherited_functions, *contract.functions)}
+    semantic_effects = build_state_effect_index(semantic_evidence)
 
     for local, expression in function.execution_value_bindings:
         if local not in predicates:
@@ -205,6 +207,19 @@ def _execution_dataflow_requirements(
                 "must be resolved before the consuming path is treated as reachable",
             )
         )
+        producer_reads = state_reads_for_function(semantic_effects, producer.name)
+        if producer_reads:
+            for state in producer_reads:
+                requirements.append(
+                    ExecutionRequirement(
+                        "execution_state_dependency",
+                        f"{producer.name} -> {state}",
+                        f"{producer.name}:compiler-state",
+                        "discovered",
+                        "compiler-backed state read used by the value producer; a constructible "
+                        "prerequisite must be identified and verified before reachability is treated as satisfied",
+                    )
+                )
 
     return tuple(dict.fromkeys(requirements))
 
@@ -353,7 +368,7 @@ def inspect_execution_readiness(
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(selected) if selected else (),
         execution_requirements=(
-            (*_execution_requirements(selected), *_execution_dataflow_requirements(contract, selected))
+            (*_execution_requirements(selected), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
             if selected else ()
         ),
         state_requirements=(
