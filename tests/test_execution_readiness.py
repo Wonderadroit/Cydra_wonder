@@ -131,6 +131,21 @@ def test_execution_readiness_does_not_invert_reverting_positive_collection_guard
     assert readiness.state_setup_candidates == ()
 
 
+def test_runtime_readiness_ignores_local_collection_mutations():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel(
+                "seed", "external", (), ("items",), (("items", "push"),), 1,
+                parameters=(ParameterModel("item", "address"),),
+            ),
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0])
+    assert readiness.runtime_requirements == ()
+
+
 def test_execution_readiness_derives_setup_from_unknown_positive_collection_guard():
     contract = ContractModel(
         name="Target",
