@@ -369,6 +369,36 @@ def test_execution_readiness_uses_inherited_producer_models():
     )
 
 
+def test_execution_readiness_discovers_compiler_writer_for_erc4626_caller_balance():
+    contract = ContractModel(
+        name="Target", source="Target.sol",
+        functions=(
+            FunctionModel("start", "external", (), (), (), 1,
+                          execution_predicates=("startDebt == 0",),
+                          execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+                          execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),)),
+            FunctionModel("borrow", "external", (), (), (), 2),
+            FunctionModel("maxWithdraw", "public", (), (), (), 3,
+                          return_expressions=("convertToAssets(balanceOf(owner))",)),
+        ),
+    )
+    evidence = (
+        SemanticRelationshipEvidence(
+            contract="Target", function="borrow", relation="writes", target="balanceOf",
+            confidence=0.99, source="solc-json-ast:test",
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0], semantic_evidence=evidence)
+    assert any(
+        item.kind == "caller_state_dependency" and item.status == "discovered"
+        for item in readiness.execution_requirements
+    )
+    assert any(
+        item.kind == "caller_state_setup_candidate" and item.subject == "borrow"
+        for item in readiness.execution_requirements
+    )
+
+
 def test_execution_readiness_uses_compiler_state_effects_for_setup_candidates():
     from cydra.ast_dataflow import SemanticRelationshipEvidence
 
