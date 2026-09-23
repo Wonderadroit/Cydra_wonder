@@ -132,13 +132,13 @@ def _has_caller_authorization_predicate(function) -> bool:
 
 def _writes_for(function, contract: ContractModel, semantic_effects: dict[str, tuple] | None) -> tuple[str, ...]:
     if semantic_effects is not None:
-        semantic = state_writes_for_function(semantic_effects, function.name)
+        semantic = state_writes_for_function(semantic_effects, function.name, contract.name)
         if semantic is not None: return semantic
     return _source_state_writes(contract, function)
 
 
-def _effect_evidence_id(function, semantic_effects: dict[str, tuple] | None) -> str:
-    if semantic_effects is not None and function.name in semantic_effects:
+def _effect_evidence_id(contract: ContractModel, function, semantic_effects: dict[str, tuple] | None) -> str:
+    if semantic_effects is not None and f"{contract.name}::{function.name}" in semantic_effects:
         return f"E-AST-STATE-{function.name}"
     return f"E-MODEL-{function.name}"
 
@@ -187,6 +187,6 @@ def generate_structural_access_control_hypotheses(contract: ContractModel, seman
             f"{function.name} may permit an unauthorized caller to mutate state also controlled by a protected sibling.",
             "INV-AUTH-001", function.name, "arbitrary external caller",
             "state shared with a protected administrative path can be changed without its authorization mechanism",
-            evidence_ids=(_effect_evidence_id(function, semantic_effects),),
+            evidence_ids=(_effect_evidence_id(contract, function, semantic_effects),),
         ))
     return tuple(hypotheses)
