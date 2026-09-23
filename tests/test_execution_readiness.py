@@ -130,6 +130,24 @@ def test_execution_readiness_derives_setup_from_nonempty_collection_guard():
     assert any(item.subject == "seed" and item.status == "constructible" for item in readiness.state_setup_candidates)
 
 
+def test_execution_readiness_marks_external_setup_dependency_unresolved():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel("target", "external", (), (), (), 1, state_predicates=("items.length > 0",)),
+            FunctionModel(
+                "seed", "external", (), (), (("tranche", "asset"),), 2,
+                parameters=(ParameterModel("tranche", "address"),),
+            ),
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0])
+    candidate = next(item for item in readiness.state_setup_candidates if item.subject == "seed")
+    assert candidate.status == "unresolved"
+    assert "runtime dependencies" in candidate.detail
+
+
 def test_execution_readiness_uses_compiler_collection_constraints_for_setup_discovery():
     contract = ContractModel(
         name="Target",
