@@ -59,3 +59,13 @@ Doctrine: **LLMs propose. Tools test. Evidence decides.**
 The readiness layer now resolves declared Solidity call receivers through the target import graph and excludes calls resolved to `library` declarations from runtime-dependency blockers. This prevents deterministic internal/library operations such as SafeCast-style and error-library calls from being mistaken for externally constructible runtime dependencies. Actual interface/state receivers remain runtime requirements. The change is covered by a regression test and full PR validation; the three unrelated post-maturity batch failures remain target/campaign-specific and are not caused by this repair.
 
 The next Arcadia rerun must verify whether `addTranche` moves from unresolved to constructible. If it does, the generated setup must execute and verify `tranches.length > 0` before retrying `H-AUTH-startLiquidation`. If setup still fails, preserve the blocker and continue generic dependency analysis; do not add an Arcadia-specific mock.
+
+
+## Current supervised-dogfood continuation — execution-readiness refinement
+
+- Frozen Arcadia target remains `arcadia-finance/lending-v2` at `def3c94995773e2feb48b6d8a02dc603d96fd96c4`.
+- The completed public-code artifact demonstrated 1 authorization hypothesis executed and reverted, 23 state hypotheses executed in the earlier rerun, and no confirmed vulnerability. The key remaining capability boundary is dependency-rich prerequisite construction.
+- New generic work on `research/arcadia-lending` now models single-statement revert-guard polarity, ERC-4626 `maxWithdraw(msg.sender)` positive-balance prerequisites, and distinct deterministic role identities for fixture addresses (including tranche addresses). These are target-agnostic.
+- PR #207 is a draft validation PR only; it must not be merged until its complete CI fan-out is inspected. Main remains the maturity baseline.
+- The latest validation fan-out is intentionally being monitored. Any failing job must be diagnosed from its actual log and repaired generically before the validation milestone is considered green.
+- Do not add Arcadia-specific exploit logic, mocks, or hard-coded answers. The next legitimate boundary is generic dependency-aware fixture construction and verification.
