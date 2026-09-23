@@ -249,3 +249,23 @@ def test_sequence_renderer_rejects_unresolved_state_prerequisite(tmp_path):
         assert "unresolved state prerequisite" in str(exc)
     else:
         raise AssertionError("ambiguous state prerequisite must fail closed")
+
+
+def test_sequence_renderer_binds_tranche_role():
+    from cydra.models import FunctionModel
+    model = ContractModel(
+        name="TrancheSequence", source="/tmp/Target.sol",
+        functions=(FunctionModel("deposit", "external", ("onlyTranche",), (), (), 3),),
+    )
+    hypothesis = Hypothesis("H-STATE-tranche", "candidate", "INV-STATE-tranche", "deposit", "tranche", "candidate")
+    experiment = Experiment(
+        "X-H-STATE-tranche", hypothesis.hypothesis_id, "deposit", ("violation",), 1.0,
+        steps=(ExperimentStep("deposit", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "TrancheSequence",
+        Path("/tmp/generated-tranche-sequence.t.sol"), model,
+    )
+    source = generated.read_text(encoding="utf-8")
+    assert "vm.prank(tranche);" in source
+    assert "address internal tranche = address(0x1007);" in source
