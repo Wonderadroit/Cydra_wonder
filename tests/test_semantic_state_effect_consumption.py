@@ -75,3 +75,22 @@ def test_unresolved_call_does_not_invent_state_effect():
     ])
     assert state_reads_for_function(index, "maxWithdraw") is None
     assert state_writes_for_function(index, "maxWithdraw") is None
+
+
+def test_transitive_state_effects_do_not_cross_contract_name_collisions():
+    evidence = [
+        SemanticRelationshipEvidence(contract="BaseA", function="balanceOf", relation="reads", target="_balancesA", confidence=0.98, source="solc-json-ast:a.sol"),
+        SemanticRelationshipEvidence(contract="BaseB", function="balanceOf", relation="reads", target="_balancesB", confidence=0.98, source="solc-json-ast:b.sol"),
+        SemanticRelationshipEvidence(
+            contract="Consumer",
+            function="maxWithdraw",
+            relation="calls",
+            target="balanceOf",
+            confidence=0.98,
+            source="solc-json-ast:consumer.sol",
+            metadata={"target_contract": "BaseA"},
+        ),
+    ]
+    index = build_state_effect_index(evidence)
+    assert state_reads_for_function(index, "maxWithdraw", "Consumer") == ("_balancesA",)
+    assert state_reads_for_function(index, "balanceOf") is None
