@@ -69,11 +69,20 @@ def state_writes_for_function(
 
 
 def state_reads_for_function(
-    effects: dict[str, tuple[StateEffect, ...]],
+    effects: dict[tuple[str, str], tuple[StateEffect, ...]],
     function: str,
+    contract: str = "",
 ) -> tuple[str, ...] | None:
-    """Return compiler-backed state reads, or None when evidence is unavailable."""
-    items = effects.get(function)
+    """Return compiler-backed state reads, optionally qualified by contract."""
+    items = effects.get((contract, function)) if contract else None
+    if items is None and not contract:
+        matches = [
+            item
+            for (item_contract, item_function), values in effects.items()
+            if item_function == function
+            for item in values
+        ]
+        items = tuple(matches) if matches else None
     if items is None:
         return None
     return tuple(sorted({item.state for item in items if item.relation in {"reads", "transition_expression"}}))
