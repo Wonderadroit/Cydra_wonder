@@ -106,7 +106,7 @@ def test_authorization_renderer_materializes_constructible_state_setup(tmp_path:
         _hypothesis(), _experiment(("7", "address(0xBEEF)")), "Target.sol", "Target", tmp_path / "test" / "generated.t.sol", model
     )
     rendered = generated.read_text(encoding="utf-8")
-    assert "vm.prank(attacker);\\n        target.seed(address(0xCAFE));" in rendered
+    assert "vm.prank(attacker);\\n        try target.seed(address(0xCAFE)) {} catch { setupOk = false; }" in rendered
     assert "execution-readiness setup failed" in rendered
 
 
