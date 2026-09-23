@@ -102,3 +102,24 @@ def test_compiler_resolved_internal_call_emits_call_edge():
     ])
     relations = _relations(_ast([callee, caller]))
     assert ("entry", "calls", "Fixture.seed") in relations
+
+
+def test_compiler_resolved_inherited_internal_call_emits_inherited_edge():
+    ast = {"nodeType": "SourceUnit", "id": 1, "children": [
+        {"nodeType": "ContractDefinition", "id": 2, "name": "Base"},
+        {"nodeType": "ContractDefinition", "id": 3, "name": "Derived",
+         "baseContracts": [{"baseName": {"nodeType": "IdentifierPath", "referencedDeclaration": 2}}]},
+        {"nodeType": "FunctionDefinition", "id": 40, "name": "seed", "kind": "function", "scope": 2,
+         "body": {"nodeType": "Block", "id": 140, "statements": []}},
+        {"nodeType": "FunctionDefinition", "id": 60, "name": "entry", "kind": "function", "scope": 3,
+         "body": {"nodeType": "Block", "id": 160, "statements": [
+             {"nodeType": "ExpressionStatement", "id": 70,
+              "expression": {"nodeType": "FunctionCall", "id": 71,
+                             "expression": _identifier(72, 40, "seed"), "arguments": []}}
+         ]}},
+    ]}
+    evidence = extract_ast_relationships(ast, "Fixture.sol")
+    calls = [item for item in evidence if item.relation == "calls"]
+    assert len(calls) == 1
+    assert calls[0].target == "Base.seed"
+    assert calls[0].metadata["inherited_target"] is True
