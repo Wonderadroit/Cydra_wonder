@@ -140,3 +140,38 @@ def test_execution_readiness_exposes_call_result_dataflow():
     )
     readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
     assert any(r.kind == "execution_dataflow" and "maxWithdraw(msg.sender)" in r.name for r in readiness.execution_requirements)
+
+
+def test_execution_readiness_resolves_local_call_result_producer():
+    producer = FunctionModel(
+        "maxWithdraw",
+        "internal",
+        (),
+        (),
+        (),
+        1,
+        return_expressions=("debt",),
+    )
+    consumer = FunctionModel(
+        "start",
+        "external",
+        (),
+        (),
+        (),
+        5,
+        execution_predicates=("startDebt == 0",),
+        execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+        execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (producer, consumer))
+
+    readiness = inspect_execution_readiness(contract, consumer)
+    producer_requirements = [
+        item for item in readiness.execution_requirements
+        if item.kind == "execution_value_producer"
+    ]
+
+    assert len(producer_requirements) == 1
+    assert producer_requirements[0].subject == "startDebt <- maxWithdraw(debt)"
+    assert producer_requirements[0].status == "discovered"
+    assert "satisfiability" in producer_requirements[0].detail
