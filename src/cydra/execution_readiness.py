@@ -379,7 +379,7 @@ def _state_setup_candidates(
             )
             runtime_dependencies = tuple(
                 requirement
-                for requirement in _runtime_requirements(writer)
+                for requirement in _runtime_requirements(contract, writer)
                 if requirement.subject.split(".")[-1] not in {"push", "pop"}
             )
             status = "constructible" if primitive_abi and not runtime_dependencies else "unresolved"
