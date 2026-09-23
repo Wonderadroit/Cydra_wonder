@@ -2,7 +2,7 @@ from cydra.ast_dataflow import SemanticRelationshipEvidence
 from pathlib import Path
 
 from cydra.compiler_constraints import ConstraintEvidence
-from cydra.execution_readiness import inspect_execution_readiness
+from cydra.execution_readiness import constructible_state_setup_plan, inspect_execution_readiness
 from cydra.models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
 
 
@@ -467,3 +467,33 @@ def test_execution_value_producer_uses_contract_qualified_state_effects():
     )
     readiness = inspect_execution_readiness(contract, contract.functions[0], semantic_evidence=evidence)
     assert any(item.kind == "execution_state_dependency" and item.subject == "producer -> balanceOf" for item in readiness.execution_requirements)
+
+
+def test_constructible_state_setup_plan_resolves_transitive_writer_prerequisites():
+    contract = ContractModel(
+        name="Target", source="Target.sol", functions=(
+            FunctionModel("target", "external", (), (), (), 1, state_predicates=("items.length > 0",)),
+            FunctionModel("seed", "external", (), ("items",), (), 2,
+                          parameters=(ParameterModel("item", "address"),),
+                          state_predicates=("enabled > 0",)),
+            FunctionModel("enable", "external", (), ("enabled",), (), 3,
+                          parameters=(ParameterModel("value", "uint256"),)),
+        ),
+    )
+    plan = constructible_state_setup_plan(contract, contract.functions[0])
+    assert [item.function for item in plan] == ["enable", "seed"]
+
+
+def test_constructible_state_setup_plan_fails_closed_on_prerequisite_cycle():
+    contract = ContractModel(
+        name="Target", source="Target.sol", functions=(
+            FunctionModel("target", "external", (), (), (), 1, state_predicates=("items.length > 0",)),
+            FunctionModel("seed", "external", (), ("items",), (), 2,
+                          parameters=(ParameterModel("item", "address"),),
+                          state_predicates=("enabled > 0",)),
+            FunctionModel("enable", "external", (), ("enabled",), (), 3,
+                          parameters=(ParameterModel("value", "uint256"),),
+                          state_predicates=("items.length > 0",)),
+        ),
+    )
+    assert constructible_state_setup_plan(contract, contract.functions[0]) == ()
