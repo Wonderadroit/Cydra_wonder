@@ -101,7 +101,7 @@ def test_authorization_renderer_materializes_constructible_state_setup(tmp_path:
         name="seed", visibility="external", modifiers=(), writes=("items",), external_calls=(), line=1,
         parameters=(ParameterModel("item", "address"),),
     )
-    model = ContractModel("Target", str(source), (target, seed), pragma="^0.8.20")
+    model = ContractModel("Target", str(source), (target,), pragma="^0.8.20")
     generated = generate_authorization_test_from_experiment(
         _hypothesis(), _experiment(("7", "address(0xBEEF)")), "Target.sol", "Target", tmp_path / "test" / "generated.t.sol", model
     )
