@@ -338,16 +338,14 @@ def _state_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> 
         # The function body has already been isolated, so the latter has no
         # branch brace to inspect. Only classify it when the next statement
         # is explicitly a revert; otherwise retain unknown polarity.
-        brace = body.find("{", opening)
+        after_predicate = body[_balanced_parenthesized_end(body, opening):].lstrip()
         polarity = "unknown"
-        if brace >= 0:
-            branch = _body(body, brace)
+        if after_predicate.startswith("{"):
+            branch = _body(body, body.find("{", _balanced_parenthesized_end(body, opening)))
             if re.search(r"\brevert\b", branch):
                 polarity = "must_not_hold"
-        else:
-            tail = body[_balanced_parenthesized_end(body, opening):].lstrip()
-            if re.match(r"revert\s*(?:\(|;)", tail):
-                polarity = "must_not_hold"
+        elif re.match(r"revert\s*(?:\(|;)", after_predicate):
+            polarity = "must_not_hold"
         add(predicate, polarity)
 
     return tuple(results)
@@ -385,8 +383,8 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
         tail_start = _balanced_parenthesized_end(body, opening)
         tail = body[tail_start:].lstrip()
         polarity = "unknown"
-        brace = body.find("{", tail_start)
-        if brace >= 0:
+        if tail.startswith("{"):
+            brace = body.find("{", tail_start)
             branch = _body(body, brace)
             if re.search(r"\brevert\b", branch):
                 polarity = "must_not_hold"
