@@ -28,6 +28,14 @@ class ExecutionRequirement:
 
 
 @dataclass(frozen=True)
+class SetupAction:
+    """A verified, ordered state-setup transition."""
+    function: str
+    caller_role: str | None
+    provenance: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ExecutionReadiness:
     contract: str
     constructor_requirements: tuple[ExecutionRequirement, ...] = ()
@@ -459,6 +467,90 @@ def _state_setup_candidates(
                 )
             )
     return tuple(dict.fromkeys(candidates))
+
+
+def constructible_state_setup_plan(
+    contract: ContractModel,
+    function: FunctionModel,
+    constraints: tuple[ConstraintEvidence, ...] = (),
+    semantic_evidence: tuple[SemanticRelationshipEvidence, ...] = (),
+    *,
+    max_depth: int = 8,
+) -> tuple[SetupAction, ...]:
+    """Resolve state setup recursively and fail closed on unsatisfied prerequisites."""
+    functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
+    effects = build_state_effect_index(semantic_evidence)
+    memo: dict[tuple[str, tuple[str, ...]], tuple[SetupAction, ...] | None] = {}
+
+    def writers_for(state: str) -> tuple[FunctionModel, ...]:
+        result = []
+        for candidate in functions:
+            if candidate.visibility not in {"public", "external"}:
+                continue
+            semantic_writes = state_writes_for_function(effects, candidate.name, contract.name)
+            touched = state in candidate.writes or (semantic_writes is not None and state in semantic_writes) or any(
+                receiver == state and method in {"push", "pop"} for receiver, method in candidate.external_calls
+            )
+            if touched:
+                result.append(candidate)
+        return tuple(result)
+
+    def required_state_names(fn: FunctionModel) -> tuple[str, ...]:
+        names = list(_state_names_from_predicates(fn))
+        for constraint in constraints:
+            if constraint.function != fn.name or ".length" not in constraint.predicate:
+                continue
+            match = re.search(r"\\b([A-Za-z_]\\w*)\\.length\\b", constraint.predicate)
+            if match and match.group(1) not in names:
+                names.append(match.group(1))
+        return tuple(names)
+
+    def visit(fn: FunctionModel, stack: tuple[str, ...], depth: int) -> tuple[SetupAction, ...] | None:
+        key = (fn.name, stack)
+        if key in memo:
+            return memo[key]
+        if depth > max_depth or fn.name in stack:
+            memo[key] = None
+            return None
+        readiness = inspect_execution_readiness(contract, fn, constraints, semantic_evidence)
+        if any(item.status == "unresolved" for item in readiness.blockers):
+            memo[key] = None
+            return None
+        if any(item.kind == "caller_state_dependency" and item.status == "unresolved" for item in readiness.execution_requirements):
+            memo[key] = None
+            return None
+        if readiness.runtime_requirements:
+            memo[key] = None
+            return None
+        if any(item.kind == "execution_predicate" and "polarity could not be established" in item.detail for item in readiness.execution_requirements):
+            memo[key] = None
+            return None
+        actions = []
+        for state in required_state_names(fn):
+            selected = None
+            for writer in writers_for(state):
+                if writer.name in stack or writer.name == fn.name:
+                    continue
+                primitive = all(
+                    parameter.type.strip().split()[0].rstrip("[]") in {"address", "bool", "string", "bytes"}
+                    or parameter.type.strip().split()[0].rstrip("[]").startswith(("uint", "int", "bytes"))
+                    for parameter in writer.parameters
+                )
+                if not primitive:
+                    continue
+                nested = visit(writer, (*stack, fn.name), depth + 1)
+                if nested is not None:
+                    selected = (*nested, SetupAction(writer.name, caller_role(writer), (*stack, fn.name, state)))
+                    break
+            if selected is None:
+                memo[key] = None
+                return None
+            seen = {item.function for item in actions}
+            actions.extend(item for item in selected if item.function not in seen)
+        memo[key] = tuple(actions)
+        return memo[key]
+
+    return visit(function, (), 0) or ()
 
 
 def inspect_execution_readiness(
