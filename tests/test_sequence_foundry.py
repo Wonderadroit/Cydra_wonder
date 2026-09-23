@@ -175,3 +175,35 @@ def test_sequence_renderer_satisfies_owner_role_and_binds_owner_constructor(tmp_
     source = generated.read_text(encoding="utf-8")
     assert "target = new OwnedSequence(address(0x1001));" in source
     assert "vm.prank(owner);" in source
+
+
+
+def test_sequence_renderer_emits_real_newline_for_constructible_setup(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+    model = ContractModel(
+        name="SetupSequence",
+        source=str(tmp_path / "Target.sol"),
+        functions=(
+            FunctionModel(
+                "target", "external", (), (), (), 3,
+                state_predicates=("items.length > 0",),
+                state_predicate_polarities=(("items.length > 0", "must_hold"),),
+            ),
+            FunctionModel(
+                "seed", "external", (), ("items",), (), 4,
+                parameters=(ParameterModel("item", "address"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis("H-STATE-items-target", "candidate", "INV-STATE-items", "target", "arbitrary external caller", "candidate")
+    experiment = Experiment(
+        "X-H-STATE-items-target", hypothesis.hypothesis_id, "seed then target", ("violation",), 1.0,
+        steps=(ExperimentStep("target", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "SetupSequence",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    source = generated.read_text(encoding="utf-8")
+    assert "vm.prank(attacker);\n        target.seed(address(0xCAFE));" in source
+    assert "vm.prank(attacker);\\n        target.seed" not in source
