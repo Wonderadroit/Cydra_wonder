@@ -11,6 +11,7 @@ from .ast_dataflow import SemanticRelationshipEvidence
 class StateEffect:
     """Canonical compiler-backed state effect for one function/state pair."""
 
+    contract: str
     function: str
     state: str
     relation: str
@@ -35,18 +36,25 @@ def build_state_effect_index(
     calls: dict[str, set[str]] = defaultdict(set)
 
     for item in evidence:
+        caller_key = f"{item.contract}::{item.function}"
         if item.relation in _CANONICAL_RELATIONS:
             effect = StateEffect(
+                contract=item.contract,
                 function=item.function,
                 state=item.target,
                 relation=item.relation,
                 confidence=item.confidence,
                 provenance=item.source,
             )
-            if effect not in grouped[item.function]:
-                grouped[item.function].append(effect)
+            if effect not in grouped[caller_key]:
+                grouped[caller_key].append(effect)
         elif item.relation == "calls":
-            calls[item.function].add(item.target)
+            target_contract = (
+                str(item.metadata.get("target_contract"))
+                if isinstance(item.metadata, dict) and item.metadata.get("target_contract")
+                else item.contract
+            )
+            calls[caller_key].add(f"{target_contract}::{item.target}")
 
     # Fixed-point propagation is bounded by the finite compiler evidence graph.
     # Propagate both reads and writes: a caller that delegates to a helper inherits
@@ -55,10 +63,12 @@ def build_state_effect_index(
     while changed:
         changed = False
         for caller, callees in calls.items():
+            caller_contract, caller_function = caller.split("::", 1)
             for callee in callees:
                 for effect in grouped.get(callee, ()):
                     propagated = StateEffect(
-                        function=caller,
+                        contract=caller_contract,
+                        function=caller_function,
                         state=effect.state,
                         relation=effect.relation,
                         confidence=min(effect.confidence, 0.95),
@@ -71,12 +81,28 @@ def build_state_effect_index(
     return {name: tuple(items) for name, items in grouped.items()}
 
 
+def _effects_for_function(
+    effects: dict[str, tuple[StateEffect, ...]],
+    function: str,
+    contract: str | None = None,
+) -> tuple[StateEffect, ...] | None:
+    if contract is not None:
+        return effects.get(f"{contract}::{function}")
+    matches = [items for key, items in effects.items() if key.endswith(f"::{function}")]
+    if len(matches) != 1:
+        # Ambiguous function names must fail closed rather than mixing state
+        # effects from unrelated contracts.
+        return None
+    return matches[0]
+
+
 def state_writes_for_function(
     effects: dict[str, tuple[StateEffect, ...]],
     function: str,
+    contract: str | None = None,
 ) -> tuple[str, ...] | None:
     """Return authoritative direct/transitive state roots, or None when unavailable."""
-    items = effects.get(function)
+    items = _effects_for_function(effects, function, contract)
     if items is None:
         return None
     writes = {
@@ -90,9 +116,10 @@ def state_writes_for_function(
 def state_reads_for_function(
     effects: dict[str, tuple[StateEffect, ...]],
     function: str,
+    contract: str | None = None,
 ) -> tuple[str, ...] | None:
     """Return compiler-backed direct/transitive state reads, or None when unavailable."""
-    items = effects.get(function)
+    items = _effects_for_function(effects, function, contract)
     if items is None:
         return None
     return tuple(sorted({item.state for item in items if item.relation in {"reads", "transition_expression"}}))
