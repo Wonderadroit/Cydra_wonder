@@ -133,3 +133,60 @@ def test_compiler_does_not_require_lite_profile(tmp_path, monkeypatch):
     assert result.status == "compile_failed"
     assert "--profile" not in result.command
     assert result.command[-3:] == ("--threads", "1", "contracts/Fixture.sol")
+
+
+def test_extracts_selected_source_import_dependencies_without_unrelated_leakage(tmp_path):
+    project = tmp_path / "project"
+    source = project / "src" / "Fixture.sol"
+    imported = project / "src" / "Base.sol"
+    source.parent.mkdir(parents=True)
+    source.write_text("import \"./Base.sol\"; contract Fixture {}", encoding="utf-8")
+    imported.write_text("contract Base { uint256 value; function read() external { uint256 x = value; x; } }", encoding="utf-8")
+
+    base_ast = {
+        "nodeType": "SourceUnit",
+        "id": 20,
+        "nodes": [{
+            "nodeType": "ContractDefinition",
+            "id": 21,
+            "name": "Base",
+            "nodes": [
+                {"nodeType": "VariableDeclaration", "id": 22, "name": "value", "stateVariable": True},
+                {"nodeType": "FunctionDefinition", "id": 23, "name": "read", "kind": "function", "scope": 21,
+                 "body": {"nodeType": "Block", "statements": [{
+                     "nodeType": "ExpressionStatement",
+                     "expression": {"nodeType": "Identifier", "id": 24, "referencedDeclaration": 22, "name": "value"},
+                 }]}},
+            ],
+        }],
+    }
+    fixture_ast = {
+        "nodeType": "SourceUnit",
+        "id": 10,
+        "nodes": [{
+            "nodeType": "ImportDirective",
+            "id": 11,
+            "absolutePath": "src/Base.sol",
+            "sourceUnit": 20,
+        }, {
+            "nodeType": "ContractDefinition", "id": 12, "name": "Fixture", "nodes": [],
+        }],
+    }
+    unrelated_ast = {
+        "nodeType": "SourceUnit",
+        "id": 30,
+        "nodes": [{
+            "nodeType": "ContractDefinition", "id": 31, "name": "Other",
+            "nodes": [{"nodeType": "VariableDeclaration", "id": 32, "name": "secret", "stateVariable": True}],
+        }],
+    }
+    build = tmp_path / "build-info.json"
+    build.write_text(json.dumps({"output": {"sources": {
+        "src/Fixture.sol": {"ast": fixture_ast},
+        "src/Base.sol": {"ast": base_ast},
+        "src/Other.sol": {"ast": unrelated_ast},
+    }}}), encoding="utf-8")
+
+    evidence = extract_compiler = extract_state_effects_from_build_info(build, source, project)
+    assert any(item.contract == "Base" and item.function == "read" and item.target == "value" for item in evidence)
+    assert not any(item.contract == "Other" for item in evidence)
