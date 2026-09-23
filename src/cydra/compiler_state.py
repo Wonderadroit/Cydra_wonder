@@ -43,10 +43,27 @@ def _source_keys(payload: dict[str, Any], source: Path, project: Path) -> tuple[
     return tuple(candidates)
 
 
+def _all_source_keys(payload: dict[str, Any]) -> tuple[tuple[str, dict[str, Any]], ...]:
+    output = payload.get("output")
+    if not isinstance(output, dict):
+        return ()
+    sources = output.get("sources")
+    if not isinstance(sources, dict):
+        return ()
+    return tuple(
+        (key, value)
+        for key, value in sources.items()
+        if isinstance(key, str) and isinstance(value, dict)
+    )
+
+
 def extract_state_effects_from_build_info(build_info: Path, source: Path, project: Path) -> tuple[SemanticRelationshipEvidence, ...]:
     payload = json.loads(build_info.read_text(encoding="utf-8"))
     evidence: list[SemanticRelationshipEvidence] = []
-    for source_key, source_payload in _source_keys(payload, source, project):
+    # Build-info for a compiled target contains imported/inherited source ASTs.
+    # State-effect extraction intentionally consumes that complete semantic
+    # surface; constraints remain scoped to the selected target source below.
+    for source_key, source_payload in _all_source_keys(payload):
         ast = source_payload.get("ast")
         if isinstance(ast, dict):
             evidence.extend(extract_ast_relationships(ast, source_key))
