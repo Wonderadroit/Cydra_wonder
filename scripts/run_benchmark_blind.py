@@ -563,7 +563,12 @@ def main() -> int:
                 continue
             contract = _contract_for_hypothesis(result, hypothesis)
             function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
-            readiness = inspect_execution_readiness(\n                contract,\n                function,\n                tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),\n                compiler_evidence.evidence,\n            )
+            readiness = inspect_execution_readiness(
+                contract,
+                function,
+                tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
+                compiler_evidence.evidence,
+            )
             execution_readiness.append({
                 "hypothesis_id": hypothesis.hypothesis_id,
                 "class": class_name,
