@@ -149,19 +149,23 @@ def _caller_requirements(function: FunctionModel) -> tuple[ExecutionRequirement,
 
 def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool:
     """Resolve a call receiver and exclude deterministic library calls from runtime blockers."""
-    root = Path(contract.source).resolve()
-    # The source resolver follows declared imports/remappings, so this remains
-    # target-agnostic and does not depend on library naming conventions.
+    source_path = Path(contract.source).resolve()
+    project_root = next(
+        (parent for parent in (source_path.parent, *source_path.parents) if (parent / "foundry.toml").exists()),
+        source_path.parent,
+    )
     try:
-        source_path, _ = resolve_named_type_source(root.parent, root, receiver)
+        resolved, _ = resolve_named_type_source(project_root, source_path, receiver)
     except (FileNotFoundError, ValueError, OSError, UnicodeError):
         return False
+    resolved_path = Path(resolved)
+    if not resolved_path.is_absolute():
+        resolved_path = (project_root / resolved_path).resolve()
     try:
-        source = source_path.read_text(encoding="utf-8")
+        source = resolved_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return False
     return bool(re.search(r"\\blibrary\\s+" + re.escape(receiver) + r"\\b", source))
-
 
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
