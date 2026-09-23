@@ -1,4 +1,4 @@
-from cydra.ast_dataflow import SemanticRelationshipEvidence
+from cydra.ast_dataflow import SemanticRelationshipEvidence, _operator_contexts
 from cydra.models import ContractModel, FunctionModel
 from cydra.semantic_state_effects import build_state_effect_index, state_reads_for_function, state_writes_for_function
 from cydra.structural_authorization import generate_structural_access_control_hypotheses
@@ -78,3 +78,30 @@ def test_contract_qualification_prevents_cross_contract_state_leakage():
     assert state_writes_for_function(index, "balanceOf", "Target") is None
     assert state_writes_for_function(index, "balanceOf", "BaseA") == ("balance",)
     assert state_writes_for_function(index, "balanceOf", "BaseB") == ("balance",)
+
+def test_array_push_and_pop_are_compiler_state_mutations():
+    body = {
+        "nodeType": "Block",
+        "statements": [
+            {"nodeType": "ExpressionStatement", "expression": {
+                "nodeType": "FunctionCall",
+                "expression": {
+                    "nodeType": "MemberAccess",
+                    "memberName": "push",
+                    "expression": {"nodeType": "Identifier", "referencedDeclaration": 11},
+                },
+                "arguments": [],
+            }},
+            {"nodeType": "ExpressionStatement", "expression": {
+                "nodeType": "FunctionCall",
+                "expression": {
+                    "nodeType": "MemberAccess",
+                    "memberName": "pop",
+                    "expression": {"nodeType": "Identifier", "referencedDeclaration": 11},
+                },
+                "arguments": [],
+            }},
+        ],
+    }
+    roles = _operator_contexts(body, {11: "items"})
+    assert roles[11] == "read_write"
