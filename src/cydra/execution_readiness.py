@@ -156,6 +156,25 @@ def _runtime_requirements(function: FunctionModel) -> tuple[ExecutionRequirement
     )
 
 
+def _execution_dataflow_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+    predicates = " ".join(function.execution_predicates)
+    requirements: list[ExecutionRequirement] = []
+    for local, expression in function.execution_value_bindings:
+        if local not in predicates:
+            continue
+        requirements.append(
+            ExecutionRequirement(
+                "execution_dataflow",
+                f"{local} <- {expression}",
+                f"{function.name}:body",
+                "required",
+                "execution predicate depends on a locally bound call/input value; "
+                "the binding must be resolved before reachability is treated as satisfied",
+            )
+        )
+    return tuple(requirements)
+
+
 def _execution_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     polarities = dict(function.execution_predicate_polarities)
     return tuple(
@@ -295,7 +314,10 @@ def inspect_execution_readiness(
         constructor_requirements=_constructor_requirements(contract),
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(selected) if selected else (),
-        execution_requirements=_execution_requirements(selected) if selected else (),
+        execution_requirements=(
+            (*_execution_requirements(selected), *_execution_dataflow_requirements(selected))
+            if selected else ()
+        ),
         state_requirements=(
             (*_state_requirements(selected), *_constraint_state_requirements(selected, constraints))
             if selected else ()
