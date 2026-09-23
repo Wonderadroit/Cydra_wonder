@@ -1,4 +1,4 @@
-name: CYDRA Public-Code Blind Research — Arcadia Lending
+name: CYDRA Arcadia Lending Overnight Research Campaign
 
 on:
   workflow_dispatch:
@@ -10,11 +10,53 @@ permissions:
   contents: read
 
 concurrency:
-  group: cydra-research-arcadia
+  group: cydra-arcadia-overnight
   cancel-in-progress: false
 
+env:
+  TARGET_REPO: https://github.com/arcadia-finance/lending-v2
+  TARGET_REF: def3c94995773e2feb48b6d8a02dc603d96fd96c
+  TARGET_PATH: src/LendingPool.sol
+  TARGET_PROJECT: .
+  PYTHONPATH: .
+  CYDRA_EXPERIMENT_TIMEOUT_SECONDS: "180"
+  PYTHONUNBUFFERED: "1"
+
 jobs:
-  research:
+  regression:
+    name: Generic regression gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout CYDRA
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+
+      - name: Full regression
+        run: python -m pytest -q
+
+  arcadia-blind:
+    name: Frozen Arcadia blind research
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -42,35 +84,79 @@ jobs:
           python -m pip install -e .
           python -m pip install pytest
 
+      - name: Focused execution-readiness regressions
+        run: |
+          python -m pytest -q             tests/test_execution_readiness.py             tests/test_sequence_foundry.py             tests/test_ast_dataflow_semantics.py             tests/test_semantic_state_effects.py
+
       - name: Initialize research artifact directory
         run: mkdir -p backtest-artifacts/arcadia-lending
 
-      - name: Full regression baseline
-        run: python -m pytest -q
-
       - name: Run frozen Arcadia public-code blind research
-        env:
-          PYTHONPATH: .
-          CYDRA_EXPERIMENT_TIMEOUT_SECONDS: "180"
-          PYTHONUNBUFFERED: "1"
+        id: research
         run: |
           set +e
-          mkdir -p backtest-artifacts/arcadia-lending
-          python scripts/run_benchmark_blind.py \
-            --target-repo https://github.com/arcadia-finance/lending-v2 \
-            --target-ref def3c94995773e2feb48b6d8a02dc603d96fd96c \
-            --target-path src/LendingPool.sol \
-            --target-project . \
-            --classes authorization initialization state guard_parity \
-            --freeze backtest-artifacts/arcadia-lending/freeze
+          python scripts/run_benchmark_blind.py             --target-repo "$TARGET_REPO"             --target-ref "$TARGET_REF"             --target-path "$TARGET_PATH"             --target-project "$TARGET_PROJECT"             --classes authorization initialization state guard_parity             --freeze backtest-artifacts/arcadia-lending/freeze
           rc=$?
-          printf '{"campaign":"arcadia-lending-public-code-blind","exit_code":%s,"target_ref":"def3c94995773e2feb48b6d8a02dc603d96fd96c"}\n' "$rc" > backtest-artifacts/arcadia-lending/ci-result.json
+          printf '{"campaign":"arcadia-lending-overnight","exit_code":%s,"target_ref":"%s"}\n' "$rc" "$TARGET_REF" > backtest-artifacts/arcadia-lending/ci-result.json
           exit "$rc"
 
-      - name: Upload Arcadia research evidence
+      - name: Validate artifact completeness
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("backtest-artifacts/arcadia-lending")
+          freeze = root / "freeze"
+          required = [
+              "provenance.json",
+              "target-intake.json",
+              "execution-readiness.json",
+              "target-checkout.txt",
+              "parse-output.json",
+              "invariants.json",
+              "hypotheses.json",
+              "experiments.json",
+              "compilation.log",
+              "execution.json",
+              "execution-human.txt",
+              "integrity-check.json",
+              "classification.json",
+              "manifest.sha256",
+              "README.md",
+          ]
+          missing = [name for name in required if not (freeze / name).exists()]
+          if missing:
+              raise SystemExit("missing freeze files: " + ", ".join(missing))
+
+          manifest = {}
+          for line in (freeze / "manifest.sha256").read_text().splitlines():
+              digest, name = line.split("  ", 1)
+              manifest[name] = digest
+          mismatches = []
+          for name, expected in manifest.items():
+              actual = hashlib.sha256((freeze / name).read_bytes()).hexdigest()
+              if actual != expected:
+                  mismatches.append(name)
+          if mismatches:
+              raise SystemExit("manifest mismatches: " + ", ".join(mismatches))
+
+          classification = json.loads((freeze / "classification.json").read_text())
+          execution = json.loads((freeze / "execution.json").read_text())
+          print(json.dumps({
+              "artifact_complete": True,
+              "hypotheses": len(classification.get("hypotheses", [])),
+              "executions": len(execution.get("executions", [])),
+              "class_coverage": classification.get("class_coverage", {}),
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload Arcadia campaign evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cydra-arcadia-lending-public-code
+          name: cydra-arcadia-lending-overnight
           path: backtest-artifacts/arcadia-lending
           if-no-files-found: warn
