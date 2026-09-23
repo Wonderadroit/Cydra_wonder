@@ -1931,3 +1931,23 @@ Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
 ## CI validation note — current execution-readiness baseline
 
 The current main baseline includes generic execution value-producer and compiler-backed prerequisite evidence. Validation of this baseline must distinguish CI/pipeline health from security conclusions; target-specific execution failures are treated as capability-gap evidence and repaired at the generic abstraction layer.
+
+
+## Milestone 86 — first supervised real-target dogfood closure
+
+The first frozen public-code supervised dogfood campaign was executed against the Arcadia Finance `lending-v2` target at commit `def3c94995773e2feb48b6d8a02dc603d96fd96c4`. The GitHub Actions research job completed successfully on run `35834281565`; the final evidence artifact was uploaded with SHA-256 `db3cf3f2cee0259d3ab46018987c8b2410d34a45129605c543abfeb23caac940`.
+
+Observed result:
+- target intake: `solidity-foundry-v1`, confidence 0.95, no intake blockers;
+- compiler build: successful with Solc 0.8.37;
+- one authorization hypothesis was extracted and executed: `H-AUTH-startLiquidation`;
+- the candidate call reverted, so unauthorized mutation was **not** demonstrated;
+- the authorization classifier correctly remained `NOT_REACHED` because the blind public-code target has no patched counterpart;
+- initialization, guard-parity, and state classes produced no executable candidate under the current blind rules;
+- execution-readiness identified `tranches.length > 0` as a prerequisite and identified `addTranche` as the relevant state-establishing transition, but correctly marked it `unresolved` because that transition has unresolved runtime dependencies.
+
+This campaign therefore produced **no confirmed vulnerability**. It did produce a concrete generic capability gap: CYDRA can identify a prerequisite transition, but cannot yet synthesize and verify a dependency-rich fixture for that transition. The failure must remain a readiness/capability result rather than being promoted to a security finding.
+
+The next development boundary is generic dependency-aware fixture construction and verification for unresolved prerequisite transitions. The implementation must remain target-agnostic: do not add Arcadia-specific mocks, addresses, function names, or exploit sequences. The fixture planner should first model required interface methods and runtime dependencies, then construct minimal deterministic stubs only where their semantics are explicit and sufficient for the experiment, verify the prerequisite state, and only then execute the security hypothesis.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
