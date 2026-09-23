@@ -15,10 +15,10 @@ def test_index_preserves_write_and_compound_transition_semantics():
         _evidence("mutator", "reads", "balance"),
         _evidence("ignored", "reference", "adminState"),
     ])
-    assert state_writes_for_function(index, "guarded") == ("adminState",)
-    assert state_writes_for_function(index, "mutator") == ("adminState",)
-    assert state_reads_for_function(index, "mutator") == ("adminState", "balance")
-    assert state_writes_for_function(index, "ignored") is None
+    assert state_writes_for_function(index, "guarded", "Target") == ("adminState",)
+    assert state_writes_for_function(index, "mutator", "Target") == ("adminState",)
+    assert state_reads_for_function(index, "mutator", "Target") == ("adminState", "balance")
+    assert state_writes_for_function(index, "ignored", "Target") is None
 
 
 def test_compiler_read_only_effect_overrides_lying_model_write(tmp_path):
@@ -55,3 +55,18 @@ def test_compiler_backed_candidate_records_ast_provenance(tmp_path):
     hypotheses = generate_structural_access_control_hypotheses(contract, evidence)
     assert [h.target_function for h in hypotheses] == ["mutator"]
     assert hypotheses[0].evidence_ids == ("E-AST-STATE-mutator",)
+
+def test_contract_qualification_prevents_cross_contract_state_leakage():
+    index = build_state_effect_index([
+        _evidence("balanceOf", "writes", "balance"),
+        SemanticRelationshipEvidence(
+            contract="BaseB",
+            function="balanceOf",
+            relation="writes",
+            target="balance",
+            confidence=0.98,
+            source="solc-json-ast:baseb.sol",
+        ),
+    ])
+    assert state_writes_for_function(index, "balanceOf", "Target") is None
+    assert state_writes_for_function(index, "balanceOf", "BaseB") == ("balance",)
