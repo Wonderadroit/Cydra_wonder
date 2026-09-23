@@ -128,3 +128,15 @@ def test_execution_readiness_preserves_local_guard_as_path_prerequisite():
     assert requirement.status == "required"
     assert "must not hold" in requirement.detail
     assert not readiness.state_setup_candidates
+
+
+
+def test_execution_readiness_exposes_call_result_dataflow():
+    function = FunctionModel(
+        "target", "external", (), (), (), 1,
+        execution_predicates=("startDebt == 0",),
+        execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+        execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    assert any(r.kind == "execution_dataflow" and "maxWithdraw(msg.sender)" in r.name for r in readiness.execution_requirements)
