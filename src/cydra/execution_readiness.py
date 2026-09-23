@@ -31,6 +31,7 @@ class ExecutionReadiness:
     runtime_requirements: tuple[ExecutionRequirement, ...] = ()
     state_requirements: tuple[ExecutionRequirement, ...] = ()
     state_setup_candidates: tuple[ExecutionRequirement, ...] = ()
+    execution_requirements: tuple[ExecutionRequirement, ...] = ()
 
     @property
     def blockers(self) -> tuple[ExecutionRequirement, ...]:
@@ -41,6 +42,7 @@ class ExecutionReadiness:
                 *self.caller_requirements,
                 *self.runtime_requirements,
                 *self.state_requirements,
+                *self.execution_requirements,
             )
             if item.status == "unresolved"
         )
@@ -151,6 +153,24 @@ def _runtime_requirements(function: FunctionModel) -> tuple[ExecutionRequirement
             "function performs an external call whose target/state may be required for execution",
         )
         for receiver, method in function.external_calls
+    )
+
+
+def _execution_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+    polarities = dict(function.execution_predicate_polarities)
+    return tuple(
+        ExecutionRequirement(
+            "execution_predicate",
+            predicate,
+            f"{function.name}:body",
+            "required",
+            {
+                "must_hold": "execution predicate must hold for the normal security-relevant path",
+                "must_not_hold": "execution predicate is a guarded revert condition and must not hold",
+                "unknown": "execution predicate polarity could not be established statically",
+            }.get(polarities.get(predicate, "unknown"), "execution predicate polarity is unknown"),
+        )
+        for predicate in function.execution_predicates
     )
 
 
@@ -275,6 +295,7 @@ def inspect_execution_readiness(
         constructor_requirements=_constructor_requirements(contract),
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(selected) if selected else (),
+        execution_requirements=_execution_requirements(selected) if selected else (),
         state_requirements=(
             (*_state_requirements(selected), *_constraint_state_requirements(selected, constraints))
             if selected else ()
