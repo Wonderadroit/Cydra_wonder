@@ -268,6 +268,13 @@ def _execution_dataflow_requirements(
         producer_name = call_match.group("name")
         producer = functions_by_name.get(producer_name)
         if producer is None:
+            member_head = re.match(
+                r"^(?P<receiver>[A-Za-z_]\\w*(?:\\([^)]*\\))?)\\.\\s*(?P<method>[A-Za-z_]\\w*)\\s*\\(",
+                expression,
+            )
+            receiver_type = member_head.group("receiver").split("(")[0] if member_head else None
+            if receiver_type is not None and _runtime_receiver_is_library(contract, receiver_type):
+                continue
             # A call-shaped value binding whose producer is not present in the
             # local model is itself a reachability dependency. Fail closed
             # rather than allowing a setup writer to appear constructible.
