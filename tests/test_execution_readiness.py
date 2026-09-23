@@ -26,6 +26,16 @@ def test_readiness_discovers_constructor_roles_and_dependencies():
     assert ("constructor_dependency", "IERC20") in kinds
 
 
+def test_readiness_excludes_resolved_library_calls_from_runtime_blockers(tmp_path):
+    lib = tmp_path / "SafeLib.sol"
+    lib.write_text("library SafeLib { function foo(uint256 x) internal pure returns (uint256) { return x; } }", encoding="utf-8")
+    source = tmp_path / "Target.sol"
+    source.write_text('import "./SafeLib.sol"; contract Target {}', encoding="utf-8")
+    function = FunctionModel("configure", "external", (), (), (("SafeLib", "foo"),), 1)
+    readiness = inspect_execution_readiness(ContractModel("Target", str(source), (function,)), function)
+    assert readiness.runtime_requirements == ()
+
+
 def test_readiness_discovers_caller_and_runtime_prerequisites():
     function = FunctionModel(
         "settle",
