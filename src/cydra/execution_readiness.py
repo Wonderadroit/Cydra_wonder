@@ -156,12 +156,23 @@ def _runtime_requirements(function: FunctionModel) -> tuple[ExecutionRequirement
     )
 
 
-def _execution_dataflow_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+def _execution_dataflow_requirements(
+    contract: ContractModel,
+    function: FunctionModel,
+) -> tuple[ExecutionRequirement, ...]:
+    """Resolve local execution bindings to modeled function producers when possible.
+
+    Discovery of a producer is evidence about program data flow only. It does not
+    establish that the producer can return the required value in a live fixture.
+    """
     predicates = " ".join(function.execution_predicates)
     requirements: list[ExecutionRequirement] = []
+    functions_by_name = {item.name: item for item in contract.functions}
+
     for local, expression in function.execution_value_bindings:
         if local not in predicates:
             continue
+
         requirements.append(
             ExecutionRequirement(
                 "execution_dataflow",
@@ -172,7 +183,28 @@ def _execution_dataflow_requirements(function: FunctionModel) -> tuple[Execution
                 "the binding must be resolved before reachability is treated as satisfied",
             )
         )
-    return tuple(requirements)
+
+        call_match = re.match(r"^(?:[A-Za-z_]\\w*\\.)?(?P<name>[A-Za-z_]\\w*)\\s*\\(", expression)
+        if not call_match:
+            continue
+        producer_name = call_match.group("name")
+        producer = functions_by_name.get(producer_name)
+        if producer is None:
+            continue
+
+        returns = ", ".join(producer.return_expressions) if producer.return_expressions else "<return expression not modeled>"
+        requirements.append(
+            ExecutionRequirement(
+                "execution_value_producer",
+                f"{local} <- {producer.name}({returns})",
+                f"{producer.name}:return",
+                "discovered",
+                "modeled local call-result producer; its dependencies and satisfiability "
+                "must be resolved before the consuming path is treated as reachable",
+            )
+        )
+
+    return tuple(dict.fromkeys(requirements))
 
 
 def _execution_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
@@ -315,7 +347,7 @@ def inspect_execution_readiness(
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(selected) if selected else (),
         execution_requirements=(
-            (*_execution_requirements(selected), *_execution_dataflow_requirements(selected))
+            (*_execution_requirements(selected), *_execution_dataflow_requirements(contract, selected))
             if selected else ()
         ),
         state_requirements=(
