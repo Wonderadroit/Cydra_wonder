@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 from .compiler_constraints import ConstraintEvidence
-from .interface_resolver import resolve_named_type_source, _strip_comments
+from .interface_resolver import resolve_named_type_source, resolve_import, _imports_for, _strip_comments
 from .models import ContractModel, FunctionModel
 from .ast_dataflow import SemanticRelationshipEvidence
 from .semantic_state_effects import build_state_effect_index, state_reads_for_function, state_writes_for_function
@@ -162,23 +162,34 @@ def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool
         source = resolved_path.read_text(encoding="utf-8")
         return bool(re.search(r"\blibrary\s+" + re.escape(receiver) + r"\b", source))
     except (FileNotFoundError, ValueError, OSError, UnicodeError):
-        # Fail closed on ambiguity, but tolerate resolver limitations by checking
-        # the target's own Solidity dependency tree for a unique library declaration.
-        matches: list[Path] = []
-        try:
-            for candidate in project_root.rglob("*.sol"):
-                try:
-                    text = _strip_comments(candidate.read_text(encoding="utf-8"))
-                except (OSError, UnicodeError):
-                    continue
-                if re.search(r"\blibrary\s+" + re.escape(receiver) + r"\b", text):
-                    matches.append(candidate)
-                    if len(matches) > 1:
-                        return False
-        except OSError:
-            return False
-        return len(matches) == 1
+        # Fallback only through the import graph. Do not scan the whole repository:
+        # state variables such as tranches are not type names and large dependency
+        # trees must remain bounded.
+        visited: set[Path] = set()
 
+        def walk(path: Path) -> bool | None:
+            path = path.resolve()
+            if path in visited or not path.is_file():
+                return None
+            visited.add(path)
+            try:
+                source = _strip_comments(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                return None
+            if re.search(r"\blibrary\s+" + re.escape(receiver) + r"\b", source):
+                return True
+            if re.search(r"\b(?:contract|interface)\s+" + re.escape(receiver) + r"\b", source):
+                return False
+            for import_path in _imports_for(path):
+                resolved_import = resolve_import(project_root, path, import_path)
+                if resolved_import is None:
+                    continue
+                result = walk(resolved_import[0])
+                if result is not None:
+                    return result
+            return None
+
+        return walk(source_path) is True
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
     for receiver, method in function.external_calls:
