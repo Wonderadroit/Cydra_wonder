@@ -6,6 +6,7 @@ from .execution_readiness import _address_role, caller_role, inspect_execution_r
 from .experiment_inputs import conservative_defaults
 
 from .models import ContractModel, Experiment, Hypothesis
+from .solidity_model import parse_solidity
 from .planned_call import render_function_call
 
 
@@ -120,6 +121,12 @@ def generate_authorization_test_from_experiment(
     asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
     readiness = inspect_execution_readiness(contract_model, function)
     functions_by_name = {item.name: item for item in (*contract_model.inherited_functions, *contract_model.functions)}
+    if not all(requirement.subject in functions_by_name for requirement in readiness.state_setup_candidates):
+        try:
+            parsed_contract = parse_solidity(Path(contract_model.source))[0]
+            functions_by_name.update({item.name: item for item in parsed_contract.functions})
+        except (OSError, ValueError, IndexError):
+            pass
     caller_bindings = {
         "owner": "owner",
         "admin": "admin",
