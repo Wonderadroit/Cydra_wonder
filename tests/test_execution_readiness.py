@@ -111,6 +111,26 @@ def test_execution_readiness_preserves_revert_guard_polarity():
     assert readiness.state_setup_candidates == ()
 
 
+def test_execution_readiness_does_not_invert_reverting_positive_collection_guard():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel(
+                "target", "external", (), (), (), 1,
+                state_predicates=("items.length > 0",),
+                state_predicate_polarities=(("items.length > 0", "must_not_hold"),),
+            ),
+            FunctionModel(
+                "seed", "external", (), ("items",), (), 2,
+                parameters=(ParameterModel("item", "address"),),
+            ),
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0])
+    assert readiness.state_setup_candidates == ()
+
+
 def test_execution_readiness_derives_setup_from_unknown_positive_collection_guard():
     contract = ContractModel(
         name="Target",
