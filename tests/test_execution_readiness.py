@@ -90,6 +90,26 @@ def test_execution_readiness_preserves_revert_guard_polarity():
     assert readiness.state_setup_candidates == ()
 
 
+def test_execution_readiness_derives_setup_from_unknown_positive_collection_guard():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel(
+                "target", "external", (), (), (), 1,
+                state_predicates=("items.length > 0",),
+                state_predicate_polarities=(("items.length > 0", "unknown"),),
+            ),
+            FunctionModel(
+                "seed", "external", (), ("items",), (), 2,
+                parameters=(ParameterModel("item", "address"),),
+            ),
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0])
+    assert any(item.subject == "seed" and item.status == "constructible" for item in readiness.state_setup_candidates)
+
+
 def test_execution_readiness_derives_setup_from_nonempty_collection_guard():
     contract = ContractModel(
         name="Target",
