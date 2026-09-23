@@ -505,6 +505,7 @@ def test_state_predicate_polarity_models_collection_length_comparisons(tmp_path:
     function = parse_solidity(path)[0].functions[0]
     assert ("items.length > 0", "must_not_hold") in function.state_predicate_polarities
     assert ("items.length == 0", "must_hold") in function.state_predicate_polarities
+    assert function.execution_predicates == ()
 
 
 def test_execution_predicates_capture_local_reachability_without_promoting_local_values_to_state(tmp_path: Path) -> None:
