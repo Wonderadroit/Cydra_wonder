@@ -364,3 +364,34 @@ def test_execution_readiness_exposes_compiler_state_dependencies_of_value_produc
         and item.subject == "maxWithdraw -> realisedDebt"
         for item in readiness.execution_requirements
     )
+
+def test_execution_value_producer_uses_contract_qualified_state_effects():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel(
+                "consumer", "external", (), (), (), 1,
+                execution_predicates=("startDebt == 0",),
+                execution_predicate_polarities=(("startDebt == 0", "unknown"),),
+                execution_value_bindings=(("startDebt", "producer()"),),
+            ),
+            FunctionModel(
+                "producer", "internal", (), (), (), 2,
+                return_expressions=("balanceOf[owner]",),
+            ),
+        ),
+        inherited_functions=(),
+    )
+    evidence = (
+        SemanticRelationshipEvidence(
+            contract="Target",
+            function="producer",
+            relation="reads",
+            target="balanceOf",
+            confidence=0.98,
+            source="solc-json-ast:Target.sol",
+        ),
+    )
+    readiness = inspect_execution_readiness(contract, contract.functions[0], semantic_evidence=evidence)
+    assert any(item.kind == "execution_state_dependency" and item.subject == "producer -> balanceOf" for item in readiness.execution_requirements)
