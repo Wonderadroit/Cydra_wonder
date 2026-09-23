@@ -227,3 +227,29 @@ def test_execution_readiness_uses_inherited_producer_models():
         and item.subject == "startDebt <- maxWithdraw(debt)"
         for item in readiness.execution_requirements
     )
+
+
+def test_execution_readiness_uses_compiler_state_effects_for_setup_candidates():
+    from cydra.ast_dataflow import SemanticRelationshipEvidence
+
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel("target", "external", (), (), (), 1, state_predicates=("debt > 0",)),
+            FunctionModel("borrow", "external", (), (), (), 2),
+        ),
+    )
+    semantic = (
+        SemanticRelationshipEvidence(
+            contract="Target",
+            function="borrow",
+            relation="writes",
+            target="debt",
+            confidence=0.99,
+            source="solc-json-ast:test",
+        ),
+    )
+
+    readiness = inspect_execution_readiness(contract, contract.functions[0], semantic_evidence=semantic)
+    assert any(item.subject == "borrow" for item in readiness.state_setup_candidates)
