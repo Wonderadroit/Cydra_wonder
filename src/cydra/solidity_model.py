@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .interface_resolver import ResolvedInterface, resolve_interface
+from .interface_resolver import ResolvedInterface, resolve_interface, resolve_named_type_source
 from .models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
 
 
@@ -515,7 +515,44 @@ def _constructor_interface_casts(
     return tuple(casts), tuple(resolved_casts), tuple(derived_casts)
 
 
-def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
+def _inherited_functions(
+    root: Path,
+    importer: Path,
+    inherits: tuple[str, ...],
+    seen: set[Path] | None = None,
+) -> tuple[FunctionModel, ...]:
+    """Resolve concrete inherited functions through the source inheritance graph."""
+    seen = set() if seen is None else seen
+    functions: list[FunctionModel] = []
+    for inherited_name in inherits:
+        try:
+            source_path, _method = resolve_named_type_source(root, importer, inherited_name)
+        except (FileNotFoundError, ValueError):
+            continue
+        resolved_path = (root / source_path).resolve()
+        if resolved_path in seen:
+            continue
+        seen.add(resolved_path)
+        try:
+            contracts = parse_solidity(resolved_path, include_inherited=False)
+        except (OSError, UnicodeError):
+            continue
+        base = next((item for item in contracts if item.name == inherited_name), None)
+        if base is None:
+            continue
+        functions.extend(base.functions)
+        functions.extend(_inherited_functions(root, resolved_path, base.inherits, seen))
+    deduped: list[FunctionModel] = []
+    seen_keys: set[tuple[str, int, str]] = set()
+    for function in functions:
+        key = (function.name, function.line, function.visibility)
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped.append(function)
+    return tuple(deduped)
+
+
+def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple[ContractModel, ...]:
     """Minimal deterministic model extractor used before compiler integration.
 
     It intentionally extracts only syntactic facts needed by the current
@@ -635,6 +672,7 @@ def parse_solidity(path: str | Path) -> tuple[ContractModel, ...]:
                 inherits=inherits,
                 declared_types=declared_types,
                 inherited_resolved_interfaces=tuple(inherited_resolved_interfaces),
+                inherited_functions=_inherited_functions(root, path, inherits) if include_inherited else (),
             )
         )
 
