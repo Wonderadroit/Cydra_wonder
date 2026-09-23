@@ -497,7 +497,8 @@ def test_single_statement_revert_guards_get_must_not_hold_polarity(tmp_path: Pat
         contract SingleGuard {
             uint256 public debt;
             function liquidate() external {
-                if (debt == 0) revert();
+                uint256 startDebt = debt;
+                if (startDebt == 0) revert();
             }
         }
     ''', encoding="utf-8")
