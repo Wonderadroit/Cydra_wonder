@@ -163,6 +163,12 @@ import {{ {target_type} }} from "{target_import}";
 {stub_declaration}contract CydraAuthInvariantTest is Test {{
     {target_type} internal target;
     address internal attacker = address(0xBEEF);
+    address internal owner = address(0x1001);
+    address internal admin = address(0x1002);
+    address internal guardian = address(0x1003);
+    address internal riskManager = address(0x1004);
+    address internal liquidator = address(0x1005);
+    address internal factory = address(0x1006);
 {asset_declaration}    function setUp() public {{
 {asset_setup}        target = {constructor_call};
     }}
