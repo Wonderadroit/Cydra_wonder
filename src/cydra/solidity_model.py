@@ -320,7 +320,7 @@ def _state_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> 
 
     def add(candidate: str, polarity: str) -> None:
         for match in _STATE_COMPARISON_RE.finditer(candidate):
-            if match.group("name") not in state_names:
+            if match.group("name") not in state_names and match.group("member") != ".length":
                 continue
             predicate = match.group(0).strip()
             item = (predicate, polarity)
@@ -363,6 +363,11 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
     def add(candidate: str, polarity: str) -> None:
         text = candidate.strip()
         if not text:
+            return
+        if any(
+            match.group("member") == ".length" and match.group(0).strip() == text
+            for match in _STATE_COMPARISON_RE.finditer(text)
+        ):
             return
         identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", text))
         state_expression_words = {"length", "true", "false"}
