@@ -212,7 +212,7 @@ def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool
         return walk(source_path) is True
 def _resolved_interface_method(contract: ContractModel, receiver: str, method: str) -> bool:
     """Return True only when a receiver cast resolves to an interface declaring method."""
-    match = re.match(r"^(?P<type>[A-Za-z_]\\w*)\\s*\\(", receiver.strip())
+    match = re.match(r"^(?P<type>[A-Za-z_]\w*)\s*\(", receiver.strip())
     if not match:
         return False
     type_name = match.group("type")
@@ -245,12 +245,12 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
         # Keep it as a prerequisite for runtime verification, but do not
         # misclassify it as an unconstructible external dependency.
         normalized_receiver = receiver.strip()
-        receiver_root = re.match(r"^([A-Za-z_]\\w*)$", normalized_receiver)
+        receiver_root = re.match(r"^([A-Za-z_]\w*)$", normalized_receiver)
         configured = bool(receiver_root and receiver_root.group(1) in state_names)
         interface_call = _resolved_interface_method(contract, normalized_receiver, method)
         configured_cast = interface_call and any(
             token in state_names
-            for token in re.findall(r"\\b[A-Za-z_]\\w*\\b", normalized_receiver)
+            for token in re.findall(r"\b[A-Za-z_]\w*\b", normalized_receiver)
         )
         status = "discovered" if configured or configured_cast else "required"
         detail = (
