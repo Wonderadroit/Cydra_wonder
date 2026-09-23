@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - pilot/arcadia-lending-dogfood
+      - fix/bounded-foundry-experiments
   pull_request:
     paths:
       - ".github/workflows/live-arcadia-lending-dogfood.yml"
