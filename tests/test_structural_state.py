@@ -158,6 +158,20 @@ def test_compiler_backed_reader_writer_topology_generates_state_surface(tmp_path
     assert all(h.invariant_id == "INV-STATE-value" for h in result.hypotheses)
 
 
+def test_collection_push_is_a_generic_state_writer():
+    contract = ContractModel(
+        name="Target",
+        source="Target.sol",
+        functions=(
+            FunctionModel("seed", "external", (), (), (("items", "push"),), 1),
+            FunctionModel("consume", "external", (), (), (), 2, state_predicates=("items.length > 0",)),
+        ),
+    )
+    contribution = generate_cross_function_state_hypotheses(contract)
+    assert any(h.target_function == "seed" and h.invariant_id == "INV-STATE-items" for h in contribution.hypotheses)
+    assert any(h.target_function == "consume" and h.invariant_id == "INV-STATE-items" for h in contribution.hypotheses)
+
+
 def test_cross_function_state_surface_does_not_reintroduce_modifier_protected_semantic_writers():
     contract = ContractModel(
         name="Target",
