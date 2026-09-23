@@ -62,6 +62,8 @@ class FunctionModel:
     # contract state.
     execution_predicates: tuple[str, ...] = field(default_factory=tuple)
     execution_predicate_polarities: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    # Local/call-result bindings used by execution predicates.
+    execution_value_bindings: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
