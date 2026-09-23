@@ -205,6 +205,11 @@ def _runtime_receiver_is_library(contract: ContractModel, receiver: str) -> bool
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
     for receiver, method in function.external_calls:
+        # Solidity array mutations are represented by the parser as calls on
+        # synthetic receivers, but push/pop are local state operations, not
+        # runtime dependencies that need a stubbed external target.
+        if method in {"push", "pop"}:
+            continue
         if _runtime_receiver_is_library(contract, receiver):
             continue
         requirements.append(
