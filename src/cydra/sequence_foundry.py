@@ -36,7 +36,7 @@ def generate_sequence_test_from_experiment(
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     functions_by_name = {function.name: function for function in contract_model.functions}
     caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
-    setup_keys: set[str] = set()
+    setup_keys: set[str] = set(step.function for step in experiment.steps)
     setup_rendered: list[str] = []
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
