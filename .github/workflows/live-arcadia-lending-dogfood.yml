@@ -19,7 +19,7 @@ permissions:
 jobs:
   research:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 150
     steps:
       - name: Checkout CYDRA
         uses: actions/checkout@v4
