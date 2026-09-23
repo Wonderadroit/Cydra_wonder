@@ -227,7 +227,7 @@ def test_sequence_renderer_materializes_transitive_setup_plan(tmp_path):
         hypothesis, experiment, "../Target.sol", "RecursiveSetup", tmp_path / "test" / "generated.t.sol", model
     )
     source = generated.read_text(encoding="utf-8")
-    assert source.index("target.enable(0);") < source.index("target.seed(address(0xCAFE));") < source.index("target.target();")
+    assert source.index("target.enable(1);") < source.index("target.seed(address(0xCAFE));") < source.index("target.target();")
 
 
 def test_sequence_renderer_rejects_unresolved_state_prerequisite(tmp_path):
