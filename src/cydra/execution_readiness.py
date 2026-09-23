@@ -261,7 +261,13 @@ def _execution_dataflow_requirements(
         # the consumer explicitly rejects a zero result, a non-zero caller
         # share balance is a deterministic prerequisite. This is a protocol-
         # agnostic semantic rule, not an Arcadia-specific assumption.
-        if re.search(r"\bmaxWithdraw\s*\(\s*msg\.sender\s*\)", expression):
+        local_polarities = dict(function.execution_predicate_polarities)
+        needs_positive_result = any(
+            re.search(rf"\b{re.escape(local)}\s*(?:==|<=)\s*0\b", predicate)
+            and local_polarities.get(predicate) == "must_not_hold"
+            for predicate in function.execution_predicates
+        )
+        if needs_positive_result and re.search(r"\bmaxWithdraw\s*\(\s*msg\.sender\s*\)", expression):
             requirements.append(
                 ExecutionRequirement(
                     "caller_state_dependency",
