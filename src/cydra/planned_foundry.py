@@ -119,14 +119,28 @@ def generate_authorization_test_from_experiment(
     )
     asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
     asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
-    readiness = inspect_execution_readiness(contract_model, function)
     functions_by_name = {item.name: item for item in (*contract_model.inherited_functions, *contract_model.functions)}
-    if not all(requirement.subject in functions_by_name for requirement in readiness.state_setup_candidates):
-        try:
-            parsed_contract = parse_solidity(Path(contract_model.source))[0]
-            functions_by_name.update({item.name: item for item in parsed_contract.functions})
-        except (OSError, ValueError, IndexError):
-            pass
+    readiness_contract = contract_model
+    try:
+        parsed_contract = parse_solidity(Path(contract_model.source))[0]
+        for parsed_function in parsed_contract.functions:
+            functions_by_name.setdefault(parsed_function.name, parsed_function)
+        if len(functions_by_name) > len(contract_model.functions) + len(contract_model.inherited_functions):
+            readiness_contract = ContractModel(
+                name=contract_model.name,
+                source=contract_model.source,
+                functions=tuple(functions_by_name.values()),
+                constructor=contract_model.constructor,
+                pragma=contract_model.pragma,
+                state_variables=contract_model.state_variables,
+                inherits=contract_model.inherits,
+                declared_types=contract_model.declared_types,
+                inherited_resolved_interfaces=contract_model.inherited_resolved_interfaces,
+                inherited_functions=contract_model.inherited_functions,
+            )
+    except (OSError, ValueError, IndexError):
+        pass
+    readiness = inspect_execution_readiness(readiness_contract, function)
     caller_bindings = {
         "owner": "owner",
         "admin": "admin",
