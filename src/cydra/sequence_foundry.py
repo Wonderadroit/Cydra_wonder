@@ -58,6 +58,13 @@ def generate_sequence_test_from_experiment(
             raise ValueError(f"sequence step {step.function} contains an empty argument")
         arguments = ", ".join(step.arguments)
         readiness = inspect_execution_readiness(contract_model, function, constraints, semantic_evidence)
+        unresolved_state_guards = tuple(
+            item for item in readiness.state_requirements
+            if item.status == "required" and "polarity could not be established" in item.detail
+        )
+        if unresolved_state_guards:
+            subjects = ", ".join(item.subject for item in unresolved_state_guards)
+            raise ValueError(f"unresolved state prerequisite(s) for {function.name}: {subjects}")
         setup_plan = constructible_state_setup_plan(contract_model, function, constraints, semantic_evidence)
         for action in setup_plan:
             if action.function in setup_keys:
