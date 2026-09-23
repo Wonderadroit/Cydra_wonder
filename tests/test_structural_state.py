@@ -138,6 +138,26 @@ def test_state_surface_retains_modifier_protected_entries_with_authorized_capabi
     assert next(h for h in result.hypotheses if h.target_function == "admin").attacker_capability == "authorized caller satisfying the modeled guards"
 
 
+def test_compiler_backed_reader_writer_topology_generates_state_surface(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    pragma solidity ^0.8.20;
+    contract Target {
+        uint256 public value;
+        function seed(uint256 next) external { value = next; }
+        function consume() external view returns (uint256) { return value; }
+    }
+    """, encoding="utf-8")
+    contract = parse_solidity(source)[0]
+    semantic = (
+        SemanticRelationshipEvidence("Target", "seed", "writes", "value", 0.98, "test"),
+        SemanticRelationshipEvidence("Target", "consume", "reads", "value", 0.90, "test"),
+    )
+    result = generate_cross_function_state_hypotheses(contract, semantic)
+    assert {h.target_function for h in result.hypotheses} == {"seed", "consume"}
+    assert all(h.invariant_id == "INV-STATE-value" for h in result.hypotheses)
+
+
 def test_cross_function_state_surface_does_not_reintroduce_modifier_protected_semantic_writers():
     contract = ContractModel(
         name="Target",
