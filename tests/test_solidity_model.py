@@ -521,6 +521,22 @@ def test_execution_predicate_revert_guard_polarity_is_not_hold(tmp_path: Path) -
     assert ("startDebt == 0", "must_not_hold") in function.execution_predicate_polarities
 
 
+def test_execution_predicate_polarity_handles_custom_error_revert():
+    source = '''
+    contract Target {
+        error NotReady();
+        function target() external {
+            uint256 startDebt = maxWithdraw(msg.sender);
+            if (startDebt == 0) revert NotReady();
+        }
+        function maxWithdraw(address) public pure returns (uint256) { return 0; }
+    }
+    '''
+    path = _write_source(source)
+    function = next(item for item in parse_solidity(path)[0].functions if item.name == "target")
+    assert function.execution_predicate_polarities == (("startDebt == 0", "must_not_hold"),)
+
+
 def test_state_predicate_polarity_models_collection_length_comparisons(tmp_path: Path) -> None:
     path = tmp_path / "CollectionGuard.sol"
     path.write_text('''
