@@ -429,22 +429,58 @@ def _execution_dataflow_requirements(
     return tuple(dict.fromkeys(requirements))
 
 
-def _execution_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, predicate: str) -> bool:
+    """Classify pure input/local path conditions separately from environment prerequisites.
+
+    A predicate over ABI inputs, local derived values, literals, and compile-time
+    constants is a constraint the generated experiment must satisfy. Predicates
+    that depend on persistent target state or ambient execution context remain
+    blocking prerequisites.
+    """
+    identifiers = set(re.findall(r"\\b[A-Za-z_]\\w*\\b", predicate))
+    state_names = set(contract.state_variables)
+    parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
+    local_names = {name for name, _ in function.execution_value_bindings}
+    ambient = {"msg", "tx", "block", "now"}
+    if identifiers & state_names or identifiers & ambient:
+        return False
+    if "$." in predicate:
+        return False
+    # Unknown identifiers may be source-defined compile-time constants/types.
+    # They are not treated as environmental state merely because the lightweight
+    # parser cannot resolve their declaration.
+    return bool(identifiers <= (parameter_names | local_names | identifiers))
+
+
+def _execution_requirements(
+    contract: ContractModel,
+    function: FunctionModel,
+) -> tuple[ExecutionRequirement, ...]:
     polarities = dict(function.execution_predicate_polarities)
-    return tuple(
-        ExecutionRequirement(
-            "execution_predicate",
-            predicate,
-            f"{function.name}:body",
-            "required",
-            {
-                "must_hold": "execution predicate must hold for the normal security-relevant path",
-                "must_not_hold": "execution predicate is a guarded revert condition and must not hold",
-                "unknown": "execution predicate polarity could not be established statically",
-            }.get(polarities.get(predicate, "unknown"), "execution predicate polarity is unknown"),
+    requirements: list[ExecutionRequirement] = []
+    for predicate in function.execution_predicates:
+        polarity = polarities.get(predicate, "unknown")
+        detail = {
+            "must_hold": "execution predicate must hold for the normal security-relevant path",
+            "must_not_hold": "execution predicate is a guarded revert condition and must not hold",
+            "unknown": "execution predicate polarity could not be established statically",
+        }.get(polarity, "execution predicate polarity is unknown")
+        status = "constraint" if _is_experiment_constraint(contract, function, predicate) else "required"
+        if status == "constraint":
+            detail = (
+                "pure input/local execution constraint; the generated experiment "
+                "must satisfy it before the security-relevant assertion"
+            )
+        requirements.append(
+            ExecutionRequirement(
+                "execution_predicate",
+                predicate,
+                f"{function.name}:body",
+                status,
+                detail,
+            )
         )
-        for predicate in function.execution_predicates
-    )
+    return tuple(requirements)
 
 
 def _state_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
@@ -698,7 +734,7 @@ def inspect_execution_readiness(
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(contract, selected) if selected else (),
         execution_requirements=(
-            (*_execution_requirements(selected), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
+            (*_execution_requirements(contract, selected), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
             if selected else ()
         ),
         state_requirements=(
