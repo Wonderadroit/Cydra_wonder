@@ -566,7 +566,17 @@ def _model_initialization_source(
     if constructor is not None and constructor.parameters:
         constructor_arguments = ", ".join(_constructor_argument(p, constructor_runtime_arguments) for p in constructor.parameters)
 
-    initializer_runtime_arguments = {parameter: "address(tokenStub)" for parameter in token_parameters}
+    initializer_runtime_arguments: dict[str, str] = {}
+    for parameter in function.parameters:
+        if parameter.name not in token_parameters:
+            continue
+        base_type = parameter.type.strip().split()[0].rstrip("[]")
+        if base_type.startswith(("address", "uint", "int", "bytes", "bool", "string")):
+            initializer_runtime_arguments[parameter.name] = "address(tokenStub)"
+        else:
+            initializer_runtime_arguments[parameter.name] = (
+                f"{base_type}(address(tokenStub))"
+            )
     arguments: list[str] = []
     declarations: list[str] = []
     for index, parameter in enumerate(function.parameters):
