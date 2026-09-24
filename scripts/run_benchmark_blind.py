@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -31,8 +31,10 @@ from cydra.sequence_foundry import generate_sequence_test_from_experiment
 from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 from cydra.target_adapter import inspect_target
-from cydra.execution_readiness import inspect_execution_readiness
-from cydra.prerequisite_graph import build_prerequisite_graph, can_enter_security_experiment
+from cydra.execution_readiness import constructible_state_setup_plan, inspect_execution_readiness, role_address_expression
+from cydra.prerequisite_graph import apply_observations, build_prerequisite_graph, can_enter_security_experiment
+from cydra.runtime_observation import plan_public_state_observations
+from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
 from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
@@ -340,6 +342,86 @@ def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[
         "tests_failed": execution.tests_failed,
         "evidence": outcome.evidence,
     }
+
+
+def _setup_argument(function, index: int, role: str | None) -> str:
+    parameter = function.parameters[index]
+    parameter_type = parameter.type.strip()
+    base = parameter_type.split()[0].rstrip("[]")
+    if parameter_type.endswith("[]"):
+        raise ValueError(f"unsupported setup array parameter type: {parameter.type}")
+    if base == "address":
+        if role:
+            expression = role_address_expression(role)
+            if expression:
+                return expression
+        name = parameter.name.lower()
+        if "recipient" in name or "user" in name or "account" in name:
+            return "attacker"
+        return "attacker"
+    if parameter_type == "address payable":
+        return "payable(attacker)"
+    if base == "bool":
+        return "true"
+    if base.startswith(("uint", "int")):
+        return "1"
+    if base == "string":
+        return '"CYDRA"'
+    if base == "bytes":
+        return 'bytes("")'
+    if base.startswith("bytes") and base[5:].isdigit():
+        return "0"
+    raise ValueError(f"unsupported setup parameter type: {parameter.type}")
+
+
+def _setup_steps(result, contract, setup_actions):
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    steps = []
+    for action in setup_actions:
+        function = functions.get(action.function)
+        if function is None:
+            raise ValueError(f"setup action is not modeled: {action.function}")
+        arguments = tuple(
+            _setup_argument(function, index, action.caller_role)
+            for index in range(len(function.parameters))
+        )
+        from cydra.models import ExperimentStep
+        steps.append(ExperimentStep(function=function.name, arguments=arguments))
+    return tuple(steps)
+
+
+def _run_state_prerequisite_observation(
+    project: Path,
+    hypothesis,
+    experiment,
+    contract,
+    setup_actions,
+    plans,
+) -> tuple[Any, tuple[Any, ...], tuple[Any, ...]]:
+    if not plans:
+        raise ValueError("state prerequisite has no deterministic public runtime observation")
+    from cydra.models import ExperimentStep
+    setup_steps = _setup_steps(None, contract, setup_actions)
+    observation_steps = (*setup_steps, ExperimentStep(function=hypothesis.target_function, arguments=tuple(
+        _setup_argument(next(item for item in contract.functions if item.name == hypothesis.target_function), i, None)
+        for i in range(len(next(item for item in contract.functions if item.name == hypothesis.target_function).parameters))
+    )))
+    observation_experiment = replace(experiment, experiment_id=f"{experiment.experiment_id}-PREREQ", steps=observation_steps)
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}-prereq.t.sol")
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        observation_experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+        verify_state_prerequisites=True,
+        stop_before_target=True,
+    )
+    execution = run_foundry_test(project, generated, observation_experiment.experiment_id, "prerequisite")
+    observations = observations_from_execution(observation_experiment.experiment_id, plans, execution)
+    evidence = evidence_records_from_execution(observation_experiment.experiment_id, plans, execution)
+    return execution, observations, evidence
 
 
 def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
