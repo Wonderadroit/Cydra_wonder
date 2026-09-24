@@ -65,7 +65,7 @@ def generate_sequence_test_from_experiment(
                 )
             for plan in relation_plans:
                 relation_setups.append(
-                    f"        uint256 before_{plan.state} = {plan.getter};"
+                    f"        {plan.state_type} before_{plan.state} = {plan.getter};"
                 )
                 expression = plan.relation.expression
                 if " + " in expression:
