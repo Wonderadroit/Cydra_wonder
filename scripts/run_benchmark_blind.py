@@ -198,6 +198,39 @@ def clone_target(repo: str, ref: str, destination: Path) -> None:
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", ref), check=True)
 
 
+def _materialize_generic_foundry_config(project: Path) -> None:
+    """Make npm/Hardhat Solidity checkouts consumable by the generic Foundry harness."""
+    config = project / "foundry.toml"
+    if not config.exists():
+        source_dir = "contracts" if (project / "contracts").exists() else "src"
+        config.write_text(
+            "[profile.default]\n"
+            f'src = "{source_dir}"\n'
+            'test = "test"\n'
+            'libs = ["lib", "node_modules"]\n'
+            'optimizer = false\n'
+            'via_ir = false\n',
+            encoding="utf-8",
+        )
+    remappings = project / "remappings.txt"
+    if remappings.exists():
+        return
+    node_modules = project / "node_modules"
+    mappings: list[str] = []
+    if node_modules.exists():
+        for child in sorted(node_modules.iterdir()):
+            if child.name.startswith("."):
+                continue
+            if child.name.startswith("@") and child.is_dir():
+                for package in sorted(child.iterdir()):
+                    if package.is_dir():
+                        mappings.append(f"{child.name}/{package.name}=node_modules/{child.name}/{package.name}/")
+            elif child.is_dir():
+                mappings.append(f"{child.name}=node_modules/{child.name}/")
+    if mappings:
+        remappings.write_text("\n".join(mappings) + "\n", encoding="utf-8")
+
+
 def prepare_target_project(project: Path) -> None:
     """Materialize declared dependencies needed by the generic experiment harness."""
     package = project / "package.json"
@@ -241,6 +274,11 @@ def prepare_target_project(project: Path) -> None:
             cwd=project,
             check=True,
         )
+
+    # Hardhat/npm targets are accepted by target intake and need a temporary
+    # Foundry execution envelope. Never overwrite a target-authored config.
+    if not (project / "foundry.toml").exists():
+        _materialize_generic_foundry_config(project)
 
 
 def _contract_for_hypothesis(result, hypothesis):
