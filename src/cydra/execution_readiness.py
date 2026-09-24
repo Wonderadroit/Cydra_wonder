@@ -446,8 +446,14 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     """
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     state_names = set(contract.state_variables)
+    parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
+    local_names = {name for name, _ in function.execution_value_bindings}
     ambient = {"msg", "tx", "block", "now"}
     if identifiers & state_names or identifiers & ambient or "$." in predicate:
+        return False
+    if not (identifiers & (parameter_names | local_names)):
+        # An unresolved identifier with no ABI/local binding is not assumed to
+        # be a harmless constant; keep the gate fail-closed.
         return False
     call_bound_locals = {
         name
