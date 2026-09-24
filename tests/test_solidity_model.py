@@ -607,3 +607,23 @@ def test_custom_errors_and_events_are_not_runtime_external_calls(tmp_path: Path)
     )
     function = parse_solidity(path)[0].functions[0]
     assert function.external_calls == ()
+
+
+def test_execution_predicate_polarity_recognizes_custom_error_revert_guard(tmp_path: Path) -> None:
+    path = tmp_path / "CustomErrorGuard.sol"
+    path.write_text(
+        """
+        contract CustomErrorGuard {
+            uint256 public epoch;
+            error NotReady();
+            function execute(uint256 requiredEpoch) external {
+                if (epoch < requiredEpoch) revert NotReady();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    function = parse_solidity(path)[0].functions[0]
+    assert function.execution_predicate_polarities == ((
+        "epoch < requiredEpoch", "must_not_hold"
+    ),)
