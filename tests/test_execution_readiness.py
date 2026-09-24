@@ -401,3 +401,49 @@ def test_repeated_unbound_local_scalar_can_be_an_experiment_constraint():
     )
     readiness = inspect_execution_readiness(contract, function)
     assert all(item.status == "constraint" for item in readiness.execution_requirements)
+
+
+def test_constructible_constructor_interface_and_role_inputs_are_constraints():
+    model = ContractModel(
+        "Target",
+        "/tmp/Target.sol",
+        (),
+        constructor=ConstructorModel(
+            (
+                ParameterModel("factory_", "address"),
+                ParameterModel("accountant_", "IVaultAccountant"),
+            ),
+            1,
+            interface_casts=(("accountant_", "IVaultAccountant"),),
+        ),
+    )
+    readiness = inspect_execution_readiness(model)
+    statuses = {(item.kind, item.subject): item.status for item in readiness.constructor_requirements}
+    assert statuses[("constructor_role", "factory")] == "constraint"
+    assert statuses[("constructor_dependency", "IVaultAccountant")] == "constraint"
+
+def test_input_state_order_guard_is_experiment_constraint() -> None:
+    model = ContractModel(
+        "Target",
+        "/tmp/Target.sol",
+        functions=(
+            FunctionModel(
+                "execute",
+                "external",
+                (),
+                (),
+                (),
+                1,
+                parameters=(ParameterModel("epoch", "uint256"),),
+                execution_predicates=("epoch >= depositEpoch",),
+                execution_predicate_polarities=(("epoch >= depositEpoch", "must_not_hold"),),
+            ),
+        ),
+        state_variables=("depositEpoch",),
+    )
+    readiness = inspect_execution_readiness(model, model.functions[0])
+    predicates = {
+        (item.kind, item.subject): item.status
+        for item in readiness.execution_requirements
+    }
+    assert predicates[("execution_predicate", "epoch >= depositEpoch")] == "constraint"

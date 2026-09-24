@@ -97,19 +97,47 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
         return ()
 
     requirements: list[ExecutionRequirement] = []
+    source_path = Path(contract.source).resolve()
+    project_root = next(
+        (
+            parent
+            for parent in (source_path.parent, *source_path.parents)
+            if any((parent / marker).exists() for marker in ("foundry.toml", "package.json", "remappings.txt"))
+        ),
+        source_path.parent,
+    )
+
+    def resolves_to_interface(type_name: str) -> bool:
+        try:
+            resolved = resolve_interface(project_root, source_path, type_name)
+        except (FileNotFoundError, ValueError, OSError, UnicodeError):
+            return False
+        return bool(resolved.methods or resolved.name == type_name)
     for parameter in contract.constructor.parameters:
         base = parameter.type.strip().split()[0].rstrip("[]")
         primitive = base in {"address", "bool", "string", "bytes"} or base.startswith(
             ("uint", "int", "bytes")
         )
+        interface_parameter = bool(
+            contract.constructor
+            and any(
+                parameter.name == parameter_name
+                for parameter_name, _interface_name in contract.constructor.interface_casts
+            )
+        ) or resolves_to_interface(base)
         if not primitive:
             requirements.append(
                 ExecutionRequirement(
                     "constructor_dependency",
                     base,
                     "constructor",
-                    "required",
-                    f"constructor parameter {parameter.name or '<unnamed>'} uses a contract/interface/custom type",
+                    "constraint" if interface_parameter else "required",
+                    (
+                        "interface-typed constructor input can be materialized by the generic "
+                        "runtime stub; deployment remains part of experiment verification"
+                        if interface_parameter
+                        else f"constructor parameter {parameter.name or '<unnamed>'} uses a contract/interface/custom type"
+                    ),
                 )
             )
         if base == "address":
@@ -120,8 +148,8 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
                         "constructor_role",
                         role,
                         f"constructor:{parameter.name}",
-                        "required",
-                        "address parameter is a likely role/dependency binding by declared parameter name",
+                        "constraint",
+                        "constructor role is an experiment input binding; the generated deployment must materialize it",
                     )
                 )
     return tuple(requirements)
@@ -449,9 +477,24 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
     local_names = {name for name, _ in function.execution_value_bindings}
     ambient = {"msg", "tx", "block", "now"}
+    # A one-sided numeric comparison between an ABI input and modeled state
+    # can be satisfied by a conservative extremal input (for example
+    # epoch >= depositEpoch -> max uint). It is an experiment input constraint,
+    # not an environmental prerequisite, provided no ambient/call-derived value
+    # participates in the predicate.
+    parameter_state_order = bool(
+        identifiers & parameter_names
+        and identifiers & state_names
+        and re.search(r"(?:>=|<=|>|<)", predicate)
+        and not re.search(r"\b(?:msg|tx|block|now)\b", predicate)
+    )
+    if parameter_state_order:
+        return True
+
     if identifiers & state_names or identifiers & ambient or "$." in predicate:
         return False
     bound_names = parameter_names | local_names
+
     if not (identifiers & bound_names):
         # A repeated lower-case identifier across multiple path predicates is
         # commonly a local derived scalar whose declaration the lightweight
