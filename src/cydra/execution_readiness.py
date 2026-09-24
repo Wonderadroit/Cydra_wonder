@@ -486,7 +486,7 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
         identifiers & parameter_names
         and identifiers & state_names
         and re.search(r"(?:>=|<=|>|<)", predicate)
-        and not re.search(r"\\b(?:msg|tx|block|now)\\b", predicate)
+        and not re.search(r"\b(?:msg|tx|block|now)\b", predicate)
     )
     if parameter_state_order:
         return True
