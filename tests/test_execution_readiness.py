@@ -296,3 +296,9 @@ def test_execution_readiness_exposes_compiler_state_dependencies_of_value_produc
         and item.subject == "maxWithdraw -> realisedDebt"
         for item in readiness.execution_requirements
     )
+
+def test_lifecycle_modifiers_are_not_caller_role_prerequisites():
+    function = FunctionModel("initialize", "external", ("initializer",), (), (), 1)
+    model = ContractModel("Target", "/tmp/Target.sol", (function,))
+    readiness = inspect_execution_readiness(model, function)
+    assert readiness.caller_requirements == ()
