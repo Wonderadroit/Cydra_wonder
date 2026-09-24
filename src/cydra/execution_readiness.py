@@ -477,9 +477,6 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
     local_names = {name for name, _ in function.execution_value_bindings}
     ambient = {"msg", "tx", "block", "now"}
-    if identifiers & state_names or identifiers & ambient or "$." in predicate:
-        return False
-    bound_names = parameter_names | local_names
     # A one-sided numeric comparison between an ABI input and modeled state
     # can be satisfied by a conservative extremal input (for example
     # epoch >= depositEpoch -> max uint). It is an experiment input constraint,
@@ -493,6 +490,10 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     )
     if parameter_state_order:
         return True
+
+    if identifiers & state_names or identifiers & ambient or "$." in predicate:
+        return False
+    bound_names = parameter_names | local_names
 
     if not (identifiers & bound_names):
         # A repeated lower-case identifier across multiple path predicates is
