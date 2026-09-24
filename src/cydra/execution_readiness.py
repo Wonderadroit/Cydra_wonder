@@ -310,7 +310,7 @@ def _execution_dataflow_requirements(
         producer_name = call_match.group("name")
         producer = functions_by_name.get(producer_name)
         member_call = re.match(
-            r"^(?P<receiver>[A-Za-z_]\\w*(?:\\([^)]*\\))?)\\.\\s*(?P<method>[A-Za-z_]\\w*)\\s*\\(",
+            r"^(?P<receiver>[A-Za-z_]\w*(?:\([^)]*\))?)\.\s*(?P<method>[A-Za-z_]\w*)\s*\(",
             expression,
         )
         if member_call and not _runtime_receiver_is_library(contract, member_call.group("receiver").split("(")[0]):
