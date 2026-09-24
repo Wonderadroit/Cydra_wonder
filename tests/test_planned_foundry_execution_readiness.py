@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from cydra.models import ContractModel, Experiment, Hypothesis, FunctionModel, ParameterModel
+from cydra.ast_dataflow import SemanticRelationshipEvidence
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 
 
@@ -46,7 +47,12 @@ def test_authorization_renderer_fails_closed_when_caller_state_writer_is_unconst
     )
     max_withdraw = FunctionModel("maxWithdraw", "public", (), (), (), 30, return_expressions=("convertToAssets(balanceOf(owner))",))
     contract = ContractModel("Target", str(source), (start, borrow, max_withdraw), state_variables=("FACTORY",))
-    evidence = ()
+    evidence = (
+        SemanticRelationshipEvidence(
+            contract="Target", function="borrow", relation="writes", target="balanceOf",
+            confidence=0.99, source="solc-json-ast:test",
+        ),
+    )
     hypothesis = Hypothesis("H-AUTH-start", "start is unprotected", "INV-AUTH-001", "start", "attacker", "state mutation")
     experiment = Experiment("X-H-AUTH-start", "H-AUTH-start", "call start", ("mutation", "authorization"), 1.0, ("0",), "start")
     import pytest
