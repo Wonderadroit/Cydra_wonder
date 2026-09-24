@@ -131,6 +131,13 @@ def plan_source_state_relations(
             if state not in state_names:
                 continue
             rhs = match.groupdict().get("rhs")
+            rhs_expression = (
+                rhs if rhs and not re.fullmatch(_LITERAL, rhs) else None
+            )
+            if rhs_expression is not None and rhs_expression not in {
+                parameter.name for parameter in function.parameters
+            }:
+                continue
             raw_indexes = match.groupdict().get("indexes")
             indexes = _index_expressions(raw_indexes) if raw_indexes else ()
             if raw_indexes and indexes is None:
@@ -150,9 +157,7 @@ def plan_source_state_relations(
                     expression=expression,
                     source=f"source:{contract.source}",
                     index_expressions=tuple(indexes),
-                    rhs_expression=(
-                        rhs if rhs and not re.fullmatch(_LITERAL, rhs) else None
-                    ),
+                    rhs_expression=rhs_expression,
                 )
             )
     return tuple(dict.fromkeys(relations))
