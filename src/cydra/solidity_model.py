@@ -648,7 +648,12 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
             )
             # State-model writes are explicit contract-state transitions, not local assignments.
             writes = tuple(sorted(set(name for name in write_candidates if name in state_variables)))
-            external_calls = tuple(sorted(set(re.findall(r"\b(\w+)\.(\w+)\s*\(", body))))
+            external_call_matches = re.finditer(r"\b(\w+)\.(\w+)\s*\(", body)
+            external_calls = tuple(sorted({
+                (match.group(1), match.group(2))
+                for match in external_call_matches
+                if not re.search(r"\b(?:revert|emit)\s*$", body[max(0, match.start() - 32):match.start()])
+            }))
             functions.append(
                 FunctionModel(
                     name=name,
