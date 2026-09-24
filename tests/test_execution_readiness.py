@@ -311,6 +311,10 @@ def test_pure_input_execution_predicate_is_experiment_constraint():
     function = FunctionModel(
         name="initialize",
         visibility="public",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
         parameters=(ParameterModel("amount", "uint256"),),
         execution_predicates=("amount > 0",),
         execution_predicate_polarities=(("amount > 0", "must_hold"),),
@@ -332,6 +336,10 @@ def test_state_execution_predicate_remains_blocking():
     function = FunctionModel(
         name="execute",
         visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
         execution_predicates=("storedAmount > 0",),
         execution_predicate_polarities=(("storedAmount > 0", "must_hold"),),
     )
