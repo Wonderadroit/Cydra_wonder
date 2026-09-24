@@ -35,6 +35,8 @@ from cydra.execution_readiness import constructible_state_setup_plan, inspect_ex
 from cydra.prerequisite_graph import apply_observations, build_prerequisite_graph, can_enter_security_experiment
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
+from cydra.state_relation_observation import plan_state_relation_observations
+from cydra.state_relation_evidence import evidence_records_from_relation_execution
 from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
@@ -426,6 +428,56 @@ def _run_state_prerequisite_observation(
     return execution, observations, evidence
 
 
+def _run_state_relation_verification(
+    project: Path,
+    hypothesis,
+    experiment,
+    contract,
+) -> tuple[Any, tuple[Any, ...], tuple[Any, ...]]:
+    """Verify a source-backed state transition before any state classification.
+
+    This is deliberately separate from the security experiment. A passing
+    transaction is not enough: the generated test must contain the modeled
+    before/after assertion, execute it, and pass it before relation evidence
+    exists.
+    """
+    function = next(
+        (item for item in (*contract.functions, *contract.inherited_functions)
+         if item.name == hypothesis.target_function),
+        None,
+    )
+    if function is None:
+        raise ValueError(f"state relation target function is not modeled: {hypothesis.target_function}")
+    plans = plan_state_relation_observations(contract, function)
+    if not plans:
+        raise ValueError(
+            "state transition has no deterministic public unsigned-integer relation observation"
+        )
+    output = test_path_for(
+        project, f"generated/{hypothesis.hypothesis_id}-relation.t.sol"
+    )
+    relation_experiment = replace(
+        experiment,
+        experiment_id=f"{experiment.experiment_id}-RELATION",
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        relation_experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+        verify_state_relations=True,
+    )
+    execution = run_foundry_test(
+        project, generated, relation_experiment.experiment_id, "relation"
+    )
+    evidence = evidence_records_from_relation_execution(
+        relation_experiment.experiment_id, plans, execution
+    )
+    return execution, plans, evidence
+
+
 def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_sequence_test_from_experiment(
@@ -545,6 +597,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             "blind_executed": False,
             "classification": "NOT_REACHED",
         }
+        relation_execution = None
+        relation_evidence = ()
 
         if not capability["generate_foundry"]:
             status["foundry_generation_blocked_reason"] = capability["generate_block_reason"]
@@ -562,6 +616,32 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             evidence.extend(prerequisite_observation_evidence)
             statuses.append(status)
             continue
+
+        if class_name == "state":
+            try:
+                relation_execution, relation_plans, relation_evidence = _run_state_relation_verification(
+                    project, hypothesis, experiment, contract
+                )
+                status["state_relation_verification"] = {
+                    "verified": bool(relation_evidence),
+                    "plans": [
+                        {
+                            "state": plan.state,
+                            "getter": plan.getter,
+                            "relation": plan.relation.expression,
+                        }
+                        for plan in relation_plans
+                    ],
+                    "execution": _json(relation_execution),
+                    "evidence_ids": [item.evidence_id for item in relation_evidence],
+                }
+                evidence.extend(relation_evidence)
+                executions.append(relation_execution)
+            except Exception as error:
+                status["state_relation_verification"] = {
+                    "verified": False,
+                    "failure": f"{type(error).__name__}: {error}",
+                }
 
         try:
             if class_name == "authorization":
@@ -798,46 +878,3 @@ def main() -> int:
         provenance = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "target_repo": args.target_repo,
-            "target_ref": args.target_ref,
-            "target_path": args.target_path,
-            "target_project": args.target_project,
-            "classes": list(classes),
-            "cydra_commit": cydra_commit,
-            "environment": provenance_env,
-        }
-        text_files = {
-            "target-checkout.txt": _git_output(checkout, "rev-parse", "HEAD") + "\n",
-            "compilation.log": json.dumps(
-                {"compiler_evidence": _json(compiler_evidence), "build": build_capture},
-                indent=2,
-                sort_keys=True,
-            ) + "\n",
-            "execution-human.txt": execution_human,
-            "README.md": (
-                "# CYDRA blind capability artifact\n\n"
-                "This artifact records compiler-backed constraints, structural hypotheses, "
-                "planned experiment inputs, generated experiments, execution evidence, "
-                "and explicit capability gaps. A measured execution is not itself a "
-                "vulnerability confirmation.\n"
-            ),
-            "integrity-check.json": json.dumps({"manifest": "manifest.sha256"}, indent=2) + "\n",
-            "forge-config.json": forge_config_text,
-        }
-        files = {
-            "provenance.json": provenance,
-            "target-intake.json": target_intake.to_dict(),
-            "execution-readiness.json": execution_readiness,
-            "parse-output.json": {"target": args.target_path, "contracts": _json(result.contracts)},
-            "invariants.json": result.invariants,
-            "hypotheses.json": result.hypotheses,
-            "experiments.json": result.experiments,
-            "execution.json": execution_json,
-            "classification.json": classification,
-        }
-        create_freeze(files, text_files, args.freeze)
-
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
