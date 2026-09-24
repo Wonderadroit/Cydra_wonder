@@ -282,3 +282,39 @@ def test_sequence_renderer_can_verify_source_backed_state_relation(tmp_path):
     assert "uint256 before_counter = target.counter();" in rendered
     assert "target.bump();" in rendered
     assert "assertEq(target.counter(), before_counter + 1" in rendered
+
+
+
+def test_sequence_renderer_can_verify_inherited_state_relation(tmp_path):
+    from cydra.models import FunctionModel
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Base { uint256 public counter; "
+        "function bump() external { counter += 1; } } "
+        "contract Target is Base {}",
+        encoding="utf-8",
+    )
+    inherited = FunctionModel("bump", "external", (), ("counter",), (), 1)
+    model = ContractModel(
+        "Target",
+        str(source),
+        (),
+        state_variables=("counter",),
+        inherited_functions=(inherited,),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-inherited-bump", "candidate", "INV-STATE-inherited",
+        "bump", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-H-STATE-inherited-bump", hypothesis.hypothesis_id, "bump", ("violation",), 1.0,
+        steps=(ExperimentStep("bump", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_relations=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "target.bump();" in rendered
+    assert "assertEq(target.counter(), before_counter + 1" in rendered
