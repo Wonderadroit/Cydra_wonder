@@ -7,6 +7,7 @@ from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source
 from .execution_readiness import _address_role, caller_role
 from .runtime_observation import plan_public_state_observations
+from .state_relation_observation import plan_state_relation_observations
 
 
 def generate_sequence_test_from_experiment(
@@ -19,6 +20,7 @@ def generate_sequence_test_from_experiment(
     *,
     verify_state_prerequisites: bool = False,
     stop_before_target: bool = False,
+    verify_state_relations: bool = False,
 ) -> Path:
     """Render a structured ordered experiment into an executable Foundry test.
 
@@ -36,6 +38,8 @@ def generate_sequence_test_from_experiment(
 
     functions = {function.name: function for function in contract_model.functions}
     rendered: list[str] = []
+    relation_setups: list[str] = []
+    relation_assertions: list[str] = []
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
@@ -52,6 +56,30 @@ def generate_sequence_test_from_experiment(
             )
         if any(not argument.strip() for argument in step.arguments):
             raise ValueError(f"sequence step {step.function} contains an empty argument")
+        if verify_state_relations and function.name == hypothesis.target_function:
+            relation_plans = plan_state_relation_observations(contract_model, function)
+            if function.writes and not relation_plans:
+                raise ValueError(
+                    "state transition has no deterministic source-backed relation observation; "
+                    "relation verification must fail closed"
+                )
+            for plan in relation_plans:
+                relation_setups.append(
+                    f"        uint256 before_{plan.state} = {plan.getter};"
+                )
+                expression = plan.relation.expression
+                if " + " in expression:
+                    amount = expression.rsplit(" + ", 1)[1]
+                    relation_assertions.append(
+                        f'        assertEq({plan.getter}, before_{plan.state} + {amount}, '
+                        f'"unverified state relation: {expression}");'
+                    )
+                elif " - " in expression:
+                    amount = expression.rsplit(" - ", 1)[1]
+                    relation_assertions.append(
+                        f'        assertEq({plan.getter}, before_{plan.state} - {amount}, '
+                        f'"unverified state relation: {expression}");'
+                    )
         if verify_state_prerequisites and function.name == hypothesis.target_function:
             observations = plan_public_state_observations(contract_model, function)
             if function.state_predicates and not observations:
@@ -65,11 +93,17 @@ def generate_sequence_test_from_experiment(
             )
             if stop_before_target:
                 break
+        if verify_state_relations and function.name == hypothesis.target_function and relation_setups:
+            rendered.extend(relation_setups)
+            relation_setups.clear()
         arguments = ", ".join(step.arguments)
         role = caller_role(function)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
         caller = caller_bindings.get(role, "attacker") if role else "attacker"
         rendered.append(f"        vm.prank({caller});\n        target.{step.function}({arguments});")
+        if verify_state_relations and function.name == hypothesis.target_function and relation_assertions:
+            rendered.extend(relation_assertions)
+            relation_assertions.clear()
 
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
