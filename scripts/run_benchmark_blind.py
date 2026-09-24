@@ -512,6 +512,27 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             compiler_evidence.evidence,
         )
         prerequisite_graph = build_prerequisite_graph(readiness)
+        prerequisite_observation_evidence = ()
+        status_prerequisite = {}
+        if class_name == "state" and readiness.state_requirements:
+            setup_actions = constructible_state_setup_plan(
+                contract,
+                function,
+                tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
+                compiler_evidence.evidence,
+            )
+            observation_plans = plan_public_state_observations(contract, function)
+            if observation_plans:
+                try:
+                    prerequisite_execution, observations, prerequisite_observation_evidence = _run_state_prerequisite_observation(
+                        project, hypothesis, experiment, contract, setup_actions, observation_plans
+                    )
+                    prerequisite_graph = apply_observations(prerequisite_graph, observations)
+                    status_prerequisite = {"prerequisite_setup_actions": [a.function for a in setup_actions], "prerequisite_observations": [o.evidence_id for o in observations], "prerequisite_execution": _json(prerequisite_execution)}
+                except Exception as error:
+                    status_prerequisite = {"prerequisite_setup_actions": [a.function for a in setup_actions], "prerequisite_observation_failure": f"{type(error).__name__}: {error}"}
+            else:
+                status_prerequisite = {"prerequisite_observation_failure": "no deterministic public state observation plan"}
         status: dict[str, Any] = {
             "hypothesis_id": hypothesis.hypothesis_id,
             "class": class_name,
@@ -535,6 +556,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             status["classification"] = "NOT_REACHED"
             status["classification_blocked_reason"] = "security experiment prerequisites are not verified"
             status["prerequisites"] = _json(prerequisite_graph)
+            status.update(status_prerequisite)
+            evidence.extend(prerequisite_observation_evidence)
             statuses.append(status)
             continue
 
@@ -556,6 +579,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             statuses.append({**status, **_failure_status(hypothesis, class_name, stage, error)})
             continue
 
+        status.update(status_prerequisite)
+        evidence.extend(prerequisite_observation_evidence)
         status.update(
             {
                 "foundry_generated": True,
