@@ -1983,3 +1983,16 @@ Benchmark 040 run 36017834764 completed successfully on the PR head. The unfamil
 Therefore the next implementation boundary is narrower and more fundamental: derive or bind an independently testable state relation from compiler/source evidence and the ordered transition model, render observations of that relation before/between/after transitions, and keep causal classification fail-closed unless the observed relation is actually justified. No target-specific state formula, historical answer, or arbitrary execution failure may be promoted into a finding.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 89 — keyed state-relation verification merged; unfamiliar-target state remains fail-closed
+
+PR #218 was merged to main as commit 11de6ca3087427cdb1829794bb36254bee3f0795. It extends the generic source-backed state-relation observation boundary from public scalar state to simple public mappings when every mapping index is a direct function parameter with matching ABI type. Generated Foundry assertions bind getter indexes to the actual experiment arguments. Dynamic indexes, signed/non-numeric values, and ambiguous getter surfaces remain unresolved. Scalar literal state-relation extraction was also repaired after CI exposed an accidental regression in the keyed extension.
+
+The merged implementation now has green structural/debug/dataflow/research/maturity validation on the merge head. Benchmark 040 run 36072220778 completed successfully. On Panoptic HypoVault, six state hypotheses were extracted, but all six remained NOT_REACHED because the selected state transitions did not expose a deterministic public unsigned-integer relation observation. This is the intended fail-closed result, not a finding.
+
+The same campaign also demonstrated that the generic blind runner can execute unfamiliar authorization hypotheses and preserve measured reverts as non-findings. Separately, Benchmark 041's blind-selection phase identified the PanopticVaultAccountant computeNAV paired-output asymmetry from compiler/source reasoning, and a causal control reproduced the known historical H-01 behavior. That campaign is useful validation of blind hypothesis selection and causal evidence plumbing, but its final PoC harness is benchmark-specific; it is not yet evidence that CYDRA can autonomously construct that complete dependency-heavy PoC on an arbitrary target.
+
+The next end-result boundary is therefore explicit: convert source-backed relations into fully generic ordered state experiments on unfamiliar targets, including mapping/struct-derived surfaces where safely observable; then add class-neutral causal differential execution without target-specific PoCs. Arithmetic/pair-symmetry execution remains a separate capability gap because the current blind runner still blocks arithmetic Foundry generation without a patched counterpart.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
