@@ -95,7 +95,7 @@ def _index_expressions(raw: str) -> tuple[str, ...] | None:
     expressions = tuple(
         item.strip() for item in re.findall(r"\[([^\]]+)\]", raw)
     )
-    if not expressions or any(not re.fullmatch(r"[A-Za-z_]\w*", item) for item in expressions):
+    if not expressions or any(item != "msg.sender" and not re.fullmatch(r"[A-Za-z_]\w*", item) for item in expressions):
         return None
     return expressions
 
