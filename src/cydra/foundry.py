@@ -550,6 +550,42 @@ def _model_initialization_source(
     derived_interface_casts = constructor.derived_interface_casts if constructor else ()
     inherited_resolved_interfaces = contract_model.inherited_resolved_interfaces
     token_parameters, factory_context = _initializer_runtime_requirements(contract_model, function.name)
+
+    # Interface-typed initializer parameters are runtime dependencies when the
+    # initializer reads ERC-20 metadata. Resolve direct parameter interfaces
+    # before argument synthesis so the generic harness can bind a Cydra token
+    # stub even when the concrete contract does not inherit that interface.
+    parameter_interfaces = {
+        interface.name: interface for interface in inherited_resolved_interfaces
+    }
+    if output_path is not None:
+        output = Path(output_path)
+        project_root = next(
+            (
+                ancestor
+                for ancestor in (output.parent, *output.parents)
+                if (ancestor / "foundry.toml").exists()
+            ),
+            None,
+        )
+        if project_root is not None:
+            for parameter in function.parameters:
+                base = parameter.type.strip().split()[0].rstrip("[]")
+                if base in parameter_interfaces:
+                    continue
+                try:
+                    resolved = resolve_interface(project_root, contract_model.source, base)
+                except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                    continue
+                parameter_interfaces[base] = resolved
+    for parameter in function.parameters:
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        interface = parameter_interfaces.get(base)
+        if interface is not None and any(
+            method.name in {"symbol", "decimals"} for method in interface.methods
+        ):
+            token_parameters.add(parameter.name)
+
     stub_source, stub_variables = _runtime_stub_source(
         resolved_interface_casts,
         derived_interface_casts,
