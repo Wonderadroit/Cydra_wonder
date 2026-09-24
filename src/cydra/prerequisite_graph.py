@@ -58,6 +58,7 @@ def build_prerequisite_graph(
             "discovered": "unresolved",
             "constructible": "constructible",
             "verified": "verified",
+            "constraint": "constraint",
         }.get(item.status, "unresolved")
         nodes.append(
             PrerequisiteNode(
@@ -95,7 +96,7 @@ def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
     """
 
     return not graph.unresolved and all(
-        node.status == "verified" for node in graph.nodes
+        node.status in {"verified", "constraint"} for node in graph.nodes
     )
 
 
