@@ -24,8 +24,33 @@ _PUBLIC_SCALAR_RE = re.compile(
 )
 
 
-def _public_scalar_getters(source: str) -> dict[str, str]:
-    return {match.group("name"): match.group("type") for match in _PUBLIC_SCALAR_RE.finditer(source)}
+def _contract_body(source: str, contract_name: str) -> str:
+    """Return only the selected contract body; never borrow getters from siblings."""
+    declaration = re.search(
+        r"\\b(?:contract|library|interface)\\s+" + re.escape(contract_name) + r"\\b[^{}]*\\{",
+        source,
+    )
+    if declaration is None:
+        return ""
+    opening = declaration.end() - 1
+    depth = 0
+    for index in range(opening, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[opening + 1:index]
+    return ""
+
+
+def _public_scalar_getters(source: str, contract_name: str) -> dict[str, str]:
+    body = _contract_body(source, contract_name)
+    return {
+        match.group("name"): match.group("type")
+        for match in _PUBLIC_SCALAR_RE.finditer(body)
+    }
 
 
 def plan_state_relation_observations(
@@ -37,7 +62,7 @@ def plan_state_relation_observations(
     except (OSError, UnicodeError):
         return ()
 
-    getters = _public_scalar_getters(source)
+    getters = _public_scalar_getters(source, contract.name)
     return tuple(
         StateRelationObservationPlan(
             state=relation.state,
