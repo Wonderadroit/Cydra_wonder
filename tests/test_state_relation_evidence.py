@@ -28,15 +28,15 @@ def _plan(tmp_path: Path):
 def _execution(status="PASS", executed=True, tests_run=1, tests_failed=0):
     return ExecutionResult(
         experiment_id="X-REL",
-        phase="blind",
+        target="Target",
         command=("forge", "test"),
         exit_code=0 if status == "PASS" else 1,
-        stdout="",
-        stderr="",
-        status=status,
         executed=executed,
         tests_run=tests_run,
         tests_failed=tests_failed,
+        status=status,
+        stdout="",
+        stderr="",
     )
 
 
