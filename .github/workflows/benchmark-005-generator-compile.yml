@@ -1,10 +1,8 @@
 name: CYDRA Benchmark 005 Generator Compile Gate
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+
 
 jobs:
   liquidclaw-compile:

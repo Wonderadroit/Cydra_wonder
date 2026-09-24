@@ -1,17 +1,7 @@
 name: Benchmark 036 strict blind incentive-state divergence
 on:
-  pull_request:
-    paths:
-      - "benchmarks/036_incentive_state_divergence/**"
-      - "scripts/run_benchmark_036_incentive_state_divergence.py"
-      - "src/cydra/**"
-      - "tests/test_benchmark_036_incentive_state_divergence.py"
-  push:
-    branches: [main]
-    paths:
-      - "benchmarks/036_incentive_state_divergence/**"
-      - "scripts/run_benchmark_036_incentive_state_divergence.py"
-      - "src/cydra/**"
+  workflow_dispatch:
+
 jobs:
   benchmark-036:
     runs-on: ubuntu-latest

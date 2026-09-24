@@ -1,22 +1,8 @@
 name: CYDRA unfamiliar signature reuse backtest
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_019_unfamiliar_signature_reuse.py"
-      - "benchmarks/019_signature_reuse/**"
-      - "tests/test_structural_signature_reuse.py"
-      - ".github/workflows/benchmark-019-unfamiliar-signature-reuse.yml"
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_019_unfamiliar_signature_reuse.py"
-      - "benchmarks/019_signature_reuse/**"
-      - "tests/test_structural_signature_reuse.py"
-      - ".github/workflows/benchmark-019-unfamiliar-signature-reuse.yml"
   workflow_dispatch:
+
 
 jobs:
   signature-reuse:

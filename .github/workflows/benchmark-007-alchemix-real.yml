@@ -1,11 +1,8 @@
 name: CYDRA Backtest 007 — real Alchemix historical authorization
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
   workflow_dispatch:
+
 
 jobs:
   real-alchemix-authorization:

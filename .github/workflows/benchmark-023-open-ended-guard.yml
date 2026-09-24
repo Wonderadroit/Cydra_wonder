@@ -1,20 +1,8 @@
 name: CYDRA open-ended guard discovery
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_023_open_ended_guard.py"
-      - "benchmarks/023_open_ended_guard/**"
-      - ".github/workflows/benchmark-023-open-ended-guard.yml"
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_023_open_ended_guard.py"
-      - "benchmarks/023_open_ended_guard/**"
-      - ".github/workflows/benchmark-023-open-ended-guard.yml"
   workflow_dispatch:
+
 
 jobs:
   open-ended-guard:

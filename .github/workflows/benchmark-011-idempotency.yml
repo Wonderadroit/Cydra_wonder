@@ -1,22 +1,8 @@
 name: CYDRA Benchmark 011 - Idempotency
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_011_idempotency.py"
-      - "benchmarks/011_idempotency_mt_pelerin/**"
-      - "tests/test_idempotency.py"
-      - ".github/workflows/benchmark-011-idempotency.yml"
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_011_idempotency.py"
-      - "benchmarks/011_idempotency_mt_pelerin/**"
-      - "tests/test_idempotency.py"
-      - ".github/workflows/benchmark-011-idempotency.yml"
   workflow_dispatch:
+
 
 jobs:
   idempotency:

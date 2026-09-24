@@ -1,10 +1,8 @@
 name: CYDRA Benchmark 010 Temporal Precondition
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+
+
 jobs:
   temporal-precondition:
     runs-on: ubuntu-latest

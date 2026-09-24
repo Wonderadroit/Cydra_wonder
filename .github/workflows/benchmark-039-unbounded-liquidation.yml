@@ -1,12 +1,8 @@
 name: Benchmark 039 strict blind unbounded liquidation
 
 on:
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_039_unbounded_liquidation.py"
-      - ".github/workflows/benchmark-039-unbounded-liquidation.yml"
   workflow_dispatch:
+
 
 jobs:
   benchmark-039:

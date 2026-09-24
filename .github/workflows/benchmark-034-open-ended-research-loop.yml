@@ -1,10 +1,8 @@
 name: Benchmark 034 generic research-loop holdout
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+
+
 jobs:
   benchmark-034:
     runs-on: ubuntu-latest

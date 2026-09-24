@@ -2,19 +2,6 @@ name: CYDRA unfamiliar storage persistence backtest
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "scripts/run_benchmark_014_unfamiliar_storage_persistence.py"
-      - "src/cydra/structural_storage_persistence.py"
-      - "src/cydra/storage_persistence_execution.py"
-      - "tests/test_structural_storage_persistence.py"
-  push:
-    branches: [main]
-    paths:
-      - "scripts/run_benchmark_014_unfamiliar_storage_persistence.py"
-      - "src/cydra/structural_storage_persistence.py"
-      - "src/cydra/storage_persistence_execution.py"
-      - "tests/test_structural_storage_persistence.py"
 
 jobs:
   storage-persistence:

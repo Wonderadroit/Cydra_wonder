@@ -1,23 +1,8 @@
 name: CYDRA unfamiliar epoch-boundary accounting backtest
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "src/cydra/epoch_accounting_planning.py"
-      - "scripts/run_benchmark_020_unfamiliar_epoch_boundary.py"
-      - "benchmarks/020_epoch_boundary_accounting/**"
-      - "tests/test_structural_epoch_accounting.py"
-      - ".github/workflows/benchmark-020-unfamiliar-epoch-boundary-accounting.yml"
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_020_unfamiliar_epoch_boundary.py"
-      - "benchmarks/020_epoch_boundary_accounting/**"
-      - "tests/test_structural_epoch_accounting.py"
-      - ".github/workflows/benchmark-020-unfamiliar-epoch-boundary-accounting.yml"
   workflow_dispatch:
+
 
 jobs:
   epoch-boundary:

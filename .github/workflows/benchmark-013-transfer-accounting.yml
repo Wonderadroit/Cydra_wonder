@@ -1,7 +1,8 @@
 name: benchmark-013-transfer-accounting
 on:
-  pull_request:
   workflow_dispatch:
+
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest

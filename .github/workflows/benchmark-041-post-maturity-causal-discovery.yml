@@ -1,19 +1,9 @@
 name: CYDRA Benchmark 041 — Post-Maturity Blind-to-Causal Discovery
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/run_benchmark_blind.py"
-      - "scripts/run_benchmark_041_post_maturity_causal_discovery.py"
-      - "benchmarks/041_post_maturity_causal_discovery/**"
-      - ".github/workflows/benchmark-041-post-maturity-causal-discovery.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
 
 jobs:
   benchmark:

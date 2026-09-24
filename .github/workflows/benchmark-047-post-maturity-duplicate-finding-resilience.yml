@@ -1,14 +1,8 @@
 name: benchmark-047-post-maturity-duplicate-finding-resilience
 
 on:
-  pull_request:
-    paths:
-      - "src/cydra/impact_priority.py"
-      - "tests/test_impact_priority.py"
-      - "scripts/run_benchmark_047_duplicate_finding_resilience.py"
-      - "benchmarks/047_post_maturity_duplicate_finding_resilience/**"
-      - ".github/workflows/benchmark-047-post-maturity-duplicate-finding-resilience.yml"
   workflow_dispatch:
+
 
 jobs:
   benchmark:

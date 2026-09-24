@@ -2,22 +2,9 @@ name: Benchmark 032 strict blind callback state order
 # Canonical validation trigger: execute this workflow on the validation PR.
 
 on:
-  push:
-    branches:
-      - main
-      - feat/benchmark-032-callback-state-order-2026-09-21
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "tests/test_structural_callback_state_order.py"
-      - "scripts/run_benchmark_032_strict_blind_callback_state_order.py"
-      - "benchmarks/032_callback_state_order/**"
-      - ".github/workflows/benchmark-032-strict-blind-callback-state-order.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pull-requests: write
 
 jobs:
   benchmark-032:

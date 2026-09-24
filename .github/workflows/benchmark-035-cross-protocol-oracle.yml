@@ -2,21 +2,7 @@ name: Benchmark 035 strict blind cross-protocol oracle
 # Canonical holdout workflow: rerun on every benchmark/harness change.
 
 on:
-  pull_request:
-    paths:
-      - "benchmarks/035_cross_protocol_oracle/**"
-      - "scripts/run_benchmark_035_cross_protocol_oracle.py"
-      - "src/cydra/pipeline.py"
-      - "src/cydra/research_loop.py"
-      - "src/cydra/structural_read_only_reentrancy.py"
-      - "src/cydra/**"
-      - ".github/workflows/benchmark-035-cross-protocol-oracle.yml"
-  push:
-    branches: [main]
-    paths:
-      - "benchmarks/035_cross_protocol_oracle/**"
-      - "scripts/run_benchmark_035_cross_protocol_oracle.py"
-      - "src/cydra/pipeline.py"
+  workflow_dispatch:
 
 jobs:
   benchmark-035:

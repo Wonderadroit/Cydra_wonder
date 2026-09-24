@@ -1,10 +1,8 @@
 name: CYDRA Benchmark 005 Foundry JSON Probe
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+
 
 jobs:
   foundry-json-probe:

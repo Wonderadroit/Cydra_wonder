@@ -1,15 +1,8 @@
 name: CYDRA iterative blind control-flow research loop
 
 on:
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_027_iterative_blind_control_flow.py"
-      - "scripts/run_benchmark_005_blind.py"
-      - "scripts/run_benchmark_021_unfamiliar_control_flow.py"
-      - "benchmarks/027_iterative_blind_control_flow/**"
-      - ".github/workflows/benchmark-027-iterative-blind-control-flow.yml"
   workflow_dispatch:
+
 
 jobs:
   iterative-blind-control-flow:
