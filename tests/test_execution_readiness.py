@@ -302,3 +302,76 @@ def test_lifecycle_modifiers_are_not_caller_role_prerequisites():
     model = ContractModel("Target", "/tmp/Target.sol", (function,))
     readiness = inspect_execution_readiness(model, function)
     assert readiness.caller_requirements == ()
+
+
+def test_pure_input_execution_predicate_is_experiment_constraint():
+    from cydra.execution_readiness import inspect_execution_readiness
+    from cydra.models import ContractModel, FunctionModel, ParameterModel
+
+    function = FunctionModel(
+        name="initialize",
+        visibility="public",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
+        parameters=(ParameterModel("amount", "uint256"),),
+        execution_predicates=("amount > 0",),
+        execution_predicate_polarities=(("amount > 0", "must_hold"),),
+    )
+    contract = ContractModel(
+        name="Target",
+        source="/tmp/Target.sol",
+        functions=(function,),
+        state_variables=("storedAmount",),
+    )
+    readiness = inspect_execution_readiness(contract, function)
+    assert readiness.execution_requirements[0].status == "constraint"
+
+
+def test_call_derived_local_execution_predicate_remains_blocking():
+    from cydra.execution_readiness import inspect_execution_readiness
+    from cydra.models import ContractModel, FunctionModel
+
+    function = FunctionModel(
+        name="execute",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
+        execution_predicates=("startDebt == 0",),
+        execution_predicate_polarities=(("startDebt == 0", "must_not_hold"),),
+        execution_value_bindings=(("startDebt", "maxWithdraw(msg.sender)"),),
+    )
+    contract = ContractModel(
+        name="Target",
+        source="/tmp/Target.sol",
+        functions=(function,),
+    )
+    readiness = inspect_execution_readiness(contract, function)
+    assert readiness.execution_requirements[0].status == "required"
+
+
+def test_state_execution_predicate_remains_blocking():
+    from cydra.execution_readiness import inspect_execution_readiness
+    from cydra.models import ContractModel, FunctionModel
+
+    function = FunctionModel(
+        name="execute",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
+        execution_predicates=("storedAmount > 0",),
+        execution_predicate_polarities=(("storedAmount > 0", "must_hold"),),
+    )
+    contract = ContractModel(
+        name="Target",
+        source="/tmp/Target.sol",
+        functions=(function,),
+        state_variables=("storedAmount",),
+    )
+    readiness = inspect_execution_readiness(contract, function)
+    assert readiness.execution_requirements[0].status == "required"
