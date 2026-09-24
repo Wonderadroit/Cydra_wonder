@@ -84,7 +84,7 @@ def generate_sequence_test_from_experiment(
                 if " + " in expression:
                     amount = expression.rsplit(" + ", 1)[1]
                     for parameter_name, argument in parameter_bindings.items():
-                        amount = re.sub(rf"\\b{re.escape(parameter_name)}\\b", argument, amount)
+                        amount = re.sub(rf"\b{re.escape(parameter_name)}\b", argument, amount)
                     relation_assertions.append(
                         f'        assertEq({getter}, {snapshot_name} + {amount}, '
                         f'"unverified state relation: {expression}");'
@@ -92,7 +92,7 @@ def generate_sequence_test_from_experiment(
                 elif " - " in expression:
                     amount = expression.rsplit(" - ", 1)[1]
                     for parameter_name, argument in parameter_bindings.items():
-                        amount = re.sub(rf"\\b{re.escape(parameter_name)}\\b", argument, amount)
+                        amount = re.sub(rf"\b{re.escape(parameter_name)}\b", argument, amount)
                     relation_assertions.append(
                         f'        assertEq({getter}, {snapshot_name} - {amount}, '
                         f'"unverified state relation: {expression}");'
