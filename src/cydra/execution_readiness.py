@@ -143,6 +143,11 @@ def caller_role(function: FunctionModel) -> str | None:
 def _caller_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
     for modifier in function.modifiers:
+        # Lifecycle modifiers control initialization state, not caller identity.
+        # Treating initializer/reinitializer/onlyInitializing as caller roles
+        # creates a false prerequisite and blocks legitimate lifecycle tests.
+        if modifier in {"initializer", "reinitializer", "onlyInitializing"}:
+            continue
         if modifier.startswith(("returns", "override")):
             continue
         requirements.append(
