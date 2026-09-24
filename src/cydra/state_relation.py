@@ -21,6 +21,22 @@ class StateRelation:
 
 _LITERAL = r"(?:0[xX][0-9a-fA-F]+|[0-9]+)"
 _PATTERNS = (
+    # Scalar literal arithmetic.
+    (
+        re.compile(
+            r"\b(?P<state>[A-Za-z_]\w*)\s*"
+            r"\+=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+        ),
+        "+",
+    ),
+    (
+        re.compile(
+            r"\b(?P<state>[A-Za-z_]\w*)\s*"
+            r"-=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+        ),
+        "-",
+    ),
+    # Keyed literal arithmetic. Index expressions are validated separately.
     (
         re.compile(
             r"\b(?P<state>[A-Za-z_]\w*)\s*(?P<indexes>(?:\[[^\]]+\])+)"
