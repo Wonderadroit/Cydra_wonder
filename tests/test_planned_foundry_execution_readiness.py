@@ -20,7 +20,7 @@ def test_authorization_renderer_uses_recursive_execution_readiness_setup(tmp_pat
     )
     contract = ContractModel("Target", str(source), (target, seed))
     hypothesis = Hypothesis("H-AUTH-start", "start is unprotected", "INV-AUTH-001", "start", "attacker", "state mutation")
-    experiment = Experiment("X-H-AUTH-start", "H-AUTH-start", "call start", ("mutation", "authorization"), 1.0, ("0",), "start")
+    experiment = Experiment("X-H-AUTH-start", "H-AUTH-start", "call start", ("mutation", "authorization"), 1.0, (), "start")
     output = tmp_path / "test.t.sol"
     generate_authorization_test_from_experiment(hypothesis, experiment, "./Target.sol", "Target", output, contract)
     rendered = output.read_text(encoding="utf-8")
