@@ -55,3 +55,19 @@ def test_public_signed_scalar_retains_type_for_runtime_relation(tmp_path: Path):
     plans = plan_state_relation_observations(model, model.functions[0])
     assert len(plans) == 1
     assert plans[0].state_type == "int256"
+
+
+def test_relation_observation_fails_closed_for_signed_scalar(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { int256 public counter; "
+        "function bump() external { counter += 1; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (FunctionModel("bump", "external", (), ("counter",), (), 2),),
+        state_variables=("counter",),
+    )
+    assert plan_state_relation_observations(model, model.functions[0]) == ()
