@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 from .compiler_constraints import ConstraintEvidence
-from .interface_resolver import resolve_named_type_source, resolve_import, _imports_for, _strip_comments
+from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_import, _imports_for, _strip_comments
 from .models import ContractModel, FunctionModel
 from .ast_dataflow import SemanticRelationshipEvidence
 from .semantic_state_effects import build_state_effect_index, state_reads_for_function, state_writes_for_function
@@ -398,7 +398,7 @@ def _execution_dataflow_requirements(
         # local functions. Libraries are deterministic and already excluded by
         # the runtime resolver; unresolved member calls must remain blockers.
         member_call = re.match(
-            r"^(?P<receiver>[A-Za-z_]\\w*(?:\\([^)]*\\))?)\\.\\s*(?P<method>[A-Za-z_]\\w*)\\s*\\(",
+            r"^(?P<receiver>[A-Za-z_]\w*(?:\([^)]*\))?)\.\s*(?P<method>[A-Za-z_]\w*)\s*\(",
             expression,
         )
         if member_call and not _runtime_receiver_is_library(contract, member_call.group("receiver").split("(")[0]):
