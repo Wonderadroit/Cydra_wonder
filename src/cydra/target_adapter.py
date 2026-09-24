@@ -94,6 +94,33 @@ def inspect_target(project: str | Path, source: str | Path) -> TargetEnvironment
     config = root / "foundry.toml"
     framework = "foundry" if config.exists() else "unknown"
     if framework != "foundry":
+        # Solidity targets do not need to be authored as Foundry projects. A
+        # Hardhat/npm-style checkout can still be executed by the generic
+        # Foundry harness when its dependency tree is materialized.
+        package = root / "package.json"
+        if package.exists():
+            forge_config = root / "foundry.toml"
+            remappings = root / "remappings.txt"
+            return TargetEnvironment(
+                language="solidity",
+                framework="hardhat" if (root / "hardhat.config.js").exists() or (root / "hardhat.config.ts").exists() else "npm",
+                compiler="solc",
+                project_root=str(root),
+                source_root=str(source_path.parent),
+                test_root=str(root / "test"),
+                config_file=str(forge_config) if forge_config.exists() else None,
+                remappings_file=str(remappings) if remappings.exists() else None,
+                compiler_version=None,
+                optimizer_enabled=None,
+                via_ir=None,
+                dependency_roots=tuple(str((root / item).resolve()) for item in ("lib", "node_modules") if (root / item).exists()),
+                import_count=len(_imports(source_path)),
+                deployable_contracts=(),
+                unresolved_constructor_types=(),
+                adapter="solidity-generic-foundry",
+                confidence=0.8,
+                blockers=(),
+            )
         return TargetEnvironment(
             language="solidity",
             framework=framework,
