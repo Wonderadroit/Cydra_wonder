@@ -434,13 +434,7 @@ def _run_state_relation_verification(
     experiment,
     contract,
 ) -> tuple[Any, tuple[Any, ...], tuple[Any, ...]]:
-    """Verify a source-backed state transition before any state classification.
-
-    This is deliberately separate from the security experiment. A passing
-    transaction is not enough: the generated test must contain the modeled
-    before/after assertion, execute it, and pass it before relation evidence
-    exists.
-    """
+    """Verify a source-backed state transition before any state classification."""
     function = next(
         (item for item in (*contract.functions, *contract.inherited_functions)
          if item.name == hypothesis.target_function),
@@ -878,3 +872,46 @@ def main() -> int:
         provenance = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "target_repo": args.target_repo,
+            "target_ref": args.target_ref,
+            "target_path": args.target_path,
+            "target_project": args.target_project,
+            "classes": list(classes),
+            "cydra_commit": cydra_commit,
+            "environment": provenance_env,
+        }
+        text_files = {
+            "target-checkout.txt": _git_output(checkout, "rev-parse", "HEAD") + "\n",
+            "compilation.log": json.dumps(
+                {"compiler_evidence": _json(compiler_evidence), "build": build_capture},
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
+            "execution-human.txt": execution_human,
+            "README.md": (
+                "# CYDRA blind capability artifact\n\n"
+                "This artifact records compiler-backed constraints, structural hypotheses, "
+                "planned experiment inputs, generated experiments, execution evidence, "
+                "and explicit capability gaps. A measured execution is not itself a "
+                "vulnerability confirmation.\n"
+            ),
+            "integrity-check.json": json.dumps({"manifest": "manifest.sha256"}, indent=2) + "\n",
+            "forge-config.json": forge_config_text,
+        }
+        files = {
+            "provenance.json": provenance,
+            "target-intake.json": target_intake.to_dict(),
+            "execution-readiness.json": execution_readiness,
+            "parse-output.json": {"target": args.target_path, "contracts": _json(result.contracts)},
+            "invariants.json": result.invariants,
+            "hypotheses.json": result.hypotheses,
+            "experiments.json": result.experiments,
+            "execution.json": execution_json,
+            "classification.json": classification,
+        }
+        create_freeze(files, text_files, args.freeze)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
