@@ -452,6 +452,13 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     ambient = {"msg", "tx", "block", "now"}
     if identifiers & state_names or identifiers & ambient:
         return False
+    call_bound_locals = {
+        name
+        for name, expression in function.execution_value_bindings
+        if re.search(r"\\b[A-Za-z_]\\w*\\s*\\(", expression)
+    }
+    if identifiers & call_bound_locals:
+        return False
     if "$." in predicate:
         return False
     # Unknown identifiers may be source-defined compile-time constants/types.
