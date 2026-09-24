@@ -48,3 +48,10 @@ def test_unknown_status_fails_closed():
     graph = build_prerequisite_graph(readiness)
     assert graph.unresolved
     assert not can_enter_security_experiment(graph)
+
+
+
+def test_no_prerequisites_is_executable():
+    graph = build_prerequisite_graph(ExecutionReadiness(contract="Target"))
+    assert graph.nodes == ()
+    assert can_enter_security_experiment(graph)
