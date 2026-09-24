@@ -374,7 +374,7 @@ def _setup_argument(function, index: int, role: str | None) -> str:
     raise ValueError(f"unsupported setup parameter type: {parameter.type}")
 
 
-def _setup_steps(result, contract, setup_actions):
+def _setup_steps(contract, setup_actions):
     functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
     steps = []
     for action in setup_actions:
@@ -401,11 +401,13 @@ def _run_state_prerequisite_observation(
     if not plans:
         raise ValueError("state prerequisite has no deterministic public runtime observation")
     from cydra.models import ExperimentStep
-    setup_steps = _setup_steps(None, contract, setup_actions)
-    observation_steps = (*setup_steps, ExperimentStep(function=hypothesis.target_function, arguments=tuple(
-        _setup_argument(next(item for item in contract.functions if item.name == hypothesis.target_function), i, None)
-        for i in range(len(next(item for item in contract.functions if item.name == hypothesis.target_function).parameters))
-    )))
+    setup_steps = _setup_steps(contract, setup_actions)
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    target_function = functions.get(hypothesis.target_function)
+    if target_function is None:
+        raise ValueError(f"state target function is not modeled: {hypothesis.target_function}")
+    target_arguments = tuple(_setup_argument(target_function, i, None) for i in range(len(target_function.parameters)))
+    observation_steps = (*setup_steps, ExperimentStep(function=hypothesis.target_function, arguments=target_arguments))
     observation_experiment = replace(experiment, experiment_id=f"{experiment.experiment_id}-PREREQ", steps=observation_steps)
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}-prereq.t.sol")
     generated = generate_sequence_test_from_experiment(
