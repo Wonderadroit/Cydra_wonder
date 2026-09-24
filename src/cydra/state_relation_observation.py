@@ -12,6 +12,7 @@ class StateRelationObservationPlan:
     """Executable before/after observation for a source-backed state relation."""
 
     state: str
+    state_type: str
     getter: str
     relation: StateRelation
     source: str
@@ -23,8 +24,8 @@ _PUBLIC_SCALAR_RE = re.compile(
 )
 
 
-def _public_scalar_getters(source: str) -> set[str]:
-    return {match.group("name") for match in _PUBLIC_SCALAR_RE.finditer(source)}
+def _public_scalar_getters(source: str) -> dict[str, str]:
+    return {match.group("name"): match.group("type") for match in _PUBLIC_SCALAR_RE.finditer(source)}
 
 
 def plan_state_relation_observations(
@@ -40,6 +41,7 @@ def plan_state_relation_observations(
     return tuple(
         StateRelationObservationPlan(
             state=relation.state,
+            state_type=getters[relation.state],
             getter=f"target.{relation.state}()",
             relation=relation,
             source=f"{contract.source}:{function.line}",
