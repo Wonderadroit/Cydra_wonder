@@ -1962,3 +1962,14 @@ These are historical/backtest demonstrations, not claims of newly discovered pub
 The next proof boundary remains unfamiliar-target discovery: a frozen unfamiliar target must produce a confirmed, reproducible finding without historical answer leakage. The current Benchmark 040 batch reached real blind execution and class-specific classification, but no unfamiliar-target finding was confirmed. State-sequence and arithmetic execution remain capability gaps where the existing invariant requires stronger independent verification or a generic executable renderer. Those gaps must be repaired generically rather than bypassed.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 87 — canonical historical finding loop revalidated after operating-contract update
+
+The canonical research workflow at main commit 23715c8901e66f218e7076732b0297bc3622783e completed successfully in GitHub Actions (run 36013672664). The full Python regression suite passed, and the historical blind backtests for Alchemix authorization, Stader initialization, Olas transfer accounting, Olympus cross-contract attribution, and Morph implementation initialization completed successfully. The published artifact preserved the frozen-target provenance and causal finding gates; Morph initialization independently reached a READY gate with vulnerable execution failing the explicit initialization security assertion and the patched/reproduction controls behaving as expected.
+
+This closes a validation boundary only: the durable research loop remains green after the operating-model documentation update. It does not convert historical results into new findings and does not remove the unfamiliar-target discovery gap.
+
+The next implementation boundary remains generic runtime prerequisite observation/verification. The repository already identifies constructible state-setup candidates and can recursively plan setup transitions, but a constructible transition must not be promoted to verified merely because its transaction succeeds. The next repair must therefore connect a generated setup transition to an observable, evidence-bearing postcondition and feed that observation into the prerequisite graph before the security experiment is admitted.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
