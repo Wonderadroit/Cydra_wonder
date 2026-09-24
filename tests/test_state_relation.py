@@ -35,3 +35,24 @@ def test_dynamic_state_transition_fails_closed(tmp_path: Path):
         state_variables=("counter",),
     )
     assert plan_source_state_relations(model, model.functions[0]) == ()
+
+
+def test_relation_is_scoped_to_selected_function(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { uint256 public counter; "
+        "function step() external { counter += 1; } "
+        "function other() external { counter += 2; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel("step", "external", (), ("counter",), (), 1),
+            FunctionModel("other", "external", (), ("counter",), (), 1),
+        ),
+        state_variables=("counter",),
+    )
+    assert [item.expression for item in plan_source_state_relations(model, model.functions[0])] == [
+        "after(counter) == before(counter) + 1"
+    ]
