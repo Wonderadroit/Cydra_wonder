@@ -401,3 +401,23 @@ def test_repeated_unbound_local_scalar_can_be_an_experiment_constraint():
     )
     readiness = inspect_execution_readiness(contract, function)
     assert all(item.status == "constraint" for item in readiness.execution_requirements)
+
+
+def test_constructible_constructor_interface_and_role_inputs_are_constraints():
+    model = ContractModel(
+        "Target",
+        "/tmp/Target.sol",
+        (),
+        constructor=ConstructorModel(
+            (
+                ParameterModel("factory_", "address"),
+                ParameterModel("accountant_", "IVaultAccountant"),
+            ),
+            1,
+            interface_casts=(("accountant_", "IVaultAccountant"),),
+        ),
+    )
+    readiness = inspect_execution_readiness(model)
+    statuses = {(item.kind, item.subject): item.status for item in readiness.constructor_requirements}
+    assert statuses[("constructor_role", "factory")] == "constraint"
+    assert statuses[("constructor_dependency", "IVaultAccountant")] == "constraint"
