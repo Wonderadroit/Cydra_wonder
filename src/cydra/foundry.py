@@ -353,8 +353,11 @@ def _initializer_runtime_requirements(contract_model: ContractModel, function_na
     body = body[:end]
     token_parameters = {
         parameter
-        for receiver, parameter, method in re.findall(r"\b([A-Za-z_]\w*)\s*\(\s*(\w+)\s*\)\.(\w+)\s*\(", body)
-        if receiver == "ERC20" and method == "symbol"
+        for receiver, parameter, method in re.findall(
+            r"\b([A-Za-z_]\w*)\s*\(\s*(\w+)\s*\)\.(\w+)\s*\(",
+            body,
+        )
+        if "ERC20" in receiver and method in {"symbol", "decimals"}
     }
     factory_context = bool(re.search(r"\b\w+\s*=\s*_msgSender\s*\(\s*\)\s*;", body)) and bool(
         re.search(r"\bIPoolFactory\s*\(\s*\w+\s*\)\s*\.\s*voter\s*\(", body)
