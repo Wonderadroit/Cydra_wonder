@@ -49,7 +49,7 @@ def observations_from_execution(
         observations.append(
             PrerequisiteObservation(
                 kind="state",
-                subject=plan.state,
+                subject=plan.predicate,
                 expected="true",
                 observed="true",
                 evidence_id=evidence_id,
@@ -73,7 +73,7 @@ def evidence_records_from_execution(
         RuntimeObservationEvidence(
             evidence_id=observation_evidence_id(experiment_id, plan),
             kind="execution",
-            subject=plan.state,
+            subject=plan.predicate,
             expected="true",
             observed="true",
             experiment_id=experiment_id,
