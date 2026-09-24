@@ -58,3 +58,55 @@ def test_authorization_renderer_fails_closed_when_caller_state_writer_is_unconst
     import pytest
     with pytest.raises(ValueError, match="caller-state setup"):
         generate_authorization_test_from_experiment(hypothesis, experiment, "./Target.sol", "Target", tmp_path / "test.t.sol", contract, semantic_evidence=evidence)
+
+
+def test_authorization_renderer_recursively_materializes_caller_state_writer_prerequisites(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text("pragma solidity ^0.8.20; contract Target {}\n", encoding="utf-8")
+    (tmp_path / "foundry.toml").write_text("[profile.default]\nsrc = '.'\n", encoding="utf-8")
+    start = FunctionModel(
+        "start", "external", (), (), (), 10,
+        execution_predicates=("debt == 0",),
+        execution_predicate_polarities=(("debt == 0", "must_not_hold"),),
+        execution_value_bindings=(("debt", "maxWithdraw(msg.sender)"),),
+    )
+    borrow = FunctionModel(
+        "borrow", "external", (), ("balanceOf",), (), 20,
+        state_predicates=("ready > 0",),
+        state_predicate_polarities=(("ready > 0", "must_hold"),),
+    )
+    seed = FunctionModel(
+        "seed", "external", (), ("ready",), (), 30,
+        parameters=(ParameterModel("value", "uint256"),),
+    )
+    max_withdraw = FunctionModel(
+        "maxWithdraw", "public", (), (), (), 40,
+        return_expressions=("convertToAssets(balanceOf(owner))",),
+    )
+    contract = ContractModel(
+        "Target", str(source), (start, borrow, seed, max_withdraw),
+        state_variables=("ready",),
+    )
+    evidence = (
+        SemanticRelationshipEvidence(
+            contract="Target", function="borrow", relation="writes", target="balanceOf",
+            confidence=0.99, source="solc-json-ast:test",
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-AUTH-start", "start is unprotected", "INV-AUTH-001",
+        "start", "attacker", "state mutation",
+    )
+    experiment = Experiment(
+        "X-H-AUTH-start", "H-AUTH-start", "call start",
+        ("mutation", "authorization"), 1.0, (), "start",
+    )
+    output = tmp_path / "test.t.sol"
+    generate_authorization_test_from_experiment(
+        hypothesis, experiment, "./Target.sol", "Target", output, contract,
+        semantic_evidence=evidence,
+    )
+    rendered = output.read_text(encoding="utf-8")
+    assert "target.seed(1)" in rendered
+    assert "target.borrow()" in rendered
+    assert rendered.index("target.seed(1)") < rendered.index("target.borrow()")
