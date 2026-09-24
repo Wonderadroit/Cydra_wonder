@@ -97,6 +97,22 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
         return ()
 
     requirements: list[ExecutionRequirement] = []
+    source_path = Path(contract.source).resolve()
+    project_root = next(
+        (
+            parent
+            for parent in (source_path.parent, *source_path.parents)
+            if any((parent / marker).exists() for marker in ("foundry.toml", "package.json", "remappings.txt"))
+        ),
+        source_path.parent,
+    )
+
+    def resolves_to_interface(type_name: str) -> bool:
+        try:
+            resolved = resolve_interface(project_root, source_path, type_name)
+        except (FileNotFoundError, ValueError, OSError, UnicodeError):
+            return False
+        return bool(resolved.methods or resolved.name == type_name)
     for parameter in contract.constructor.parameters:
         base = parameter.type.strip().split()[0].rstrip("[]")
         primitive = base in {"address", "bool", "string", "bytes"} or base.startswith(
@@ -108,7 +124,7 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
                 parameter.name == parameter_name
                 for parameter_name, _interface_name in contract.constructor.interface_casts
             )
-        )
+        ) or resolves_to_interface(base)
         if not primitive:
             requirements.append(
                 ExecutionRequirement(
