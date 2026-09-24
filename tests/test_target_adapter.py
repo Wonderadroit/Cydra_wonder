@@ -36,11 +36,14 @@ def test_foundry_target_intake_detects_environment_and_dependencies(tmp_path: Pa
     assert intake.dependency_roots == (str((tmp_path / "lib").resolve()),)
 
 
-def test_unsupported_environment_fails_closed(tmp_path: Path):
-    (tmp_path / "src").mkdir()
-    source = tmp_path / "src" / "Target.sol"
+def test_npm_solidity_target_gets_generic_execution_adapter(tmp_path: Path):
+    (tmp_path / "contracts").mkdir()
+    (tmp_path / "package.json").write_text("{}\\n", encoding="utf-8")
+    (tmp_path / "hardhat.config.js").write_text("module.exports = {};\\n", encoding="utf-8")
+    source = tmp_path / "contracts" / "Target.sol"
     source.write_text("pragma solidity ^0.8.20; contract Target {}", encoding="utf-8")
     intake = inspect_target(tmp_path, source)
-    assert intake.adapter == "unsupported"
-    assert intake.confidence == 0.0
-    assert intake.blockers
+    assert intake.framework == "hardhat"
+    assert intake.adapter == "solidity-generic-foundry"
+    assert intake.confidence > 0
+    assert intake.blockers == ()
