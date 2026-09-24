@@ -460,7 +460,7 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
         # were already rejected above.
         predicate_frequency = {
             name: sum(1 for item in function.execution_predicates if re.search(
-                rf"\\b{re.escape(name)}\\b", item
+                rf"\b{re.escape(name)}\b", item
             ))
             for name in identifiers
         }
