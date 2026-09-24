@@ -125,3 +125,30 @@ def test_non_parameter_compound_state_transition_fails_closed(tmp_path: Path):
         state_variables=("counter",),
     )
     assert plan_source_state_relations(model, model.functions[0]) == ()
+
+
+def test_caller_and_state_indexes_are_source_backed(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { "
+        "uint128 public depositEpoch; "
+        "mapping(address => mapping(uint256 => uint128)) public queuedDeposit; "
+        "function requestDeposit(uint128 assets) external { "
+        "queuedDeposit[msg.sender][depositEpoch] += assets; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "requestDeposit", "external", (), ("queuedDeposit",), (), 4,
+                parameters=(ParameterModel("assets", "uint128"),),
+            ),
+        ),
+        state_variables=("depositEpoch", "queuedDeposit"),
+    )
+    relations = plan_source_state_relations(model, model.functions[0])
+    assert len(relations) == 1
+    assert relations[0].index_expressions == ("msg.sender", "depositEpoch")
+    assert relations[0].rhs_expression == "assets"
