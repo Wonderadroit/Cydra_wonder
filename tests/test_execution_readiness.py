@@ -311,7 +311,7 @@ def test_pure_input_execution_predicate_is_experiment_constraint():
     function = FunctionModel(
         name="initialize",
         visibility="public",
-        parameters=(ParameterModel("uint256", "amount"),),
+        parameters=(ParameterModel("amount", "uint256"),),
         execution_predicates=("amount > 0",),
         execution_predicate_polarities=(("amount > 0", "must_hold"),),
     )
