@@ -387,7 +387,7 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
             branch = _body(body, brace)
             if re.search(r"\brevert\b", branch):
                 polarity = "must_not_hold"
-        elif re.match(r"revert\s*(?:\(|;)", tail):
+        elif re.match(r"revert\b", tail):
             polarity = "must_not_hold"
         # A non-reverting if branch selects a side effect; it is not an
         # entry prerequisite and must not become an execution blocker.
