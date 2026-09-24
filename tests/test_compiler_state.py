@@ -139,8 +139,7 @@ def test_compiler_retries_stack_too_deep_with_bounded_via_ir(tmp_path, monkeypat
     project = tmp_path / "project"
     source = project / "contracts" / "Fixture.sol"
     source.parent.mkdir(parents=True)
-    source.write_text("contract Fixture {}
-", encoding="utf-8")
+    source.write_text("contract Fixture {}\\n", encoding="utf-8")
     calls = []
 
     class Failed:
