@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from cydra.models import ContractModel, FunctionModel
+from cydra.models import ContractModel, FunctionModel, ParameterModel
 from cydra.state_relation_observation import plan_state_relation_observations
 
 
@@ -75,7 +75,7 @@ def test_relation_observation_binds_nested_public_mapping_getter(tmp_path: Path)
                 (),
                 2,
                 parameters=(
-                    __import__("cydra.models", fromlist=["ParameterModel"]).ParameterModel("user", "address"),
+                    ParameterModel("user", "address"),
                     __import__("cydra.models", fromlist=["ParameterModel"]).ParameterModel("epoch", "uint256"),
                 ),
             ),
