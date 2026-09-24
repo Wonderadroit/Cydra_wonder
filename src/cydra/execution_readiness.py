@@ -451,10 +451,27 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     ambient = {"msg", "tx", "block", "now"}
     if identifiers & state_names or identifiers & ambient or "$." in predicate:
         return False
-    if not (identifiers & (parameter_names | local_names)):
-        # An unresolved identifier with no ABI/local binding is not assumed to
-        # be a harmless constant; keep the gate fail-closed.
-        return False
+    bound_names = parameter_names | local_names
+    if not (identifiers & bound_names):
+        # A repeated lower-case identifier across multiple path predicates is
+        # commonly a local derived scalar whose declaration the lightweight
+        # parser could not bind. Repetition is weak evidence, so only use it
+        # for the experiment-constraint classification; state/ambient names
+        # were already rejected above.
+        predicate_frequency = {
+            name: sum(1 for item in function.execution_predicates if re.search(
+                rf"\\b{re.escape(name)}\\b", item
+            ))
+            for name in identifiers
+        }
+        repeated_local = any(
+            frequency >= 2 and name[:1].islower()
+            for name, frequency in predicate_frequency.items()
+        )
+        if not repeated_local:
+            # An unresolved identifier with no ABI/local binding is not assumed
+            # to be a harmless constant; keep the gate fail-closed.
+            return False
     call_bound_locals = {
         name
         for name, expression in function.execution_value_bindings
