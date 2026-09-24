@@ -81,7 +81,7 @@ def test_compiler_uses_bounded_lightweight_profile_and_selected_source(tmp_path,
     project = tmp_path / "project"
     source = project / "src" / "Fixture.sol"
     source.parent.mkdir(parents=True)
-    source.write_text("contract Fixture {}\n", encoding="utf-8")
+    source.write_text("contract Fixture {}\\n", encoding="utf-8")
     (project / "foundry.toml").write_text("[profile.lite]\nsolc_version = \"0.8.28\"\n", encoding="utf-8")
     captured = {}
 
