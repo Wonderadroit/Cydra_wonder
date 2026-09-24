@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import re
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source
@@ -66,23 +67,30 @@ def generate_sequence_test_from_experiment(
                     "state transition has no deterministic source-backed relation observation; "
                     "relation verification must fail closed"
                 )
+            parameter_bindings = {
+                parameter.name: argument
+                for parameter, argument in zip(function.parameters, step.arguments)
+            }
             for plan in relation_plans:
+                getter = plan.getter
+                for parameter_name, argument in parameter_bindings.items():
+                    getter = re.sub(rf"\\b{re.escape(parameter_name)}\\b", argument, getter)
                 snapshot_suffix = "_".join(plan.relation.index_expressions)
                 snapshot_name = f"before_{plan.state}" + (f"_{snapshot_suffix}" if snapshot_suffix else "")
                 relation_setups.append(
-                    f"        {plan.state_type} {snapshot_name} = {plan.getter};"
+                    f"        {plan.state_type} {snapshot_name} = {getter};"
                 )
                 expression = plan.relation.expression
                 if " + " in expression:
                     amount = expression.rsplit(" + ", 1)[1]
                     relation_assertions.append(
-                        f'        assertEq({plan.getter}, {snapshot_name} + {amount}, '
+                        f'        assertEq({getter}, {snapshot_name} + {amount}, '
                         f'"unverified state relation: {expression}");'
                     )
                 elif " - " in expression:
                     amount = expression.rsplit(" - ", 1)[1]
                     relation_assertions.append(
-                        f'        assertEq({plan.getter}, {snapshot_name} - {amount}, '
+                        f'        assertEq({getter}, {snapshot_name} - {amount}, '
                         f'"unverified state relation: {expression}");'
                     )
         if verify_state_prerequisites and function.name == hypothesis.target_function:
