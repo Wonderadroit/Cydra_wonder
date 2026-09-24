@@ -74,7 +74,7 @@ def generate_sequence_test_from_experiment(
             for plan in relation_plans:
                 getter = plan.getter
                 for parameter_name, argument in parameter_bindings.items():
-                    getter = re.sub(rf"\\b{re.escape(parameter_name)}\\b", argument, getter)
+                    getter = re.sub(rf"\b{re.escape(parameter_name)}\b", argument, getter)
                 snapshot_suffix = "_".join(plan.relation.index_expressions)
                 snapshot_name = f"before_{plan.state}" + (f"_{snapshot_suffix}" if snapshot_suffix else "")
                 relation_setups.append(
