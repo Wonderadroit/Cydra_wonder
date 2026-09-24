@@ -80,3 +80,48 @@ def test_keyed_literal_compound_state_transition_is_source_backed(tmp_path: Path
     assert len(relations) == 1
     assert relations[0].index_expressions == ("user", "epoch")
     assert relations[0].expression == "after(queued[user][epoch]) == before(queued[user][epoch]) + 1"
+
+
+def test_parameter_compound_state_transition_is_source_backed(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { uint256 public counter; "
+        "function step(uint256 amount) external { counter += amount; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "step", "external", (), ("counter",), (), 2,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("counter",),
+    )
+    relations = plan_source_state_relations(model, model.functions[0])
+    assert len(relations) == 1
+    assert relations[0].rhs_expression == "amount"
+    assert relations[0].expression == "after(counter) == before(counter) + amount"
+
+
+def test_non_parameter_compound_state_transition_fails_closed(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { uint256 public counter; "
+        "function step(uint256 amount) external { uint256 delta = amount + 1; counter += delta; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "step", "external", (), ("counter",), (), 2,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("counter",),
+    )
+    assert plan_source_state_relations(model, model.functions[0]) == ()
