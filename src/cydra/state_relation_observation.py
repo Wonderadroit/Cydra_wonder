@@ -27,7 +27,7 @@ _PUBLIC_SCALAR_RE = re.compile(
 def _contract_body(source: str, contract_name: str) -> str:
     """Return only the selected contract body; never borrow getters from siblings."""
     declaration = re.search(
-        r"\\b(?:contract|library|interface)\\s+" + re.escape(contract_name) + r"\\b[^{}]*\\{",
+        r"\b(?:contract|library|interface)\s+" + re.escape(contract_name) + r"\\b[^{}]*\\{",
         source,
     )
     if declaration is None:
