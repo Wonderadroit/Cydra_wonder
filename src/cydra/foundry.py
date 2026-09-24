@@ -581,9 +581,15 @@ def _model_initialization_source(
     for parameter in function.parameters:
         base = parameter.type.strip().split()[0].rstrip("[]")
         interface = parameter_interfaces.get(base)
-        if interface is not None and any(
-            method.name in {"symbol", "decimals"} for method in interface.methods
+        if (
+            (interface is not None and any(
+                method.name in {"symbol", "decimals"} for method in interface.methods
+            ))
+            or "ERC20" in base
         ):
+            # ERC20-shaped interface parameters can be backed by the canonical
+            # CYDRA token stub even when the resolver cannot traverse an unusual
+            # remapping in the target checkout.
             token_parameters.add(parameter.name)
 
     stub_source, stub_variables = _runtime_stub_source(
