@@ -301,7 +301,7 @@ def _failure_status(hypothesis, class_name: str, stage: str, error: Exception) -
     return status
 
 
-def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+def _run_authorization(project: Path, hypothesis, experiment, contract, semantic_evidence=(), constraints=()) -> dict[str, Any]:
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_authorization_test_from_experiment(
         hypothesis,
@@ -310,6 +310,8 @@ def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[
         contract.name,
         output,
         contract,
+        semantic_evidence=semantic_evidence,
+        constraints=constraints,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
     return {
@@ -429,7 +431,7 @@ def run_layers(result, project: Path, classes: tuple[str, ...], semantic_evidenc
 
         try:
             if class_name == "authorization":
-                run = _run_authorization(project, hypothesis, experiment, contract)
+                run = _run_authorization(project, hypothesis, experiment, contract, semantic_evidence, constraints)
             elif class_name == "state":
                 run = _run_state(project, hypothesis, experiment, contract, semantic_evidence, constraints)
             elif class_name == "initialization":
