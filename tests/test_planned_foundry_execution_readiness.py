@@ -54,7 +54,7 @@ def test_authorization_renderer_fails_closed_when_caller_state_writer_is_unconst
         ),
     )
     hypothesis = Hypothesis("H-AUTH-start", "start is unprotected", "INV-AUTH-001", "start", "attacker", "state mutation")
-    experiment = Experiment("X-H-AUTH-start", "H-AUTH-start", "call start", ("mutation", "authorization"), 1.0, ("0",), "start")
+    experiment = Experiment("X-H-AUTH-start", "H-AUTH-start", "call start", ("mutation", "authorization"), 1.0, (), "start")
     import pytest
     with pytest.raises(ValueError, match="caller-state setup"):
         generate_authorization_test_from_experiment(hypothesis, experiment, "./Target.sol", "Target", tmp_path / "test.t.sol", contract, semantic_evidence=evidence)
