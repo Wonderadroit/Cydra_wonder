@@ -398,3 +398,44 @@ def test_sequence_renderer_binds_parameter_state_delta(tmp_path):
     assert "uint256 before_counter = target.counter();" in rendered
     assert "target.bump(7);" in rendered
     assert "assertEq(target.counter(), before_counter + 7" in rendered
+
+
+def test_sequence_renderer_binds_caller_and_state_mapping_indexes(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "uint128 public depositEpoch; "
+        "mapping(address => mapping(uint256 => uint128)) public queuedDeposit; "
+        "function requestDeposit(uint128 assets) external { "
+        "queuedDeposit[msg.sender][depositEpoch] += assets; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import FunctionModel, ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "requestDeposit", "external", (), ("queuedDeposit",), (), 4,
+                parameters=(ParameterModel("assets", "uint128"),),
+            ),
+        ),
+        state_variables=("depositEpoch", "queuedDeposit"),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-queuedDeposit-requestDeposit", "candidate",
+        "INV-STATE-queuedDeposit", "requestDeposit", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-H-STATE-queuedDeposit-requestDeposit", hypothesis.hypothesis_id,
+        "requestDeposit", ("violation",), 1.0,
+        steps=(ExperimentStep("requestDeposit", ("7",)),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_relations=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "uint128 before_queuedDeposit_msg_sender_depositEpoch = target.queuedDeposit(attacker, target.depositEpoch());" in rendered
+    assert "target.requestDeposit(7);" in rendered
+    assert "assertEq(target.queuedDeposit(attacker, target.depositEpoch()), before_queuedDeposit_msg_sender_depositEpoch + 7" in rendered
