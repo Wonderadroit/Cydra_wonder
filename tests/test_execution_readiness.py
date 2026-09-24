@@ -426,7 +426,6 @@ def test_input_state_order_guard_is_experiment_constraint() -> None:
     model = ContractModel(
         "Target",
         "/tmp/Target.sol",
-        ("depositEpoch",),
         functions=(
             FunctionModel(
                 "execute",
@@ -440,6 +439,7 @@ def test_input_state_order_guard_is_experiment_constraint() -> None:
                 execution_predicate_polarities=(("epoch >= depositEpoch", "must_not_hold"),),
             ),
         ),
+        state_variables=("depositEpoch",),
     )
     readiness = inspect_execution_readiness(model, model.functions[0])
     predicates = {
