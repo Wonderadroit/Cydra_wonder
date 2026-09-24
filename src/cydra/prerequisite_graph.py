@@ -102,6 +102,7 @@ def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
 @dataclass(frozen=True)
 class PrerequisiteObservation:
     """Deterministic runtime observation used to promote one prerequisite."""
+    kind: str
     subject: str
     expected: str
     observed: str
@@ -113,10 +114,10 @@ def apply_observations(
     observations: tuple[PrerequisiteObservation, ...],
 ) -> PrerequisiteGraph:
     """Promote only evidence-backed matching prerequisites; fail closed otherwise."""
-    by_subject = {observation.subject: observation for observation in observations}
+    by_subject = {(observation.kind, observation.subject): observation for observation in observations}
     nodes: list[PrerequisiteNode] = []
     for node in graph.nodes:
-        observation = by_subject.get(node.subject)
+        observation = by_subject.get((node.kind, node.subject))
         if observation is None:
             nodes.append(node)
             continue
