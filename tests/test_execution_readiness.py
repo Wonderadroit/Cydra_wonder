@@ -375,3 +375,29 @@ def test_state_execution_predicate_remains_blocking():
     )
     readiness = inspect_execution_readiness(contract, function)
     assert readiness.execution_requirements[0].status == "required"
+
+
+def test_repeated_unbound_local_scalar_can_be_an_experiment_constraint():
+    from cydra.execution_readiness import inspect_execution_readiness
+    from cydra.models import ContractModel, FunctionModel
+
+    function = FunctionModel(
+        name="initialize",
+        visibility="public",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
+        execution_predicates=("decimals < 18", "decimals != 18"),
+        execution_predicate_polarities=(
+            ("decimals < 18", "must_not_hold"),
+            ("decimals != 18", "must_not_hold"),
+        ),
+    )
+    contract = ContractModel(
+        name="Target",
+        source="/tmp/Target.sol",
+        functions=(function,),
+    )
+    readiness = inspect_execution_readiness(contract, function)
+    assert all(item.status == "constraint" for item in readiness.execution_requirements)
