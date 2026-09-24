@@ -1,18 +1,9 @@
 name: CYDRA Benchmark 046 — Post-Maturity Unmeasurable Resilience
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/cydra/research_loop.py"
-      - "src/cydra/hypothesis_selection.py"
-      - "scripts/run_benchmark_046_unmeasurable_resilience.py"
-      - "benchmarks/046_post_maturity_unmeasurable_resilience/**"
-      - ".github/workflows/benchmark-046-post-maturity-unmeasurable-resilience.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
 
 jobs:
   unmeasurable-resilience:

@@ -1,29 +1,9 @@
 name: CYDRA post-maturity hardening batch campaign
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/cydra/research_loop.py"
-      - "src/cydra/hypothesis_selection.py"
-      - "src/cydra/impact_priority.py"
-      - "tests/test_research_loop.py"
-      - "tests/test_impact_priority.py"
-      - "scripts/run_benchmark_046_unmeasurable_resilience.py"
-      - "scripts/run_benchmark_047_duplicate_finding_resilience.py"
-      - "scripts/run_benchmark_048_research_loop_duplicate_integration.py"
-      - "scripts/run_benchmark_048_unmeasurable_exhaustion.py"
-      - "scripts/run_benchmark_049_post_maturity_hardening_batch.py"
-      - "benchmarks/046_post_maturity_unmeasurable_resilience/**"
-      - "benchmarks/047_post_maturity_duplicate_finding_resilience/**"
-      - "benchmarks/048_post_maturity_research_loop_duplicate_integration/**"
-      - "benchmarks/048_post_maturity_unmeasurable_exhaustion/**"
-      - "benchmarks/049_post_maturity_hardening_batch/**"
-      - ".github/workflows/benchmark-049-post-maturity-hardening-batch.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
 
 jobs:
   hardening-batch:

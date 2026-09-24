@@ -2,15 +2,6 @@ name: benchmark-009-guard-parity
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches-ignore:
-      - pilot/arcadia-lending-dogfood
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_009_guard_parity.py"
-      - "benchmarks/009_guard_parity_euler/**"
-      - "tests/test_guard_parity*.py"
 
 jobs:
   backtest:

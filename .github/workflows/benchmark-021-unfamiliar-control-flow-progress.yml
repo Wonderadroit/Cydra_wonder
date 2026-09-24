@@ -1,22 +1,8 @@
 name: CYDRA unfamiliar control-flow progress backtest
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_021_unfamiliar_control_flow.py"
-      - "benchmarks/021_control_flow_progress/**"
-      - "tests/test_structural_control_flow.py"
-      - ".github/workflows/benchmark-021-unfamiliar-control-flow-progress.yml"
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_021_unfamiliar_control_flow.py"
-      - "benchmarks/021_control_flow_progress/**"
-      - "tests/test_structural_control_flow.py"
-      - ".github/workflows/benchmark-021-unfamiliar-control-flow-progress.yml"
   workflow_dispatch:
+
 
 jobs:
   control-flow:

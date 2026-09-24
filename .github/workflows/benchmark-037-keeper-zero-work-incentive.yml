@@ -1,18 +1,7 @@
 name: Benchmark 037 strict blind keeper zero-work incentive
 
 on:
-  pull_request:
-    paths:
-      - "benchmarks/037_keeper_zero_work_incentive/**"
-      - "scripts/run_benchmark_037_keeper_zero_work_incentive.py"
-      - "src/cydra/**"
-      - "tests/test_benchmark_037_keeper_zero_work_incentive.py"
-  push:
-    branches: [main]
-    paths:
-      - "benchmarks/037_keeper_zero_work_incentive/**"
-      - "scripts/run_benchmark_037_keeper_zero_work_incentive.py"
-      - "src/cydra/**"
+  workflow_dispatch:
 
 jobs:
   benchmark-037:

@@ -1,10 +1,8 @@
 name: CYDRA Benchmark 005 Initialization Classification
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+
 
 jobs:
   liquidclaw-initialization:

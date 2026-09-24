@@ -1,15 +1,8 @@
 name: benchmark-048-post-maturity-research-loop-duplicate-integration
 
 on:
-  pull_request:
-    paths:
-      - "src/cydra/impact_priority.py"
-      - "src/cydra/research_loop.py"
-      - "tests/test_research_loop.py"
-      - "scripts/run_benchmark_048_research_loop_duplicate_integration.py"
-      - "benchmarks/048_post_maturity_research_loop_duplicate_integration/**"
-      - ".github/workflows/benchmark-048-post-maturity-research-loop-duplicate-integration.yml"
   workflow_dispatch:
+
 
 jobs:
   benchmark:

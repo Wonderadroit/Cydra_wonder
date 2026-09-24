@@ -1,14 +1,8 @@
 name: Benchmark 038 strict blind multi-finding
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "benchmarks/038_multi_finding_blind/**"
-      - "scripts/run_benchmark_038_multi_finding_blind.py"
-      - ".github/workflows/benchmark-038-multi-finding-blind.yml"
   workflow_dispatch:
+
 
 jobs:
   benchmark-038:

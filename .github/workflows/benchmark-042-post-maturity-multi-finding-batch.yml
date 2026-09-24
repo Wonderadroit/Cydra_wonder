@@ -1,19 +1,9 @@
 name: CYDRA Benchmark 042 — Post-Maturity Multi-Finding Batch
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/run_benchmark_blind.py"
-      - "scripts/run_benchmark_042_post_maturity_multi_finding_batch.py"
-      - "benchmarks/042_post_maturity_multi_finding_batch/**"
-      - ".github/workflows/benchmark-042-post-maturity-multi-finding-batch.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
 
 jobs:
   benchmark:

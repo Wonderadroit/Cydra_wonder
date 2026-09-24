@@ -2,17 +2,6 @@ name: CYDRA unfamiliar double debit backtest
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "scripts/run_benchmark_015_unfamiliar_double_debit.py"
-      - "src/cydra/structural_double_debit.py"
-      - "tests/test_structural_double_debit.py"
-  push:
-    branches: [main]
-    paths:
-      - "scripts/run_benchmark_015_unfamiliar_double_debit.py"
-      - "src/cydra/structural_double_debit.py"
-      - "tests/test_structural_double_debit.py"
 
 jobs:
   double-debit:

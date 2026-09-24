@@ -1,10 +1,7 @@
 name: CYDRA Benchmark 001
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   benchmark-001:

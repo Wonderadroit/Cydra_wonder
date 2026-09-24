@@ -587,3 +587,23 @@ def test_parse_solidity_resolves_inherited_function_producers(tmp_path: Path) ->
 
     assert "maxWithdraw" in inherited
     assert inherited["maxWithdraw"].return_expressions == ("debt",)
+
+def test_custom_errors_and_events_are_not_runtime_external_calls(tmp_path: Path) -> None:
+    path = tmp_path / "Errors.sol"
+    path.write_text(
+        """
+        interface IERC20Errors {
+            error ERC20InvalidReceiver(address receiver);
+        }
+        contract Errors {
+            event Sent(address receiver);
+            function target(address receiver) external {
+                if (receiver == address(0)) revert IERC20Errors.ERC20InvalidReceiver(receiver);
+                emit Sent(receiver);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    function = parse_solidity(path)[0].functions[0]
+    assert function.external_calls == ()

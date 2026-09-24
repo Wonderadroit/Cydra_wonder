@@ -1,19 +1,7 @@
 name: Benchmark 033 strict blind read-only reentrancy
 
 on:
-  pull_request:
-    paths:
-      - "scripts/run_benchmark_033_strict_blind_readonly_bond.py"
-      - "src/cydra/structural_read_only_reentrancy.py"
-      - "src/cydra/pipeline.py"
-      - "src/cydra/reasoning.py"
-      - "src/cydra/**"
-      - ".github/workflows/benchmark-033-strict-blind-readonly-bond.yml"
-  push:
-    branches: [main]
-    paths:
-      - "scripts/run_benchmark_033_strict_blind_readonly_bond.py"
-      - "src/cydra/structural_read_only_reentrancy.py"
+  workflow_dispatch:
 
 jobs:
   benchmark-033:

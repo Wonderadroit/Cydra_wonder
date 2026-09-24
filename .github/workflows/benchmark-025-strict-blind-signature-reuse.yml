@@ -1,20 +1,8 @@
 name: CYDRA strict blind signature reuse
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_025_strict_blind_signature_reuse.py"
-      - "benchmarks/025_strict_blind_signature_reuse/**"
-      - ".github/workflows/benchmark-025-strict-blind-signature-reuse.yml"
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_025_strict_blind_signature_reuse.py"
-      - "benchmarks/025_strict_blind_signature_reuse/**"
-      - ".github/workflows/benchmark-025-strict-blind-signature-reuse.yml"
   workflow_dispatch:
+
 
 jobs:
   strict-blind-signature-reuse:

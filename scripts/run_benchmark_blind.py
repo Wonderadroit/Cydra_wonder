@@ -31,6 +31,7 @@ from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 from cydra.target_adapter import inspect_target
 from cydra.execution_readiness import inspect_execution_readiness
+from cydra.prerequisite_graph import build_prerequisite_graph, can_enter_security_experiment
 from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
@@ -197,6 +198,39 @@ def clone_target(repo: str, ref: str, destination: Path) -> None:
     subprocess.run(("git", "-C", str(destination), "checkout", "--detach", ref), check=True)
 
 
+def _materialize_generic_foundry_config(project: Path) -> None:
+    """Make npm/Hardhat Solidity checkouts consumable by the generic Foundry harness."""
+    config = project / "foundry.toml"
+    if not config.exists():
+        source_dir = "contracts" if (project / "contracts").exists() else "src"
+        config.write_text(
+            "[profile.default]\n"
+            f'src = "{source_dir}"\n'
+            'test = "test"\n'
+            'libs = ["lib", "node_modules"]\n'
+            'optimizer = false\n'
+            'via_ir = false\n',
+            encoding="utf-8",
+        )
+    remappings = project / "remappings.txt"
+    if remappings.exists():
+        return
+    node_modules = project / "node_modules"
+    mappings: list[str] = []
+    if node_modules.exists():
+        for child in sorted(node_modules.iterdir()):
+            if child.name.startswith("."):
+                continue
+            if child.name.startswith("@") and child.is_dir():
+                for package in sorted(child.iterdir()):
+                    if package.is_dir():
+                        mappings.append(f"{child.name}/{package.name}=node_modules/{child.name}/{package.name}/")
+            elif child.is_dir():
+                mappings.append(f"{child.name}=node_modules/{child.name}/")
+    if mappings:
+        remappings.write_text("\n".join(mappings) + "\n", encoding="utf-8")
+
+
 def prepare_target_project(project: Path) -> None:
     """Materialize declared dependencies needed by the generic experiment harness."""
     package = project / "package.json"
@@ -240,6 +274,11 @@ def prepare_target_project(project: Path) -> None:
             cwd=project,
             check=True,
         )
+
+    # Hardhat/npm targets are accepted by target intake and need a temporary
+    # Foundry execution envelope. Never overwrite a target-authored config.
+    if not (project / "foundry.toml").exists():
+        _materialize_generic_foundry_config(project)
 
 
 def _contract_for_hypothesis(result, hypothesis):
@@ -363,7 +402,7 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
-def run_layers(result, project: Path, classes: tuple[str, ...]):
+def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidence: CompilerEvidenceResult):
     experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
     statuses: list[dict[str, Any]] = []
     executions: list[ExecutionResult] = []
@@ -380,6 +419,14 @@ def run_layers(result, project: Path, classes: tuple[str, ...]):
         capability = CLASS_CAPABILITIES[class_name]
         experiment = experiments[hypothesis.hypothesis_id]
         contract = _contract_for_hypothesis(result, hypothesis)
+        function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+        readiness = inspect_execution_readiness(
+            contract,
+            function,
+            tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
+            compiler_evidence.evidence,
+        )
+        prerequisite_graph = build_prerequisite_graph(readiness)
         status: dict[str, Any] = {
             "hypothesis_id": hypothesis.hypothesis_id,
             "class": class_name,
@@ -393,6 +440,16 @@ def run_layers(result, project: Path, classes: tuple[str, ...]):
 
         if not capability["generate_foundry"]:
             status["foundry_generation_blocked_reason"] = capability["generate_block_reason"]
+            statuses.append(status)
+            continue
+
+        # Do not execute a security experiment until every modeled prerequisite
+        # has explicit evidence. Discovery is not verification.
+        if not can_enter_security_experiment(prerequisite_graph):
+            status["blind_executed"] = False
+            status["classification"] = "NOT_REACHED"
+            status["classification_blocked_reason"] = "security experiment prerequisites are not verified"
+            status["prerequisites"] = _json(prerequisite_graph)
             statuses.append(status)
             continue
 
@@ -550,7 +607,7 @@ def main() -> int:
             experiment_planner=_blind_planner,
             reasoning_surfaces=surfaces,
         )
-        statuses, executions, evidence = run_layers(result, project, classes)
+        statuses, executions, evidence = run_layers(result, project, classes, compiler_evidence)
         experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
         execution_readiness = []
         for hypothesis in result.hypotheses:

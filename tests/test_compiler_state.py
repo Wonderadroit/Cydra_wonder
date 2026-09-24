@@ -81,7 +81,7 @@ def test_compiler_uses_bounded_lightweight_profile_and_selected_source(tmp_path,
     project = tmp_path / "project"
     source = project / "src" / "Fixture.sol"
     source.parent.mkdir(parents=True)
-    source.write_text("contract Fixture {}\n", encoding="utf-8")
+    source.write_text("contract Fixture {}\\n", encoding="utf-8")
     (project / "foundry.toml").write_text("[profile.lite]\nsolc_version = \"0.8.28\"\n", encoding="utf-8")
     captured = {}
 
@@ -133,3 +133,37 @@ def test_compiler_does_not_require_lite_profile(tmp_path, monkeypatch):
     assert result.status == "compile_failed"
     assert "--profile" not in result.command
     assert result.command[-3:] == ("--threads", "1", "contracts/Fixture.sol")
+
+
+def test_compiler_retries_stack_too_deep_with_bounded_via_ir(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    source = project / "contracts" / "Fixture.sol"
+    source.parent.mkdir(parents=True)
+    source.write_text("contract Fixture {}\\n", encoding="utf-8")
+    calls = []
+
+    class Failed:
+        returncode = 1
+        stdout = ""
+        stderr = "Error: Stack too deep. Try compiling with --via-ir."
+
+    class Succeeded:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return Failed() if len(calls) == 1 else Succeeded()
+
+    monkeypatch.setattr("cydra.compiler_state.subprocess.run", fake_run)
+    from cydra.compiler_state import compile_state_effects
+
+    result = compile_state_effects(project, source)
+
+    assert result.status == "no_ast_for_source"
+    assert len(calls) == 2
+    assert "--via-ir" in calls[1]
+    assert "--optimize" in calls[1]
+    assert "--optimizer-runs" in calls[1]
+    assert result.command == calls[1]

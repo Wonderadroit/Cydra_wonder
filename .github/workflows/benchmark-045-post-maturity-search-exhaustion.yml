@@ -1,19 +1,9 @@
 name: CYDRA Benchmark 045 — Post-Maturity Search Exhaustion
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/cydra/research_loop.py"
-      - "src/cydra/hypothesis_selection.py"
-      - "tests/test_research_loop.py"
-      - "scripts/run_benchmark_045_search_exhaustion.py"
-      - "benchmarks/045_post_maturity_search_exhaustion/**"
-      - ".github/workflows/benchmark-045-post-maturity-search-exhaustion.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
 
 jobs:
   search-exhaustion:

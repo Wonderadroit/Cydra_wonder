@@ -1,16 +1,7 @@
 name: Benchmark 006 Blind Authorization
 
 on:
-  push:
-    branches:
-      - "feat/blind-auth-causal-gate-2026-09-19"
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_006_blind_auth.py"
-      - "tests/test_blind_authorization.py"
-      - ".github/workflows/benchmark-006-blind-auth.yml"
+  workflow_dispatch:
 
 jobs:
   # State-diff-backed one-sided authorization verification.

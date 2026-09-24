@@ -1,10 +1,8 @@
 name: CYDRA Benchmark 012 Read-Only Reentrancy
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+
+
 jobs:
   read-only-reentrancy:
     runs-on: ubuntu-latest

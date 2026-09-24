@@ -1,21 +1,9 @@
 name: CYDRA Benchmark 044 — Post-Maturity Negative Controls
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/run_benchmark_blind.py"
-      - "scripts/run_benchmark_043_multi_target_causal_discovery.py"
-      - "scripts/run_benchmark_044_post_maturity_negative_controls.py"
-      - "benchmarks/043_post_maturity_multi_target_causal_discovery/**"
-      - "benchmarks/044_post_maturity_negative_controls/**"
-      - ".github/workflows/benchmark-044-post-maturity-negative-controls.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
 
 jobs:
   negative-controls:

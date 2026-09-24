@@ -1,24 +1,8 @@
 name: CYDRA open-ended blind Solidity discovery
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_022_open_ended_blind.py"
-      - "benchmarks/022_open_ended_blind/**"
-      - "tests/test_structural_signed_metadata.py"
-      - "tests/test_hypothesis_selection.py"
-      - ".github/workflows/benchmark-022-open-ended-blind.yml"
-  pull_request:
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_022_open_ended_blind.py"
-      - "benchmarks/022_open_ended_blind/**"
-      - "tests/test_structural_signed_metadata.py"
-      - "tests/test_hypothesis_selection.py"
-      - ".github/workflows/benchmark-022-open-ended-blind.yml"
   workflow_dispatch:
+
 
 jobs:
   open-ended-blind:

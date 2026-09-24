@@ -1,0 +1,112 @@
+from cydra.execution_readiness import ExecutionReadiness, ExecutionRequirement, SetupAction
+from cydra.prerequisite_graph import (
+    PrerequisiteObservation,
+    apply_observations,
+    build_prerequisite_graph,
+    can_enter_security_experiment,
+)
+
+
+def test_discovered_requirement_is_not_verified():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        execution_requirements=(
+            ExecutionRequirement("execution_value_producer", "balance", "producer", "discovered"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.unresolved
+    assert not can_enter_security_experiment(graph)
+
+
+def test_constructible_setup_is_not_verified():
+    readiness = ExecutionReadiness(contract="Target")
+    graph = build_prerequisite_graph(
+        readiness,
+        (SetupAction("seedBalance", "owner", ("Target:balance",)),),
+    )
+    assert graph.nodes[0].status == "constructible"
+    assert graph.nodes[0].verification == "postcondition_required"
+    assert not can_enter_security_experiment(graph)
+
+
+def test_explicit_verification_is_required():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "balance > 0", "test", "verified"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.verified
+    assert not graph.unresolved
+    assert can_enter_security_experiment(graph)
+
+
+def test_unknown_status_fails_closed():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        caller_requirements=(
+            ExecutionRequirement("caller_role", "admin", "model", "unknown"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.unresolved
+    assert not can_enter_security_experiment(graph)
+
+
+
+def test_no_prerequisites_is_executable():
+    graph = build_prerequisite_graph(ExecutionReadiness(contract="Target"))
+    assert graph.nodes == ()
+    assert can_enter_security_experiment(graph)
+
+
+
+def test_matching_runtime_observation_promotes_prerequisite():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "balance > 0", "model", "required"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    verified = apply_observations(
+        graph,
+        (PrerequisiteObservation("state_predicate", "balance > 0", "true", "true", "E-SETUP-1"),),
+    )
+    assert verified.verified[0].verification == "E-SETUP-1"
+    assert can_enter_security_experiment(verified)
+
+
+def test_mismatching_runtime_observation_blocks_prerequisite():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "balance > 0", "model", "required"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    blocked = apply_observations(
+        graph,
+        (PrerequisiteObservation("state_predicate", "balance > 0", "true", "false", "E-SETUP-2"),),
+    )
+    assert blocked.nodes[0].status == "blocked"
+    assert not can_enter_security_experiment(blocked)
+
+
+
+def test_observation_kind_mismatch_does_not_promote():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "balance > 0", "model", "required"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    unchanged = apply_observations(
+        graph,
+        (PrerequisiteObservation("execution_predicate", "balance > 0", "true", "true", "E-SETUP-3"),),
+    )
+    assert unchanged.unresolved
+    assert not can_enter_security_experiment(unchanged)

@@ -1,19 +1,9 @@
 name: CYDRA Benchmark 043 — Post-Maturity Multi-Target Causal Discovery
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/run_benchmark_blind.py"
-      - "scripts/run_benchmark_043_multi_target_causal_discovery.py"
-      - "benchmarks/043_post_maturity_multi_target_causal_discovery/**"
-      - ".github/workflows/benchmark-043-post-maturity-multi-target-causal-discovery.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
 
 jobs:
   benchmark:

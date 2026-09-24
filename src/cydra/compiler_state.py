@@ -92,6 +92,21 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
         )
         completed = subprocess.run(command, cwd=project_path, text=True, capture_output=True, check=False)
         build_files = tuple(sorted(info_path.rglob("*.json")))
+        # Some npm/Hardhat Solidity targets are valid only under the Solidity
+        # compiler's via-IR pipeline (typically because an ordinary pipeline
+        # hits "Stack too deep"). Retry that compiler capability generically;
+        # never reinterpret the failed first compile as semantic evidence.
+        if completed.returncode != 0 and "Stack too deep" in completed.stderr and "--via-ir" not in command:
+            retry_command = (
+                "forge", "build", "--build-info", "--build-info-path", str(info_path),
+                *profile, "--skip", "test", "--skip", "script", "--threads", "1",
+                "--via-ir", "--optimize", "--optimizer-runs", "200", relative_source,
+            )
+            completed = subprocess.run(
+                retry_command, cwd=project_path, text=True, capture_output=True, check=False
+            )
+            command = retry_command
+            build_files = tuple(sorted(info_path.rglob("*.json")))
         if completed.returncode != 0:
             return CompilerEvidenceResult((), (), True, "compile_failed", command, completed.stdout, completed.stderr, tuple(map(str, build_files)))
 

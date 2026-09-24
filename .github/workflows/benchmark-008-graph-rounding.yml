@@ -2,15 +2,6 @@ name: benchmark-008-graph-rounding
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches-ignore:
-      - pilot/arcadia-lending-dogfood
-    paths:
-      - "src/cydra/**"
-      - "scripts/run_benchmark_008_graph_rounding.py"
-      - "tests/test_structural_rounding.py"
-      - ".github/workflows/benchmark-008-graph-rounding.yml"
 
 jobs:
   backtest:

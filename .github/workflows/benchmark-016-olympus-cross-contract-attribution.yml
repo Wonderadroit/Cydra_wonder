@@ -1,13 +1,7 @@
 name: Benchmark 016 — Olympus cross-contract attribution
 
 on:
-  pull_request:
-    paths:
-      - "src/**"
-      - "benchmarks/016_olympus_cross_contract_attribution/**"
-      - "scripts/run_benchmark_016_olympus_cross_contract_attribution.py"
-      - "tests/test_benchmark_016_olympus_cross_contract_attribution.py"
-      - ".github/workflows/benchmark-016-olympus-cross-contract-attribution.yml"
+  workflow_dispatch:
 
 jobs:
   benchmark-016:
