@@ -18,6 +18,7 @@ def generate_sequence_test_from_experiment(
     contract_model: ContractModel,
     *,
     verify_state_prerequisites: bool = False,
+    stop_before_target: bool = False,
 ) -> Path:
     """Render a structured ordered experiment into an executable Foundry test.
 
@@ -62,6 +63,8 @@ def generate_sequence_test_from_experiment(
                 f'        assertTrue({observation.expression}, "unverified prerequisite: {observation.predicate}");'
                 for observation in observations
             )
+            if stop_before_target:
+                break
         arguments = ", ".join(step.arguments)
         role = caller_role(function)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
