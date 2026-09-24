@@ -552,7 +552,14 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         capability = CLASS_CAPABILITIES[class_name]
         experiment = experiments[hypothesis.hypothesis_id]
         contract = _contract_for_hypothesis(result, hypothesis)
-        function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+        function = next(
+            (
+                item
+                for item in (*contract.functions, *contract.inherited_functions)
+                if item.name == hypothesis.target_function
+            ),
+            None,
+        )
         readiness = inspect_execution_readiness(
             contract,
             function,
