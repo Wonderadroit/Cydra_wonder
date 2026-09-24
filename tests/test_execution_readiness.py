@@ -431,6 +431,10 @@ def test_input_state_order_guard_is_experiment_constraint() -> None:
             FunctionModel(
                 "execute",
                 "external",
+                (),
+                (),
+                (),
+                1,
                 parameters=(ParameterModel("epoch", "uint256"),),
                 execution_predicates=("epoch >= depositEpoch",),
                 execution_predicate_polarities=(("epoch >= depositEpoch", "must_not_hold"),),
