@@ -190,7 +190,7 @@ def generate_authorization_test_from_experiment(
             continue
         role = caller_bindings.get(caller_role(writer), "attacker")
         setup_lines.append(
-            f"        vm.prank({role});\\n"
+            f"        vm.prank({role});\n"
             f"        try target.{writer.name}({arguments}) {{}} catch {{ setupOk = false; }}"
         )
     setup_guard = (
