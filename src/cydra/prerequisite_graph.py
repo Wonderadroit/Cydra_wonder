@@ -97,3 +97,40 @@ def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
     return not graph.unresolved and all(
         node.status == "verified" for node in graph.nodes
     )
+
+
+@dataclass(frozen=True)
+class PrerequisiteObservation:
+    """Deterministic runtime observation used to promote one prerequisite."""
+    subject: str
+    expected: str
+    observed: str
+    evidence_id: str
+
+
+def apply_observations(
+    graph: PrerequisiteGraph,
+    observations: tuple[PrerequisiteObservation, ...],
+) -> PrerequisiteGraph:
+    """Promote only evidence-backed matching prerequisites; fail closed otherwise."""
+    by_subject = {observation.subject: observation for observation in observations}
+    nodes: list[PrerequisiteNode] = []
+    for node in graph.nodes:
+        observation = by_subject.get(node.subject)
+        if observation is None:
+            nodes.append(node)
+            continue
+        if not observation.evidence_id:
+            nodes.append(
+                PrerequisiteNode(**{**node.__dict__, "status": "unresolved", "verification": "missing_evidence_id"})
+            )
+            continue
+        if observation.expected == observation.observed:
+            nodes.append(
+                PrerequisiteNode(**{**node.__dict__, "status": "verified", "verification": observation.evidence_id})
+            )
+        else:
+            nodes.append(
+                PrerequisiteNode(**{**node.__dict__, "status": "blocked", "verification": observation.evidence_id})
+            )
+    return PrerequisiteGraph(tuple(nodes))
