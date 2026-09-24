@@ -1931,3 +1931,17 @@ Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
 ## CI validation note — current execution-readiness baseline
 
 The current main baseline includes generic execution value-producer and compiler-backed prerequisite evidence. Validation of this baseline must distinguish CI/pipeline health from security conclusions; target-specific execution failures are treated as capability-gap evidence and repaired at the generic abstraction layer.
+## 53. Unfamiliar-target batch — authorization execution is now live
+
+The post-maturity unfamiliar-target batch at main revision 7431af88b1204048003d333ecb6cf1a252b9d245 completed successfully with six target artifacts and preserved the blind boundary. A generic integration defect was repaired during this milestone: the repository already contained a one-sided authorization causal classifier, but the blind runner still hard-coded authorization classification as unavailable without a patched counterpart. The runner now sends measured blind authorization executions through that classifier.
+
+The campaign demonstrated the new execution surface on an unfamiliar target: Panoptic HypoVault produced four authorization hypotheses that were all materially executed. One candidate (requestDeposit) passed the security invariant and was rejected as not confirmed. Three candidates reverted before unauthorized mutation could be demonstrated and were retained as proposed/non-confirmed execution outcomes rather than promoted. This is the intended evidence discipline: a revert is not a vulnerability and a tool/security-assertion distinction is preserved.
+
+The same batch also produced a successful blind initialization execution on GTE CLOB and successful single-sided initialization execution on SukukFi Vault and Virtuals AgentFactory. No unfamiliar-target hypothesis in this six-target batch reached a confirmed finding gate. Therefore this campaign is evidence that the generic execution/classification path has advanced, not evidence of a new unfamiliar-target finding.
+
+A remaining generic gap is state-sequence causal classification. State hypotheses are currently executable at the Foundry layer but remain NOT_REACHED at classification because the runner still requires an independently verified relation and patched counterpart. The raw executions exposed genuine environmental/input prerequisites such as epoch fulfillment and zero-denominator conditions. These must be converted into verified prerequisite observations or experiment constraints before state conclusions are promoted. They must not be hidden by broadening the classifier or by treating arbitrary execution failures as security evidence.
+
+Current research chain:
+model → invariant → hypothesis → prerequisite readiness → executable experiment → observation → class-specific causal verification → reproduction → finding gate.
+
+The next maturity work is therefore not another benchmark-specific detector. It is generic state-sequence observation/prerequisite verification and then adversarial unfamiliar-target campaigns that can produce a confirmed, reproducible finding without historical-answer leakage.
