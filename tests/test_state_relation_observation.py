@@ -37,3 +37,22 @@ def test_relation_observation_fails_closed_without_public_getter(tmp_path: Path)
         state_variables=("counter",),
     )
     assert plan_state_relation_observations(model, model.functions[0]) == ()
+
+
+def test_public_signed_scalar_retains_type_for_runtime_relation():
+    source = """contract Target {
+        int256 public counter;
+        function bump() external { counter += 1; }
+    }"""
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "Target.sol"
+        path.write_text(source, encoding="utf-8")
+        model = ContractModel(
+            "Target", str(path),
+            (StateVariableModel("counter", "int256", 2),),
+            functions=(FunctionModel("bump", "external", (), (), ("counter",), 3),),
+        )
+        plans = plan_state_relation_observations(model, model.functions[0])
+        assert plans[0].state_type == "int256"
