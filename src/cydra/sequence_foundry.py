@@ -36,7 +36,10 @@ def generate_sequence_test_from_experiment(
     if not experiment.steps:
         raise ValueError("sequence experiment has no structured steps")
 
-    functions = {function.name: function for function in contract_model.functions}
+    functions = {
+        function.name: function
+        for function in (*contract_model.functions, *contract_model.inherited_functions)
+    }
     rendered: list[str] = []
     relation_setups: list[str] = []
     relation_assertions: list[str] = []
