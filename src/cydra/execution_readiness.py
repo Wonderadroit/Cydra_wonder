@@ -298,14 +298,22 @@ def _execution_dataflow_requirements(
         if local not in predicates:
             continue
 
+        pure_local_expression = not re.search(r"\\b[A-Za-z_]\\w*\\s*\\(", expression)
+        dataflow_status = "constraint" if pure_local_expression else "required"
+        dataflow_detail = (
+            "deterministic local derivation used by an experiment constraint; "
+            "the generated experiment must reproduce the derivation"
+            if pure_local_expression
+            else "execution predicate depends on a locally bound call/input value; "
+            "the binding must be resolved before reachability is treated as satisfied"
+        )
         requirements.append(
             ExecutionRequirement(
                 "execution_dataflow",
                 f"{local} <- {expression}",
                 f"{function.name}:body",
-                "required",
-                "execution predicate depends on a locally bound call/input value; "
-                "the binding must be resolved before reachability is treated as satisfied",
+                dataflow_status,
+                dataflow_detail,
             )
         )
 
