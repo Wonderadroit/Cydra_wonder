@@ -47,12 +47,9 @@ def _function_body(source: str, function: FunctionModel) -> str:
     for line in lines_before:
         line_offsets.append(offset)
         offset += len(line)
-    candidates = [
-        match for match in matches
-        if 0 <= function.line - 1 < len(line_offsets)
-    ]
-    if not candidates:
+    if not matches:
         return ""
+    candidates = matches
     target = min(
         candidates,
         key=lambda match: abs(source.count("\n", 0, match.start()) + 1 - function.line),
