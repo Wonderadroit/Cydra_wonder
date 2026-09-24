@@ -73,7 +73,7 @@ def test_matching_runtime_observation_promotes_prerequisite():
     graph = build_prerequisite_graph(readiness)
     verified = apply_observations(
         graph,
-        (PrerequisiteObservation("balance > 0", "true", "true", "E-SETUP-1"),),
+        (PrerequisiteObservation("state_predicate", "balance > 0", "true", "true", "E-SETUP-1"),),
     )
     assert verified.verified[0].verification == "E-SETUP-1"
     assert can_enter_security_experiment(verified)
@@ -89,7 +89,7 @@ def test_mismatching_runtime_observation_blocks_prerequisite():
     graph = build_prerequisite_graph(readiness)
     blocked = apply_observations(
         graph,
-        (PrerequisiteObservation("balance > 0", "true", "false", "E-SETUP-2"),),
+        (PrerequisiteObservation("state_predicate", "balance > 0", "true", "false", "E-SETUP-2"),),
     )
     assert blocked.nodes[0].status == "blocked"
     assert not can_enter_security_experiment(blocked)
