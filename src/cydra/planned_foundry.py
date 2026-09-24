@@ -153,47 +153,46 @@ def generate_authorization_test_from_experiment(
         "factory": "factory",
     }
     setup_lines: list[str] = []
-    caller_setup_subjects = {
-        requirement.subject
+    setup_requirements = [
+        requirement
+        for requirement in readiness.state_setup_candidates
+        if requirement.status == "constructible"
+    ]
+    caller_setup_requirements = [
+        requirement
         for requirement in readiness.execution_requirements
         if requirement.kind == "caller_state_setup_candidate"
-    }
-    if caller_setup_subjects:
-        setup_plan = constructible_state_setup_plan(
-            readiness_contract,
-            function,
-            constraints,
-            semantic_evidence,
-        )
-        planned_functions = {action.function for action in setup_plan}
-        unresolved = sorted(caller_setup_subjects - planned_functions)
-        if unresolved:
-            raise ValueError(
-                "unresolved caller-state setup prerequisite(s): " + ", ".join(unresolved)
+        and requirement.status == "discovered"
+    ]
+    if caller_setup_requirements:
+        for requirement in caller_setup_requirements:
+            writer = functions_by_name.get(requirement.subject)
+            if writer is None:
+                raise ValueError(f"execution-readiness caller-state setup function is not modeled: {requirement.subject}")
+            writer_readiness = inspect_execution_readiness(
+                readiness_contract, writer, constraints, semantic_evidence
             )
-    else:
-        setup_plan = constructible_state_setup_plan(
-            readiness_contract,
-            function,
-            constraints,
-            semantic_evidence,
-        )
-    for action in setup_plan:
-        writer = functions_by_name.get(action.function)
+            if writer_readiness.blockers:
+                blockers = ", ".join(item.subject for item in writer_readiness.blockers)
+                raise ValueError(
+                    f"unresolved caller-state setup prerequisite(s) for {writer.name}: {blockers}"
+                )
+            setup_requirements.append(requirement)
+    for requirement in dict.fromkeys(setup_requirements):
+        writer = functions_by_name.get(requirement.subject)
         if writer is None:
-            raise ValueError(f"execution-readiness setup function is not modeled: {action.function}")
+            continue
         defaults = conservative_defaults(writer.parameters)
-        if defaults is None or any(not defaults.get(parameter.name, "") for parameter in writer.parameters):
-            raise ValueError(
-                f"execution-readiness setup function lacks constructible default inputs: {action.function}"
-            )
+        if defaults is None:
+            continue
         arguments = ", ".join(defaults.get(parameter.name, "") for parameter in writer.parameters)
-        role = caller_bindings.get(action.caller_role, "attacker")
+        if any(not argument for argument in defaults.values()):
+            continue
+        role = caller_bindings.get(caller_role(writer), "attacker")
         setup_lines.append(
             f"        vm.prank({role});\\n"
             f"        try target.{writer.name}({arguments}) {{}} catch {{ setupOk = false; }}"
         )
-
     setup_guard = (
         "        bool setupOk = true;\n"
         + "\n".join(dict.fromkeys(setup_lines))
