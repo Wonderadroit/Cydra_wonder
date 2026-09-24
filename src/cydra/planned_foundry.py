@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from .interface_resolver import resolve_interface, resolve_named_type_source
-from .execution_readiness import _address_role, caller_role, inspect_execution_readiness
+from .execution_readiness import _address_role, caller_role, constructible_state_setup_plan, inspect_execution_readiness
 from .experiment_inputs import conservative_defaults
 
 from .models import ContractModel, Experiment, Hypothesis
@@ -17,6 +17,9 @@ def generate_authorization_test_from_experiment(
     target_type: str,
     output_path: str | Path,
     contract_model: ContractModel,
+    *,
+    semantic_evidence=(),
+    constraints=(),
 ) -> Path:
     """Generate an authorization experiment from the canonical Experiment plan.
 
@@ -140,7 +143,7 @@ def generate_authorization_test_from_experiment(
             )
     except (OSError, ValueError, IndexError):
         pass
-    readiness = inspect_execution_readiness(readiness_contract, function)
+    readiness = inspect_execution_readiness(readiness_contract, function, constraints, semantic_evidence)
     caller_bindings = {
         "owner": "owner",
         "admin": "admin",
@@ -150,23 +153,47 @@ def generate_authorization_test_from_experiment(
         "factory": "factory",
     }
     setup_lines: list[str] = []
-    for requirement in readiness.state_setup_candidates:
-        if requirement.status != "constructible":
-            continue
-        writer = functions_by_name.get(requirement.subject)
+    caller_setup_subjects = {
+        requirement.subject
+        for requirement in readiness.execution_requirements
+        if requirement.kind == "caller_state_setup_candidate"
+    }
+    if caller_setup_subjects:
+        setup_plan = constructible_state_setup_plan(
+            readiness_contract,
+            function,
+            constraints,
+            semantic_evidence,
+        )
+        planned_functions = {action.function for action in setup_plan}
+        unresolved = sorted(caller_setup_subjects - planned_functions)
+        if unresolved:
+            raise ValueError(
+                "unresolved caller-state setup prerequisite(s): " + ", ".join(unresolved)
+            )
+    else:
+        setup_plan = constructible_state_setup_plan(
+            readiness_contract,
+            function,
+            constraints,
+            semantic_evidence,
+        )
+    for action in setup_plan:
+        writer = functions_by_name.get(action.function)
         if writer is None:
-            continue
+            raise ValueError(f"execution-readiness setup function is not modeled: {action.function}")
         defaults = conservative_defaults(writer.parameters)
-        if defaults is None:
-            continue
+        if defaults is None or any(not defaults.get(parameter.name, "") for parameter in writer.parameters):
+            raise ValueError(
+                f"execution-readiness setup function lacks constructible default inputs: {action.function}"
+            )
         arguments = ", ".join(defaults.get(parameter.name, "") for parameter in writer.parameters)
-        if any(not argument for argument in defaults.values()):
-            continue
-        role = caller_bindings.get(caller_role(writer), "attacker")
+        role = caller_bindings.get(action.caller_role, "attacker")
         setup_lines.append(
-            f"        vm.prank({role});\n"
+            f"        vm.prank({role});\\n"
             f"        try target.{writer.name}({arguments}) {{}} catch {{ setupOk = false; }}"
         )
+
     setup_guard = (
         "        bool setupOk = true;\n"
         + "\n".join(dict.fromkeys(setup_lines))
