@@ -631,11 +631,32 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                 }
                 evidence.extend(relation_evidence)
                 executions.append(relation_execution)
+                if not relation_evidence:
+                    # Relation verification is a prerequisite for state security
+                    # experiments. Never fall through on a failed or empty assertion.
+                    status["blind_executed"] = False
+                    status["classification"] = "NOT_REACHED"
+                    status["classification_blocked_reason"] = (
+                        "state relation verification did not produce passing runtime evidence"
+                    )
+                    status.update(status_prerequisite)
+                    evidence.extend(prerequisite_observation_evidence)
+                    statuses.append(status)
+                    continue
             except Exception as error:
                 status["state_relation_verification"] = {
                     "verified": False,
                     "failure": f"{type(error).__name__}: {error}",
                 }
+                status["blind_executed"] = False
+                status["classification"] = "NOT_REACHED"
+                status["classification_blocked_reason"] = (
+                    "state relation verification could not be completed"
+                )
+                status.update(status_prerequisite)
+                evidence.extend(prerequisite_observation_evidence)
+                statuses.append(status)
+                continue
 
         try:
             if class_name == "authorization":
