@@ -248,3 +248,37 @@ def test_sequence_renderer_can_stop_before_target_after_observation(tmp_path):
     assert "target.seed();" in rendered
     assert 'assertTrue(target.epoch() > 0, "unverified prerequisite: epoch > 0");' in rendered
     assert "target.use();" not in rendered
+
+
+def test_sequence_renderer_can_verify_source_backed_state_relation(tmp_path):
+    from cydra.models import FunctionModel
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { uint256 public counter; "
+        "function bump() external { counter += 1; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (FunctionModel("bump", "external", (), ("counter",), (), 2),),
+        state_variables=("counter",),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-counter-bump", "candidate", "INV-STATE-counter",
+        "bump", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-H-STATE-counter-bump", hypothesis.hypothesis_id, "bump",
+        ("violation", "preservation"), 1.0,
+        steps=(ExperimentStep("bump", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_relations=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "uint256 before_counter = target.counter();" in rendered
+    assert "target.bump();" in rendered
+    assert "assertEq(target.counter(), before_counter + 1" in rendered
