@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .execution_readiness import ExecutionReadiness, SetupAction
 
@@ -122,15 +122,15 @@ def apply_observations(
             continue
         if not observation.evidence_id:
             nodes.append(
-                PrerequisiteNode(**{**node.__dict__, "status": "unresolved", "verification": "missing_evidence_id"})
+                replace(node, status="unresolved", verification="missing_evidence_id")
             )
             continue
         if observation.expected == observation.observed:
             nodes.append(
-                PrerequisiteNode(**{**node.__dict__, "status": "verified", "verification": observation.evidence_id})
+                replace(node, status="verified", verification=observation.evidence_id)
             )
         else:
             nodes.append(
-                PrerequisiteNode(**{**node.__dict__, "status": "blocked", "verification": observation.evidence_id})
+                replace(node, status="blocked", verification=observation.evidence_id)
             )
     return PrerequisiteGraph(tuple(nodes))
