@@ -353,8 +353,11 @@ def _initializer_runtime_requirements(contract_model: ContractModel, function_na
     body = body[:end]
     token_parameters = {
         parameter
-        for receiver, parameter, method in re.findall(r"\b([A-Za-z_]\w*)\s*\(\s*(\w+)\s*\)\.(\w+)\s*\(", body)
-        if receiver == "ERC20" and method == "symbol"
+        for receiver, parameter, method in re.findall(
+            r"\b([A-Za-z_]\w*)\s*\(\s*(\w+)\s*\)\.(\w+)\s*\(",
+            body,
+        )
+        if "ERC20" in receiver and method in {"symbol", "decimals"}
     }
     factory_context = bool(re.search(r"\b\w+\s*=\s*_msgSender\s*\(\s*\)\s*;", body)) and bool(
         re.search(r"\bIPoolFactory\s*\(\s*\w+\s*\)\s*\.\s*voter\s*\(", body)
@@ -547,6 +550,48 @@ def _model_initialization_source(
     derived_interface_casts = constructor.derived_interface_casts if constructor else ()
     inherited_resolved_interfaces = contract_model.inherited_resolved_interfaces
     token_parameters, factory_context = _initializer_runtime_requirements(contract_model, function.name)
+
+    # Interface-typed initializer parameters are runtime dependencies when the
+    # initializer reads ERC-20 metadata. Resolve direct parameter interfaces
+    # before argument synthesis so the generic harness can bind a Cydra token
+    # stub even when the concrete contract does not inherit that interface.
+    parameter_interfaces = {
+        interface.name: interface for interface in inherited_resolved_interfaces
+    }
+    if output_path is not None:
+        output = Path(output_path)
+        project_root = next(
+            (
+                ancestor
+                for ancestor in (output.parent, *output.parents)
+                if (ancestor / "foundry.toml").exists()
+            ),
+            None,
+        )
+        if project_root is not None:
+            for parameter in function.parameters:
+                base = parameter.type.strip().split()[0].rstrip("[]")
+                if base in parameter_interfaces:
+                    continue
+                try:
+                    resolved = resolve_interface(project_root, contract_model.source, base)
+                except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                    continue
+                parameter_interfaces[base] = resolved
+    for parameter in function.parameters:
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        interface = parameter_interfaces.get(base)
+        if (
+            (interface is not None and any(
+                method.name in {"symbol", "decimals"} for method in interface.methods
+            ))
+            or "ERC20" in base
+        ):
+            # ERC20-shaped interface parameters can be backed by the canonical
+            # CYDRA token stub even when the resolver cannot traverse an unusual
+            # remapping in the target checkout.
+            token_parameters.add(parameter.name)
+
     stub_source, stub_variables = _runtime_stub_source(
         resolved_interface_casts,
         derived_interface_casts,
@@ -563,7 +608,17 @@ def _model_initialization_source(
     if constructor is not None and constructor.parameters:
         constructor_arguments = ", ".join(_constructor_argument(p, constructor_runtime_arguments) for p in constructor.parameters)
 
-    initializer_runtime_arguments = {parameter: "address(tokenStub)" for parameter in token_parameters}
+    initializer_runtime_arguments: dict[str, str] = {}
+    for parameter in function.parameters:
+        if parameter.name not in token_parameters:
+            continue
+        base_type = parameter.type.strip().split()[0].rstrip("[]")
+        if base_type.startswith(("address", "uint", "int", "bytes", "bool", "string")):
+            initializer_runtime_arguments[parameter.name] = "address(tokenStub)"
+        else:
+            initializer_runtime_arguments[parameter.name] = (
+                f"{base_type}(address(tokenStub))"
+            )
     arguments: list[str] = []
     declarations: list[str] = []
     for index, parameter in enumerate(function.parameters):

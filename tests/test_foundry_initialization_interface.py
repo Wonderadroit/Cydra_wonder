@@ -274,4 +274,5 @@ def test_model_aware_generator_imports_bare_resolved_interface_initializer_type(
     )
     source = output.read_text(encoding="utf-8")
     assert 'import { IERC20Metadata } from "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";' in source
-    assert "IERC20Metadata memory parameter0;" in source
+    assert "IERC20Metadata(address(tokenStub))" in source
+    assert "IERC20Metadata memory parameter0;" not in source
