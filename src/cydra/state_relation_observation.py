@@ -47,5 +47,5 @@ def plan_state_relation_observations(
             source=f"{contract.source}:{function.line}",
         )
         for relation in plan_source_state_relations(contract, function)
-        if relation.state in getters
+        if relation.state in getters and getters[relation.state].startswith("uint")
     )
