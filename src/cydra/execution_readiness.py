@@ -455,7 +455,7 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     call_bound_locals = {
         name
         for name, expression in function.execution_value_bindings
-        if re.search(r"\\b[A-Za-z_]\\w*\\s*\\(", expression)
+        if re.search(r"\b[A-Za-z_]\w*\s*\(", expression)
     }
     if identifiers & call_bound_locals:
         return False
