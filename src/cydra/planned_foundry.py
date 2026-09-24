@@ -168,7 +168,14 @@ def generate_authorization_test_from_experiment(
         for requirement in caller_setup_requirements:
             writer = functions_by_name.get(requirement.subject)
             if writer is None:
-                raise ValueError(f"execution-readiness caller-state setup function is not modeled: {requirement.subject}")
+                raise ValueError(
+                    f"execution-readiness caller-state setup function is not modeled: {requirement.subject}"
+                )
+
+            # A discovered writer is only one edge in the prerequisite graph.
+            # Resolve the writer's own prerequisites recursively before rendering
+            # it, so a caller-state transition is never treated as constructible
+            # merely because it writes the desired state.
             writer_readiness = inspect_execution_readiness(
                 readiness_contract, writer, constraints, semantic_evidence
             )
@@ -176,6 +183,25 @@ def generate_authorization_test_from_experiment(
                 blockers = ", ".join(item.subject for item in writer_readiness.blockers)
                 raise ValueError(
                     f"unresolved caller-state setup prerequisite(s) for {writer.name}: {blockers}"
+                )
+
+            nested_actions = constructible_state_setup_plan(
+                readiness_contract, writer, constraints, semantic_evidence
+            )
+            for action in nested_actions:
+                nested_writer = functions_by_name.get(action.function)
+                if nested_writer is None:
+                    raise ValueError(
+                        f"execution-readiness nested setup function is not modeled: {action.function}"
+                    )
+                setup_requirements.append(
+                    type(requirement)(
+                        "state_setup_candidate",
+                        nested_writer.name,
+                        f"{writer.name}:recursive-state-setup",
+                        "constructible",
+                        "recursively resolved prerequisite transition for discovered caller-state writer",
+                    )
                 )
             setup_requirements.append(requirement)
     for requirement in dict.fromkeys(setup_requirements):
