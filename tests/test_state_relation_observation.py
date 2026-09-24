@@ -53,3 +53,21 @@ def test_relation_observation_fails_closed_for_signed_scalar(tmp_path: Path):
         state_variables=("counter",),
     )
     assert plan_state_relation_observations(model, model.functions[0]) == ()
+
+
+def test_relation_observation_does_not_borrow_getter_from_sibling_contract(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Sibling { uint256 public counter; "
+        "function bump() external { counter += 1; } } "
+        "contract Target { uint256 private counter; "
+        "function bump() external { counter += 1; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (FunctionModel("bump", "external", (), ("counter",), (), 3),),
+        state_variables=("counter",),
+    )
+    assert plan_state_relation_observations(model, model.functions[0]) == ()
