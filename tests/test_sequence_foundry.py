@@ -318,3 +318,43 @@ def test_sequence_renderer_can_verify_inherited_state_relation(tmp_path):
     rendered = generated.read_text(encoding="utf-8")
     assert "target.bump();" in rendered
     assert "assertEq(target.counter(), before_counter + 1" in rendered
+
+
+def test_sequence_renderer_verifies_keyed_state_relation(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "mapping(address => mapping(uint256 => uint256)) public queued; "
+        "function execute(address user, uint256 epoch) external { queued[user][epoch] += 1; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import FunctionModel, ParameterModel
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "execute", "external", (), ("queued",), (), 2,
+                parameters=(ParameterModel("user", "address"), ParameterModel("epoch", "uint256")),
+            ),
+        ),
+        state_variables=("queued",),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-queued-execute", "candidate", "INV-STATE-queued",
+        "execute", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-H-STATE-queued-execute", hypothesis.hypothesis_id, "execute",
+        ("violation",), 1.0,
+        steps=(ExperimentStep("execute", ("attacker", "1")),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_relations=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "uint256 before_queued_user_epoch = target.queued(user, epoch);" in rendered
+    assert "target.execute(attacker, 1);" in rendered
+    assert "assertEq(target.queued(user, epoch), before_queued_user_epoch + 1" in rendered
