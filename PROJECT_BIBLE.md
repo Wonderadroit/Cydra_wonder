@@ -1973,3 +1973,13 @@ This closes a validation boundary only: the durable research loop remains green 
 The next implementation boundary remains generic runtime prerequisite observation/verification. The repository already identifies constructible state-setup candidates and can recursively plan setup transitions, but a constructible transition must not be promoted to verified merely because its transaction succeeds. The next repair must therefore connect a generated setup transition to an observable, evidence-bearing postcondition and feed that observation into the prerequisite graph before the security experiment is admitted.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+## Milestone 88 — runtime prerequisite observation is merged; state-sequence classification remains the next gap
+
+PR #214 was merged to main as commit d4f6727175b06c31458e54b6df45875e2b5acd92 after the pull-request regression matrix and research workflows completed successfully. The implementation adds generic source-backed runtime observation plans for directly observable public scalar state, immutable observation evidence IDs, conversion of executed/passing assertions into PrerequisiteObservation values, and fail-closed admission of the security experiment only after the prerequisite graph is promoted by matching evidence. Setup transaction success alone remains insufficient.
+
+Benchmark 040 run 36017834764 completed successfully on the PR head. The unfamiliar-target batch materially executed six state hypotheses on Panoptic HypoVault, but those hypotheses still classified as NOT_REACHED because their readiness artifacts contained no independently modeled state_requirements and the state classifier still requires a verified relation plus a patched differential. This is an important diagnostic result: the new prerequisite-observation machinery is green, but it does not manufacture an invariant for a state-composition hypothesis whose relation is only expressed as a generic consistency claim.
+
+Therefore the next implementation boundary is narrower and more fundamental: derive or bind an independently testable state relation from compiler/source evidence and the ordered transition model, render observations of that relation before/between/after transitions, and keep causal classification fail-closed unless the observed relation is actually justified. No target-specific state formula, historical answer, or arbitrary execution failure may be promoted into a finding.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
