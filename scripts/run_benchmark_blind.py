@@ -35,6 +35,8 @@ from cydra.execution_readiness import constructible_state_setup_plan, inspect_ex
 from cydra.prerequisite_graph import apply_observations, build_prerequisite_graph, can_enter_security_experiment
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
+from cydra.state_relation_observation import plan_state_relation_observations
+from cydra.state_relation_evidence import evidence_records_from_relation_execution
 from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
@@ -426,6 +428,50 @@ def _run_state_prerequisite_observation(
     return execution, observations, evidence
 
 
+def _run_state_relation_verification(
+    project: Path,
+    hypothesis,
+    experiment,
+    contract,
+) -> tuple[Any, tuple[Any, ...], tuple[Any, ...]]:
+    """Verify a source-backed state transition before any state classification."""
+    function = next(
+        (item for item in (*contract.functions, *contract.inherited_functions)
+         if item.name == hypothesis.target_function),
+        None,
+    )
+    if function is None:
+        raise ValueError(f"state relation target function is not modeled: {hypothesis.target_function}")
+    plans = plan_state_relation_observations(contract, function)
+    if not plans:
+        raise ValueError(
+            "state transition has no deterministic public unsigned-integer relation observation"
+        )
+    output = test_path_for(
+        project, f"generated/{hypothesis.hypothesis_id}-relation.t.sol"
+    )
+    relation_experiment = replace(
+        experiment,
+        experiment_id=f"{experiment.experiment_id}-RELATION",
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        relation_experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+        verify_state_relations=True,
+    )
+    execution = run_foundry_test(
+        project, generated, relation_experiment.experiment_id, "relation"
+    )
+    evidence = evidence_records_from_relation_execution(
+        relation_experiment.experiment_id, plans, execution
+    )
+    return execution, plans, evidence
+
+
 def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
     generated = generate_sequence_test_from_experiment(
@@ -545,6 +591,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             "blind_executed": False,
             "classification": "NOT_REACHED",
         }
+        relation_execution = None
+        relation_evidence = ()
 
         if not capability["generate_foundry"]:
             status["foundry_generation_blocked_reason"] = capability["generate_block_reason"]
@@ -562,6 +610,53 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             evidence.extend(prerequisite_observation_evidence)
             statuses.append(status)
             continue
+
+        if class_name == "state":
+            try:
+                relation_execution, relation_plans, relation_evidence = _run_state_relation_verification(
+                    project, hypothesis, experiment, contract
+                )
+                status["state_relation_verification"] = {
+                    "verified": bool(relation_evidence),
+                    "plans": [
+                        {
+                            "state": plan.state,
+                            "getter": plan.getter,
+                            "relation": plan.relation.expression,
+                        }
+                        for plan in relation_plans
+                    ],
+                    "execution": _json(relation_execution),
+                    "evidence_ids": [item.evidence_id for item in relation_evidence],
+                }
+                evidence.extend(relation_evidence)
+                executions.append(relation_execution)
+                if not relation_evidence:
+                    # Relation verification is a prerequisite for state security
+                    # experiments. Never fall through on a failed or empty assertion.
+                    status["blind_executed"] = False
+                    status["classification"] = "NOT_REACHED"
+                    status["classification_blocked_reason"] = (
+                        "state relation verification did not produce passing runtime evidence"
+                    )
+                    status.update(status_prerequisite)
+                    evidence.extend(prerequisite_observation_evidence)
+                    statuses.append(status)
+                    continue
+            except Exception as error:
+                status["state_relation_verification"] = {
+                    "verified": False,
+                    "failure": f"{type(error).__name__}: {error}",
+                }
+                status["blind_executed"] = False
+                status["classification"] = "NOT_REACHED"
+                status["classification_blocked_reason"] = (
+                    "state relation verification could not be completed"
+                )
+                status.update(status_prerequisite)
+                evidence.extend(prerequisite_observation_evidence)
+                statuses.append(status)
+                continue
 
         try:
             if class_name == "authorization":

@@ -56,3 +56,27 @@ def test_relation_is_scoped_to_selected_function(tmp_path: Path):
     assert [item.expression for item in plan_source_state_relations(model, model.functions[0])] == [
         "after(counter) == before(counter) + 1"
     ]
+
+
+def test_keyed_literal_compound_state_transition_is_source_backed(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { mapping(address => mapping(uint256 => uint256)) public queued; "
+        "function execute(address user, uint256 epoch) external { queued[user][epoch] += 1; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "execute", "external", (), ("queued",), (), 1,
+                parameters=(ParameterModel("user", "address"), ParameterModel("epoch", "uint256")),
+            ),
+        ),
+        state_variables=("queued",),
+    )
+    relations = plan_source_state_relations(model, model.functions[0])
+    assert len(relations) == 1
+    assert relations[0].index_expressions == ("user", "epoch")
+    assert relations[0].expression == "after(queued[user][epoch]) == before(queued[user][epoch]) + 1"

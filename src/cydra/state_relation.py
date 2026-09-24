@@ -8,22 +8,49 @@ from .models import ContractModel, FunctionModel
 
 @dataclass(frozen=True)
 class StateRelation:
-    """Source-backed postcondition for one simple storage transition.
-
-    Only relations whose arithmetic is explicit in the target function source
-    are emitted. Unknown RHS expressions are rejected rather than guessed.
-    """
+    """Source-backed postcondition for one simple storage transition."""
 
     state: str
     function: str
     expression: str
     source: str
+    # Bare function-parameter indexes are the only keyed observation surface
+    # supported by the generic runtime verifier. Anything dynamic fails closed.
+    index_expressions: tuple[str, ...] = ()
 
 
 _LITERAL = r"(?:0[xX][0-9a-fA-F]+|[0-9]+)"
 _PATTERNS = (
-    (re.compile(r"\b(?P<state>[A-Za-z_]\w*)\s*\+=\s*(?P<rhs>"+_LITERAL+r")\s*;"), "+"),
-    (re.compile(r"\b(?P<state>[A-Za-z_]\w*)\s*-=\s*(?P<rhs>"+_LITERAL+r")\s*;"), "-"),
+    # Scalar literal arithmetic.
+    (
+        re.compile(
+            r"\b(?P<state>[A-Za-z_]\w*)\s*"
+            r"\+=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+        ),
+        "+",
+    ),
+    (
+        re.compile(
+            r"\b(?P<state>[A-Za-z_]\w*)\s*"
+            r"-=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+        ),
+        "-",
+    ),
+    # Keyed literal arithmetic. Index expressions are validated separately.
+    (
+        re.compile(
+            r"\b(?P<state>[A-Za-z_]\w*)\s*(?P<indexes>(?:\[[^\]]+\])+)"
+            r"\s*\+=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+        ),
+        "+",
+    ),
+    (
+        re.compile(
+            r"\b(?P<state>[A-Za-z_]\w*)\s*(?P<indexes>(?:\[[^\]]+\])+)"
+            r"\s*-=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+        ),
+        "-",
+    ),
     (re.compile(r"\b(?P<state>[A-Za-z_]\w*)\s*\+\+\s*;"), "+1"),
     (re.compile(r"\b(?P<state>[A-Za-z_]\w*)\s*--\s*;"), "-1"),
 )
@@ -40,24 +67,12 @@ def _function_body(source: str, function: FunctionModel) -> str:
     if not matches:
         return ""
 
-    # Prefer the function declaration closest to the modeled source line.
-    lines_before = source.splitlines(keepends=True)
-    line_offsets: list[int] = []
-    offset = 0
-    for line in lines_before:
-        line_offsets.append(offset)
-        offset += len(line)
-    candidates = [
-        match for match in matches
-        if 0 <= function.line - 1 < len(line_offsets)
-    ]
-    if not candidates:
-        return ""
     target = min(
-        candidates,
-        key=lambda match: abs(source.count("\n", 0, match.start()) + 1 - function.line),
+        matches,
+        key=lambda match: abs(
+            source.count("\n", 0, match.start()) + 1 - function.line
+        ),
     )
-
     opening = source.find("{", target.end())
     if opening < 0:
         return ""
@@ -73,14 +88,23 @@ def _function_body(source: str, function: FunctionModel) -> str:
     return ""
 
 
+def _index_expressions(raw: str) -> tuple[str, ...] | None:
+    expressions = tuple(
+        item.strip() for item in re.findall(r"\[([^\]]+)\]", raw)
+    )
+    if not expressions or any(not re.fullmatch(r"[A-Za-z_]\w*", item) for item in expressions):
+        return None
+    return expressions
+
+
 def plan_source_state_relations(
     contract: ContractModel, function: FunctionModel
 ) -> tuple[StateRelation, ...]:
     """Extract conservative, directly testable state postconditions.
 
-    This intentionally handles only literal additive/subtractive transitions
-    inside the selected function body. Mappings, arrays, call results, dynamic
-    expressions, and guessed invariants are left unresolved.
+    Scalar literal arithmetic and keyed literal arithmetic are supported.
+    Keyed relations are emitted only when every index is a bare identifier;
+    runtime observation later binds those identifiers to function parameters.
     """
     try:
         source = open(contract.source, encoding="utf-8").read()
@@ -93,7 +117,7 @@ def plan_source_state_relations(
 
     body = _function_body(source, function)
     if not body:
-        return ()
+        return ""
 
     relations: list[StateRelation] = []
     for pattern, operation in _PATTERNS:
@@ -102,18 +126,25 @@ def plan_source_state_relations(
             if state not in state_names:
                 continue
             rhs = match.groupdict().get("rhs")
+            raw_indexes = match.groupdict().get("indexes")
+            indexes = _index_expressions(raw_indexes) if raw_indexes else ()
+            if raw_indexes and indexes is None:
+                continue
+            suffix = "".join(f"[{item}]" for item in indexes)
+            subject = f"{state}{suffix}"
             if operation == "+1":
-                expression = f"after({state}) == before({state}) + 1"
+                expression = f"after({subject}) == before({subject}) + 1"
             elif operation == "-1":
-                expression = f"after({state}) == before({state}) - 1"
+                expression = f"after({subject}) == before({subject}) - 1"
             else:
-                expression = f"after({state}) == before({state}) {operation} {rhs}"
+                expression = f"after({subject}) == before({subject}) {operation} {rhs}"
             relations.append(
                 StateRelation(
                     state=state,
                     function=function.name,
                     expression=expression,
                     source=f"source:{contract.source}",
+                    index_expressions=tuple(indexes),
                 )
             )
     return tuple(dict.fromkeys(relations))
