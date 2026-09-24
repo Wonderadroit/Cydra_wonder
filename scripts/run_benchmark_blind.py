@@ -23,6 +23,7 @@ from cydra.foundry import (
     test_path_for,
 )
 from cydra.initialization_runtime import classify_initialization_execution
+from cydra.authorization_runtime import classify_authorization_blind_execution
 from cydra.pipeline import ReasoningContribution, _default_experiment_planner, investigate
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment, plan_guard_parity_experiment
@@ -64,8 +65,7 @@ CLASS_CAPABILITIES = {
         "plan_experiment": True,
         "generate_foundry": True,
         "execute_blind": True,
-        "classify_blind": False,
-        "classify_block_reason": "authorization classifier requires patched counterpart; blind target has none",
+        "classify_blind": True,
     },
     "initialization": {
         "extract": True,
@@ -327,15 +327,18 @@ def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[
         contract,
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    outcome = classify_authorization_blind_execution(hypothesis, execution)
     return {
         "generated_path": str(generated),
         "execution": execution,
-        "classification": "NOT_REACHED",
+        "classification": outcome.benchmark_status,
+        "classification_path": "single-sided authorization invariant classifier",
+        "internal_status": outcome.internal_status,
         "execution_status": execution.status,
         "execution_executed": execution.executed,
         "tests_run": execution.tests_run,
         "tests_failed": execution.tests_failed,
-        "classification_blocked_reason": CLASS_CAPABILITIES["authorization"]["classify_block_reason"],
+        "evidence": outcome.evidence,
     }
 
 
