@@ -298,7 +298,7 @@ def _execution_dataflow_requirements(
         if local not in predicates:
             continue
 
-        pure_local_expression = not re.search(r"\\b[A-Za-z_]\\w*\\s*\\(", expression)
+        pure_local_expression = not re.search(r"\b[A-Za-z_]\w*\s*\(", expression)
         dataflow_status = "constraint" if pure_local_expression else "required"
         dataflow_detail = (
             "deterministic local derivation used by an experiment constraint; "
@@ -445,7 +445,7 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     that depend on persistent target state or ambient execution context remain
     blocking prerequisites.
     """
-    identifiers = set(re.findall(r"\\b[A-Za-z_]\\w*\\b", predicate))
+    identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     state_names = set(contract.state_variables)
     parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
     local_names = {name for name, _ in function.execution_value_bindings}
