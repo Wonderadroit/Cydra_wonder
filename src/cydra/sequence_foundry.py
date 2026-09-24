@@ -6,6 +6,7 @@ import os
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source
 from .execution_readiness import _address_role, caller_role
+from .runtime_observation import plan_public_state_observations
 
 
 def generate_sequence_test_from_experiment(
@@ -15,6 +16,8 @@ def generate_sequence_test_from_experiment(
     target_type: str,
     output_path: str | Path,
     contract_model: ContractModel,
+    *,
+    verify_state_prerequisites: bool = False,
 ) -> Path:
     """Render a structured ordered experiment into an executable Foundry test.
 
@@ -48,6 +51,17 @@ def generate_sequence_test_from_experiment(
             )
         if any(not argument.strip() for argument in step.arguments):
             raise ValueError(f"sequence step {step.function} contains an empty argument")
+        if verify_state_prerequisites and function.name == hypothesis.target_function:
+            observations = plan_public_state_observations(contract_model, function)
+            if function.state_predicates and not observations:
+                raise ValueError(
+                    "state prerequisite has no deterministic public runtime observation; "
+                    "security sequence must fail closed"
+                )
+            rendered.extend(
+                f'        assertTrue({observation.expression}, "unverified prerequisite: {observation.predicate}");'
+                for observation in observations
+            )
         arguments = ", ".join(step.arguments)
         role = caller_role(function)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
