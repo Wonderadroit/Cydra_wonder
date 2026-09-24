@@ -24,8 +24,8 @@ def test_authorization_renderer_uses_recursive_execution_readiness_setup(tmp_pat
     output = tmp_path / "test.t.sol"
     generate_authorization_test_from_experiment(hypothesis, experiment, "./Target.sol", "Target", output, contract)
     rendered = output.read_text(encoding="utf-8")
-    assert "target.seed(0)" in rendered
-    assert "target.start(0)" in rendered
+    assert "target.seed(1)" in rendered
+    assert "target.start()" in rendered
 
 
 def test_authorization_renderer_fails_closed_when_caller_state_writer_is_unconstructible(tmp_path: Path):
