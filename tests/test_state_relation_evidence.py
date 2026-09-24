@@ -53,7 +53,7 @@ def test_relation_evidence_requires_passing_executed_assertion(tmp_path: Path):
 def test_relation_evidence_fails_closed_on_failed_execution(tmp_path: Path):
     plan = _plan(tmp_path)
     assert evidence_records_from_relation_execution(
-        "X-REL", (plan,), _execution(status="FAIL", exit_code=1)
+        "X-REL", (plan,), _execution(status="FAIL")
     ) == ()
 
 
