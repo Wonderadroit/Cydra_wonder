@@ -20,9 +20,8 @@ class StateObservationPlan:
 
 
 _PUBLIC_SCALAR_RE = re.compile(
-    r"^\s*(?P<type>(?:uint\d*|int\d*|bool|address|bytes\d*))\s+"
-    r"(?P<visibility>public)\s+(?P<name>[A-Za-z_]\w*)\s*(?:=[^;]*)?;$",
-    re.MULTILINE,
+    r"\b(?P<type>(?:uint\d*|int\d*|bool|address|bytes\d*))\s+"
+    r"(?P<visibility>public)\s+(?P<name>[A-Za-z_]\w*)\s*(?:=[^;]*)?;"
 )
 
 
