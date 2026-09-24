@@ -345,7 +345,7 @@ def _state_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> 
                 polarity = "must_not_hold"
         else:
             tail = body[_balanced_parenthesized_end(body, opening):].lstrip()
-            if re.match(r"revert\s*(?:\(|;)", tail):
+            if re.match(r"revert\b", tail):
                 polarity = "must_not_hold"
         add(predicate, polarity)
 
