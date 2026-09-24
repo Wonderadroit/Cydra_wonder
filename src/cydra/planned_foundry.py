@@ -211,13 +211,13 @@ def generate_authorization_test_from_experiment(
         defaults = conservative_defaults(writer.parameters)
         if defaults is None:
             continue
-        arguments = ", ".join(defaults.get(parameter.name, "") for parameter in writer.parameters)
+        setup_arguments = ", ".join(defaults.get(parameter.name, "") for parameter in writer.parameters)
         if any(not argument for argument in defaults.values()):
             continue
         role = caller_bindings.get(caller_role(writer), "attacker")
         setup_lines.append(
             f"        vm.prank({role});\n"
-            f"        try target.{writer.name}({arguments}) {{}} catch {{ setupOk = false; }}"
+            f"        try target.{writer.name}({setup_arguments}) {{}} catch {{ setupOk = false; }}"
         )
     setup_guard = (
         "        bool setupOk = true;\n"
