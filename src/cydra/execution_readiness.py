@@ -480,6 +480,20 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
     if identifiers & state_names or identifiers & ambient or "$." in predicate:
         return False
     bound_names = parameter_names | local_names
+    # A one-sided numeric comparison between an ABI input and modeled state
+    # can be satisfied by a conservative extremal input (for example
+    # epoch >= depositEpoch -> max uint). It is an experiment input constraint,
+    # not an environmental prerequisite, provided no ambient/call-derived value
+    # participates in the predicate.
+    parameter_state_order = bool(
+        identifiers & parameter_names
+        and identifiers & state_names
+        and re.search(r"(?:>=|<=|>|<)", predicate)
+        and not re.search(r"\\b(?:msg|tx|block|now)\\b", predicate)
+    )
+    if parameter_state_order:
+        return True
+
     if not (identifiers & bound_names):
         # A repeated lower-case identifier across multiple path predicates is
         # commonly a local derived scalar whose declaration the lightweight
