@@ -210,3 +210,41 @@ def test_sequence_renderer_can_emit_observed_public_state_prerequisite(tmp_path)
     )
     rendered = generated.read_text(encoding="utf-8")
     assert 'assertTrue(target.epoch() > 0, "unverified prerequisite: epoch > 0");' in rendered
+
+
+def test_sequence_renderer_can_stop_before_target_after_observation(tmp_path):
+    from cydra.models import FunctionModel
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { uint256 public epoch; "
+        "function seed() external { epoch = 1; } "
+        "function use() external { require(epoch > 0); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel("seed", "external", (), ("epoch",), (), 1),
+            FunctionModel(
+                "use", "external", (), (), (), 2,
+                state_predicates=("epoch > 0",),
+                state_predicate_polarities=(("epoch > 0", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis("H-STATE-epoch-stop", "candidate", "INV-STATE-epoch", "use", "attacker", "candidate")
+    experiment = Experiment(
+        "X-H-STATE-epoch-stop", hypothesis.hypothesis_id, "seed then use", ("violation",), 2.0,
+        steps=(ExperimentStep("seed", ()), ExperimentStep("use", ())),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True,
+        stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "target.seed();" in rendered
+    assert 'assertTrue(target.epoch() > 0, "unverified prerequisite: epoch > 0");' in rendered
+    assert "target.use();" not in rendered
