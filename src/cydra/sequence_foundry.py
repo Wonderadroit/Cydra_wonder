@@ -67,20 +67,22 @@ def generate_sequence_test_from_experiment(
                     "relation verification must fail closed"
                 )
             for plan in relation_plans:
+                snapshot_suffix = "_".join(plan.relation.index_expressions)
+                snapshot_name = f"before_{plan.state}" + (f"_{snapshot_suffix}" if snapshot_suffix else "")
                 relation_setups.append(
-                    f"        {plan.state_type} before_{plan.state} = {plan.getter};"
+                    f"        {plan.state_type} {snapshot_name} = {plan.getter};"
                 )
                 expression = plan.relation.expression
                 if " + " in expression:
                     amount = expression.rsplit(" + ", 1)[1]
                     relation_assertions.append(
-                        f'        assertEq({plan.getter}, before_{plan.state} + {amount}, '
+                        f'        assertEq({plan.getter}, {snapshot_name} + {amount}, '
                         f'"unverified state relation: {expression}");'
                     )
                 elif " - " in expression:
                     amount = expression.rsplit(" - ", 1)[1]
                     relation_assertions.append(
-                        f'        assertEq({plan.getter}, before_{plan.state} - {amount}, '
+                        f'        assertEq({plan.getter}, {snapshot_name} - {amount}, '
                         f'"unverified state relation: {expression}");'
                     )
         if verify_state_prerequisites and function.name == hypothesis.target_function:
