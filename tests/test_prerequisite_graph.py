@@ -110,3 +110,38 @@ def test_observation_kind_mismatch_does_not_promote():
     )
     assert unchanged.unresolved
     assert not can_enter_security_experiment(unchanged)
+
+
+def test_experiment_constraint_does_not_block_security_entry():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        execution_requirements=(
+            ExecutionRequirement(
+                "execution_predicate",
+                "amount > 0",
+                "test:body",
+                "constraint",
+            ),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.nodes[0].status == "constraint"
+    assert graph.unresolved == ()
+    assert can_enter_security_experiment(graph)
+
+
+def test_verified_prerequisite_still_blocks_until_verified():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        execution_requirements=(
+            ExecutionRequirement(
+                "execution_predicate",
+                "storedBalance > 0",
+                "test:body",
+                "required",
+            ),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.unresolved
+    assert not can_enter_security_experiment(graph)
