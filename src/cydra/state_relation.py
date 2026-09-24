@@ -31,17 +31,34 @@ _PATTERNS = (
 
 def _function_body(source: str, function: FunctionModel) -> str:
     """Return only the selected function body, failing closed on ambiguity."""
-    lines = source.splitlines()
+    matches = list(
+        re.finditer(
+            r"\bfunction\s+" + re.escape(function.name) + r"\s*\(",
+            source,
+        )
+    )
+    if not matches:
+        return ""
+
+    # Prefer the function declaration closest to the modeled source line.
+    lines_before = source.splitlines(keepends=True)
+    line_offsets: list[int] = []
+    offset = 0
+    for line in lines_before:
+        line_offsets.append(offset)
+        offset += len(line)
     candidates = [
-        (index, line)
-        for index, line in enumerate(lines)
-        if re.search(r"\bfunction\s+" + re.escape(function.name) + r"\s*\(", line)
+        match for match in matches
+        if 0 <= function.line - 1 < len(line_offsets)
     ]
     if not candidates:
         return ""
-    target_index = min(candidates, key=lambda item: abs(item[0] + 1 - function.line))[0]
-    start = sum(len(line) + 1 for line in lines[:target_index])
-    opening = source.find("{", start)
+    target = min(
+        candidates,
+        key=lambda match: abs(source.count("\n", 0, match.start()) + 1 - function.line),
+    )
+
+    opening = source.find("{", target.end())
     if opening < 0:
         return ""
     depth = 0
