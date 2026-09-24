@@ -355,6 +355,6 @@ def test_sequence_renderer_verifies_keyed_state_relation(tmp_path):
         verify_state_relations=True,
     )
     rendered = generated.read_text(encoding="utf-8")
-    assert "uint256 before_queued_user_epoch = target.queued(user, epoch);" in rendered
+    assert "uint256 before_queued_user_epoch = target.queued(attacker, 1);" in rendered
     assert "target.execute(attacker, 1);" in rendered
     assert "assertEq(target.queued(user, epoch), before_queued_user_epoch + 1" in rendered
