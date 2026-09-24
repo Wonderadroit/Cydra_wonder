@@ -389,7 +389,10 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
                 polarity = "must_not_hold"
         elif re.match(r"revert\s*(?:\(|;)", tail):
             polarity = "must_not_hold"
-        add(predicate, polarity)
+        # A non-reverting if branch selects a side effect; it is not an
+        # entry prerequisite and must not become an execution blocker.
+        if polarity != "unknown":
+            add(predicate, polarity)
 
     return tuple(results)
 
