@@ -94,6 +94,6 @@ def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
     so execution success cannot be mistaken for state satisfaction.
     """
 
-    return bool(graph.nodes) and not graph.unresolved and all(
+    return not graph.unresolved and all(
         node.status == "verified" for node in graph.nodes
     )
