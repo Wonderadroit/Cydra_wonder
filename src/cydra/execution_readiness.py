@@ -102,14 +102,26 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
         primitive = base in {"address", "bool", "string", "bytes"} or base.startswith(
             ("uint", "int", "bytes")
         )
+        interface_parameter = bool(
+            contract.constructor
+            and any(
+                parameter.name == parameter_name
+                for parameter_name, _interface_name in contract.constructor.interface_casts
+            )
+        )
         if not primitive:
             requirements.append(
                 ExecutionRequirement(
                     "constructor_dependency",
                     base,
                     "constructor",
-                    "required",
-                    f"constructor parameter {parameter.name or '<unnamed>'} uses a contract/interface/custom type",
+                    "constraint" if interface_parameter else "required",
+                    (
+                        "interface-typed constructor input can be materialized by the generic "
+                        "runtime stub; deployment remains part of experiment verification"
+                        if interface_parameter
+                        else f"constructor parameter {parameter.name or '<unnamed>'} uses a contract/interface/custom type"
+                    ),
                 )
             )
         if base == "address":
@@ -120,8 +132,8 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
                         "constructor_role",
                         role,
                         f"constructor:{parameter.name}",
-                        "required",
-                        "address parameter is a likely role/dependency binding by declared parameter name",
+                        "constraint",
+                        "constructor role is an experiment input binding; the generated deployment must materialize it",
                     )
                 )
     return tuple(requirements)
