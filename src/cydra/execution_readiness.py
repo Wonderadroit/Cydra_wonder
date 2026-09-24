@@ -298,14 +298,22 @@ def _execution_dataflow_requirements(
         if local not in predicates:
             continue
 
+        pure_local_expression = not re.search(r"\b[A-Za-z_]\w*\s*\(", expression)
+        dataflow_status = "constraint" if pure_local_expression else "required"
+        dataflow_detail = (
+            "deterministic local derivation used by an experiment constraint; "
+            "the generated experiment must reproduce the derivation"
+            if pure_local_expression
+            else "execution predicate depends on a locally bound call/input value; "
+            "the binding must be resolved before reachability is treated as satisfied"
+        )
         requirements.append(
             ExecutionRequirement(
                 "execution_dataflow",
                 f"{local} <- {expression}",
                 f"{function.name}:body",
-                "required",
-                "execution predicate depends on a locally bound call/input value; "
-                "the binding must be resolved before reachability is treated as satisfied",
+                dataflow_status,
+                dataflow_detail,
             )
         )
 
@@ -429,22 +437,57 @@ def _execution_dataflow_requirements(
     return tuple(dict.fromkeys(requirements))
 
 
-def _execution_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, predicate: str) -> bool:
+    """Separate pure input/local path conditions from environment prerequisites.
+
+    Predicates over ABI inputs, pure local derivations, literals, and source
+    constants are constraints for the generated experiment. Persistent state,
+    ambient context, and call-derived locals remain blocking prerequisites.
+    """
+    identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
+    state_names = set(contract.state_variables)
+    ambient = {"msg", "tx", "block", "now"}
+    if identifiers & state_names or identifiers & ambient or "$." in predicate:
+        return False
+    call_bound_locals = {
+        name
+        for name, expression in function.execution_value_bindings
+        if re.search(r"\b[A-Za-z_]\w*\s*\(", expression)
+    }
+    if identifiers & call_bound_locals:
+        return False
+    return True
+
+
+def _execution_requirements(
+    contract: ContractModel,
+    function: FunctionModel,
+) -> tuple[ExecutionRequirement, ...]:
     polarities = dict(function.execution_predicate_polarities)
-    return tuple(
-        ExecutionRequirement(
-            "execution_predicate",
-            predicate,
-            f"{function.name}:body",
-            "required",
-            {
-                "must_hold": "execution predicate must hold for the normal security-relevant path",
-                "must_not_hold": "execution predicate is a guarded revert condition and must not hold",
-                "unknown": "execution predicate polarity could not be established statically",
-            }.get(polarities.get(predicate, "unknown"), "execution predicate polarity is unknown"),
+    requirements: list[ExecutionRequirement] = []
+    for predicate in function.execution_predicates:
+        polarity = polarities.get(predicate, "unknown")
+        detail = {
+            "must_hold": "execution predicate must hold for the normal security-relevant path",
+            "must_not_hold": "execution predicate is a guarded revert condition and must not hold",
+            "unknown": "execution predicate polarity could not be established statically",
+        }.get(polarity, "execution predicate polarity is unknown")
+        status = "constraint" if _is_experiment_constraint(contract, function, predicate) else "required"
+        if status == "constraint":
+            detail = (
+                "pure input/local execution constraint; the generated experiment "
+                "must satisfy it before the security-relevant assertion"
+            )
+        requirements.append(
+            ExecutionRequirement(
+                "execution_predicate",
+                predicate,
+                f"{function.name}:body",
+                status,
+                detail,
+            )
         )
-        for predicate in function.execution_predicates
-    )
+    return tuple(requirements)
 
 
 def _state_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
@@ -698,7 +741,7 @@ def inspect_execution_readiness(
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(contract, selected) if selected else (),
         execution_requirements=(
-            (*_execution_requirements(selected), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
+            (*_execution_requirements(contract, selected), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
             if selected else ()
         ),
         state_requirements=(
