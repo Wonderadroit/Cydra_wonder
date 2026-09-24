@@ -1945,3 +1945,20 @@ Current research chain:
 model → invariant → hypothesis → prerequisite readiness → executable experiment → observation → class-specific causal verification → reproduction → finding gate.
 
 The next maturity work is therefore not another benchmark-specific detector. It is generic state-sequence observation/prerequisite verification and then adversarial unfamiliar-target campaigns that can produce a confirmed, reproducible finding without historical-answer leakage.
+
+
+## Milestone 86 — causal finding gate demonstrated on historical blind backtests
+
+The research loop now demonstrates the complete finding-producing path on frozen historical Solidity targets, while preserving the distinction between historical validation and unfamiliar-target discovery.
+
+Confirmed, reproducible examples include:
+- Alchemix `H-AUTH-setWhitelist`: blind unauthorized-call assertion failed, the patched control passed, causal verification reached `verified`, and the reproduction path reproduced the same failure while the patched reproduction passed.
+- Olas StakingToken `H-TRANSFER-ACCOUNTING-deposit`: the vulnerable execution demonstrated accounting exceeding the actual token balance delta, the patched control passed, and causal verification reached `READY`.
+- Olympus `H-CROSS-CONTRACT-ATTRIBUTION-repayLoan`: the vulnerable execution demonstrated debt reduction from an unrelated inflow, the patched control passed, and causal verification reached `READY`.
+- Morph implementation initialization also reached a verified initialization-lock differential and `READY` finding gate.
+
+These are historical/backtest demonstrations, not claims of newly discovered public vulnerabilities. They establish that CYDRA can carry a hypothesis through execution, causal verification, reproduction, and a finding gate when the required experiment surface exists.
+
+The next proof boundary remains unfamiliar-target discovery: a frozen unfamiliar target must produce a confirmed, reproducible finding without historical answer leakage. The current Benchmark 040 batch reached real blind execution and class-specific classification, but no unfamiliar-target finding was confirmed. State-sequence and arithmetic execution remain capability gaps where the existing invariant requires stronger independent verification or a generic executable renderer. Those gaps must be repaired generically rather than bypassed.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
