@@ -30,7 +30,7 @@ def test_successful_observation_promotes_only_after_execution():
     )
     graph = PrerequisiteGraph((
         PrerequisiteNode(
-            subject="epoch",
+            subject="epoch > 0",
             kind="state",
             status="unresolved",
             source="execution_readiness",
