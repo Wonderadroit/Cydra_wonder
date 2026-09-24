@@ -106,6 +106,11 @@ def plan_state_relation_observations(
         if not state_type.startswith("uint"):
             continue
 
+        if relation.rhs_expression is not None:
+            rhs_type = parameters.get(relation.rhs_expression)
+            if rhs_type is None or not rhs_type.startswith("uint"):
+                continue
+
         indexes = relation.index_expressions
         if len(indexes) != len(key_types):
             if indexes:
