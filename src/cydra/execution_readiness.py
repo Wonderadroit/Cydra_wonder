@@ -309,6 +309,21 @@ def _execution_dataflow_requirements(
             continue
         producer_name = call_match.group("name")
         producer = functions_by_name.get(producer_name)
+        member_call = re.match(
+            r"^(?P<receiver>[A-Za-z_]\\w*(?:\\([^)]*\\))?)\\.\\s*(?P<method>[A-Za-z_]\\w*)\\s*\\(",
+            expression,
+        )
+        if member_call and not _runtime_receiver_is_library(contract, member_call.group("receiver").split("(")[0]):
+            requirements.append(
+                ExecutionRequirement(
+                    "execution_value_runtime_dependency",
+                    f"{member_call.group('receiver')}.{member_call.group('method')}",
+                    f"{function.name}:value-binding",
+                    "unresolved",
+                    "execution value is produced by a non-library member call whose target/state "
+                    "must be resolved before the consumer is considered reachable",
+                )
+            )
         if producer is None:
             member_head = re.match(
                 r"^(?P<receiver>[A-Za-z_]\w*(?:\([^)]*\))?)\.\s*(?P<method>[A-Za-z_]\w*)\s*\(",
@@ -393,26 +408,6 @@ def _execution_dataflow_requirements(
                         "standard ERC-4626 positive-withdraw path requires a non-zero caller share balance and no compiler-backed constructible writer for that caller state was discovered",
                     )
                 )
-        # Member-call value sources such as IFactory(...).ownerOfAccount(...)
-        # and IAccount(...).increaseOpenPosition(...) are runtime producers, not
-        # local functions. Libraries are deterministic and already excluded by
-        # the runtime resolver; unresolved member calls must remain blockers.
-        member_call = re.match(
-            r"^(?P<receiver>[A-Za-z_]\w*(?:\([^)]*\))?)\.\s*(?P<method>[A-Za-z_]\w*)\s*\(",
-            expression,
-        )
-        if member_call and not _runtime_receiver_is_library(contract, member_call.group("receiver").split("(")[0]):
-            requirements.append(
-                ExecutionRequirement(
-                    "execution_value_runtime_dependency",
-                    f"{member_call.group('receiver')}.{member_call.group('method')}",
-                    f"{function.name}:value-binding",
-                    "unresolved",
-                    "execution value is produced by a non-library member call whose target/state "
-                    "must be resolved before the consumer is considered reachable",
-                )
-            )
-
         if producer_reads:
             for state in producer_reads:
                 requirements.append(
