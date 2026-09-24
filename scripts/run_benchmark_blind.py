@@ -599,19 +599,12 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             statuses.append(status)
             continue
 
-        # Do not execute a security experiment until every modeled prerequisite
-        # has explicit evidence. Discovery is not verification.
-        if not can_enter_security_experiment(prerequisite_graph):
-            status["blind_executed"] = False
-            status["classification"] = "NOT_REACHED"
-            status["classification_blocked_reason"] = "security experiment prerequisites are not verified"
-            status["prerequisites"] = _json(prerequisite_graph)
-            status.update(status_prerequisite)
-            evidence.extend(prerequisite_observation_evidence)
-            statuses.append(status)
-            continue
-
+        # State relation verification is itself a prerequisite. It must run
+        # before the final security-experiment admission gate so that a
+        # source-backed transition can become measured evidence rather than
+        # being blocked merely because the modeled relation is not yet verified.
         if class_name == "state":
+
             try:
                 relation_execution, relation_plans, relation_evidence = _run_state_relation_verification(
                     project, hypothesis, experiment, contract
@@ -657,6 +650,18 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                 evidence.extend(prerequisite_observation_evidence)
                 statuses.append(status)
                 continue
+
+        # Do not execute a security experiment until every modeled prerequisite
+        # has explicit evidence. Discovery is not verification.
+        if not can_enter_security_experiment(prerequisite_graph):
+            status["blind_executed"] = False
+            status["classification"] = "NOT_REACHED"
+            status["classification_blocked_reason"] = "security experiment prerequisites are not verified"
+            status["prerequisites"] = _json(prerequisite_graph)
+            status.update(status_prerequisite)
+            evidence.extend(prerequisite_observation_evidence)
+            statuses.append(status)
+            continue
 
         try:
             if class_name == "authorization":
