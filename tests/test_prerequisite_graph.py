@@ -93,3 +93,20 @@ def test_mismatching_runtime_observation_blocks_prerequisite():
     )
     assert blocked.nodes[0].status == "blocked"
     assert not can_enter_security_experiment(blocked)
+
+
+
+def test_observation_kind_mismatch_does_not_promote():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "balance > 0", "model", "required"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    unchanged = apply_observations(
+        graph,
+        (PrerequisiteObservation("execution_predicate", "balance > 0", "true", "true", "E-SETUP-3"),),
+    )
+    assert unchanged.unresolved
+    assert not can_enter_security_experiment(unchanged)
