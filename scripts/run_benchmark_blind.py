@@ -888,7 +888,7 @@ def run_source_investigation(
         )
         result = investigate(
             source,
-            target=f"{args.target_repo}@{args.target_ref}",
+            target=f"{target_repo}@{target_ref}",
             semantic_evidence=compiler_evidence.evidence,
             constraint_evidence=compiler_evidence.constraints,
             experiment_planner=_blind_planner,
@@ -972,10 +972,10 @@ def run_source_investigation(
         )
         provenance = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "target_repo": args.target_repo,
-            "target_ref": args.target_ref,
-            "target_path": args.target_path,
-            "target_project": args.target_project,
+            "target_repo": target_repo,
+            "target_ref": target_ref,
+            "target_path": target_path,
+            "target_project": target_project,
             "classes": list(classes),
             "cydra_commit": cydra_commit,
             "environment": provenance_env,
@@ -1002,7 +1002,7 @@ def run_source_investigation(
             "provenance.json": provenance,
             "target-intake.json": target_intake.to_dict(),
             "execution-readiness.json": execution_readiness,
-            "parse-output.json": {"target": args.target_path, "contracts": _json(result.contracts)},
+            "parse-output.json": {"target": target_path, "contracts": _json(result.contracts)},
             "invariants.json": result.invariants,
             "hypotheses.json": result.hypotheses,
             "experiments.json": result.experiments,
