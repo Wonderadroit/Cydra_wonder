@@ -308,3 +308,35 @@ def test_interface_initializer_parameter_is_not_declared_with_memory(tmp_path):
     source = output.read_text(encoding="utf-8")
     assert "IERC20Metadata memory parameter0;" not in source
     assert "IERC20Metadata parameter0;" in source
+
+
+def test_imported_interface_initializer_parameter_is_not_declared_with_memory(tmp_path):
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    interfaces = tmp_path / "interfaces"
+    interfaces.mkdir()
+    (interfaces / "IHinkalHelper.sol").write_text(
+        "interface IHinkalHelper { function calculateRelayFee(uint256 amount) external view returns (uint256); }\n",
+        encoding="utf-8",
+    )
+    source_path = tmp_path / "EmporiumUpgradeable.sol"
+    source_path.write_text(
+        'import "./interfaces/IHinkalHelper.sol";\n'
+        "contract EmporiumUpgradeable { function initialize(IHinkalHelper helper) external {} }\n",
+        encoding="utf-8",
+    )
+    model = _model(
+        "EmporiumUpgradeable",
+        (),
+        (ParameterModel("helper", "IHinkalHelper"),),
+    )
+    model = ContractModel(**{**model.__dict__, "source": str(source_path)})
+    output = generate_initialization_test(
+        _hypothesis(),
+        "../src/EmporiumUpgradeable.sol",
+        "EmporiumUpgradeable",
+        tmp_path / "test" / "generated.t.sol",
+        contract_model=model,
+    )
+    source = output.read_text(encoding="utf-8")
+    assert "IHinkalHelper memory parameter0;" not in source
+    assert "IHinkalHelper parameter0;" in source
