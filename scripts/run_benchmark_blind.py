@@ -851,29 +851,25 @@ def _blind_planner(hypothesis):
     # crash the entire blind investigation with a planner KeyError.
     return _default_experiment_planner(hypothesis)
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Run frozen CYDRA capability layers against a blind target."
-    )
-    parser.add_argument("--target-repo", required=True)
-    parser.add_argument("--target-ref", required=True)
-    parser.add_argument("--target-path", required=True)
-    parser.add_argument("--target-project", required=True)
-    parser.add_argument("--classes", nargs="+", required=True)
-    parser.add_argument("--freeze", type=Path, required=True)
-    parser.add_argument("--ci-run-id")
-    args = parser.parse_args()
-
+def run_source_investigation(
+    *,
+    target_repo: str,
+    target_ref: str,
+    target_path: str,
+    target_project: str,
+    classes: list[str] | tuple[str, ...],
+    freeze: Path,
+) -> int:
     require_frozen_source()
-    classes = validate_classes(args.classes)
+    classes = validate_classes(list(classes))
     root = Path(__file__).resolve().parents[1]
     cydra_commit = _git_output(root, "rev-parse", "HEAD")
 
     with tempfile.TemporaryDirectory(prefix="b006-a-target-") as temp:
         checkout = Path(temp) / "target"
-        clone_target(args.target_repo, args.target_ref, checkout)
-        project = checkout / args.target_project
-        source = checkout / args.target_path
+        clone_target(target_repo, target_ref, checkout)
+        project = checkout / target_project
+        source = checkout / target_path
 
         prepare_target_project(project)
         target_intake = inspect_target(project, source)
@@ -892,7 +888,7 @@ def main() -> int:
         )
         result = investigate(
             source,
-            target=f"{args.target_repo}@{args.target_ref}",
+            target=f"{target_repo}@{target_ref}",
             semantic_evidence=compiler_evidence.evidence,
             constraint_evidence=compiler_evidence.constraints,
             experiment_planner=_blind_planner,
@@ -976,10 +972,10 @@ def main() -> int:
         )
         provenance = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "target_repo": args.target_repo,
-            "target_ref": args.target_ref,
-            "target_path": args.target_path,
-            "target_project": args.target_project,
+            "target_repo": target_repo,
+            "target_ref": target_ref,
+            "target_path": target_path,
+            "target_project": target_project,
             "classes": list(classes),
             "cydra_commit": cydra_commit,
             "environment": provenance_env,
@@ -1006,16 +1002,38 @@ def main() -> int:
             "provenance.json": provenance,
             "target-intake.json": target_intake.to_dict(),
             "execution-readiness.json": execution_readiness,
-            "parse-output.json": {"target": args.target_path, "contracts": _json(result.contracts)},
+            "parse-output.json": {"target": target_path, "contracts": _json(result.contracts)},
             "invariants.json": result.invariants,
             "hypotheses.json": result.hypotheses,
             "experiments.json": result.experiments,
             "execution.json": execution_json,
             "classification.json": classification,
         }
-        create_freeze(files, text_files, args.freeze)
+        create_freeze(files, text_files, freeze)
 
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run frozen CYDRA capability layers against a blind target."
+    )
+    parser.add_argument("--target-repo", required=True)
+    parser.add_argument("--target-ref", required=True)
+    parser.add_argument("--target-path", required=True)
+    parser.add_argument("--target-project", required=True)
+    parser.add_argument("--classes", nargs="+", required=True)
+    parser.add_argument("--freeze", type=Path, required=True)
+    parser.add_argument("--ci-run-id")
+    args = parser.parse_args()
+    return run_source_investigation(
+        target_repo=args.target_repo,
+        target_ref=args.target_ref,
+        target_path=args.target_path,
+        target_project=args.target_project,
+        classes=args.classes,
+        freeze=args.freeze,
+    )
 
 
 if __name__ == "__main__":

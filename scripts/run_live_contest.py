@@ -7,8 +7,12 @@ import os
 import subprocess
 import tempfile
 import re
+import contextlib
+import io
 from pathlib import Path
 from typing import Any
+
+from run_benchmark_blind import run_source_investigation
 
 
 REQUIRED_KEYS = {
@@ -118,11 +122,10 @@ def prepare_shared_dependencies(checkout: Path, temp_root: Path) -> dict[str, st
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the canonical CYDRA research pipeline against one pinned live contest target.")
+    parser = argparse.ArgumentParser(description="Run the single canonical CYDRA live-target dogfood pipeline.")
     parser.add_argument("--target-spec", type=Path, required=True)
     parser.add_argument("--target-checkout", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--classes", nargs="+", default=["authorization", "initialization", "arithmetic", "state", "guard_parity"])
     args = parser.parse_args()
 
     spec = load_spec(args.target_spec)
@@ -167,22 +170,32 @@ def main() -> int:
         for index, source in enumerate(sources, start=1):
             artifact = output / f"{index:04d}-{Path(source).stem}"
             artifact.mkdir(parents=True, exist_ok=True)
-            command = [
-                os.fspath(Path(__file__).resolve().parent / "run_benchmark_blind.py"),
-                "--target-repo", local_repo,
-                "--target-ref", spec["target_ref"],
-                "--target-path", source,
-                "--target-project", spec["project_path"],
-                "--classes", *args.classes,
-                "--freeze", str(artifact / "freeze"),
-            ]
-            completed = subprocess.run(["python", *command], text=True, capture_output=True, check=False, env=child_env)
-            (artifact / "runner.stdout.txt").write_text(completed.stdout, encoding="utf-8")
-            (artifact / "runner.stderr.txt").write_text(completed.stderr, encoding="utf-8")
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            previous_env = os.environ.copy()
+            try:
+                os.environ.update(child_env)
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    exit_code = run_source_investigation(
+                        target_repo=local_repo,
+                        target_ref=spec["target_ref"],
+                        target_path=source,
+                        target_project=spec["project_path"],
+                        classes=("authorization", "initialization", "arithmetic", "state", "guard_parity"),
+                        freeze=artifact / "freeze",
+                    )
+            except Exception as error:
+                exit_code = 1
+                stderr.write(f"{type(error).__name__}: {error}\n")
+            finally:
+                os.environ.clear()
+                os.environ.update(previous_env)
+            (artifact / "runner.stdout.txt").write_text(stdout.getvalue(), encoding="utf-8")
+            (artifact / "runner.stderr.txt").write_text(stderr.getvalue(), encoding="utf-8")
             result: dict[str, Any] = {
                 "source": source,
-                "exit_code": completed.returncode,
-                "ok": completed.returncode == 0,
+                "exit_code": exit_code,
+                "ok": exit_code == 0,
                 "artifact": str(artifact.relative_to(output)),
             }
             classification = artifact / "freeze" / "classification.json"
