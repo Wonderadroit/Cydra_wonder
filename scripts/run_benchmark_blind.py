@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from cydra.compiler_state import CompilerEvidenceResult, compile_repository_state_effects, compile_state_effects
+from cydra.compiler_state import CompilerEvidenceResult, compile_repository_state_effects
 from cydra.foundry import (
     ExecutionResult,
     generate_initialization_test,
