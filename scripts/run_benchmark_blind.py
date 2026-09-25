@@ -276,11 +276,16 @@ def prepare_target_project(project: Path) -> None:
     # the standard library only when the target does not already vendor it.
     forge_std = project / "lib" / "forge-std"
     if not forge_std.exists():
-        subprocess.run(
-            ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
-            cwd=project,
-            check=True,
-        )
+        shared_forge_std = os.environ.get("CYDRA_FORGE_STD")
+        if shared_forge_std and Path(shared_forge_std).is_dir():
+            forge_std.parent.mkdir(parents=True, exist_ok=True)
+            forge_std.symlink_to(Path(shared_forge_std), target_is_directory=True)
+        else:
+            subprocess.run(
+                ("forge", "install", "foundry-rs/forge-std", "--no-commit"),
+                cwd=project,
+                check=True,
+            )
 
     # Hardhat/npm targets are accepted by target intake and need a temporary
     # Foundry execution envelope. Never overwrite a target-authored config.

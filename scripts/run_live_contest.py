@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import tempfile
+import re
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,9 @@ def discover_sources(checkout: Path, roots: list[str]) -> list[str]:
             relative = safe_relative(source, checkout)
             if relative.startswith(excluded_prefixes):
                 continue
+            text = source.read_text(encoding="utf-8", errors="ignore")
+            if not re.search(r"\b(?:abstract\s+)?contract\s+[A-Za-z_][A-Za-z0-9_]*", text):
+                continue
             found.add(relative)
     return sorted(found)
 
@@ -102,6 +106,7 @@ def main() -> int:
         "out_of_scope": spec["out_of_scope"],
         "rules": spec["rules"],
         "source_count": len(sources),
+        "source_selection": "concrete-or-abstract contract declarations only; interface/library/type-only Solidity files remain dependencies",
         "sources": sources,
     })
 
@@ -109,6 +114,12 @@ def main() -> int:
     results: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="cydra-live-run-") as temp:
         temp_root = Path(temp)
+        shared_forge_std = temp_root / "forge-std"
+        dependency = run(["git", "clone", "--depth", "1", "https://github.com/foundry-rs/forge-std.git", str(shared_forge_std)])
+        if dependency.returncode != 0:
+            raise RuntimeError(f"failed to prepare shared forge-std: {dependency.stderr.strip()}")
+        child_env = os.environ.copy()
+        child_env["CYDRA_FORGE_STD"] = os.fspath(shared_forge_std)
         for index, source in enumerate(sources, start=1):
             artifact = output / f"{index:04d}-{Path(source).stem}"
             artifact.mkdir(parents=True, exist_ok=True)
@@ -121,7 +132,7 @@ def main() -> int:
                 "--classes", *args.classes,
                 "--freeze", str(artifact / "freeze"),
             ]
-            completed = run(["python", *command])
+            completed = subprocess.run(["python", *command], text=True, capture_output=True, check=False, env=child_env)
             (artifact / "runner.stdout.txt").write_text(completed.stdout, encoding="utf-8")
             (artifact / "runner.stderr.txt").write_text(completed.stderr, encoding="utf-8")
             result: dict[str, Any] = {
