@@ -1,0 +1,19 @@
+{
+  "program": "RAIN-USDR Smart Contract Audit Contest (Sept 2026)",
+  "program_url": "https://hackenproof.com/audit-programs/rain-usdr-smart-contract-audit-contest-sept-2026",
+  "target_repo": "hackenproof-public/rain-usdr-contracts",
+  "target_url": "https://github.com/hackenproof-public/rain-usdr-contracts/tree/bd6e03abe34936b7dbece2509b90457bd5c9b119",
+  "target_ref": "bd6e03abe34936b7dbece2509b90457bd5c9b119",
+  "project_path": ".",
+  "in_scope": ["contracts"],
+  "out_of_scope": ["tests", "mocks", "deploy", "script", "scripts", "lib", "node_modules", "docs", "documentation"],
+  "rules": {
+    "authorized_testing": true,
+    "localized_to_researcher_accounts": true,
+    "third_party_contract_testing": false,
+    "oracle_testing": false,
+    "dos_testing": false,
+    "public_disclosure": false,
+    "human_validation_required": true
+  }
+}
