@@ -1004,10 +1004,18 @@ def main() -> int:
             "provenance.json": provenance,
             "target-intake.json": target_intake.to_dict(),
             "execution-readiness.json": execution_readiness,
-            "parse-output.json": {\n                "target": args.target_path,\n                "repository": {\n                    "source_files": list(campaign.source_files),\n                    "skipped_files": list(campaign.skipped_files),\n                    "contracts": _json(campaign.contracts),\n                    "system_model": campaign.system_model.export(),\n                },\n            },
-            "invariants.json": result.invariants,
-            "hypotheses.json": result.hypotheses,
-            "experiments.json": result.experiments,
+            "parse-output.json": {
+                "target": args.target_path,
+                "repository": {
+                    "source_files": list(campaign.source_files),
+                    "skipped_files": list(campaign.skipped_files),
+                    "contracts": _json(campaign.contracts),
+                    "system_model": campaign.system_model.export(),
+                },
+            },
+            "invariants.json": campaign.invariants,
+            "hypotheses.json": campaign.hypotheses,
+            "experiments.json": campaign.experiments,
             "execution.json": execution_json,
             "classification.json": classification,
         }
