@@ -436,7 +436,7 @@ def _run_state_relation_verification(
     hypothesis,
     experiment,
     contract,
-) -> tuple[Any, tuple[Any, ...], tuple[Any, ...]]:
+) -> tuple[Any, tuple[Any, ...], tuple[Any, ...], tuple[Any, ...]]:
     """Verify a source-backed state transition before any state classification."""
     function = next(
         (item for item in (*contract.functions, *contract.inherited_functions)
