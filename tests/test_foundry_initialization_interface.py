@@ -276,3 +276,35 @@ def test_model_aware_generator_imports_bare_resolved_interface_initializer_type(
     assert 'import { IERC20Metadata } from "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";' in source
     assert "IERC20Metadata(address(tokenStub))" in source
     assert "IERC20Metadata memory parameter0;" not in source
+
+
+def test_interface_initializer_parameter_is_not_declared_with_memory(tmp_path):
+    interface = ResolvedInterface(
+        name="IERC20Metadata",
+        source_path="interfaces/IERC20Metadata.sol",
+        resolution_method="relative_import",
+        methods=(InterfaceMethod("decimals", (), ("uint8",)),),
+    )
+    source_path = tmp_path / "Vault.sol"
+    source_path.write_text(
+        "interface IERC20Metadata { function decimals() external view returns (uint8); }\n"
+        "contract Vault { function initialize(IERC20Metadata asset_) external {} }\n",
+        encoding="utf-8",
+    )
+    model = _model(
+        "Vault",
+        (),
+        (ParameterModel("asset_", "IERC20Metadata"),),
+        inherited_resolved_interfaces=(interface,),
+    )
+    model = ContractModel(**{**model.__dict__, "source": str(source_path)})
+    output = generate_initialization_test(
+        _hypothesis(),
+        "../src/Vault.sol",
+        "Vault",
+        tmp_path / "generated.t.sol",
+        contract_model=model,
+    )
+    source = output.read_text(encoding="utf-8")
+    assert "IERC20Metadata memory parameter0;" not in source
+    assert "IERC20Metadata parameter0;" in source
