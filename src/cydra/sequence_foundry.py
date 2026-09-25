@@ -85,6 +85,22 @@ def generate_sequence_test_from_experiment(
                 for parameter_name, argument in parameter_bindings.items():
                     getter = re.sub(rf"\b{re.escape(parameter_name)}\b", argument, getter)
                 getter = re.sub(r"\bmsg\.sender\b", relation_caller, getter)
+
+                # A mapping index sourced from contract state must be frozen
+                # before the transition. Otherwise a function that changes the
+                # index state would make the post-state getter observe a
+                # different key and could create false relation failures.
+                for state_name, state_type in plan.index_state_types:
+                    index_snapshot = f"before_index_{state_name}"
+                    relation_setups.append(
+                        f"        {state_type} {index_snapshot} = target.{state_name}();"
+                    )
+                    getter = re.sub(
+                        rf"\btarget\.{re.escape(state_name)}\(\)",
+                        index_snapshot,
+                        getter,
+                    )
+
                 snapshot_suffix = "_".join(
                     re.sub(r"[^A-Za-z0-9_]+", "_", item)
                     for item in plan.relation.index_expressions
