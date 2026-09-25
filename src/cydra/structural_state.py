@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .models import ContractModel, Hypothesis, Invariant
-from .pipeline import ReasoningContribution
+from .reasoning_surface import ReasoningContribution
 
 
 def _shared_state_writers(
