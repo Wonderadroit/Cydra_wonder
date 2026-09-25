@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from collections.abc import Callable, Iterable
+import inspect
 from dataclasses import replace
 
 from .ast_dataflow import SemanticRelationshipEvidence
@@ -71,7 +72,7 @@ from .reasoning_surface import ReasoningContribution
 from .structural_state import generate_cross_function_state_hypotheses
 
 
-ReasoningSurface = Callable[[ContractModel, tuple[SemanticRelationshipEvidence, ...]], ReasoningContribution]
+ReasoningSurface = Callable[..., ReasoningContribution]
 
 
 def _merge_hypotheses(*groups):
@@ -207,6 +208,7 @@ def investigate(
     constraint_evidence: Iterable[ConstraintEvidence] | None = None,
     experiment_planner: Callable[[Hypothesis], Experiment] | None = None,
     reasoning_surfaces: Iterable[ReasoningSurface] | None = None,
+    system_model=None,
 ) -> InvestigationResult:
     """Build an investigation while keeping experiment transport class-neutral.
 
@@ -283,7 +285,14 @@ def investigate(
         surface_invariants: list[Invariant] = []
         surface_hypotheses: list[Hypothesis] = []
         for surface in surfaces:
-            contribution = surface(contract, contract_semantic)
+            # Repository-aware surfaces may consume the canonical SystemModel.
+            # Legacy surfaces remain two-argument adapters. The graph is context,
+            # not a finding: explicit hypotheses still require executable evidence.
+            parameters = inspect.signature(surface).parameters
+            if system_model is not None and len(parameters) >= 3:
+                contribution = surface(contract, contract_semantic, system_model)
+            else:
+                contribution = surface(contract, contract_semantic)
             surface_invariants.extend(contribution.invariants)
             surface_hypotheses.extend(contribution.hypotheses)
 
