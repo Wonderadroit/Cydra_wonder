@@ -1030,6 +1030,17 @@ def run_source_investigation(
             }
         classification["class_coverage"] = by_class
         classification["unexecuted_reasoning_surfaces"] = unexecuted_reasoning_surfaces
+        # A target can fail the default forge build while compiler-backed
+        # evidence succeeds through the generic fallback (for example via-IR).
+        # Keep both facts, but expose the effective compiler state so downstream
+        # consumers do not mistake a recoverable build-mode mismatch for loss of
+        # compiler evidence.
+        if compiler_evidence.status == "success":
+            classification["compiler_status"] = (
+                "build_success" if build_capture["ok"] else "compiler_evidence_success_build_mode_failed"
+            )
+        else:
+            classification["compiler_status"] = "compiler_evidence_failed"
         classification["taxonomy"] = {
             "confirmed": "independently confirmed initialization candidate",
             "not_confirmed": "executed candidate did not confirm",
