@@ -2010,3 +2010,17 @@ PR #229 subsequently rebased the state-relation mismatch evidence boundary onto 
 The immediate next boundary remains behavioral and causal: use the newly connected shared-state discovery surface and mismatch evidence in unfamiliar-target campaigns, then diagnose whether CYDRA can turn a generic state inconsistency into a discriminating causal experiment and independently reproducible impact without benchmark-specific PoCs. Do not add another detector unless an unfamiliar investigation demonstrates a missing general capability.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+
+## Milestone 91 — repository-wide blind research orchestration
+
+The first live Arcadia accounts-v2 dogfood exposed a scope boundary: the target checkout was cloned and compiled successfully, but the blind entrypoint modeled only the selected `src/Factory.sol` file. The resulting artifact had valid provenance, compilation, and freeze integrity but no repository-wide hypotheses. This was not treated as evidence that the target was safe or that CYDRA had exhausted its reasoning.
+
+PR #231 adds a generic repository-level orchestration boundary. In-scope Solidity source is deterministically inventoried while tests, mocks, scripts, deployment tooling, generated output, and vendored dependencies remain outside the research surface. All parsed contracts are projected into one canonical `SystemModel` before contract-level hypothesis generation begins. Existing reasoning surfaces and experiment planners are reused rather than duplicated, and generated hypothesis/experiment identities are namespaced so similarly named functions in different contracts cannot overwrite each other's execution artifacts.
+
+The blind runner now consumes this repository campaign and records the complete source inventory, skipped-source set, contract count, canonical node/edge counts, and repository SystemModel in the frozen artifact. The selected `target_path` remains an execution/compiler anchor; it no longer defines the entire reasoning scope.
+
+This closes an important composition gap: repository understanding and the existing reasoning/execution machinery now share one blind campaign boundary. It does not yet prove autonomous bug discovery. The next proof boundary is that repository-wide hypotheses are selected by information gain, executed causally, and can reach a reproducible finding gate on an unfamiliar target without historical-answer leakage.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
