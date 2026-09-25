@@ -613,6 +613,43 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
+def _execution_adapter(class_name: str):
+    """Return the generic runtime adapter for an executable capability class.
+
+    This is the single runtime dispatch boundary. New reasoning surfaces may be
+    planned without being executable; they must be represented as explicit
+    capability gaps rather than silently skipped or falsely marked executed.
+    """
+    return {
+        "authorization": _run_authorization,
+        "state": _run_state,
+        "initialization": _run_initialization,
+        "guard_parity": _run_guard_parity,
+    }.get(class_name)
+
+
+def _unknown_reasoning_status(hypothesis, experiment) -> dict[str, Any]:
+    """Record a planned-but-not-yet-executable reasoning surface explicitly."""
+    return {
+        "hypothesis_id": hypothesis.hypothesis_id,
+        "class": "reasoning_surface",
+        "invariant_id": hypothesis.invariant_id,
+        "target_function": hypothesis.target_function,
+        "experiment_id": experiment.experiment_id,
+        "extracted": True,
+        "hypothesis_generated": True,
+        "experiment_planned": True,
+        "foundry_generated": False,
+        "blind_executed": False,
+        "classification": "NOT_REACHED",
+        "execution_capability": "UNIMPLEMENTED",
+        "blocked_reason": (
+            "reasoning surface is planned by the canonical pipeline but has no "
+            "generic runtime adapter yet"
+        ),
+    }
+
+
 def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidence: CompilerEvidenceResult):
     experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
     statuses: list[dict[str, Any]] = []
@@ -625,10 +662,13 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             class_name = "state"
         if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
             class_name = "guard_parity"
-        if class_name is None or class_name not in classes:
+        experiment = experiments[hypothesis.hypothesis_id]
+        if class_name is None:
+            statuses.append(_unknown_reasoning_status(hypothesis, experiment))
+            continue
+        if class_name not in classes:
             continue
         capability = CLASS_CAPABILITIES[class_name]
-        experiment = experiments[hypothesis.hypothesis_id]
         contract = _contract_for_hypothesis(result, hypothesis)
         function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
         readiness = inspect_execution_readiness(
@@ -761,16 +801,10 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                 continue
 
         try:
-            if class_name == "authorization":
-                run = _run_authorization(project, hypothesis, experiment, contract)
-            elif class_name == "state":
-                run = _run_state(project, hypothesis, experiment, contract)
-            elif class_name == "initialization":
-                run = _run_initialization(project, hypothesis, experiment, contract)
-            elif class_name == "guard_parity":
-                run = _run_guard_parity(project, hypothesis, experiment, contract)
-            else:
-                raise AssertionError(f"Unhandled supported class: {class_name}")
+            adapter = _execution_adapter(class_name)
+            if adapter is None:
+                raise AssertionError(f"No runtime adapter registered for executable class: {class_name}")
+            run = adapter(project, hypothesis, experiment, contract)
         except Exception as error:
             stage = "generation" if not any(
                 project.joinpath("test").rglob(f"{hypothesis.hypothesis_id}.t.sol")
@@ -922,16 +956,20 @@ def run_source_investigation(
         # "complete" investigation.
         unexecuted_reasoning_surfaces = []
         for hypothesis in result.hypotheses:
-            if hypothesis.invariant_id in INVARIANT_CLASS:
+            class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
+            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-")):
                 continue
-            if hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-")):
-                continue
-            if hypothesis.invariant_id.startswith(REASONING_SURFACE_PREFIXES):
+            if class_name is None:
+                experiment = next(
+                    item for item in result.experiments
+                    if item.hypothesis_id == hypothesis.hypothesis_id
+                )
                 unexecuted_reasoning_surfaces.append({
                     "hypothesis_id": hypothesis.hypothesis_id,
                     "invariant_id": hypothesis.invariant_id,
                     "target_function": hypothesis.target_function,
-                    "reason": "reasoning surface is generated by the canonical pipeline but has no legacy blind execution adapter",
+                    "experiment_id": experiment.experiment_id,
+                    "reason": "reasoning surface is generated and planned by the canonical pipeline but has no generic runtime adapter",
                 })
 
         statuses, executions, evidence = run_layers(result, project, classes, compiler_evidence)
@@ -943,7 +981,9 @@ def run_source_investigation(
                 class_name = "state"
             if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
                 class_name = "guard_parity"
-            if class_name is None or class_name not in classes:
+            if class_name is None:
+                class_name = "reasoning_surface"
+            elif class_name not in classes:
                 continue
             contract = _contract_for_hypothesis(result, hypothesis)
             function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
