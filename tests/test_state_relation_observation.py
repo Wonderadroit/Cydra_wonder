@@ -181,3 +181,28 @@ def test_relation_observation_binds_caller_and_state_indexes(tmp_path: Path):
     plans = plan_state_relation_observations(model, model.functions[0])
     assert len(plans) == 1
     assert plans[0].getter == "target.queuedDeposit(msg.sender, target.depositEpoch())"
+
+    
+def test_relation_observation_records_state_backed_index_type(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { "
+        "uint128 public epoch; "
+        "mapping(uint256 => uint256) public queued; "
+        "function queue(uint256 amount) external { queued[epoch] += amount; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "queue", "external", (), ("queued",), (), 4,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("epoch", "queued"),
+    )
+    plans = plan_state_relation_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].index_state_types == (("epoch", "uint128"),)
