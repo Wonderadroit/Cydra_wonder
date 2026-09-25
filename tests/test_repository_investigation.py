@@ -36,3 +36,21 @@ def test_repository_investigation_builds_one_canonical_model_from_multiple_contr
     ]
     assert {node.label for node in contract_nodes} == {"A", "B"}
     assert any(edge.relation == "defined_in" for edge in campaign.system_model.edges)
+
+
+def test_repository_namespace_keeps_same_function_names_executable(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    source = "pragma solidity ^0.8.0; contract A { uint256 value; function set(uint256 x) external { value = x; } }"
+    (src / "A.sol").write_text(source)
+    (src / "B.sol").write_text(source.replace("contract A", "contract B"))
+
+    campaign = investigate_repository(tmp_path)
+    ids = [
+        hypothesis.hypothesis_id
+        for result in campaign.results
+        for hypothesis in result.hypotheses
+    ]
+
+    assert ids == sorted(ids)
+    assert len(ids) == len(set(ids))
