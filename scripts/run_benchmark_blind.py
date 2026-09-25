@@ -36,7 +36,10 @@ from cydra.prerequisite_graph import apply_observations, build_prerequisite_grap
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
 from cydra.state_relation_observation import plan_state_relation_observations
-from cydra.state_relation_evidence import evidence_records_from_relation_execution
+from cydra.state_relation_evidence import (
+    evidence_records_from_relation_execution,
+    violation_records_from_relation_execution,
+)
 from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
@@ -490,7 +493,10 @@ def _run_state_relation_verification(
     evidence = evidence_records_from_relation_execution(
         relation_experiment.experiment_id, plans, execution
     )
-    return execution, plans, evidence
+    violations = violation_records_from_relation_execution(
+        relation_experiment.experiment_id, plans, execution
+    )
+    return execution, plans, evidence, violations
 
 
 def _run_state(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
@@ -614,6 +620,7 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         }
         relation_execution = None
         relation_evidence = ()
+        relation_violations = ()
 
         if not capability["generate_foundry"]:
             status["foundry_generation_blocked_reason"] = capability["generate_block_reason"]
@@ -634,7 +641,7 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
 
         if class_name == "state":
             try:
-                relation_execution, relation_plans, relation_evidence = _run_state_relation_verification(
+                relation_execution, relation_plans, relation_evidence, relation_violations = _run_state_relation_verification(
                     project, hypothesis, experiment, contract
                 )
                 status["state_relation_verification"] = {
@@ -652,10 +659,32 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                     "evidence_ids": [item.evidence_id for item in relation_evidence],
                 }
                 evidence.extend(relation_evidence)
+                evidence.extend(relation_violations)
                 executions.append(relation_execution)
+                if relation_violations:
+                    status["state_relation_verification"]["relation_mismatches"] = [
+                        {
+                            "step_index": item.step_index,
+                            "state": item.state,
+                            "relation": item.relation,
+                            "expression": item.expression,
+                            "evidence_id": item.evidence_id,
+                        }
+                        for item in relation_violations
+                    ]
+                    status["blind_executed"] = False
+                    status["classification"] = "NOT_REACHED"
+                    status["classification_blocked_reason"] = (
+                        "state relation mismatch observed; causal differential verification is required"
+                    )
+                    status["classification_signal"] = "relation_mismatch"
+                    status.update(status_prerequisite)
+                    evidence.extend(prerequisite_observation_evidence)
+                    statuses.append(status)
+                    continue
                 if not relation_evidence:
-                    # Relation verification is a prerequisite for state security
-                    # experiments. Never fall through on a failed or empty assertion.
+                    # A generic execution failure is never promoted to a state
+                    # mismatch. Preserve the fail-closed boundary.
                     status["blind_executed"] = False
                     status["classification"] = "NOT_REACHED"
                     status["classification_blocked_reason"] = (
