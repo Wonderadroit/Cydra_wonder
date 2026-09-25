@@ -65,3 +65,15 @@ def test_relation_evidence_does_not_accept_unexecuted_or_empty_tests(tmp_path: P
     assert evidence_records_from_relation_execution(
         "X-REL", (plan,), _execution(tests_run=0)
     ) == ()
+
+
+def test_relation_evidence_ids_distinguish_repeated_sequence_steps(tmp_path: Path):
+    plan = _plan(tmp_path)
+    first = relation_observation_evidence_id("X-REL-SEQUENCE", plan, 0)
+    second = relation_observation_evidence_id("X-REL-SEQUENCE", plan, 1)
+    assert first != second
+    evidence = evidence_records_from_relation_execution(
+        "X-REL-SEQUENCE", (plan, plan), _execution()
+    )
+    assert [item.evidence_id for item in evidence] == [first, second]
+    assert [item.step_index for item in evidence] == [0, 1]
