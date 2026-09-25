@@ -3,7 +3,7 @@ name: CYDRA Benchmark 045 — Post-Maturity Search Exhaustion
 on:
   workflow_dispatch:
 
-permissions:
+permissions: {}
 
 jobs:
   search-exhaustion:
