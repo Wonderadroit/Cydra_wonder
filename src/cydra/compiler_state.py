@@ -43,13 +43,47 @@ def _source_keys(payload: dict[str, Any], source: Path, project: Path) -> tuple[
     return tuple(candidates)
 
 
+def _walk_ast(node: Any):
+    if isinstance(node, dict):
+        if isinstance(node.get("nodeType"), str):
+            yield node
+        for value in node.values():
+            yield from _walk_ast(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _walk_ast(value)
+
+
 def extract_state_effects_from_build_info(build_info: Path, source: Path, project: Path) -> tuple[SemanticRelationshipEvidence, ...]:
     payload = json.loads(build_info.read_text(encoding="utf-8"))
-    evidence: list[SemanticRelationshipEvidence] = []
-    for source_key, source_payload in _source_keys(payload, source, project):
+    output = payload.get("output")
+    sources = output.get("sources") if isinstance(output, dict) else None
+    if not isinstance(sources, dict):
+        return ()
+
+    # Build a declaration map across the complete compilation graph so identifiers
+    # in a derived contract can resolve inherited state variables.
+    known_states: dict[int, str] = {}
+    ast_sources: dict[str, dict[str, Any]] = {}
+    for source_key, source_payload in sources.items():
+        if not isinstance(source_key, str) or not isinstance(source_payload, dict):
+            continue
         ast = source_payload.get("ast")
-        if isinstance(ast, dict):
-            evidence.extend(extract_ast_relationships(ast, source_key))
+        if not isinstance(ast, dict):
+            continue
+        ast_sources[source_key] = ast
+        for node in _walk_ast(ast):
+            if (node.get("nodeType") == "VariableDeclaration"
+                    and node.get("stateVariable") is True
+                    and isinstance(node.get("id"), int)
+                    and isinstance(node.get("name"), str)):
+                known_states[node["id"]] = node["name"]
+
+    evidence: list[SemanticRelationshipEvidence] = []
+    for source_key, _ in _source_keys(payload, source, project):
+        ast = ast_sources.get(source_key)
+        if ast is not None:
+            evidence.extend(extract_ast_relationships(ast, source_key, known_states))
     return tuple(evidence)
 
 
