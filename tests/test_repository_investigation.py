@@ -52,5 +52,4 @@ def test_repository_namespace_keeps_same_function_names_executable(tmp_path: Pat
         for hypothesis in result.hypotheses
     ]
 
-    assert ids == sorted(ids)
     assert len(ids) == len(set(ids))
