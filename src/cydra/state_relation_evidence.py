@@ -34,11 +34,13 @@ def relation_observation_evidence_id(
 
 def evidence_records_from_relation_execution(
     experiment_id: str,
-    plans: tuple[StateRelationObservationPlan, ...],
+    plans: tuple[tuple[int, StateRelationObservationPlan], ...],
     execution: ExecutionResult,
 ) -> tuple[StateRelationObservationEvidence, ...]:
     """Emit relation evidence only after an executed, passing assertion test.
 
+    Each plan carries the actual ordered transition index that produced it;
+    evidence never infers sequence position from flattened plan order.
     A successful transaction without the generated before/after assertion does
     not qualify. This function is deliberately independent from prerequisite
     observations because a transition relation is evidence about a state
@@ -60,5 +62,5 @@ def evidence_records_from_relation_execution(
             source=plan.source,
             step_index=step_index,
         )
-        for step_index, plan in enumerate(plans)
+        for step_index, plan in plans
     )
