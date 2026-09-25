@@ -442,10 +442,28 @@ def _run_state_relation_verification(
     )
     if function is None:
         raise ValueError(f"state relation target function is not modeled: {hypothesis.target_function}")
-    plans = plan_state_relation_observations(contract, function)
+    # Verify every externally callable transition in the ordered experiment,
+    # not only the hypothesis target. This makes the evidence chain genuinely
+    # before/between/after for cross-function state hypotheses.
+    functions = {
+        item.name: item for item in (*contract.functions, *contract.inherited_functions)
+    }
+    relation_plans_by_step = []
+    for step in experiment.steps:
+        step_function = functions.get(step.function)
+        if step_function is None:
+            raise ValueError(f"state relation step is not modeled: {step.function}")
+        step_plans = plan_state_relation_observations(contract, step_function)
+        if step_function.writes and not step_plans:
+            raise ValueError(
+                f"state transition {step_function.name} has no deterministic "
+                "public unsigned-integer relation observation"
+            )
+        relation_plans_by_step.extend(step_plans)
+    plans = tuple(relation_plans_by_step)
     if not plans:
         raise ValueError(
-            "state transition has no deterministic public unsigned-integer relation observation"
+            "state experiment has no deterministic public unsigned-integer relation observation"
         )
     output = test_path_for(
         project, f"generated/{hypothesis.hypothesis_id}-relation.t.sol"
@@ -462,6 +480,7 @@ def _run_state_relation_verification(
         output,
         contract,
         verify_state_relations=True,
+        verify_state_relations_all_steps=True,
     )
     execution = run_foundry_test(
         project, generated, relation_experiment.experiment_id, "relation"
