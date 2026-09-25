@@ -167,3 +167,59 @@ def test_compiler_retries_stack_too_deep_with_bounded_via_ir(tmp_path, monkeypat
     assert "--optimize" in calls[1]
     assert "--optimizer-runs" in calls[1]
     assert result.command == calls[1]
+
+
+
+def test_repository_compiler_consumes_all_source_asts_once(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "foundry.toml").write_text("[profile.lite]\nsolc_version = \"0.8.28\"\n", encoding="utf-8")
+    ast = {
+        "nodeType": "SourceUnit",
+        "id": 1,
+        "nodes": [{
+            "nodeType": "ContractDefinition",
+            "id": 2,
+            "name": "A",
+            "nodes": [{
+                "nodeType": "FunctionDefinition",
+                "id": 3,
+                "name": "set",
+                "kind": "function",
+                "scope": 2,
+                "body": {"nodeType": "Block", "statements": []},
+            }],
+        }],
+    }
+
+    class Completed:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        info_path = Path(command[4])
+        info_path.mkdir(parents=True, exist_ok=True)
+        (info_path / "all.json").write_text(json.dumps({
+            "solcVersion": "0.8.28",
+            "output": {
+                "sources": {
+                    "src/A.sol": {"ast": ast},
+                    "src/B.sol": {"ast": {**ast, "nodes": [{**ast["nodes"][0], "name": "B"}]}},
+                }
+            },
+        }), encoding="utf-8")
+        return Completed()
+
+    monkeypatch.setattr("cydra.compiler_state.subprocess.run", fake_run)
+    from cydra.compiler_state import compile_repository_state_effects
+
+    result = compile_repository_state_effects(project)
+
+    assert result.status == "success"
+    assert len(calls) == 1
+    assert result.command[-1] == "1"
+    assert {item.contract for item in result.evidence} == {"A", "B"}
