@@ -16,6 +16,10 @@ class StateRelationObservationPlan:
     getter: str
     relation: StateRelation
     source: str
+    # State-backed mapping indexes are snapshotted before the target transition.
+    # This prevents a transition that changes its own index state from comparing
+    # different mapping keys before vs. after execution.
+    index_state_types: tuple[tuple[str, str], ...] = ()
 
 
 _PUBLIC_SCALAR_RE = re.compile(
@@ -116,6 +120,7 @@ def plan_state_relation_observations(
             if indexes:
                 continue
         getter_arguments: list[str] = []
+        index_state_types: list[tuple[str, str]] = []
         valid = True
         for expression, key_type in zip(indexes, key_types):
             normalized_key = _normalize_type(key_type)
@@ -147,6 +152,7 @@ def plan_state_relation_observations(
                 valid = False
                 break
             getter_arguments.append(f"target.{expression}()")
+            index_state_types.append((expression, state_index[0]))
         if not valid:
             continue
 
@@ -158,6 +164,7 @@ def plan_state_relation_observations(
                 getter=getter,
                 relation=relation,
                 source=f"{contract.source}:{function.line}",
+                index_state_types=tuple(index_state_types),
             )
         )
     return tuple(plans)
