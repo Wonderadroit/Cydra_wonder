@@ -102,7 +102,7 @@ def extract_ast_relationships(\n    ast: dict[str, Any],\n    file: str,\n    kn
             if isinstance(node.get("name"), str) and isinstance(node_id, int):
                 states[node_id] = node["name"]
 
-    evidence: list[SemanticRelationshipEvidence] = []
+    if known_state_declarations:\n        states.update(known_state_declarations)\n\n    evidence: list[SemanticRelationshipEvidence] = []
     for node in _walk(ast):
         if node.get("nodeType") != "FunctionDefinition" or not isinstance(node.get("id"), int):
             continue
