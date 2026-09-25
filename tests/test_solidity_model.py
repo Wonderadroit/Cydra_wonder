@@ -627,3 +627,33 @@ def test_execution_predicate_polarity_recognizes_custom_error_revert_guard(tmp_p
     assert function.execution_predicate_polarities == ((
         "epoch < requiredEpoch", "must_not_hold"
     ),)
+
+
+def test_parse_solidity_resolves_inherited_state_variables_and_writes(tmp_path: Path) -> None:
+    (tmp_path / "Base.sol").write_text(
+        """
+        contract Base {
+            mapping(uint256 => address) public externalActionMap;
+            address public helper;
+        }
+        """,
+        encoding="utf-8",
+    )
+    derived_path = tmp_path / "Derived.sol"
+    derived_path.write_text(
+        """
+        import "./Base.sol";
+        contract Derived is Base {
+            function register(uint256 id, address action) external {
+                externalActionMap[id] = action;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(derived_path)[0]
+
+    assert contract.state_variables == ("externalActionMap", "helper")
+    register = contract.functions[0]
+    assert register.writes == ("externalActionMap",)
