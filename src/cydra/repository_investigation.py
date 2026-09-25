@@ -144,6 +144,7 @@ def investigate_repository(
             constraint_evidence=constraints,
             experiment_planner=experiment_planner,
             reasoning_surfaces=reasoning_surfaces,
+            system_model=canonical,
         )
         results.append(_namespace_result(result, "repo_" + path.stem + "_"))
 
