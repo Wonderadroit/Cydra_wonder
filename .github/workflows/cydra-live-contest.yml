@@ -1,0 +1,68 @@
+name: CYDRA live contest research
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: cydra-live-contest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rain-usdr:
+    name: CYDRA → pinned RAIN-USDR target
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout CYDRA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+
+      - name: Checkout authorized contest source
+        uses: actions/checkout@v4
+        with:
+          repository: hackenproof-public/rain-usdr-contracts
+          ref: bd6e03abe34936b7dbece2509b90457bd5c9b119
+          token: ${{ secrets.LIVE_TARGET_GITHUB_TOKEN }}
+          fetch-depth: 0
+          submodules: recursive
+          path: .cydra-live-target
+
+      - name: Verify target freeze
+        run: |
+          test "$(git -C .cydra-live-target rev-parse HEAD)" = "bd6e03abe34936b7dbece2509b90457bd5c9b119"
+          git -C .cydra-live-target status --porcelain
+
+      - name: Run CYDRA against the complete in-scope surface
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_live_contest.py \
+            --target-spec targets/live-contest.json \
+            --target-checkout .cydra-live-target \
+            --output live-artifacts
+
+      - name: Publish live research artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-live-rain-usdr-${{ github.sha }}
+          path: live-artifacts/
+          if-no-files-found: error
+          retention-days: 30
