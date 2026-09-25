@@ -206,14 +206,22 @@ def main() -> int:
     if not loop.rounds:
         raise RuntimeError("research loop produced no hypothesis rounds")
 
-    selected = loop.rounds[-1]
-    hypothesis = selected.selection.hypothesis
-    if hypothesis.hypothesis_id != "H-READONLY-XCONTRACT-latestAnswer":
+    target_round = next(
+        (
+            round_
+            for round_ in loop.rounds
+            if round_.selection.hypothesis.hypothesis_id == "H-READONLY-XCONTRACT-latestAnswer"
+        ),
+        None,
+    )
+    if target_round is None:
+        reached = ", ".join(round_.selection.hypothesis.hypothesis_id for round_ in loop.rounds)
         raise RuntimeError(
-            "strict blind loop did not reach the cross-protocol hypothesis: "
-            + hypothesis.hypothesis_id
+            "strict blind loop did not reach the cross-protocol hypothesis; "
+            f"selected rounds: {reached}"
         )
-    vulnerable = selected.observation
+    hypothesis = target_round.selection.hypothesis
+    vulnerable = target_round.observation
     experiment = next(
         e for e in investigation.experiments
         if e.hypothesis_id == hypothesis.hypothesis_id
