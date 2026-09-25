@@ -18,11 +18,6 @@ _FUNCTION_RE = re.compile(
     re.MULTILINE,
 )
 
-# Calls through a value/contract expression are callback-capable. This deliberately
-# includes ordinary interface/contract calls (for example helper.foo()) as well as
-# low-level value transfers. Solidity builtins that cannot invoke target code are
-# excluded so the surface remains a topology detector rather than a generic call
-# counter.
 _EXTERNAL_CALL_RE = re.compile(
     r"(?<![\w.])"
     r"(?:[A-Za-z_]\w*\s*\([^;{}]*\)|[A-Za-z_]\w*)"
@@ -57,11 +52,8 @@ def _external_callback_call(body: str) -> re.Match[str] | None:
         if receiver in _NON_CALLBACK_RECEIVERS:
             continue
         return match
-    # Preserve the original low-level/value-transfer topology even when the
-    # receiver is msg.sender/payable(address(...)), which is intentionally excluded
-    # from the ordinary dotted-call matcher above.
     return re.search(
-        r"(?:\\.call\\s*\\{\\s*value\\s*:|\\.transfer\\s*\\(|\\.send\\s*\\(|\\.safeTransferETH\\s*\\()",
+        r"(?:\.call\s*\{\s*value\s*:|\.transfer\s*\(|\.send\s*\(|\.safeTransferETH\s*\()",
         body,
     )
 
@@ -132,9 +124,6 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
         if call is None:
             continue
 
-        # Preserve the original, narrower transfer surface exactly: value-transfer
-        # callbacks remain candidates, but ordinary contract calls now get the same
-        # conservative ordering analysis.
         has_ordering_gap = (
             _state_write_after_external_transfer(body)
             if _external_value_transfer(body)
@@ -151,9 +140,6 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
                 for candidate in public_functions.values()
                 if re.search(rf"\b{re.escape(function.name)}\s*\(", _body_for(candidate, source))
             )
-            # A guarded public entry point cannot be used as the reentrant boundary
-            # represented by this hypothesis. If several callers exist, retain an
-            # unguarded one rather than manufacturing a candidate from a protected path.
             unguarded = tuple(candidate for candidate in callers if not _guarded(candidate))
             if not unguarded:
                 continue
