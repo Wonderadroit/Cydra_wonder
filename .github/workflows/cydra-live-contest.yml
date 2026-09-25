@@ -1,11 +1,7 @@
-name: CYDRA live bounty research
+name: CYDRA canonical live-target dogfood
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
 
 concurrency:
   group: cydra-live-bounty-${{ github.run_id }}
