@@ -181,14 +181,28 @@ def test_repository_compiler_consumes_all_source_asts_once(tmp_path, monkeypatch
             "nodeType": "ContractDefinition",
             "id": 2,
             "name": "A",
-            "nodes": [{
-                "nodeType": "FunctionDefinition",
-                "id": 3,
-                "name": "set",
-                "kind": "function",
-                "scope": 2,
-                "body": {"nodeType": "Block", "statements": []},
-            }],
+            "nodes": [
+                {"nodeType": "VariableDeclaration", "id": 8, "name": "value", "stateVariable": True},
+                {
+                    "nodeType": "FunctionDefinition",
+                    "id": 3,
+                    "name": "set",
+                    "kind": "function",
+                    "scope": 2,
+                    "body": {
+                        "nodeType": "Block",
+                        "statements": [{
+                            "nodeType": "ExpressionStatement",
+                            "expression": {
+                                "nodeType": "Assignment",
+                                "operator": "=",
+                                "leftHandSide": {"nodeType": "Identifier", "id": 9, "referencedDeclaration": 8, "name": "value"},
+                                "rightHandSide": {"nodeType": "Literal", "id": 10, "value": "1", "kind": "number"},
+                            },
+                        }],
+                    },
+                },
+            ],
         }],
     }
 
