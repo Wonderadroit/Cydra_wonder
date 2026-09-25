@@ -526,3 +526,51 @@ def test_sequence_renderer_reuses_shared_state_mapping_index_snapshot(tmp_path):
     assert rendered.count("uint256 before_index_epoch = target.epoch();") == 1
     assert rendered.count("target.first(attacker, before_index_epoch)") == 2
     assert rendered.count("target.second(attacker, before_index_epoch)") == 2
+
+
+def test_sequence_renderer_verifies_relations_for_all_ordered_state_steps(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "uint256 public counter; "
+        "function increase(uint256 amount) external { counter += amount; } "
+        "function decrease(uint256 amount) external { counter -= amount; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import FunctionModel, ParameterModel
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "increase", "external", (), ("counter",), (), 3,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+            FunctionModel(
+                "decrease", "external", (), ("counter",), (), 4,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("counter",),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-counter-decrease", "candidate", "INV-STATE-counter",
+        "decrease", "attacker", "candidate", related_functions=("increase",),
+    )
+    experiment = Experiment(
+        "X-H-STATE-counter-decrease", hypothesis.hypothesis_id,
+        "increase then decrease", ("violation", "preservation"), 2.0,
+        steps=(ExperimentStep("increase", ("7",)), ExperimentStep("decrease", ("7",))),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_relations=True,
+        verify_state_relations_all_steps=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert rendered.count("uint256 before_counter") == 2
+    assert "target.increase(7);" in rendered
+    assert "assertEq(target.counter(), before_counter + 7" in rendered
+    assert "target.decrease(7);" in rendered
+    assert "assertEq(target.counter(), before_counter - 7" in rendered
