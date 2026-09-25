@@ -78,3 +78,53 @@ def test_relation_evidence_uses_explicit_ordered_step_indexes(tmp_path: Path):
     )
     assert [item.evidence_id for item in evidence] == [first, second]
     assert [item.step_index for item in evidence] == [0, 2]
+
+
+def test_relation_violation_evidence_requires_generated_assertion_failure(tmp_path: Path):
+    plan = _plan(tmp_path)
+    from cydra.state_relation_evidence import (
+        violation_records_from_relation_execution,
+        relation_violation_evidence_id,
+    )
+
+    execution = _execution(status="FAIL")
+    execution = ExecutionResult(
+        experiment_id=execution.experiment_id,
+        target=execution.target,
+        command=execution.command,
+        exit_code=1,
+        executed=True,
+        tests_run=1,
+        tests_failed=1,
+        status="FAIL",
+        stdout="FAIL: unverified state relation: after(counter) == before(counter) + 1",
+        stderr="",
+    )
+    evidence = violation_records_from_relation_execution(
+        "X-REL", ((0, plan),), execution
+    )
+    assert len(evidence) == 1
+    assert evidence[0].kind == "relation_mismatch"
+    assert evidence[0].expression == "after(counter) == before(counter) + 1"
+    assert evidence[0].evidence_id == relation_violation_evidence_id("X-REL", plan, 0)
+
+
+def test_relation_violation_evidence_rejects_generic_failure(tmp_path: Path):
+    plan = _plan(tmp_path)
+    from cydra.state_relation_evidence import violation_records_from_relation_execution
+
+    execution = ExecutionResult(
+        experiment_id="X-REL",
+        target="Target",
+        command=("forge", "test"),
+        exit_code=1,
+        executed=True,
+        tests_run=1,
+        tests_failed=1,
+        status="FAIL",
+        stdout="candidate call reverted: EpochNotFulfilled()",
+        stderr="",
+    )
+    assert violation_records_from_relation_execution(
+        "X-REL", ((0, plan),), execution
+    ) == ()
