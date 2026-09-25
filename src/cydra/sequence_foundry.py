@@ -45,7 +45,6 @@ def generate_sequence_test_from_experiment(
     rendered: list[str] = []
     relation_setups: list[str] = []
     relation_assertions: list[str] = []
-    relation_index_snapshots: dict[str, str] = {}
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
@@ -66,6 +65,9 @@ def generate_sequence_test_from_experiment(
             verify_state_relations_all_steps or function.name == hypothesis.target_function
         )
         if verify_relation_for_step:
+            # Reuse a state-backed mapping key only within this transition.
+            # A later transition may legitimately advance the index state.
+            relation_index_snapshots: dict[str, str] = {}
             relation_plans = plan_state_relation_observations(contract_model, function)
             if function.writes and not relation_plans:
                 raise ValueError(
