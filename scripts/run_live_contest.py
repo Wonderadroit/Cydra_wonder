@@ -118,11 +118,10 @@ def prepare_shared_dependencies(checkout: Path, temp_root: Path) -> dict[str, st
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the canonical CYDRA research pipeline against one pinned live contest target.")
+    parser = argparse.ArgumentParser(description="Run the single canonical CYDRA live-target dogfood pipeline.")
     parser.add_argument("--target-spec", type=Path, required=True)
     parser.add_argument("--target-checkout", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--classes", nargs="+", default=["authorization", "initialization", "arithmetic", "state", "guard_parity"])
     args = parser.parse_args()
 
     spec = load_spec(args.target_spec)
@@ -173,7 +172,7 @@ def main() -> int:
                 "--target-ref", spec["target_ref"],
                 "--target-path", source,
                 "--target-project", spec["project_path"],
-                "--classes", *args.classes,
+                "--classes", "authorization", "initialization", "arithmetic", "state", "guard_parity",
                 "--freeze", str(artifact / "freeze"),
             ]
             completed = subprocess.run(["python", *command], text=True, capture_output=True, check=False, env=child_env)
