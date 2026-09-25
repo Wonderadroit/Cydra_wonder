@@ -18,14 +18,15 @@ class StateRelationObservationEvidence:
     experiment_id: str
     expression: str
     source: str
+    step_index: int = 0
 
 
 def relation_observation_evidence_id(
-    experiment_id: str, plan: StateRelationObservationPlan
+    experiment_id: str, plan: StateRelationObservationPlan, step_index: int = 0
 ) -> str:
     material = (
-        f"{experiment_id}|{plan.state}|{plan.relation.function}|"
-        f"{plan.relation.expression}|{plan.getter}"
+        f"{experiment_id}|step:{step_index}|{plan.state}|"
+        f"{plan.relation.function}|{plan.relation.expression}|{plan.getter}"
     )
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
     return f"E-OBS-REL-{digest}"
@@ -50,13 +51,14 @@ def evidence_records_from_relation_execution(
 
     return tuple(
         StateRelationObservationEvidence(
-            evidence_id=relation_observation_evidence_id(experiment_id, plan),
+            evidence_id=relation_observation_evidence_id(experiment_id, plan, step_index),
             kind="execution",
             state=plan.state,
             relation=plan.relation.function,
             experiment_id=experiment_id,
             expression=plan.relation.expression,
             source=plan.source,
+            step_index=step_index,
         )
-        for plan in plans
+        for step_index, plan in enumerate(plans)
     )
