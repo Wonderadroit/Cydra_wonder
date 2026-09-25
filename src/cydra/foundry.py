@@ -272,7 +272,17 @@ def _initializer_argument(
         declaration = f"{target_type}.{parameter_type} memory {variable};"
     else:
         qualified_type = _resolve_custom_type(parameter_type, target_type, contract_model)
-        declaration = f"{qualified_type} memory {variable};"
+        # Contract/interface types are value-like references and cannot carry
+        # a data-location qualifier in a local variable declaration. Structs
+        # and other reference types still require memory here.
+        base_type = parameter_type.split()[0].rstrip("[]")
+        interface_names = {interface.name for interface in contract_model.inherited_resolved_interfaces}
+        source = _source_text(contract_model)
+        is_contract_type = base_type in interface_names or bool(
+            re.search(rf"\\b(?:interface|contract|library)\\s+{re.escape(base_type)}\\b", source)
+        )
+        location = "" if is_contract_type else " memory"
+        declaration = f"{qualified_type}{location} {variable};"
     return variable, declaration
 
 
