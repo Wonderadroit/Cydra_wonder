@@ -39,4 +39,4 @@ def test_unbounded_iteration_hypotheses_survive_unified_pipeline(tmp_path: Path)
     assert any(
         item.hypothesis_id == "H-UNBOUNDED-ITERATION-process"
         for item in result.experiments
-    ) is False
+    )
