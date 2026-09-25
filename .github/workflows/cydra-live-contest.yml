@@ -3,7 +3,7 @@ name: CYDRA live bounty research
 on:
   workflow_dispatch:
   push:
-    branches: ["live/hinkal-bounty-dogfood"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
