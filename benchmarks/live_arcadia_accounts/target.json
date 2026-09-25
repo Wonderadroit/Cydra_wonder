@@ -1,0 +1,14 @@
+{
+  "research_type":"public_code_blind_research",
+  "program_reference":"HackenProof — Arcadia Finance Smart Contracts",
+  "eligibility_status":"not_claimed",
+  "target_repo":"https://github.com/arcadia-finance/accounts-v2",
+  "target_ref":"8b6e9c27e13d71c646795019e5f243a444bf8da8",
+  "target_project":".",
+  "target_path":"src/Factory.sol",
+  "scope_basis":"Current public source pinned to the live-program repository revision; local research dogfood only.",
+  "excluded":["tests","mocks","scripts","deployment tooling","third-party dependencies/imports","accounts-v2/src/accounts/helpers/SpotToMarginMigrator.sol"],
+  "research_boundary":"Local source/system-model and deterministic experiment generation/execution only. No live deployment exploitation, live-state mutation, funds interaction, or submission.",
+  "historical_knowledge_boundary":"Known findings, historical audits, public PoCs, and incident analyses remain outside the initial blind input until the run is frozen.",
+  "classes":["initialization","authorization","state","guard_parity"]
+}
