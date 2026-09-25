@@ -74,6 +74,29 @@ from .structural_state import generate_cross_function_state_hypotheses
 ReasoningSurface = Callable[[ContractModel, tuple[SemanticRelationshipEvidence, ...]], ReasoningContribution]
 
 
+def default_reasoning_surfaces() -> tuple[ReasoningSurface, ...]:
+    """Return the repository-wide reasoning surfaces used by the canonical pipeline.
+
+    Callers that need additional legacy structural detectors can append them to
+    this tuple; they must not replace these default surfaces, or newer reasoning
+    capabilities silently disappear from live dogfooding.
+    """
+    return (
+        generate_cross_contract_economic_hypotheses,
+        generate_cross_contract_attribution_hypotheses,
+        generate_cross_contract_read_only_reentrancy_hypotheses,
+        generate_control_flow_hypotheses,
+        generate_epoch_accounting_hypotheses,
+        generate_external_outcome_hypotheses,
+        generate_type_domain_hypotheses,
+        generate_resource_authorization_hypotheses,
+        generate_callback_state_order_hypotheses,
+        generate_incentive_liveness_hypotheses,
+        generate_unbounded_iteration_hypotheses,
+        generate_cross_function_state_hypotheses,
+    )
+
+
 def _merge_hypotheses(*groups):
     merged = {}
     for group in groups:
@@ -220,7 +243,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses, generate_incentive_liveness_hypotheses, generate_unbounded_iteration_hypotheses, generate_cross_function_state_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else default_reasoning_surfaces()
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []

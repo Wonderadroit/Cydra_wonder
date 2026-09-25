@@ -24,7 +24,7 @@ from cydra.foundry import (
 )
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.authorization_runtime import classify_authorization_blind_execution
-from cydra.pipeline import ReasoningContribution, _default_experiment_planner, investigate
+from cydra.pipeline import ReasoningContribution, _default_experiment_planner, default_reasoning_surfaces, investigate
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment, plan_guard_parity_experiment
 from cydra.sequence_foundry import generate_sequence_test_from_experiment
@@ -876,15 +876,17 @@ def run_source_investigation(
         if target_intake.adapter == "unsupported":
             raise RuntimeError("target intake could not select a supported execution adapter")
         compiler_evidence: CompilerEvidenceResult = compile_state_effects(project, source)
-        surfaces = tuple(
-            surface
-            for enabled, surface in (
-                ("state" in classes, generate_cross_function_state_hypotheses),
-                ("arithmetic" in classes, lambda contract, _evidence: ReasoningContribution((), generate_pair_symmetry_hypotheses(contract))),
-                ("arithmetic" in classes, lambda contract, _evidence: ReasoningContribution((), generate_aggregation_order_hypotheses(contract))),
-                (bool(classes), lambda contract, _evidence: ReasoningContribution((), generate_configuration_binding_hypotheses(contract))),
-            )
-            if enabled
+        # Keep every repository-wide reasoning surface active during live
+        # dogfooding. Requested legacy structural detectors are additive; they
+        # must never replace the newer default surfaces.
+        surfaces = list(default_reasoning_surfaces())
+        if "arithmetic" in classes:
+            surfaces.extend((
+                lambda contract, _evidence: ReasoningContribution((), generate_pair_symmetry_hypotheses(contract)),
+                lambda contract, _evidence: ReasoningContribution((), generate_aggregation_order_hypotheses(contract)),
+            ))
+        surfaces.append(
+            lambda contract, _evidence: ReasoningContribution((), generate_configuration_binding_hypotheses(contract))
         )
         result = investigate(
             source,
@@ -892,7 +894,7 @@ def run_source_investigation(
             semantic_evidence=compiler_evidence.evidence,
             constraint_evidence=compiler_evidence.constraints,
             experiment_planner=_blind_planner,
-            reasoning_surfaces=surfaces,
+            reasoning_surfaces=tuple(surfaces),
         )
         statuses, executions, evidence = run_layers(result, project, classes, compiler_evidence)
         experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
