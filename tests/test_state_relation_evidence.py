@@ -71,7 +71,7 @@ def test_relation_evidence_does_not_accept_unexecuted_or_empty_tests(tmp_path: P
 def test_relation_evidence_uses_explicit_ordered_step_indexes(tmp_path: Path):
     plan = _plan(tmp_path)
     first = relation_observation_evidence_id("X-REL-SEQUENCE", plan, 0)
-    second = relation_observation_evidence_id("X-REL-SEQUENCE", plan, 1)
+    second = relation_observation_evidence_id("X-REL-SEQUENCE", plan, 2)
     assert first != second
     evidence = evidence_records_from_relation_execution(
         "X-REL-SEQUENCE", ((0, plan), (2, plan)), _execution()
