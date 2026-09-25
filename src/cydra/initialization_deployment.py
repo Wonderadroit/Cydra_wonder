@@ -60,7 +60,7 @@ class DeploymentSurface:
 _CONTRACT_RE = re.compile(r"\b(?:abstract\s+)?contract\s+(?P<name>[A-Za-z_]\w*)")
 _PROXY_DECL_RE = re.compile(r"\bcontract\s+(?P<name>[A-Za-z_]\w*Proxy[A-Za-z_]\w*)\b")
 _NEW_PROXY_RE = re.compile(
-    r"\bnew\s+(?P<proxy>[A-Za-z_]\w*Proxy[A-Za-z_]\w*)"
+    r"\bnew\s+(?P<proxy>[A-Za-z_]\w*?Proxy[A-Za-z_]\w*)"
     r"(?:\s*\{[^}]*\})?\s*\(\s*(?P<argument>[^,)]*)",
     re.MULTILINE,
 )
@@ -141,7 +141,7 @@ def inspect_deployment_surface(
 
         for match in _INIT_FORWARD_RE.finditer(source):
             contract = _contract_name_for_offset(source, match.start())
-            if contract is None:
+            if contract is None or contract not in proxy_names:
                 continue
             evidence.append(DeploymentEvidence(
                 evidence_id=f"E-DEPLOY-INIT-FORWARD-{relative}-{match.start()}",
