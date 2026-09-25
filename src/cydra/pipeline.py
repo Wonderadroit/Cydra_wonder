@@ -51,6 +51,7 @@ from .structural_signed_metadata import generate_signed_metadata_hypotheses
 from .structural_intent_parity import generate_intent_parity_hypotheses
 from .intent_parity_planning import plan_intent_parity_experiment
 from .signature_reuse_planning import plan_signature_reuse_experiment
+from .signature_replay_planning import plan_signature_replay_experiment
 from .signed_metadata_planning import plan_signed_metadata_experiment
 from .control_flow_planning import plan_control_flow_experiment
 from .structural_epoch_accounting import generate_epoch_accounting_hypotheses
@@ -146,7 +147,7 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
     if hypothesis.invariant_id.startswith("INV-TEMPORAL-PRECONDITION-"):
         return plan_temporal_precondition_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-SIGNATURE-REPLAY-"):
-        return plan_signature_reuse_experiment(hypothesis)
+        return plan_signature_replay_experiment(hypothesis)
     if hypothesis.invariant_id.startswith(("INV-DOUBLE-DEBIT-", "INV-STORAGE-PERSISTENCE-")):
         return plan_experiment(
             hypothesis,
