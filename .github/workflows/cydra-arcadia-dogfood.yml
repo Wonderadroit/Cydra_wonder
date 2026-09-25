@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - dogfood/arcadia-accounts-live
+  pull_request:
+    branches:
+      - main
 
 permissions: {}
 
