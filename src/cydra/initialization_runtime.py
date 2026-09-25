@@ -113,7 +113,11 @@ def _failure_semantics(execution: ExecutionResult) -> str:
     if re.search(r"\[FAIL:\s*(?:.*(?:did not revert|expected revert|assert(?:ion)? failed|assertEq|assertTrue|assertFalse).*)\]", output, re.IGNORECASE):
         return "security_assertion_failure"
     if "arbitrary initializer call mutated target storage" in output:
-        return "security_assertion_failure"
+        # This fallback probe only proves that the implementation object can
+        # mutate its own storage when called directly. It does not establish
+        # that an attacker can reach the deployed proxy/creation lifecycle.
+        # Keep it proposed until deployment-surface/causal evidence exists.
+        return "direct_implementation_mutation"
     return "unclassified_failure"
 
 def classify_initialization_execution(hypothesis: Hypothesis, execution: ExecutionResult) -> InitializationOutcome:
@@ -124,7 +128,7 @@ def classify_initialization_execution(hypothesis: Hypothesis, execution: Executi
         internal_status, benchmark_status = "rejected", "not_confirmed"
     elif execution.status == "FAIL" and semantics == "security_assertion_failure":
         internal_status, benchmark_status = "confirmed", "confirmed"
-    elif execution.status == "FAIL" and semantics == "deployment_guard_revert":
+    elif execution.status == "FAIL" and semantics in {"deployment_guard_revert", "direct_implementation_mutation"}:
         internal_status, benchmark_status = "proposed", "proposed"
     elif execution.status == "FAIL":
         internal_status, benchmark_status = "proposed", "proposed"
