@@ -11,7 +11,7 @@ from typing import Literal
 
 from .models import ContractModel, Evidence, Experiment, FunctionModel, Hypothesis, ParameterModel
 from .initialization_shapes import render_initialization_test_body
-from .interface_resolver import resolve_import, resolve_interface
+from .interface_resolver import resolve_import, resolve_interface, resolve_named_type_source
 
 
 ExecutionStatus = Literal["PASS", "FAIL", "UNMEASURABLE"]
@@ -281,6 +281,32 @@ def _initializer_argument(
         is_contract_type = base_type in interface_names or bool(
             re.search(rf"\b(?:interface|contract|library)\s+{re.escape(base_type)}\b", source)
         )
+        if not is_contract_type:
+            project_root = next(
+                (
+                    ancestor
+                    for ancestor in (Path(contract_model.source).resolve().parent, *Path(contract_model.source).resolve().parents)
+                    if (ancestor / "foundry.toml").exists()
+                ),
+                None,
+            )
+            if project_root is not None:
+                try:
+                    resolved_source, _ = resolve_named_type_source(
+                        project_root,
+                        Path(contract_model.source),
+                        base_type,
+                    )
+                    resolved_path = project_root / resolved_source
+                    resolved_text = resolved_path.read_text(encoding="utf-8")
+                    is_contract_type = bool(
+                        re.search(
+                            rf"\b(?:interface|contract|library)\s+{re.escape(base_type)}\b",
+                            resolved_text,
+                        )
+                    )
+                except (FileNotFoundError, OSError, UnicodeError):
+                    pass
         location = "" if is_contract_type else " memory"
         declaration = f"{qualified_type}{location} {variable};"
     return variable, declaration
