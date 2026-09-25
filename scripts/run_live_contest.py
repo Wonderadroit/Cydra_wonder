@@ -149,6 +149,7 @@ def main() -> int:
         "rules": spec["rules"],
         "source_count": len(sources),
         "source_selection": "concrete-or-abstract contract declarations only; interface/library/type-only Solidity files remain dependencies",
+        "dependency_strategy": "import-driven shared dependency bootstrap for manifest-less public targets; dependency versions are inferred from observed import layout",
         "sources": sources,
     })
 
