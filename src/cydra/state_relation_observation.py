@@ -106,6 +106,11 @@ def plan_state_relation_observations(
         if not state_type.startswith("uint"):
             continue
 
+        if relation.rhs_expression is not None:
+            rhs_type = parameters.get(relation.rhs_expression)
+            if rhs_type is None or not rhs_type.startswith("uint"):
+                continue
+
         indexes = relation.index_expressions
         if len(indexes) != len(key_types):
             if indexes:
@@ -113,11 +118,35 @@ def plan_state_relation_observations(
         getter_arguments: list[str] = []
         valid = True
         for expression, key_type in zip(indexes, key_types):
+            normalized_key = _normalize_type(key_type)
+            if expression == "msg.sender":
+                if normalized_key != "address":
+                    valid = False
+                    break
+                getter_arguments.append("msg.sender")
+                continue
+
             parameter_type = parameters.get(expression)
-            if parameter_type is None or _normalize_type(key_type) != parameter_type:
+            if parameter_type is not None:
+                if normalized_key != parameter_type:
+                    valid = False
+                    break
+                getter_arguments.append(expression)
+                continue
+
+            # A public unsigned-integer state variable may safely provide a
+            # deterministic mapping index. The renderer reads it through the
+            # target getter at runtime, so the index is not guessed.
+            state_index = getters.get(expression)
+            if (
+                state_index is None
+                or state_index[1]
+                or not state_index[0].startswith("uint")
+                or not normalized_key.startswith("uint")
+            ):
                 valid = False
                 break
-            getter_arguments.append(expression)
+            getter_arguments.append(f"target.{expression}()")
         if not valid:
             continue
 

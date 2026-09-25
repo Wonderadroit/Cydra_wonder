@@ -17,6 +17,9 @@ class StateRelation:
     # Bare function-parameter indexes are the only keyed observation surface
     # supported by the generic runtime verifier. Anything dynamic fails closed.
     index_expressions: tuple[str, ...] = ()
+    # Direct function parameter used as the arithmetic delta; dynamic locals/calls
+    # remain unresolved unless independently modeled elsewhere.
+    rhs_expression: str | None = None
 
 
 _LITERAL = r"(?:0[xX][0-9a-fA-F]+|[0-9]+)"
@@ -25,14 +28,14 @@ _PATTERNS = (
     (
         re.compile(
             r"\b(?P<state>[A-Za-z_]\w*)\s*"
-            r"\+=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+            r"\+=\s*(?P<rhs>" + _LITERAL + r"|[A-Za-z_]\w*)\s*;"
         ),
         "+",
     ),
     (
         re.compile(
             r"\b(?P<state>[A-Za-z_]\w*)\s*"
-            r"-=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+            r"-=\s*(?P<rhs>" + _LITERAL + r"|[A-Za-z_]\w*)\s*;"
         ),
         "-",
     ),
@@ -40,14 +43,14 @@ _PATTERNS = (
     (
         re.compile(
             r"\b(?P<state>[A-Za-z_]\w*)\s*(?P<indexes>(?:\[[^\]]+\])+)"
-            r"\s*\+=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+            r"\s*\+=\s*(?P<rhs>" + _LITERAL + r"|[A-Za-z_]\w*)\s*;"
         ),
         "+",
     ),
     (
         re.compile(
             r"\b(?P<state>[A-Za-z_]\w*)\s*(?P<indexes>(?:\[[^\]]+\])+)"
-            r"\s*-=\s*(?P<rhs>" + _LITERAL + r")\s*;"
+            r"\s*-=\s*(?P<rhs>" + _LITERAL + r"|[A-Za-z_]\w*)\s*;"
         ),
         "-",
     ),
@@ -92,7 +95,7 @@ def _index_expressions(raw: str) -> tuple[str, ...] | None:
     expressions = tuple(
         item.strip() for item in re.findall(r"\[([^\]]+)\]", raw)
     )
-    if not expressions or any(not re.fullmatch(r"[A-Za-z_]\w*", item) for item in expressions):
+    if not expressions or any(item != "msg.sender" and not re.fullmatch(r"[A-Za-z_]\w*", item) for item in expressions):
         return None
     return expressions
 
@@ -102,9 +105,11 @@ def plan_source_state_relations(
 ) -> tuple[StateRelation, ...]:
     """Extract conservative, directly testable state postconditions.
 
-    Scalar literal arithmetic and keyed literal arithmetic are supported.
+    Scalar/keyed literal arithmetic and direct-parameter arithmetic are supported.
     Keyed relations are emitted only when every index is a bare identifier;
     runtime observation later binds those identifiers to function parameters.
+    Identifier deltas are retained as source evidence but must be validated as
+    directly typed function parameters before runtime observation.
     """
     try:
         source = open(contract.source, encoding="utf-8").read()
@@ -126,6 +131,13 @@ def plan_source_state_relations(
             if state not in state_names:
                 continue
             rhs = match.groupdict().get("rhs")
+            rhs_expression = (
+                rhs if rhs and not re.fullmatch(_LITERAL, rhs) else None
+            )
+            if rhs_expression is not None and rhs_expression not in {
+                parameter.name for parameter in function.parameters
+            }:
+                continue
             raw_indexes = match.groupdict().get("indexes")
             indexes = _index_expressions(raw_indexes) if raw_indexes else ()
             if raw_indexes and indexes is None:
@@ -145,6 +157,7 @@ def plan_source_state_relations(
                     expression=expression,
                     source=f"source:{contract.source}",
                     index_expressions=tuple(indexes),
+                    rhs_expression=rhs_expression,
                 )
             )
     return tuple(dict.fromkeys(relations))

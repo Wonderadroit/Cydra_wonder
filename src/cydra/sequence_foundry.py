@@ -71,11 +71,24 @@ def generate_sequence_test_from_experiment(
                 parameter.name: argument
                 for parameter, argument in zip(function.parameters, step.arguments)
             }
+            relation_role = caller_role(function)
+            relation_caller = {
+                "owner": "owner",
+                "admin": "admin",
+                "guardian": "guardian",
+                "risk_manager": "riskManager",
+                "liquidator": "liquidator",
+                "factory": "factory",
+            }.get(relation_role, "attacker") if relation_role else "attacker"
             for plan in relation_plans:
                 getter = plan.getter
                 for parameter_name, argument in parameter_bindings.items():
                     getter = re.sub(rf"\b{re.escape(parameter_name)}\b", argument, getter)
-                snapshot_suffix = "_".join(plan.relation.index_expressions)
+                getter = re.sub(r"\bmsg\.sender\b", relation_caller, getter)
+                snapshot_suffix = "_".join(
+                    re.sub(r"[^A-Za-z0-9_]+", "_", item)
+                    for item in plan.relation.index_expressions
+                )
                 snapshot_name = f"before_{plan.state}" + (f"_{snapshot_suffix}" if snapshot_suffix else "")
                 relation_setups.append(
                     f"        {plan.state_type} {snapshot_name} = {getter};"
@@ -83,12 +96,16 @@ def generate_sequence_test_from_experiment(
                 expression = plan.relation.expression
                 if " + " in expression:
                     amount = expression.rsplit(" + ", 1)[1]
+                    for parameter_name, argument in parameter_bindings.items():
+                        amount = re.sub(rf"\b{re.escape(parameter_name)}\b", argument, amount)
                     relation_assertions.append(
                         f'        assertEq({getter}, {snapshot_name} + {amount}, '
                         f'"unverified state relation: {expression}");'
                     )
                 elif " - " in expression:
                     amount = expression.rsplit(" - ", 1)[1]
+                    for parameter_name, argument in parameter_bindings.items():
+                        amount = re.sub(rf"\b{re.escape(parameter_name)}\b", argument, amount)
                     relation_assertions.append(
                         f'        assertEq({getter}, {snapshot_name} - {amount}, '
                         f'"unverified state relation: {expression}");'

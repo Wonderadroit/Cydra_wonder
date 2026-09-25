@@ -111,3 +111,73 @@ def test_relation_observation_fails_closed_for_dynamic_mapping_index(tmp_path: P
         state_variables=("queued",),
     )
     assert plan_state_relation_observations(model, model.functions[0]) == ()
+
+
+def test_relation_observation_binds_parameter_delta(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { uint256 public counter; "
+        "function bump(uint256 amount) external { counter += amount; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "bump", "external", (), ("counter",), (), 2,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("counter",),
+    )
+    plans = plan_state_relation_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].relation.rhs_expression == "amount"
+
+
+def test_relation_observation_rejects_non_numeric_parameter_delta(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { uint256 public counter; "
+        "function bump(bool enabled) external { counter += enabled; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "bump", "external", (), ("counter",), (), 2,
+                parameters=(ParameterModel("enabled", "bool"),),
+            ),
+        ),
+        state_variables=("counter",),
+    )
+    assert plan_state_relation_observations(model, model.functions[0]) == ()
+
+
+def test_relation_observation_binds_caller_and_state_indexes(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { "
+        "uint128 public depositEpoch; "
+        "mapping(address => mapping(uint256 => uint128)) public queuedDeposit; "
+        "function requestDeposit(uint128 assets) external { "
+        "queuedDeposit[msg.sender][depositEpoch] += assets; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "requestDeposit", "external", (), ("queuedDeposit",), (), 4,
+                parameters=(ParameterModel("assets", "uint128"),),
+            ),
+        ),
+        state_variables=("depositEpoch", "queuedDeposit"),
+    )
+    plans = plan_state_relation_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].getter == "target.queuedDeposit(msg.sender, target.depositEpoch())"
