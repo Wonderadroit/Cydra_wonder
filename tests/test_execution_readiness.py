@@ -447,3 +447,49 @@ def test_input_state_order_guard_is_experiment_constraint() -> None:
         for item in readiness.execution_requirements
     }
     assert predicates[("execution_predicate", "epoch >= depositEpoch")] == "constraint"
+
+
+def test_execution_readiness_treats_solidity_casts_as_deterministic_dataflow():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        execution_predicates=("selector == expected", "balanceChange < 0"),
+        execution_predicate_polarities=(
+            ("selector == expected", "must_not_hold"),
+            ("balanceChange < 0", "must_not_hold"),
+        ),
+        execution_value_bindings=(
+            ("selector", "bytes4(op.callData)"),
+            ("balanceChange", "int256(after[i]) - int256(before[i])"),
+        ),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    dataflow = {
+        item.subject: item.status
+        for item in readiness.execution_requirements
+        if item.kind == "execution_dataflow"
+    }
+    assert dataflow["selector <- bytes4(op.callData)"] == "constraint"
+    assert dataflow["balanceChange <- int256(after[i]) - int256(before[i])"] == "constraint"
+
+
+def test_execution_readiness_excludes_solidity_abi_builtin_runtime_dependency():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (("abi", "decode"), ("target", "execute")),
+        1,
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    assert ("runtime_dependency", "abi.decode") not in {
+        (item.kind, item.subject) for item in readiness.runtime_requirements
+    }
+    assert ("runtime_dependency", "target.execute") in {
+        (item.kind, item.subject) for item in readiness.runtime_requirements
+    }
