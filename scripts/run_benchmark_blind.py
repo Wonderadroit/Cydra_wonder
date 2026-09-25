@@ -120,24 +120,7 @@ FREEZE_FILES = (
     "classification.json",
     "manifest.sha256",
     "README.md",
-),
-                    "skipped_files": list(campaign.skipped_files),
-                    "contracts": _json(campaign.contracts),
-                    "system_model": campaign.system_model.export(),
-                },
-            },
-            "invariants.json",
-    "hypotheses.json",
-    "experiments.json",
-    "compilation.log",
-    "execution.json",
-    "execution-human.txt",
-    "integrity-check.json",
-    "classification.json",
-    "manifest.sha256",
-    "README.md",
 )
-
 
 def validate_classes(requested: list[str]) -> tuple[str, ...]:
     unsupported = set(requested) - SUPPORTED_CLASSES
