@@ -44,6 +44,7 @@ def generate_sequence_test_from_experiment(
     rendered: list[str] = []
     relation_setups: list[str] = []
     relation_assertions: list[str] = []
+    relation_index_snapshots: dict[str, str] = {}
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
@@ -91,10 +92,13 @@ def generate_sequence_test_from_experiment(
                 # index state would make the post-state getter observe a
                 # different key and could create false relation failures.
                 for state_name, state_type in plan.index_state_types:
-                    index_snapshot = f"before_index_{state_name}"
-                    relation_setups.append(
-                        f"        {state_type} {index_snapshot} = target.{state_name}();"
-                    )
+                    index_snapshot = relation_index_snapshots.get(state_name)
+                    if index_snapshot is None:
+                        index_snapshot = f"before_index_{state_name}"
+                        relation_index_snapshots[state_name] = index_snapshot
+                        relation_setups.append(
+                            f"        {state_type} {index_snapshot} = target.{state_name}();"
+                        )
                     getter = re.sub(
                         rf"\btarget\.{re.escape(state_name)}\(\)",
                         index_snapshot,
