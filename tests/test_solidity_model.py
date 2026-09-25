@@ -657,3 +657,22 @@ def test_parse_solidity_resolves_inherited_state_variables_and_writes(tmp_path: 
     assert contract.state_variables == ("externalActionMap", "helper")
     register = contract.functions[0]
     assert register.writes == ("externalActionMap",)
+
+
+def test_solidity_model_excludes_builtin_member_calls_from_runtime_dependencies(tmp_path: Path):
+    source = tmp_path / "Builtins.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Builtins {
+            function execute(bytes memory data) external returns (bytes memory) {
+                bytes memory decoded = abi.decode(data, (bytes));
+                return abi.encode(decoded);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    contract = parse_solidity(source)[0]
+    function = next(item for item in contract.functions if item.name == "execute")
+    assert function.external_calls == ()
