@@ -7,14 +7,14 @@ pipeline. No vulnerability class or target-specific answer is injected here.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable
 
 from .models import ContractModel, InvestigationResult
 from .solidity_model import parse_solidity
 from .solidity_system_model import project_contracts
-from .system_model import SystemModel
+from .system_model import SystemModel\n\n\ndef _namespace_result(result: InvestigationResult, prefix: str) -> InvestigationResult:\n    """Keep generated execution identities unique across source files."""\n    hypotheses = tuple(replace(item, hypothesis_id=f"{prefix}{item.hypothesis_id}") for item in result.hypotheses)\n    hypothesis_ids = {item.hypothesis_id.replace(prefix, "", 1): item.hypothesis_id for item in hypotheses}\n    experiments = tuple(\n        replace(\n            item,\n            experiment_id=f"{prefix}{item.experiment_id}",\n            hypothesis_id=hypothesis_ids.get(item.hypothesis_id, f"{prefix}{item.hypothesis_id}"),\n        )\n        for item in result.experiments\n    )\n    return replace(result, hypotheses=hypotheses, experiments=experiments)\n
 
 DEFAULT_EXCLUDED_PARTS = frozenset({
     ".git", "lib", "node_modules", "out", "cache",
