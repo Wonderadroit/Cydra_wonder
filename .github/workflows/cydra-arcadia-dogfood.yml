@@ -2,6 +2,9 @@ name: CYDRA Arcadia Accounts-v2 Blind Dogfood
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - dogfood/arcadia-accounts-live
 
 permissions: {}
 
