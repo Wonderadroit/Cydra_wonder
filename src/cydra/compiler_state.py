@@ -125,3 +125,73 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
                 continue
         status = "success" if evidence or constraints else "no_ast_for_source"
         return CompilerEvidenceResult(tuple(evidence), tuple(constraints), True, status, command, completed.stdout, completed.stderr, tuple(map(str, build_files)), tuple(sorted(versions)))
+
+
+def compile_repository_state_effects(project: str | Path) -> CompilerEvidenceResult:
+    """Compile the repository once and retain AST/constraint evidence for every source.
+
+    The repository investigation reasons over the complete in-scope source tree.
+    Restricting compiler evidence to the selected execution anchor would silently
+    starve hypotheses belonging to other contracts, so this boundary consumes the
+    same build-info graph without making a per-file compiler invocation.
+    """
+    project_path = Path(project).resolve()
+    command = ("forge", "build", "--build-info")
+    if not project_path.exists():
+        return CompilerEvidenceResult((), (), False, "input_missing", command, "", "project missing")
+
+    with tempfile.TemporaryDirectory(prefix="cydra-repository-build-info-", dir=project_path.parent) as temp:
+        info_path = Path(temp)
+        profile = ("--profile", "lite") if _has_lite_profile(project_path) else ()
+        command = (
+            "forge", "build", "--build-info", "--build-info-path", str(info_path),
+            *profile, "--skip", "test", "--skip", "script", "--threads", "1",
+        )
+        completed = subprocess.run(command, cwd=project_path, text=True, capture_output=True, check=False)
+        build_files = tuple(sorted(info_path.rglob("*.json")))
+        if completed.returncode != 0 and "Stack too deep" in completed.stderr and "--via-ir" not in command:
+            retry_command = (
+                "forge", "build", "--build-info", "--build-info-path", str(info_path),
+                *profile, "--skip", "test", "--skip", "script", "--threads", "1",
+                "--via-ir", "--optimize", "--optimizer-runs", "200",
+            )
+            completed = subprocess.run(
+                retry_command, cwd=project_path, text=True, capture_output=True, check=False
+            )
+            command = retry_command
+            build_files = tuple(sorted(info_path.rglob("*.json")))
+        if completed.returncode != 0:
+            return CompilerEvidenceResult(
+                (), (), True, "compile_failed", command, completed.stdout,
+                completed.stderr, tuple(map(str, build_files))
+            )
+
+        evidence: list[SemanticRelationshipEvidence] = []
+        constraints: list[ConstraintEvidence] = []
+        versions: set[str] = set()
+        for build_file in build_files:
+            try:
+                payload = json.loads(build_file.read_text(encoding="utf-8"))
+                version = payload.get("solcVersion")
+                if isinstance(version, str):
+                    versions.add(version)
+                output = payload.get("output")
+                sources = output.get("sources") if isinstance(output, dict) else None
+                if not isinstance(sources, dict):
+                    continue
+                for source_key, source_payload in sources.items():
+                    if not isinstance(source_key, str) or not isinstance(source_payload, dict):
+                        continue
+                    ast = source_payload.get("ast")
+                    if not isinstance(ast, dict):
+                        continue
+                    evidence.extend(extract_ast_relationships(ast, source_key))
+                    constraints.extend(extract_parameter_constraints(ast, source_key))
+            except (OSError, json.JSONDecodeError):
+                continue
+        status = "success" if evidence or constraints else "no_ast_for_repository"
+        return CompilerEvidenceResult(
+            tuple(evidence), tuple(constraints), True, status, command,
+            completed.stdout, completed.stderr, tuple(map(str, build_files)),
+            tuple(sorted(versions))
+        )
