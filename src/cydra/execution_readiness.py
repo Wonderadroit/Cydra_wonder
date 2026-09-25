@@ -289,6 +289,25 @@ def _resolved_interface_method(contract: ContractModel, receiver: str, method: s
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
     state_names = set(contract.state_variables)
+    parameter_names = {
+        parameter.name
+        for parameter in function.parameters
+        if parameter.name
+    }
+    bound_local_names = {
+        name for name, _expression in function.execution_value_bindings
+    }
+    # A returned value that is not a state variable or parameter is evidence of
+    # a local value/collection. Member operations on such a value are local
+    # execution work, not external runtime targets.
+    returned_local_names = {
+        match.group(1)
+        for expression in function.return_expressions
+        for match in [re.match(r"^([A-Za-z_]\\w*)\\b", expression.strip())]
+        if match and match.group(1) not in state_names
+    }
+    local_value_names = bound_local_names | parameter_names | returned_local_names
+
     for receiver, method in function.external_calls:
         # Solidity array mutations are represented by the parser as calls on
         # synthetic receivers, but push/pop are local state operations, not
@@ -296,6 +315,8 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
         if method in {"push", "pop"}:
             continue
         if receiver in {"abi", "block", "msg", "tx", "type", "super"}:
+            continue
+        if receiver in local_value_names and receiver not in state_names:
             continue
         if _runtime_receiver_is_library(contract, receiver):
             continue
@@ -371,6 +392,13 @@ def _execution_dataflow_requirements(
                 dataflow_detail,
             )
         )
+
+        # Deterministic Solidity casts/builtins are already classified as local
+        # dataflow constraints above. Do not reintroduce them as unresolved
+        # call-shaped producer dependencies merely because their syntax contains
+        # parentheses.
+        if pure_local_expression:
+            continue
 
         call_match = re.match(r"^(?:[A-Za-z_]\w*\.)?(?P<name>[A-Za-z_]\w*)\s*\(", expression)
         if not call_match:
