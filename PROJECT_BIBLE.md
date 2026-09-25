@@ -1996,3 +1996,17 @@ The same campaign also demonstrated that the generic blind runner can execute un
 The next end-result boundary is therefore explicit: convert source-backed relations into fully generic ordered state experiments on unfamiliar targets, including mapping/struct-derived surfaces where safely observable; then add class-neutral causal differential execution without target-specific PoCs. Arithmetic/pair-symmetry execution remains a separate capability gap because the current blind runner still blocks arithmetic Foundry generation without a patched counterpart.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+## Milestone 90 — activate the existing class-neutral shared-state discovery surface
+
+The post-maturity state investigation work exposed an orchestration gap rather than a missing state-analysis primitive: CYDRA already had a class-neutral cross-function state-transition reasoning surface and a generic ordered experiment planner, but the canonical default investigation path did not activate that surface. PR #228 merged the correction.
+
+The reasoning-surface transport contract was also moved out of the pipeline into a standalone module so reasoning surfaces no longer depend on orchestration internals. A regression now verifies that a normal default `investigate()` call can discover multiple externally callable transitions sharing a state surface, produce `INV-STATE-*` hypotheses with related transitions, and bind them to ordered experiments without a vulnerability-class-specific prompt.
+
+This is deliberately a composition repair, not a new vulnerability detector. It reduces the risk that a demonstrated capability exists only behind a benchmark-specific caller while remaining absent from ordinary discovery.
+
+PR #229 subsequently rebased the state-relation mismatch evidence boundary onto the new main and merged it. Generated relation assertion failures now remain explicit evidence when the generated diagnostic marker and expression are both observed; generic reverts, compilation failures, and empty executions remain non-evidence. The mismatch is still not a finding and remains downstream of causal verification.
+
+The immediate next boundary remains behavioral and causal: use the newly connected shared-state discovery surface and mismatch evidence in unfamiliar-target campaigns, then diagnose whether CYDRA can turn a generic state inconsistency into a discriminating causal experiment and independently reproducible impact without benchmark-specific PoCs. Do not add another detector unless an unfamiliar investigation demonstrates a missing general capability.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
