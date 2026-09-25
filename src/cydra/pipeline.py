@@ -8,7 +8,7 @@ from dataclasses import replace
 from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
 from .experiment_inputs import plan_parameter_inputs
-from .experiment_planning import bind_experiment
+from .experiment_planning import bind_experiment, plan_experiment
 from .models import ContractModel, Experiment, ExperimentStep, Hypothesis, InvestigationResult, Invariant
 from .reasoning import (
     access_control_invariant,
@@ -70,6 +70,10 @@ from .callback_state_order_planning import plan_callback_state_order_experiment
 from .state_experiments import plan_cross_function_state_experiment
 from .reasoning_surface import ReasoningContribution
 from .structural_state import generate_cross_function_state_hypotheses
+from .structural_temporal import generate_temporal_precondition_hypotheses
+from .structural_signature_replay import generate_signature_replay_hypotheses
+from .structural_double_debit import generate_double_debit_hypotheses
+from .structural_storage_persistence import generate_storage_persistence_hypotheses
 
 
 ReasoningSurface = Callable[..., ReasoningContribution]
@@ -139,6 +143,20 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_unbounded_iteration_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-STATE-"):
         return plan_cross_function_state_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-TEMPORAL-PRECONDITION-"):
+        return plan_temporal_precondition_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith("INV-SIGNATURE-REPLAY-"):
+        return plan_signature_reuse_experiment(hypothesis)
+    if hypothesis.invariant_id.startswith(("INV-DOUBLE-DEBIT-", "INV-STORAGE-PERSISTENCE-")):
+        return plan_experiment(
+            hypothesis,
+            action="construct a transaction that traces the suspected value/state transition and compare persistent accounting before and after the operation",
+            discriminates=(
+                "the modeled state transition persists exactly once",
+                "the caller bears an additional value/state transition not reflected by the modeled accounting",
+            ),
+            cost=1.0,
+        )
     try:
         planner = planners[hypothesis.invariant_id]
     except KeyError as exc:
@@ -222,7 +240,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses, generate_incentive_liveness_hypotheses, generate_unbounded_iteration_hypotheses, generate_cross_function_state_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses, generate_incentive_liveness_hypotheses, generate_unbounded_iteration_hypotheses, generate_cross_function_state_hypotheses, generate_temporal_precondition_hypotheses, generate_signature_replay_hypotheses, generate_double_debit_hypotheses, generate_storage_persistence_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
