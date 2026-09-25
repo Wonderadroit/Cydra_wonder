@@ -57,7 +57,13 @@ def _external_callback_call(body: str) -> re.Match[str] | None:
         if receiver in _NON_CALLBACK_RECEIVERS:
             continue
         return match
-    return None
+    # Preserve the original low-level/value-transfer topology even when the
+    # receiver is msg.sender/payable(address(...)), which is intentionally excluded
+    # from the ordinary dotted-call matcher above.
+    return re.search(
+        r"(?:\\.call\\s*\\{\\s*value\\s*:|\\.transfer\\s*\\(|\\.send\\s*\\(|\\.safeTransferETH\\s*\\()",
+        body,
+    )
 
 
 def _external_value_transfer(body: str) -> bool:
@@ -94,20 +100,6 @@ def _guarded(function) -> bool:
         re.search(r"\b(?:nonReentrant|reentrancy|notInReentrant|notLocked)\b", modifier)
         for modifier in function.modifiers
     )
-
-
-def _public_callers(function_name: str, functions) -> tuple:
-    return tuple(
-        function
-        for function in functions
-        if function.visibility in {"public", "external"}
-        and re.search(rf"\b{re.escape(function_name)}\s*\(", _body_for_function(function))
-    )
-
-
-def _body_for_function(function) -> str:
-    # This helper is replaced by the source-aware closure in the generator.
-    return ""
 
 
 def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=()) -> CallbackStateOrderContribution:
