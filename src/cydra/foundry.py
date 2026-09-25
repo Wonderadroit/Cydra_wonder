@@ -279,7 +279,7 @@ def _initializer_argument(
         interface_names = {interface.name for interface in contract_model.inherited_resolved_interfaces}
         source = _source_text(contract_model)
         is_contract_type = base_type in interface_names or bool(
-            re.search(rf"\\b(?:interface|contract|library)\\s+{re.escape(base_type)}\\b", source)
+            re.search(rf"\b(?:interface|contract|library)\s+{re.escape(base_type)}\b", source)
         )
         location = "" if is_contract_type else " memory"
         declaration = f"{qualified_type}{location} {variable};"
