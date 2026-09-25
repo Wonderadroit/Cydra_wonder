@@ -303,7 +303,7 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
     returned_local_names = {
         match.group(1)
         for expression in function.return_expressions
-        for match in [re.match(r"^([A-Za-z_]\\w*)\b", expression.strip())]
+        for match in [re.match(r"^([A-Za-z_]\w*)\b", expression.strip())]
         if match and match.group(1) not in state_names
     }
     local_value_names = bound_local_names | parameter_names | returned_local_names
