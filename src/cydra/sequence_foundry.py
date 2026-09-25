@@ -44,6 +44,7 @@ def generate_sequence_test_from_experiment(
     rendered: list[str] = []
     relation_setups: list[str] = []
     relation_assertions: list[str] = []
+    relation_index_snapshots: dict[str, str] = {}
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
@@ -85,6 +86,25 @@ def generate_sequence_test_from_experiment(
                 for parameter_name, argument in parameter_bindings.items():
                     getter = re.sub(rf"\b{re.escape(parameter_name)}\b", argument, getter)
                 getter = re.sub(r"\bmsg\.sender\b", relation_caller, getter)
+
+                # A mapping index sourced from contract state must be frozen
+                # before the transition. Otherwise a function that changes the
+                # index state would make the post-state getter observe a
+                # different key and could create false relation failures.
+                for state_name, state_type in plan.index_state_types:
+                    index_snapshot = relation_index_snapshots.get(state_name)
+                    if index_snapshot is None:
+                        index_snapshot = f"before_index_{state_name}"
+                        relation_index_snapshots[state_name] = index_snapshot
+                        relation_setups.append(
+                            f"        {state_type} {index_snapshot} = target.{state_name}();"
+                        )
+                    getter = re.sub(
+                        rf"\btarget\.{re.escape(state_name)}\(\)",
+                        index_snapshot,
+                        getter,
+                    )
+
                 snapshot_suffix = "_".join(
                     re.sub(r"[^A-Za-z0-9_]+", "_", item)
                     for item in plan.relation.index_expressions

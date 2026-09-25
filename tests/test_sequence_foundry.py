@@ -436,6 +436,93 @@ def test_sequence_renderer_binds_caller_and_state_mapping_indexes(tmp_path):
         verify_state_relations=True,
     )
     rendered = generated.read_text(encoding="utf-8")
-    assert "uint128 before_queuedDeposit_msg_sender_depositEpoch = target.queuedDeposit(attacker, target.depositEpoch());" in rendered
+    assert "uint128 before_index_depositEpoch = target.depositEpoch();" in rendered
+    assert "uint128 before_queuedDeposit_msg_sender_depositEpoch = target.queuedDeposit(attacker, before_index_depositEpoch);" in rendered
     assert "target.requestDeposit(7);" in rendered
-    assert "assertEq(target.queuedDeposit(attacker, target.depositEpoch()), before_queuedDeposit_msg_sender_depositEpoch + 7" in rendered
+    assert "assertEq(target.queuedDeposit(attacker, before_index_depositEpoch), before_queuedDeposit_msg_sender_depositEpoch + 7" in rendered
+
+    
+def test_sequence_renderer_freezes_state_mapping_index_when_transition_changes_index(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "uint128 public epoch; "
+        "mapping(uint256 => uint256) public queued; "
+        "function advanceAndQueue(uint256 amount) external { "
+        "queued[epoch] += amount; epoch += 1; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import FunctionModel, ParameterModel
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "advanceAndQueue", "external", (), ("queued", "epoch"), (), 4,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("epoch", "queued"),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-queued-advance", "candidate", "INV-STATE-queued",
+        "advanceAndQueue", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-H-STATE-queued-advance", hypothesis.hypothesis_id,
+        "advanceAndQueue", ("violation",), 1.0,
+        steps=(ExperimentStep("advanceAndQueue", ("7",)),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_relations=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "uint128 before_index_epoch = target.epoch();" in rendered
+    assert "uint256 before_queued_epoch = target.queued(before_index_epoch);" in rendered
+    assert "target.advanceAndQueue(7);" in rendered
+    assert "assertEq(target.queued(before_index_epoch), before_queued_epoch + 7" in rendered
+
+
+def test_sequence_renderer_reuses_shared_state_mapping_index_snapshot(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "uint256 public epoch; "
+        "mapping(address => mapping(uint256 => uint256)) public first; "
+        "mapping(address => mapping(uint256 => uint256)) public second; "
+        "function bump(uint256 amount) external { "
+        "first[msg.sender][epoch] += amount; "
+        "second[msg.sender][epoch] += amount; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import FunctionModel, ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "bump", "external", (), ("first", "second"), (), 4,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("epoch", "first", "second"),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-shared-index-bump", "candidate",
+        "INV-STATE-shared-index", "bump", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-H-STATE-shared-index-bump", hypothesis.hypothesis_id, "bump",
+        ("violation",), 1.0,
+        steps=(ExperimentStep("bump", ("7",)),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_relations=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert rendered.count("uint256 before_index_epoch = target.epoch();") == 1
+    assert rendered.count("target.first(attacker, before_index_epoch)") == 2
+    assert rendered.count("target.second(attacker, before_index_epoch)") == 2
