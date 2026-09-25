@@ -158,10 +158,21 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         )
     try:
         planner = planners[hypothesis.invariant_id]
-    except KeyError as exc:
-        raise ValueError(
-            f"no default experiment planner for invariant {hypothesis.invariant_id}"
-        ) from exc
+    except KeyError:
+        # A reasoning surface is allowed to introduce a new invariant without
+        # forcing the orchestration layer to learn a vulnerability-class branch.
+        # The generic envelope preserves the hypothesis -> experiment join; an
+        # execution adapter may later mark the experiment unmeasurable if it
+        # cannot safely render the action.
+        return plan_experiment(
+            hypothesis,
+            action="construct an evidence-seeking transaction that discriminates the hypothesis from its stated alternative",
+            discriminates=(
+                "the hypothesis is contradicted by observed execution",
+                "the hypothesis is supported by observed execution",
+            ),
+            cost=1.0,
+        )
     return planner(hypothesis)
 
 
