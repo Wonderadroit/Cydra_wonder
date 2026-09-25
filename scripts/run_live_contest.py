@@ -75,6 +75,48 @@ def write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def prepare_shared_dependencies(checkout: Path, temp_root: Path) -> dict[str, str]:
+    """Prepare dependency checkouts once for all per-source live investigations."""
+    imports = "\n".join(
+        source.read_text(encoding="utf-8", errors="ignore")
+        for root_name in ("contracts", "circuits")
+        if (checkout / root_name).is_dir()
+        for source in (checkout / root_name).rglob("*.sol")
+    )
+    environment: dict[str, str] = {}
+
+    if "@openzeppelin/contracts/" in imports:
+        # The target's legacy security/ReentrancyGuard.sol import identifies
+        # the OpenZeppelin 4.x layout. Newer OZ releases moved that file.
+        oz_version = "v4.9.6" if "/security/ReentrancyGuard.sol" in imports else "v5.4.0"
+        oz = temp_root / "openzeppelin-contracts"
+        dependency = run([
+            "git", "clone", "--depth", "1", "--branch", oz_version,
+            "https://github.com/OpenZeppelin/openzeppelin-contracts.git", str(oz)
+        ])
+        if dependency.returncode != 0:
+            raise RuntimeError(
+                f"failed to prepare OpenZeppelin contracts {oz_version}: {dependency.stderr.strip()}"
+            )
+        environment["CYDRA_OPENZEPPELIN_CONTRACTS"] = os.fspath(oz)
+
+    if "@openzeppelin/contracts-upgradeable/" in imports:
+        oz_version = "v4.9.6" if "/security/ReentrancyGuard.sol" in imports else "v5.4.0"
+        oz_upgradeable = temp_root / "openzeppelin-contracts-upgradeable"
+        dependency = run([
+            "git", "clone", "--depth", "1", "--branch", oz_version,
+            "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable.git",
+            str(oz_upgradeable),
+        ])
+        if dependency.returncode != 0:
+            raise RuntimeError(
+                f"failed to prepare OpenZeppelin upgradeable {oz_version}: {dependency.stderr.strip()}"
+            )
+        environment["CYDRA_OPENZEPPELIN_UPGRADEABLE"] = os.fspath(oz_upgradeable)
+
+    return environment
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the canonical CYDRA research pipeline against one pinned live contest target.")
     parser.add_argument("--target-spec", type=Path, required=True)
@@ -120,6 +162,7 @@ def main() -> int:
             raise RuntimeError(f"failed to prepare shared forge-std: {dependency.stderr.strip()}")
         child_env = os.environ.copy()
         child_env["CYDRA_FORGE_STD"] = os.fspath(shared_forge_std)
+        child_env.update(prepare_shared_dependencies(checkout, temp_root))
         for index, source in enumerate(sources, start=1):
             artifact = output / f"{index:04d}-{Path(source).stem}"
             artifact.mkdir(parents=True, exist_ok=True)
