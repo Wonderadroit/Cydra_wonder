@@ -574,3 +574,48 @@ def test_sequence_renderer_verifies_relations_for_all_ordered_state_steps(tmp_pa
     assert "assertEq(target.counter(), before_counter + 7" in rendered
     assert "target.decrease(7);" in rendered
     assert "assertEq(target.counter(), before_counter - 7" in rendered
+
+
+def test_sequence_renderer_refreshes_state_mapping_index_between_transitions(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "uint256 public epoch; mapping(uint256 => uint256) public queued; "
+        "function queue(uint256 amount) external { queued[epoch] += amount; } "
+        "function advance() external { epoch += 1; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import FunctionModel, ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel("queue", "external", (), ("queued",), (), 3,
+                          parameters=(ParameterModel("amount", "uint256"),)),
+            FunctionModel("advance", "external", (), ("epoch",), (), 4),
+        ),
+        state_variables=("epoch", "queued"),
+    )
+    hypothesis = Hypothesis(
+        "H-STATE-queued-queue", "candidate", "INV-STATE-queued",
+        "queue", "attacker", "candidate", related_functions=("advance",),
+    )
+    experiment = Experiment(
+        "X-H-STATE-queued-sequence", hypothesis.hypothesis_id,
+        "queue, advance, queue", ("violation",), 3.0,
+        steps=(
+            ExperimentStep("queue", ("7",)),
+            ExperimentStep("advance", ()),
+            ExperimentStep("queue", ("9",)),
+        ),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_relations=True,
+        verify_state_relations_all_steps=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert rendered.count("uint256 before_index_epoch = target.epoch();") == 2
+    assert "target.queue(7);" in rendered
+    assert "target.advance();" in rendered
+    assert "target.queue(9);" in rendered
