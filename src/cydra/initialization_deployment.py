@@ -46,11 +46,15 @@ class DeploymentSurface:
         return tuple(item for item in self.implementation_links if item.implementation_contract == implementation_contract)
 
     def has_explicit_route(self, implementation_contract: str) -> bool:
+        """Return true only when the source explicitly links the implementation to a
+        proxy that forwards arbitrary calldata with delegatecall.
+
+        This is reachability evidence, not runtime proof that the proxy is deployed
+        on a live system or that the initializer is still unclaimed.
+        """
         links = self.linked(implementation_contract)
-        return bool(links) and any(
-            item.proxy_contract in {link.proxy_contract for link in links}
-            for item in self.initializer_forwarding
-        )
+        proxy_ids = {item.proxy_contract for item in self.evidence if item.kind == "proxy_delegatecall"}
+        return bool(links) and any(item.proxy_contract in proxy_ids for item in links)
 
 
 _CONTRACT_RE = re.compile(r"\b(?:abstract\s+)?contract\s+(?P<name>[A-Za-z_]\w*)")
