@@ -40,16 +40,25 @@ def _body(source: str, name: str) -> str:
     return ""
 
 
-def _standalone_external_calls(body: str) -> tuple[str, ...]:
+def _ignored_failure_capable_calls(body: str) -> tuple[str, ...]:
+    """Find calls whose Solidity result can directly carry failure information.
+
+    A bare interface/contract call is not evidence that a failure result was
+    ignored: many external functions return nothing at all. Restrict this
+    surface to Solidity operations with an explicit failure-capable return value
+    that is syntactically discarded.
+    """
+    patterns = (
+        r"(?m)^\s*(?P<callee>[A-Za-z_]\w*)\s*\.\s*call(?:\s*\{[^;{}]*\})?\s*\([^;{}]*\)\s*;",
+        r"(?m)^\s*(?P<callee>[A-Za-z_]\w*)\s*\.\s*delegatecall\s*\([^;{}]*\)\s*;",
+        r"(?m)^\s*(?P<callee>[A-Za-z_]\w*)\s*\.\s*staticcall\s*\([^;{}]*\)\s*;",
+        r"(?m)^\s*(?P<callee>[A-Za-z_]\w*)\s*\.\s*send\s*\([^;{}]*\)\s*;",
+    )
     calls: list[str] = []
-    for match in re.finditer(
-        r"(?m)^\s*(?P<callee>[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w+)?)\s*\([^;{}]*\)\s*;",
-        body,
-    ):
-        callee = re.sub(r"\s+", "", match.group("callee"))
-        if "." in callee:
-            calls.append(callee)
-    return tuple(calls)
+    for pattern in patterns:
+        for match in re.finditer(pattern, body):
+            calls.append(re.sub(r"\s+", "", match.group("callee")))
+    return tuple(dict.fromkeys(calls))
 
 
 def generate_external_outcome_hypotheses(
@@ -73,12 +82,12 @@ def generate_external_outcome_hypotheses(
         if function.visibility not in {"public", "external"}:
             continue
         body = _body(source, function.name)
-        calls = _standalone_external_calls(body)
+        calls = _ignored_failure_capable_calls(body)
         if len(calls) < 1:
             continue
-        # The structural signal is deliberately conservative: a standalone
-        # external call is a candidate for ignored-result semantics. Execution
-        # decides whether its return value is actually security-relevant.
+        # The structural signal is deliberately narrow: only failure-capable
+        # low-level calls whose result is syntactically discarded enter this
+        # surface. Execution still decides whether the result is security-relevant.
         hid = f"H-EXTERNAL-OUTCOME-{function.name}"
         hypotheses.append(
             Hypothesis(
