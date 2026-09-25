@@ -231,6 +231,7 @@ def _initializer_argument(
     index: int,
     runtime_arguments: dict[str, str] | None = None,
     contract_model: ContractModel | None = None,
+    interface_types: set[str] | None = None,
 ) -> tuple[str, str | None]:
     runtime_arguments = runtime_arguments or {}
     if parameter.name in runtime_arguments:
@@ -270,9 +271,17 @@ def _initializer_argument(
     variable = f"parameter{index}"
     if contract_model is None:
         declaration = f"{target_type}.{parameter_type} memory {variable};"
-    else:
-        qualified_type = _resolve_custom_type(parameter_type, target_type, contract_model)
-        declaration = f"{qualified_type} memory {variable};"
+        return variable, declaration
+
+    # Solidity contract/interface types are address-like ABI values, not
+    # memory reference types. Directly imported interfaces are valid initializer
+    # parameters even when they are not inherited by the target contract.
+    base = parameter_type.split()[0].rstrip("[]")
+    if base in (interface_types or set()):
+        return f"{parameter_type.split()[0]}(address(0xA11CE))", None
+
+    qualified_type = _resolve_custom_type(parameter_type, target_type, contract_model)
+    declaration = f"{qualified_type} memory {variable};"
     return variable, declaration
 
 
@@ -628,6 +637,7 @@ def _model_initialization_source(
             index,
             initializer_runtime_arguments,
             contract_model,
+            set(parameter_interfaces),
         )
         arguments.append(argument)
         if declaration:
