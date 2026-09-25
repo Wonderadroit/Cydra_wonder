@@ -23,6 +23,7 @@ from cydra.foundry import (
     test_path_for,
 )
 from cydra.initialization_runtime import classify_initialization_execution
+from cydra.initialization_deployment import DeploymentSurface, inspect_deployment_surface
 from cydra.authorization_runtime import classify_authorization_blind_execution
 from cydra.pipeline import ReasoningContribution, _default_experiment_planner
 from cydra.repository_investigation import investigate_repository
@@ -562,7 +563,7 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
-def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidence: CompilerEvidenceResult):
+def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidence: CompilerEvidenceResult, deployment_surface: DeploymentSurface | None = None):
     experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
     statuses: list[dict[str, Any]] = []
     executions: list[ExecutionResult] = []
@@ -729,6 +730,19 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
 
         status.update(status_prerequisite)
         evidence.extend(prerequisite_observation_evidence)
+        if class_name == "initialization" and deployment_surface is not None:
+            route_evidence = deployment_surface.linked(contract.name)
+            route_ready = deployment_surface.has_explicit_route(contract.name)
+            status["deployment_causal_gate"] = {
+                "static_route_ready": route_ready,
+                "implementation_link_evidence_ids": [item.evidence_id for item in route_evidence],
+                "initializer_forwarding_evidence_ids": [
+                    item.evidence_id
+                    for item in deployment_surface.initializer_forwarding
+                    if item.proxy_contract in {link.proxy_contract for link in route_evidence}
+                ],
+                "decision": "requires_runtime_route_verification" if not route_ready else "runtime_route_verification_required",
+            }
         status.update(
             {
                 "foundry_generated": True,
@@ -847,6 +861,10 @@ def main() -> int:
         if target_intake.adapter == "unsupported":
             raise RuntimeError("target intake could not select a supported execution adapter")
         compiler_evidence: CompilerEvidenceResult = compile_repository_state_effects(project)
+        deployment_surface = inspect_deployment_surface(
+            project,
+            source_files=tuple(project / relative for relative in campaign.source_files),
+        )
         surfaces = tuple(
             surface
             for enabled, surface in (
@@ -871,7 +889,7 @@ def main() -> int:
         execution_readiness = []
         for result in campaign.results:
             result_statuses, result_executions, result_evidence = run_layers(
-                result, project, classes, compiler_evidence
+                result, project, classes, compiler_evidence, deployment_surface
             )
             statuses.extend(result_statuses)
             executions.extend(result_executions)
@@ -917,6 +935,7 @@ def main() -> int:
                 "contracts": len(campaign.contracts),
                 "canonical_nodes": len(campaign.system_model.nodes),
                 "canonical_edges": len(campaign.system_model.edges),
+                "deployment_surface": _json(deployment_surface),
             },
             "outcome_taxonomy": {
                 "initialization": {"TP": "confirmed", "FP": "rejected", "FN": "not_confirmed"},
