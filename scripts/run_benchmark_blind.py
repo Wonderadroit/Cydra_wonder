@@ -24,7 +24,8 @@ from cydra.foundry import (
 )
 from cydra.initialization_runtime import classify_initialization_execution
 from cydra.authorization_runtime import classify_authorization_blind_execution
-from cydra.pipeline import ReasoningContribution, _default_experiment_planner, investigate
+from cydra.pipeline import ReasoningContribution, _default_experiment_planner
+from cydra.repository_investigation import investigate_repository
 from cydra.planned_foundry import generate_authorization_test_from_experiment
 from cydra.reasoning import plan_access_control_experiment, plan_arithmetic_experiment, plan_initialization_experiment, plan_guard_parity_experiment
 from cydra.sequence_foundry import generate_sequence_test_from_experiment
@@ -857,45 +858,60 @@ def main() -> int:
             )
             if enabled
         )
-        result = investigate(
-            source,
+        campaign = investigate_repository(
+            project,
             target=f"{args.target_repo}@{args.target_ref}",
             semantic_evidence=compiler_evidence.evidence,
             constraint_evidence=compiler_evidence.constraints,
             experiment_planner=_blind_planner,
             reasoning_surfaces=surfaces,
         )
-        statuses, executions, evidence = run_layers(result, project, classes, compiler_evidence)
-        experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
+        statuses = []
+        executions = []
+        evidence = []
         execution_readiness = []
-        for hypothesis in result.hypotheses:
-            class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
-            if class_name is None and hypothesis.invariant_id.startswith("INV-STATE-"):
-                class_name = "state"
-            if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
-                class_name = "guard_parity"
-            if class_name is None or class_name not in classes:
-                continue
-            contract = _contract_for_hypothesis(result, hypothesis)
-            function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
-            readiness = inspect_execution_readiness(
-                contract,
-                function,
-                tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
-                compiler_evidence.evidence,
+        for result in campaign.results:
+            result_statuses, result_executions, result_evidence = run_layers(
+                result, project, classes, compiler_evidence
             )
-            execution_readiness.append({
-                "hypothesis_id": hypothesis.hypothesis_id,
-                "class": class_name,
-                "target_function": hypothesis.target_function,
-                "readiness": readiness,
-            })
+            statuses.extend(result_statuses)
+            executions.extend(result_executions)
+            evidence.extend(result_evidence)
+            for hypothesis in result.hypotheses:
+                class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
+                if class_name is None and hypothesis.invariant_id.startswith("INV-STATE-"):
+                    class_name = "state"
+                if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
+                    class_name = "guard_parity"
+                if class_name is None or class_name not in classes:
+                    continue
+                contract = _contract_for_hypothesis(result, hypothesis)
+                function = next(
+                    (item for item in contract.functions if item.name == hypothesis.target_function),
+                    None,
+                )
+                readiness = inspect_execution_readiness(
+                    contract,
+                    function,
+                    tuple(
+                        item for item in compiler_evidence.constraints
+                        if item.contract == contract.name
+                    ),
+                    compiler_evidence.evidence,
+                )
+                execution_readiness.append({
+                    "hypothesis_id": hypothesis.hypothesis_id,
+                    "class": class_name,
+                    "target_function": hypothesis.target_function,
+                    "source": contract.source,
+                    "readiness": readiness,
+                })
         build_capture = _command_capture(project, "forge", "build")
         provenance_env, _, forge_config_text = _environment_provenance(root, project)
 
         classification = {
             "surface": "compiler-backed-planned-execution",
-            "hypotheses": statuses,
+            "hypotheses": statuses,\n            "repository": {\n                "source_files": list(campaign.source_files),\n                "skipped_files": list(campaign.skipped_files),\n                "contracts": len(campaign.contracts),\n                "canonical_nodes": len(campaign.system_model.nodes),\n                "canonical_edges": len(campaign.system_model.edges),\n            },
             "outcome_taxonomy": {
                 "initialization": {"TP": "confirmed", "FP": "rejected", "FN": "not_confirmed"},
                 "authorization": {"execution": "measured", "classification": "requires_patched_counterpart"},
@@ -973,7 +989,7 @@ def main() -> int:
             "provenance.json": provenance,
             "target-intake.json": target_intake.to_dict(),
             "execution-readiness.json": execution_readiness,
-            "parse-output.json": {"target": args.target_path, "contracts": _json(result.contracts)},
+            "parse-output.json": {\n                "target": args.target_path,\n                "repository": {\n                    "source_files": list(campaign.source_files),\n                    "skipped_files": list(campaign.skipped_files),\n                    "contracts": _json(campaign.contracts),\n                    "system_model": campaign.system_model.export(),\n                },\n            },
             "invariants.json": result.invariants,
             "hypotheses.json": result.hypotheses,
             "experiments.json": result.experiments,
