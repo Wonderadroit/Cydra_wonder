@@ -2,9 +2,6 @@ name: CYDRA canonical live-target dogfood
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - refactor/canonical-live-dogfood
 
 concurrency:
   group: cydra-live-bounty-${{ github.run_id }}
