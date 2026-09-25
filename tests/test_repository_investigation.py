@@ -53,3 +53,46 @@ def test_repository_namespace_keeps_same_function_names_executable(tmp_path: Pat
     ]
 
     assert len(ids) == len(set(ids))
+
+
+def test_repository_reasoning_surface_receives_canonical_system_model(tmp_path: Path):
+    from cydra.models import Hypothesis, Invariant
+    from cydra.reasoning_surface import ReasoningContribution
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "A.sol").write_text(
+        "pragma solidity ^0.8.0; contract A { uint256 value; function set(uint256 x) external { value = x; } }"
+    )
+
+    seen = []
+
+    def surface(contract, semantic, system_model):
+        seen.append((contract.name, system_model))
+        return ReasoningContribution(
+            invariants=(
+                Invariant(
+                    "INV-REPO-CONTEXT-001",
+                    "repository context is available to this reasoning surface",
+                    "system_model",
+                    1.0,
+                ),
+            ),
+            hypotheses=(
+                Hypothesis(
+                    "H-REPO-CONTEXT-001",
+                    "the reasoning surface can inspect repository-wide canonical context",
+                    "INV-REPO-CONTEXT-001",
+                    contract.functions[0].name,
+                    "external caller",
+                    "context inspection",
+                ),
+            ),
+        )
+
+    campaign = investigate_repository(tmp_path, reasoning_surfaces=(surface,))
+
+    assert seen and seen[0][0] == "A"
+    model = seen[0][1]
+    assert any(node.kind == "contract" and node.label == "A" for node in model.nodes.values())
+    assert any(item.invariant_id == "INV-REPO-CONTEXT-001" for item in campaign.invariants)
