@@ -276,3 +276,24 @@ def test_model_aware_generator_imports_bare_resolved_interface_initializer_type(
     assert 'import { IERC20Metadata } from "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";' in source
     assert "IERC20Metadata(address(tokenStub))" in source
     assert "IERC20Metadata memory parameter0;" not in source
+
+
+def test_model_aware_generator_resolves_direct_imported_interface_as_address_like_type(tmp_path):
+    source_path = tmp_path / "Vault.sol"
+    source_path.write_text(
+        'import "./IHinkalHelper.sol";\ncontract Vault { function initialize(IHinkalHelper helper) external {} }\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "IHinkalHelper.sol").write_text(
+        "interface IHinkalHelper { function ping() external; }\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    model = _model("Vault", (), (ParameterModel("helper", "IHinkalHelper"),))
+    model = ContractModel(**{**model.__dict__, "source": str(source_path)})
+    output = generate_initialization_test(
+        _hypothesis(), "Vault.sol", "Vault", tmp_path / "test" / "generated.t.sol", contract_model=model
+    )
+    source = output.read_text(encoding="utf-8")
+    assert "IHinkalHelper(address(0xA11CE))" in source
+    assert "IHinkalHelper memory parameter0;" not in source
