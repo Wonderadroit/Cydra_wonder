@@ -287,6 +287,34 @@ def prepare_target_project(project: Path) -> None:
                 check=True,
             )
 
+    # Live bounty repositories may intentionally omit dependency manifests while
+    # retaining canonical package imports. The live runner can prepare shared
+    # dependency checkouts once; reuse them here instead of silently compiling
+    # against an incomplete import graph.
+    shared_openzeppelin = os.environ.get("CYDRA_OPENZEPPELIN_CONTRACTS")
+    shared_openzeppelin_upgradeable = os.environ.get("CYDRA_OPENZEPPELIN_UPGRADEABLE")
+    remappings = project / "remappings.txt"
+    dependency_mappings: list[str] = []
+    if shared_openzeppelin and Path(shared_openzeppelin).is_dir():
+        destination = project / "lib" / "openzeppelin-contracts"
+        if not destination.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.symlink_to(Path(shared_openzeppelin), target_is_directory=True)
+        dependency_mappings.append("@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/")
+    if shared_openzeppelin_upgradeable and Path(shared_openzeppelin_upgradeable).is_dir():
+        destination = project / "lib" / "openzeppelin-contracts-upgradeable"
+        if not destination.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.symlink_to(Path(shared_openzeppelin_upgradeable), target_is_directory=True)
+        dependency_mappings.append("@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/")
+    if dependency_mappings:
+        existing = remappings.read_text(encoding="utf-8").splitlines() if remappings.exists() else []
+        merged = existing[:]
+        for mapping in dependency_mappings:
+            if mapping not in merged:
+                merged.append(mapping)
+        remappings.write_text("\n".join(merged) + "\n", encoding="utf-8")
+
     # Hardhat/npm targets are accepted by target intake and need a temporary
     # Foundry execution envelope. Never overwrite a target-authored config.
     if not (project / "foundry.toml").exists():
