@@ -18,14 +18,15 @@ class StateRelationObservationEvidence:
     experiment_id: str
     expression: str
     source: str
+    step_index: int = 0
 
 
 def relation_observation_evidence_id(
-    experiment_id: str, plan: StateRelationObservationPlan
+    experiment_id: str, plan: StateRelationObservationPlan, step_index: int = 0
 ) -> str:
     material = (
-        f"{experiment_id}|{plan.state}|{plan.relation.function}|"
-        f"{plan.relation.expression}|{plan.getter}"
+        f"{experiment_id}|step:{step_index}|{plan.state}|"
+        f"{plan.relation.function}|{plan.relation.expression}|{plan.getter}"
     )
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
     return f"E-OBS-REL-{digest}"
@@ -33,11 +34,13 @@ def relation_observation_evidence_id(
 
 def evidence_records_from_relation_execution(
     experiment_id: str,
-    plans: tuple[StateRelationObservationPlan, ...],
+    plans: tuple[tuple[int, StateRelationObservationPlan], ...],
     execution: ExecutionResult,
 ) -> tuple[StateRelationObservationEvidence, ...]:
     """Emit relation evidence only after an executed, passing assertion test.
 
+    Each plan carries the actual ordered transition index that produced it;
+    evidence never infers sequence position from flattened plan order.
     A successful transaction without the generated before/after assertion does
     not qualify. This function is deliberately independent from prerequisite
     observations because a transition relation is evidence about a state
@@ -50,13 +53,14 @@ def evidence_records_from_relation_execution(
 
     return tuple(
         StateRelationObservationEvidence(
-            evidence_id=relation_observation_evidence_id(experiment_id, plan),
+            evidence_id=relation_observation_evidence_id(experiment_id, plan, step_index),
             kind="execution",
             state=plan.state,
             relation=plan.relation.function,
             experiment_id=experiment_id,
             expression=plan.relation.expression,
             source=plan.source,
+            step_index=step_index,
         )
-        for plan in plans
+        for step_index, plan in plans
     )

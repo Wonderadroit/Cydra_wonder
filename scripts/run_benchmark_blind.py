@@ -442,10 +442,30 @@ def _run_state_relation_verification(
     )
     if function is None:
         raise ValueError(f"state relation target function is not modeled: {hypothesis.target_function}")
-    plans = plan_state_relation_observations(contract, function)
+    # Verify every externally callable transition in the ordered experiment,
+    # not only the hypothesis target. This makes the evidence chain genuinely
+    # before/between/after for cross-function state hypotheses.
+    functions = {
+        item.name: item for item in (*contract.functions, *contract.inherited_functions)
+    }
+    relation_plans_by_step = []
+    for step_index, step in enumerate(experiment.steps):
+        step_function = functions.get(step.function)
+        if step_function is None:
+            raise ValueError(f"state relation step is not modeled: {step.function}")
+        step_plans = plan_state_relation_observations(contract, step_function)
+        if step_function.writes and not step_plans:
+            raise ValueError(
+                f"state transition {step_function.name} has no deterministic "
+                "public unsigned-integer relation observation"
+            )
+        relation_plans_by_step.extend(
+            (step_index, plan) for plan in step_plans
+        )
+    plans = tuple(relation_plans_by_step)
     if not plans:
         raise ValueError(
-            "state transition has no deterministic public unsigned-integer relation observation"
+            "state experiment has no deterministic public unsigned-integer relation observation"
         )
     output = test_path_for(
         project, f"generated/{hypothesis.hypothesis_id}-relation.t.sol"
@@ -462,6 +482,7 @@ def _run_state_relation_verification(
         output,
         contract,
         verify_state_relations=True,
+        verify_state_relations_all_steps=True,
     )
     execution = run_foundry_test(
         project, generated, relation_experiment.experiment_id, "relation"
@@ -620,11 +641,12 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                     "verified": bool(relation_evidence),
                     "plans": [
                         {
+                            "step_index": step_index,
                             "state": plan.state,
                             "getter": plan.getter,
                             "relation": plan.relation.expression,
                         }
-                        for plan in relation_plans
+                        for step_index, plan in relation_plans
                     ],
                     "execution": _json(relation_execution),
                     "evidence_ids": [item.evidence_id for item in relation_evidence],

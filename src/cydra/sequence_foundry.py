@@ -22,6 +22,7 @@ def generate_sequence_test_from_experiment(
     verify_state_prerequisites: bool = False,
     stop_before_target: bool = False,
     verify_state_relations: bool = False,
+    verify_state_relations_all_steps: bool = False,
 ) -> Path:
     """Render a structured ordered experiment into an executable Foundry test.
 
@@ -44,7 +45,6 @@ def generate_sequence_test_from_experiment(
     rendered: list[str] = []
     relation_setups: list[str] = []
     relation_assertions: list[str] = []
-    relation_index_snapshots: dict[str, str] = {}
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
@@ -61,7 +61,13 @@ def generate_sequence_test_from_experiment(
             )
         if any(not argument.strip() for argument in step.arguments):
             raise ValueError(f"sequence step {step.function} contains an empty argument")
-        if verify_state_relations and function.name == hypothesis.target_function:
+        verify_relation_for_step = verify_state_relations and (
+            verify_state_relations_all_steps or function.name == hypothesis.target_function
+        )
+        if verify_relation_for_step:
+            # Reuse a state-backed mapping key only within this transition.
+            # A later transition may legitimately advance the index state.
+            relation_index_snapshots: dict[str, str] = {}
             relation_plans = plan_state_relation_observations(contract_model, function)
             if function.writes and not relation_plans:
                 raise ValueError(
@@ -143,7 +149,7 @@ def generate_sequence_test_from_experiment(
             )
             if stop_before_target:
                 break
-        if verify_state_relations and function.name == hypothesis.target_function and relation_setups:
+        if verify_relation_for_step and relation_setups:
             rendered.extend(relation_setups)
             relation_setups.clear()
         arguments = ", ".join(step.arguments)
@@ -151,7 +157,7 @@ def generate_sequence_test_from_experiment(
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
         caller = caller_bindings.get(role, "attacker") if role else "attacker"
         rendered.append(f"        vm.prank({caller});\n        target.{step.function}({arguments});")
-        if verify_state_relations and function.name == hypothesis.target_function and relation_assertions:
+        if verify_relation_for_step and relation_assertions:
             rendered.extend(relation_assertions)
             relation_assertions.clear()
 

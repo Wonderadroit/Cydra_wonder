@@ -152,3 +152,77 @@ def test_caller_and_state_indexes_are_source_backed(tmp_path: Path):
     assert len(relations) == 1
     assert relations[0].index_expressions == ("msg.sender", "depositEpoch")
     assert relations[0].rhs_expression == "assets"
+
+def test_direct_self_referential_state_assignment_is_source_backed(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { uint256 public counter; "
+        "function step(uint256 amount) external { counter = counter + amount; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "step", "external", (), ("counter",), (), 1,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("counter",),
+    )
+    relations = plan_source_state_relations(model, model.functions[0])
+    assert len(relations) == 1
+    assert relations[0].rhs_expression == "amount"
+    assert relations[0].expression == "after(counter) == before(counter) + amount"
+
+
+def test_keyed_direct_self_referential_state_assignment_is_source_backed(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { mapping(address => uint256) public queued; "
+        "function step(address user, uint256 amount) external { "
+        "queued[user] = queued[user] + amount; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "step", "external", (), ("queued",), (), 1,
+                parameters=(
+                    ParameterModel("user", "address"),
+                    ParameterModel("amount", "uint256"),
+                ),
+            ),
+        ),
+        state_variables=("queued",),
+    )
+    relations = plan_source_state_relations(model, model.functions[0])
+    assert len(relations) == 1
+    assert relations[0].index_expressions == ("user",)
+    assert relations[0].expression == "after(queued[user]) == before(queued[user]) + amount"
+
+
+def test_direct_self_referential_state_assignment_with_dynamic_local_fails_closed(tmp_path: Path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { uint256 public counter; "
+        "function step(uint256 amount) external { "
+        "uint256 delta = amount + 1; counter = counter + delta; } }",
+        encoding="utf-8",
+    )
+    from cydra.models import ParameterModel
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "step", "external", (), ("counter",), (), 1,
+                parameters=(ParameterModel("amount", "uint256"),),
+            ),
+        ),
+        state_variables=("counter",),
+    )
+    assert plan_source_state_relations(model, model.functions[0]) == ()
+
