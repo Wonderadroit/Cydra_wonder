@@ -77,7 +77,7 @@ _SOLIDITY_BUILTIN_FUNCTIONS = {
     "addmod", "mulmod", "keccak256", "sha256", "ripemd160", "ecrecover",
 }
 _SOLIDITY_CAST_RE = re.compile(
-    r"^(?:address(?:\\s+payable)?|bool|string|bytes(?:\\d+)?|u?int(?:\\d+)?|fixed(?:\\d+x\\d+)?|ufixed(?:\\d+x\\d+)?)$"
+    r"^(?:address(?:\s+payable)?|bool|string|bytes(?:\d+)?|u?int(?:\d+)?|fixed(?:\d+x\d+)?|ufixed(?:\d+x\d+)?)$"
 )
 
 
@@ -87,7 +87,7 @@ def _is_deterministic_expression(expression: str) -> bool:
     Type conversions and ABI/hash arithmetic helpers do not introduce a runtime
     contract dependency. User-defined/internal calls remain producer dependencies.
     """
-    calls = re.findall(r"\\b([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\(", expression)
+    calls = re.findall(r"\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(", expression)
     for call in calls:
         if call in _SOLIDITY_BUILTIN_FUNCTIONS:
             continue
