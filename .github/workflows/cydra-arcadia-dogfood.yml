@@ -1,0 +1,38 @@
+name: CYDRA Arcadia Accounts-v2 Blind Dogfood
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  blind-dogfood:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CYDRA
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Regression gate
+        run: python -m pytest -q
+      - name: Arcadia accounts-v2 blind campaign
+        run: |
+          python scripts/run_benchmark_blind.py \
+            --target-repo https://github.com/arcadia-finance/accounts-v2.git \
+            --target-ref 8b6e9c27e13d71c646795019e5f243a444bf8da8 \
+            --target-path src/Factory.sol \
+            --target-project . \
+            --classes initialization authorization state guard_parity \
+            --freeze backtest-artifacts/arcadia-live-dogfood/freeze
+      - name: Upload blind artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcadia-live-dogfood
+          path: backtest-artifacts/arcadia-live-dogfood
+          if-no-files-found: warn
