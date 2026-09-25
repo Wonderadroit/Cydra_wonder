@@ -314,6 +314,7 @@ def investigate(
             intent_hypotheses,
             type_domain.hypotheses,
             resource_auth.hypotheses,
+            unbounded_iteration,
             surface_hypotheses,
         )
         all_invariants.extend(guard_parity.invariants)
