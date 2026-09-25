@@ -181,3 +181,30 @@ def test_relation_observation_binds_caller_and_state_indexes(tmp_path: Path):
     plans = plan_state_relation_observations(model, model.functions[0])
     assert len(plans) == 1
     assert plans[0].getter == "target.queuedDeposit(msg.sender, target.depositEpoch())"
+
+
+def test_panoptic_style_public_mapping_relation_with_msg_sender_and_epoch(tmp_path: Path):
+    source = tmp_path / "HypoVault.sol"
+    source.write_text(
+        "contract HypoVault { "
+        "uint128 public depositEpoch; "
+        "mapping(address => mapping(uint256 => uint128)) public queuedDeposit; "
+        "function requestDeposit(uint128 assets) external { "
+        "queuedDeposit[msg.sender][depositEpoch] += assets; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "HypoVault",
+        str(source),
+        (
+            FunctionModel(
+                "requestDeposit", "external", (), ("queuedDeposit",), (), 4,
+                parameters=(ParameterModel("assets", "uint128"),),
+            ),
+        ),
+        state_variables=("depositEpoch", "queuedDeposit"),
+    )
+    plans = plan_state_relation_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].getter == "target.queuedDeposit(msg.sender, target.depositEpoch())"
+    assert plans[0].relation.rhs_expression == "assets"
