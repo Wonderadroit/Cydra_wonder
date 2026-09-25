@@ -137,16 +137,15 @@ def investigate_repository(
     for path in paths:
         if path not in parsed_by_path:
             continue
-        results.append(
-            investigate(
-                path,
-                target=target or str(path.relative_to(base)),
-                semantic_evidence=semantic,
-                constraint_evidence=constraints,
-                experiment_planner=experiment_planner,
-                reasoning_surfaces=reasoning_surfaces,
-            )
+        result = investigate(
+            path,
+            target=target or str(path.relative_to(base)),
+            semantic_evidence=semantic,
+            constraint_evidence=constraints,
+            experiment_planner=experiment_planner,
+            reasoning_surfaces=reasoning_surfaces,
         )
+        results.append(_namespace_result(result, "repo_" + path.stem + "_"))
 
     return RepositoryInvestigation(
         root=str(base),
