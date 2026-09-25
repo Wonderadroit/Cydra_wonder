@@ -20,6 +20,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Setup Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
       - name: Install CYDRA
         run: |
           python -m pip install -e .
