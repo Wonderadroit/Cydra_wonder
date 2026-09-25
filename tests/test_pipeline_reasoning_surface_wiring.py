@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from cydra.pipeline import investigate
+from cydra.pipeline import default_reasoning_surfaces, investigate
+from cydra.structural_callback_state_order import generate_callback_state_order_hypotheses
+from cydra.structural_unbounded_iteration import generate_unbounded_iteration_hypotheses
 
 
 def test_unbounded_iteration_hypotheses_reach_investigation_result(tmp_path: Path):
@@ -32,3 +34,9 @@ def test_unbounded_iteration_hypotheses_reach_investigation_result(tmp_path: Pat
         for hypothesis in matches
         for experiment in result.experiments
     )
+
+
+def test_default_reasoning_surfaces_keep_newer_live_capabilities_enabled():
+    surfaces = default_reasoning_surfaces()
+    assert generate_callback_state_order_hypotheses in surfaces
+    assert generate_unbounded_iteration_hypotheses in surfaces
