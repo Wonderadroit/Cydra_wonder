@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: ["live/hinkal-bounty-dogfood"]
+  pull_request:
+    branches: ["main"]
 
 concurrency:
   group: cydra-live-bounty
