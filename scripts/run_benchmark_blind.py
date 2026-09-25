@@ -109,8 +109,16 @@ FREEZE_FILES = (
     "target-intake.json",
     "execution-readiness.json",
     "target-checkout.txt",
-    "parse-output.json",
-    "invariants.json",
+    "parse-output.json": {
+                "target": args.target_path,
+                "repository": {
+                    "source_files": list(campaign.source_files),
+                    "skipped_files": list(campaign.skipped_files),
+                    "contracts": _json(campaign.contracts),
+                    "system_model": campaign.system_model.export(),
+                },
+            },
+            "invariants.json",
     "hypotheses.json",
     "experiments.json",
     "compilation.log",
@@ -911,7 +919,14 @@ def main() -> int:
 
         classification = {
             "surface": "compiler-backed-planned-execution",
-            "hypotheses": statuses,\n            "repository": {\n                "source_files": list(campaign.source_files),\n                "skipped_files": list(campaign.skipped_files),\n                "contracts": len(campaign.contracts),\n                "canonical_nodes": len(campaign.system_model.nodes),\n                "canonical_edges": len(campaign.system_model.edges),\n            },
+            "hypotheses": statuses,
+            "repository": {
+                "source_files": list(campaign.source_files),
+                "skipped_files": list(campaign.skipped_files),
+                "contracts": len(campaign.contracts),
+                "canonical_nodes": len(campaign.system_model.nodes),
+                "canonical_edges": len(campaign.system_model.edges),
+            },
             "outcome_taxonomy": {
                 "initialization": {"TP": "confirmed", "FP": "rejected", "FN": "not_confirmed"},
                 "authorization": {"execution": "measured", "classification": "requires_patched_counterpart"},
