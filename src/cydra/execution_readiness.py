@@ -71,6 +71,31 @@ _ROLE_HINTS = (
     ("factory", "factory"),
 )
 
+_SOLIDITY_BUILTIN_FUNCTIONS = {
+    "abi.decode", "abi.encode", "abi.encodePacked", "abi.encodeWithSelector",
+    "abi.encodeWithSignature", "abi.encodeCall",
+    "addmod", "mulmod", "keccak256", "sha256", "ripemd160", "ecrecover",
+}
+_SOLIDITY_CAST_RE = re.compile(
+    r"^(?:address(?:\\s+payable)?|bool|string|bytes(?:\\d+)?|u?int(?:\\d+)?|fixed(?:\\d+x\\d+)?|ufixed(?:\\d+x\\d+)?)$"
+)
+
+
+def _is_deterministic_expression(expression: str) -> bool:
+    """Return True when all call-shaped operations are Solidity-local builtins/casts.
+
+    Type conversions and ABI/hash arithmetic helpers do not introduce a runtime
+    contract dependency. User-defined/internal calls remain producer dependencies.
+    """
+    calls = re.findall(r"\\b([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\(", expression)
+    for call in calls:
+        if call in _SOLIDITY_BUILTIN_FUNCTIONS:
+            continue
+        if _SOLIDITY_CAST_RE.fullmatch(call):
+            continue
+        return False
+    return True
+
 
 def _address_role(name: str) -> str | None:
     normalized = re.sub(r"[^a-z0-9]", "", name.lower())
@@ -270,6 +295,8 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
         # runtime dependencies that need a stubbed external target.
         if method in {"push", "pop"}:
             continue
+        if receiver in {"abi", "block", "msg", "tx", "type", "super"}:
+            continue
         if _runtime_receiver_is_library(contract, receiver):
             continue
 
@@ -326,7 +353,7 @@ def _execution_dataflow_requirements(
         if local not in predicates:
             continue
 
-        pure_local_expression = not re.search(r"\b[A-Za-z_]\w*\s*\(", expression)
+        pure_local_expression = _is_deterministic_expression(expression)
         dataflow_status = "constraint" if pure_local_expression else "required"
         dataflow_detail = (
             "deterministic local derivation used by an experiment constraint; "
