@@ -108,8 +108,6 @@ def _default_experiment_planner(hypothesis: Hypothesis) -> Experiment:
         return plan_control_flow_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
         return plan_guard_parity_experiment(hypothesis)
-    if hypothesis.invariant_id.startswith("INV-TEMPORAL-PRECONDITION-"):
-        return plan_temporal_precondition_experiment(hypothesis)
     if hypothesis.invariant_id.startswith("INV-IDEMPOTENCY-"):
         return plan_idempotency_experiment(hypothesis)
     if hypothesis.invariant_id.startswith(("INV-READONLY-REENTRANCY-", "INV-READONLY-XCONTRACT-")):
