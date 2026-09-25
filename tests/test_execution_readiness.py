@@ -493,3 +493,46 @@ def test_execution_readiness_excludes_solidity_abi_builtin_runtime_dependency():
     assert ("runtime_dependency", "target.execute") in {
         (item.kind, item.subject) for item in readiness.runtime_requirements
     }
+
+
+def test_execution_readiness_does_not_reclassify_deterministic_casts_as_producer_dependencies():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        execution_predicates=("selector == expected", "balanceChange < 0"),
+        execution_predicate_polarities=(
+            ("selector == expected", "must_not_hold"),
+            ("balanceChange < 0", "must_not_hold"),
+        ),
+        execution_value_bindings=(
+            ("selector", "bytes4(op.callData)"),
+            ("balanceChange", "int256(after[i]) - int256(before[i])"),
+        ),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    assert not any(
+        item.kind in {"execution_value_dependency", "execution_value_runtime_dependency"}
+        for item in readiness.execution_requirements
+    )
+
+
+def test_execution_readiness_does_not_treat_returned_local_collection_as_runtime_target():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (("utxoSet", "skipLast"),),
+        1,
+        return_expressions=("utxoSet",),
+    )
+    model = ContractModel("Target", "Target.sol", (function,))
+    readiness = inspect_execution_readiness(model, function)
+    assert not any(
+        item.subject == "utxoSet.skipLast"
+        for item in readiness.runtime_requirements
+    )
