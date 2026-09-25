@@ -85,7 +85,7 @@ def _operator_contexts(body: dict[str, Any], states: dict[int, str]) -> dict[int
     return roles
 
 
-def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRelationshipEvidence]:
+def extract_ast_relationships(\n    ast: dict[str, Any],\n    file: str,\n    known_state_declarations: dict[int, str] | None = None,\n) -> list[SemanticRelationshipEvidence]:
     """Extract compiler-linked state reads/writes from AST operator context.
 
     Declaration IDs are authoritative. Canonical SystemModel relation names are used
@@ -102,7 +102,7 @@ def extract_ast_relationships(ast: dict[str, Any], file: str) -> list[SemanticRe
             if isinstance(node.get("name"), str) and isinstance(node_id, int):
                 states[node_id] = node["name"]
 
-    evidence: list[SemanticRelationshipEvidence] = []
+    if known_state_declarations:\n        states.update(known_state_declarations)\n\n    evidence: list[SemanticRelationshipEvidence] = []
     for node in _walk(ast):
         if node.get("nodeType") != "FunctionDefinition" or not isinstance(node.get("id"), int):
             continue
