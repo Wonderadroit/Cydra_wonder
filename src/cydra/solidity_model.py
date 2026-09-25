@@ -562,6 +562,39 @@ def _inherited_functions(
     return tuple(deduped)
 
 
+def _inherited_state_variables(
+    root: Path,
+    importer: Path,
+    inherits: tuple[str, ...],
+    seen: set[Path] | None = None,
+) -> tuple[str, ...]:
+    """Resolve mutable state declared by concrete base contracts."""
+    seen = set() if seen is None else seen
+    variables: list[str] = []
+    for inherited_name in inherits:
+        try:
+            source_path, _method = resolve_named_type_source(root, importer, inherited_name)
+        except (FileNotFoundError, ValueError):
+            continue
+        resolved_path = (root / source_path).resolve()
+        if resolved_path in seen:
+            continue
+        seen.add(resolved_path)
+        try:
+            contracts = parse_solidity(resolved_path, include_inherited=False)
+        except (OSError, UnicodeError):
+            continue
+        base = next((item for item in contracts if item.name == inherited_name), None)
+        if base is None:
+            continue
+        for name in base.state_variables:
+            if name not in variables:
+                variables.append(name)
+        for name in _inherited_state_variables(root, resolved_path, base.inherits, seen):
+            if name not in variables:
+                variables.append(name)
+    return tuple(variables)
+
 def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple[ContractModel, ...]:
     """Minimal deterministic model extractor used before compiler integration.
 
@@ -588,7 +621,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
 
         contract_opening = contract_source.find("{")
         contract_body = _body(contract_source, contract_opening) if contract_opening >= 0 else contract_source
-        state_variables = _state_variables(contract_body)
+        state_variables = tuple(dict.fromkeys((*_state_variables(contract_body), *_inherited_state_variables(root, path, inherits))))
         declared_types = _declared_types(contract_body)
         inherited_resolved_interfaces: list[ResolvedInterface] = []
         for inherited_name in inherits:
