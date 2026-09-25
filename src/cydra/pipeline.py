@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import replace
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
@@ -67,19 +67,8 @@ from .unbounded_iteration_planning import plan_unbounded_iteration_experiment
 from .incentive_liveness_planning import plan_incentive_liveness_experiment
 from .callback_state_order_planning import plan_callback_state_order_experiment
 from .state_experiments import plan_cross_function_state_experiment
-
-
-@dataclass(frozen=True)
-class ReasoningContribution:
-    """Class-neutral contribution from an optional reasoning surface.
-
-    The orchestration layer transports invariants and hypotheses without knowing
-    their vulnerability class. Experiment planning remains injected through the
-    existing class-neutral planner boundary.
-    """
-
-    invariants: tuple[Invariant, ...]
-    hypotheses: tuple[Hypothesis, ...]
+from .reasoning_surface import ReasoningContribution
+from .structural_state import generate_cross_function_state_hypotheses
 
 
 ReasoningSurface = Callable[[ContractModel, tuple[SemanticRelationshipEvidence, ...]], ReasoningContribution]
@@ -231,7 +220,7 @@ def investigate(
         raise ValueError(f"No Solidity contract found in {path}")
 
     planner = experiment_planner or _default_experiment_planner
-    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses, generate_incentive_liveness_hypotheses, generate_unbounded_iteration_hypotheses,)
+    surfaces = tuple(reasoning_surfaces) if reasoning_surfaces is not None else (generate_cross_contract_economic_hypotheses, generate_cross_contract_attribution_hypotheses, generate_cross_contract_read_only_reentrancy_hypotheses, generate_control_flow_hypotheses, generate_epoch_accounting_hypotheses, generate_external_outcome_hypotheses, generate_type_domain_hypotheses, generate_resource_authorization_hypotheses, generate_callback_state_order_hypotheses, generate_incentive_liveness_hypotheses, generate_unbounded_iteration_hypotheses, generate_cross_function_state_hypotheses,)
     semantic = tuple(semantic_evidence or ())
     constraints = tuple(constraint_evidence or ())
     all_invariants, all_hypotheses, all_experiments, all_evidence = [], [], [], []
