@@ -287,7 +287,7 @@ def generate_caller_prerequisite_test(
         source = adapt_generated_initialization_for_proxy(source, contract_model.name)
 
     helper = """
-contract CydraCallerSet {
+library CydraCallerSet {
     function one(address caller) internal pure returns (address[] memory callers) {
         callers = new address[](1);
         callers[0] = caller;
