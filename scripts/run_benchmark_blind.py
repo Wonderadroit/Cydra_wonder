@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from cydra.compiler_state import CompilerEvidenceResult, compile_state_effects
+from cydra.caller_prerequisite import generate_caller_prerequisite_test
 from cydra.foundry import (
     ExecutionResult,
     generate_initialization_test,
@@ -44,8 +45,9 @@ from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
 from cydra.guard_parity_execution import generate_guard_parity_test
+from cydra.callback_state_order_execution import generate_callback_state_order_test
 
-SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
+SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity", "callback_state_order"}
 
 CLASS_CAPABILITIES = {
     "guard_parity": {
@@ -82,6 +84,15 @@ CLASS_CAPABILITIES = {
         "execute_blind": True,
         "classify_blind": True,
         "classification_path": "single-sided initialization classifier",
+    },
+    "callback_state_order": {
+        "extract": True,
+        "generate_hypothesis": True,
+        "plan_experiment": True,
+        "generate_foundry": True,
+        "execute_blind": True,
+        "classify_blind": False,
+        "classify_block_reason": "callback execution requires causal differential verification before classification",
     },
     "arithmetic": {
         "extract": True,
@@ -446,6 +457,65 @@ def _setup_steps(contract, setup_actions):
     return tuple(steps)
 
 
+def _run_caller_prerequisite_observation(
+    project: Path,
+    hypothesis,
+    experiment,
+    contract,
+) -> tuple[ExecutionResult, tuple[Any, ...], tuple[Any, ...]]:
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}-caller-prereq.t.sol")
+    generated = generate_caller_prerequisite_test(
+        hypothesis,
+        experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+    )
+    execution = run_foundry_test(
+        project,
+        generated,
+        f"{experiment.experiment_id}-CALLER-PREREQ",
+        "caller-prerequisite",
+    )
+    observations = ()
+    evidence = ()
+    if execution.executed and execution.status == "PASS" and execution.tests_run >= 1 and execution.tests_failed == 0:
+        from cydra.prerequisite_graph import PrerequisiteObservation
+        import hashlib
+        digest = hashlib.sha256(
+            f"{experiment.experiment_id}|caller_role|{hypothesis.target_function}".encode("utf-8")
+        ).hexdigest()[:16]
+        evidence_id = f"E-OBS-CALLER-{digest}"
+        subject = next(
+            (item.subject for item in inspect_execution_readiness(contract, next(
+                fn for fn in (*contract.functions, *contract.inherited_functions)
+                if fn.name == hypothesis.target_function
+            )).caller_requirements),
+            "caller_role",
+        )
+        observations = (
+            PrerequisiteObservation(
+                kind="caller_role",
+                subject=subject,
+                expected="satisfied",
+                observed="satisfied",
+                evidence_id=evidence_id,
+            ),
+        )
+        from cydra.models import Evidence
+        evidence = (
+            Evidence(
+                evidence_id,
+                "execution",
+                "Target-provided initialization established the caller-role prerequisite and the target function accepted the same caller.",
+                " ".join(execution.command),
+                execution.target + ".t.sol",
+            ),
+        )
+    return execution, observations, evidence
+
+
 def _run_state_prerequisite_observation(
     project: Path,
     hypothesis,
@@ -613,6 +683,31 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
+def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+    generated = generate_callback_state_order_test(
+        hypothesis,
+        experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+    )
+    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    return {
+        "generated_path": str(generated),
+        "execution": execution,
+        "classification": "NOT_REACHED",
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
+        "classification_blocked_reason": (
+            "callback execution reached the generic runtime boundary; "
+            "causal differential verification is required before classification"
+        ),
+    }
+
 def _execution_adapter(class_name: str):
     """Return the generic runtime adapter for an executable capability class.
 
@@ -625,6 +720,7 @@ def _execution_adapter(class_name: str):
         "state": _run_state,
         "initialization": _run_initialization,
         "guard_parity": _run_guard_parity,
+        "callback_state_order": _run_callback_state_order,
     }.get(class_name)
 
 
@@ -663,6 +759,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
             class_name = "guard_parity"
         experiment = experiments[hypothesis.hypothesis_id]
+        if class_name is None and hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
+            class_name = "callback_state_order"
         if class_name is None:
             statuses.append(_unknown_reasoning_status(hypothesis, experiment))
             continue
@@ -680,6 +778,20 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         prerequisite_graph = build_prerequisite_graph(readiness)
         prerequisite_observation_evidence = ()
         status_prerequisite = {}
+        if readiness.caller_requirements:
+            try:
+                prerequisite_execution, observations, prerequisite_observation_evidence = _run_caller_prerequisite_observation(
+                    project, hypothesis, experiment, contract
+                )
+                prerequisite_graph = apply_observations(prerequisite_graph, observations)
+                status_prerequisite = {
+                    "caller_prerequisite_execution": _json(prerequisite_execution),
+                    "caller_prerequisite_observations": [o.evidence_id for o in observations],
+                }
+            except Exception as error:
+                status_prerequisite = {
+                    "caller_prerequisite_failure": f"{type(error).__name__}: {error}"
+                }
         if class_name == "state" and readiness.state_requirements:
             setup_actions = constructible_state_setup_plan(
                 contract,
@@ -957,7 +1069,7 @@ def run_source_investigation(
         unexecuted_reasoning_surfaces = []
         for hypothesis in result.hypotheses:
             class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
-            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-")):
+            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-", "INV-CALLBACK-STATE-ORDER-")):
                 continue
             if class_name is None:
                 experiment = next(
@@ -981,6 +1093,8 @@ def run_source_investigation(
                 class_name = "state"
             if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
                 class_name = "guard_parity"
+            if class_name is None and hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
+                class_name = "callback_state_order"
             if class_name is None:
                 class_name = "reasoning_surface"
             elif class_name not in classes:

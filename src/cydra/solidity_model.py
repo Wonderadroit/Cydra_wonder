@@ -37,6 +37,11 @@ _STATE_DECLARATION_KEYWORDS = {
     "event", "error", "using", "struct", "enum", "function", "modifier", "constructor", "fallback", "receive",
 }
 
+# Solidity built-in namespaces are deterministic language operations, not runtime targets.
+_SOLIDITY_BUILTIN_RECEIVERS = {
+    "abi", "block", "msg", "tx", "type", "super",
+}
+
 
 def _strip_comments(source: str) -> str:
     """Blank Solidity comments while preserving source length and line offsets."""
@@ -688,7 +693,8 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
             external_calls = tuple(sorted({
                 (match.group(1), match.group(2))
                 for match in external_call_matches
-                if not re.search(r"\b(?:revert|emit)\s*$", body[max(0, match.start() - 32):match.start()])
+                if match.group(1) not in _SOLIDITY_BUILTIN_RECEIVERS
+                and not re.search(r"\b(?:revert|emit)\s*$", body[max(0, match.start() - 32):match.start()])
             }))
             functions.append(
                 FunctionModel(
