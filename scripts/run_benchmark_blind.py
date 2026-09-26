@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from cydra.compiler_state import CompilerEvidenceResult, compile_state_effects
+from cydra.caller_prerequisite import generate_caller_prerequisite_test
 from cydra.foundry import (
     ExecutionResult,
     generate_initialization_test,
@@ -456,6 +457,65 @@ def _setup_steps(contract, setup_actions):
     return tuple(steps)
 
 
+def _run_caller_prerequisite_observation(
+    project: Path,
+    hypothesis,
+    experiment,
+    contract,
+) -> tuple[ExecutionResult, tuple[Any, ...], tuple[Any, ...]]:
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}-caller-prereq.t.sol")
+    generated = generate_caller_prerequisite_test(
+        hypothesis,
+        experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+    )
+    execution = run_foundry_test(
+        project,
+        generated,
+        f"{experiment.experiment_id}-CALLER-PREREQ",
+        "caller-prerequisite",
+    )
+    observations = ()
+    evidence = ()
+    if execution.executed and execution.status == "PASS" and execution.tests_run >= 1 and execution.tests_failed == 0:
+        from cydra.prerequisite_graph import PrerequisiteObservation
+        import hashlib
+        digest = hashlib.sha256(
+            f"{experiment.experiment_id}|caller_role|{hypothesis.target_function}".encode("utf-8")
+        ).hexdigest()[:16]
+        evidence_id = f"E-OBS-CALLER-{digest}"
+        subject = next(
+            (item.subject for item in inspect_execution_readiness(contract, next(
+                fn for fn in (*contract.functions, *contract.inherited_functions)
+                if fn.name == hypothesis.target_function
+            )).caller_requirements),
+            "caller_role",
+        )
+        observations = (
+            PrerequisiteObservation(
+                kind="caller_role",
+                subject=subject,
+                expected="verified",
+                observed="verified",
+                evidence_id=evidence_id,
+            ),
+        )
+        from cydra.models import Evidence
+        evidence = (
+            Evidence(
+                evidence_id,
+                "execution",
+                "Target-provided initialization established the caller-role prerequisite and the target function accepted the same caller.",
+                " ".join(execution.command),
+                execution.target + ".t.sol",
+            ),
+        )
+    return execution, observations, evidence
+
+
 def _run_state_prerequisite_observation(
     project: Path,
     hypothesis,
@@ -718,6 +778,20 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         prerequisite_graph = build_prerequisite_graph(readiness)
         prerequisite_observation_evidence = ()
         status_prerequisite = {}
+        if readiness.caller_requirements:
+            try:
+                prerequisite_execution, observations, prerequisite_observation_evidence = _run_caller_prerequisite_observation(
+                    project, hypothesis, experiment, contract
+                )
+                prerequisite_graph = apply_observations(prerequisite_graph, observations)
+                status_prerequisite = {
+                    "caller_prerequisite_execution": _json(prerequisite_execution),
+                    "caller_prerequisite_observations": [o.evidence_id for o in observations],
+                }
+            except Exception as error:
+                status_prerequisite = {
+                    "caller_prerequisite_failure": f"{type(error).__name__}: {error}"
+                }
         if class_name == "state" and readiness.state_requirements:
             setup_actions = constructible_state_setup_plan(
                 contract,
