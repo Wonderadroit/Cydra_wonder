@@ -317,8 +317,9 @@ contract CydraCallbackStateOrderTest is Test {{
 
     function setUp() public {{
         target = {constructor_call};
-        target.{initializer.name}({', '.join(initializer_args)});
         attacker = new CydraReentrantCaller(address(target));
+        address cydraAttacker = address(attacker);
+        target.{initializer.name}({', '.join(initializer_args)});
         {setup}
         bytes memory reentryCallData = {reentry_call};
         attacker.setReentryCallData(reentryCallData);
