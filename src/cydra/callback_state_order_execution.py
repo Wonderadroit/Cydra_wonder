@@ -5,7 +5,13 @@ import os
 import re
 
 from .models import ContractModel, Experiment, Hypothesis
-from .foundry import _constructor_argument, _layout_aware_import_path, _write_test, generate_initialization_test
+from .foundry import (
+    _constructor_argument,
+    _initializer_argument,
+    _layout_aware_import_path,
+    _write_test,
+    generate_initialization_test,
+)
 from .initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
 from .caller_prerequisite import (
     _caller_bound_initializer_arguments,
@@ -309,6 +315,27 @@ def generate_callback_state_order_test(
         tuple(parameter.name for parameter in initializer.parameters),
     )
     setup_declarations = _initializer_setup_declarations(lifecycle_source, initializer.name)
+
+    # The shared lifecycle renderer is the source of truth for initializer
+    # arguments, but custom reference parameters can be emitted as local
+    # declarations that are easy to lose when the lifecycle assertion body is
+    # replaced. Recover only declarations for identifier-shaped arguments; do
+    # not invent values or target-specific setup.
+    declared_names: set[str] = set()
+    for declaration in setup_declarations:
+        declared_names.update(re.findall(r"\b([A-Za-z_]\w*)\s*;", declaration))
+    recovered_declarations: list[str] = []
+    for index, (parameter, argument) in enumerate(zip(initializer.parameters, initializer_args)):
+        identifier = re.fullmatch(r"[A-Za-z_]\w*", argument.strip())
+        if identifier is None or identifier.group(0) in declared_names:
+            continue
+        rendered_argument, declaration = _initializer_argument(
+            parameter, target_type, index, contract_model=contract_model
+        )
+        if rendered_argument == argument and declaration:
+            recovered_declarations.append(declaration)
+            declared_names.add(identifier.group(0))
+    setup_declarations.extend(recovered_declarations)
 
     metadata = _callback_metadata_setup(contract_model, function, arguments, target_type)
     if metadata is None:
