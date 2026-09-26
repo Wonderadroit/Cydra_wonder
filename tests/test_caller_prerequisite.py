@@ -53,3 +53,23 @@ function testInitializationInterfaceIsCallable() public {
     )
     assert changed is False
     assert rewritten == source
+
+def test_initializer_call_parser_handles_nested_constructor_arguments():
+    source = '''
+function testInitializationInterfaceIsCallable() public {
+    target.initialize(
+        address(0xA11CE),
+        new address[](0),
+        new bytes[](0)
+    );
+}
+'''
+    rewritten, changed = _replace_initializer_call(
+        source,
+        "initialize",
+        ("_helper", "allowedRecipients", "_payloads"),
+    )
+    assert changed is True
+    assert "CydraCallerSet.one(attacker)" in rewritten
+    assert "new bytes[](0)" in rewritten
+
