@@ -82,6 +82,7 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
 def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
     caller_variable = "cydraAttacker"
     start, end, argument_text = _find_initializer_call(source, initializer_name)
+    caller_variable = "cydraAttacker"
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
         raise ValueError(
@@ -105,7 +106,7 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
             if arguments[index].startswith("new address[]"):
                 normalized = re.sub(r"[^a-z0-9]", "", name.lower())
                 if any(hint in normalized for hint in _CALLER_PARAMETER_HINTS):
-                    arguments[index] = "CydraCallerSet.one(attacker)"
+                    arguments[index] = f"CydraCallerSet.one({caller_variable})"
                     changed = True
                     break
 
@@ -126,7 +127,6 @@ def _caller_bound_initializer_arguments(
     initializer_name: str,
     parameter_names: tuple[str, ...],
 ) -> list[str]:
-    caller_variable = "cydraAttacker"
     """Return initializer arguments with the caller identity bound to attacker.
 
     This is deliberately an argument-level transformation. The generated
@@ -151,7 +151,7 @@ def _caller_bound_initializer_arguments(
             arguments[index] = "CydraCallerSet.one(attacker)"
             changed = True
         elif expression.startswith(("address(", "payable(")):
-            arguments[index] = "attacker"
+            arguments[index] = caller_variable
             changed = True
 
     if not changed:
