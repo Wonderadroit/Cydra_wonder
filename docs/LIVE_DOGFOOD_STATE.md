@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current checkpoint commit: `aa68b51d44715de017602c3141b2cfd167e0b4a0`
+- Current checkpoint commit: `17879ced02215afcf3708fb04cbc9b2dc4e8c239`
 
 ## Latest validated live run
 
@@ -42,14 +42,14 @@ The latest run (36182788690 / artifact 10884960775) confirms the readiness repai
 
 ## Latest generic repair
 
-Branch `dogfood-readiness-expression-provenance` now contains generic execution-readiness handling for:
+The readiness repair was validated by live run `36182788690`. The next generic gap was the missing runtime adapter for `INV-CALLBACK-STATE-ORDER-*`.
 
-- Solidity builtin namespaces;
-- deterministic builtin/cast expressions;
-- local/parameter/bound-value member operations;
-- regression tests for deterministic expression provenance.
+Implemented on this branch:
+- `src/cydra/callback_state_order_execution.py`: generic one-shot reentrant caller harness;
+- `scripts/run_benchmark_blind.py`: callback-state-order capability registration and runtime dispatch;
+- `tests/test_callback_state_order_execution.py`: generator regression coverage.
 
-The readiness artifact has now proved those false blockers are resolved. The next engineering task is the generic callback-order runtime adapter; it must remain target-neutral.
+The harness derives the target function, ABI shape, constructor shape, and experiment inputs from the model/experiment. It does not contain Hinkal-specific callback interfaces or function names. It deliberately reports execution as `NOT_REACHED` until causal differential verification is performed.
 
 ## Findings
 
@@ -57,7 +57,7 @@ No confirmed finding from this live campaign.
 
 ## Next action
 
-Implement the generic callback-order runtime adapter, add regression coverage, then rerun the same frozen Hinkal target. Do not claim a finding until causal execution and independent verification produce evidence.
+Dispatch the canonical workflow from `dogfood-readiness-expression-provenance` and inspect whether `H-CALLBACK-STATE-ORDER-runAction` is now Foundry-generated and executed. Classify the result only from execution evidence; if the generic harness cannot reach the callback, use that failure to identify the next generic prerequisite/argument-planning gap.
 
 Canonical workflow:
 https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contest.yml
