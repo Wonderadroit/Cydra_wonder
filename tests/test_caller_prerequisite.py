@@ -73,3 +73,21 @@ function testInitializationInterfaceIsCallable() public {
     assert "CydraCallerSet.one(attacker)" in rewritten
     assert "new bytes[](0)" in rewritten
 
+
+def test_initializer_call_parser_handles_try_call_body():
+    source = '''
+function testInitializationInterfaceIsCallable() public {
+    try target.initialize(
+        address(0xA11CE),
+        new address[](0)
+    ) { } catch { }
+}
+'''
+    rewritten, changed = _replace_initializer_call(
+        source,
+        "initialize",
+        ("_helper", "allowedRecipients"),
+    )
+    assert changed is True
+    assert "CydraCallerSet.one(attacker)" in rewritten
+    assert "try target.initialize(address(0xA11CE), CydraCallerSet.one(attacker)) { }" in rewritten
