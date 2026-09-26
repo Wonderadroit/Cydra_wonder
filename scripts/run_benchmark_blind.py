@@ -498,8 +498,8 @@ def _run_caller_prerequisite_observation(
             PrerequisiteObservation(
                 kind="caller_role",
                 subject=subject,
-                expected="verified",
-                observed="verified",
+                expected="satisfied",
+                observed="satisfied",
                 evidence_id=evidence_id,
             ),
         )
