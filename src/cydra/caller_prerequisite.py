@@ -80,6 +80,7 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
 
 
 def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
+    caller_variable = "cydraAttacker"
     start, end, argument_text = _find_initializer_call(source, initializer_name)
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
@@ -93,10 +94,10 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
         if any(hint in normalized for hint in _CALLER_PARAMETER_HINTS):
             parameter_expression = arguments[index]
             if parameter_expression.startswith("new address[]"):
-                arguments[index] = "CydraCallerSet.one(attacker)"
+                arguments[index] = f"CydraCallerSet.one({caller_variable})"
                 changed = True
             elif parameter_expression.startswith(("address(", "payable(")):
-                arguments[index] = "attacker"
+                arguments[index] = caller_variable
                 changed = True
 
     if not changed:
@@ -125,6 +126,7 @@ def _caller_bound_initializer_arguments(
     initializer_name: str,
     parameter_names: tuple[str, ...],
 ) -> list[str]:
+    caller_variable = "cydraAttacker"
     """Return initializer arguments with the caller identity bound to attacker.
 
     This is deliberately an argument-level transformation. The generated
@@ -372,7 +374,7 @@ def generate_caller_prerequisite_test(
         f"        address cydraUnauthorized = address(0xA11CE);\n"
         f"{declarations_text}"
         f"        target.{initializer.name}({', '.join(initializer_args)});\n"
-        f"        vm.prank(unauthorized);\n"
+        f"        vm.prank(cydraUnauthorized);\n"
         f"        (bool unauthorizedOk, bytes memory unauthorizedData) = address(target).call({target_call_data});\n"
         f'        assertFalse(unauthorizedOk, "caller-role prerequisite was not enforced for an unauthorized caller");\n'
         f"        vm.prank(cydraAttacker);\n"
