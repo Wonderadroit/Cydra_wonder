@@ -126,6 +126,18 @@ https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contes
 Canonical workflow:
 https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contest.yml
 
+## Latest canonical diagnosis: artifact 10913265831 / run 36263372926
+
+The callback harness is now self-contained: the prior custom initializer type/import blocker was cleared by preserving lifecycle initializer imports. The callback harness compiles and executes, but the initial runAction call reverts before the callback is observed.
+
+The live artifact established the next generic capability gap: runAction calls the modeled internal verifyWallet function, whose own execution guards were absent from the caller readiness graph. The compiler-backed model identifies verifyWallet requirements including used-message state, signature verification, deadline validity, and fee-bound validity. The callback adapter must not bypass these prerequisites.
+
+Generic repair: src/cydra/execution_readiness.py now discovers modeled internal calls from source and propagates the callee's execution/state predicates into the caller readiness graph as unresolved internal_execution_predicate / internal_state_predicate requirements. This is fail-closed and bounded; it does not invent target-specific inputs. Regression coverage was added in tests/test_execution_readiness.py.
+
+Engineering commits: 08b385ad3951166f8aec96ebcd3bbc1797823fac and a76ebbe91bb8c25b218b426038cef83db71450ee.
+
+No confirmed Hinkal finding exists. The next canonical run should verify that the callback experiment is no longer generated against an unsatisfied internal prerequisite and that the readiness report names the propagated verifyWallet requirements. If the next blocker is signature/proof construction, implement only the generic capability needed to represent and verify that prerequisite; do not add Hinkal-specific constants or bypasses.
+
 ## Automatic checkpoint format
 
 After each canonical workflow run, the workflow updates the run/artifact/commit metadata in this file. Human/agent engineering changes should update the diagnosis and next-action sections.
