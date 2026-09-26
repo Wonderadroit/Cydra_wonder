@@ -109,8 +109,13 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
     # Preserve the original Solidity suffix (; for a normal call, { for a
     # try-call) instead of manufacturing a semicolon that can invalidate the
     # surrounding generated syntax.
-    replacement = f"target.{initializer_name}({', '.join(arguments)})"
-    return source[:start] + replacement + source[end:], changed
+    call_start = start
+    prefix = ""
+    if start >= 4 and source[start - 4:start] == "try ":
+        call_start = start - 4
+        prefix = "try "
+    replacement = f"{prefix}target.{initializer_name}({', '.join(arguments)})"
+    return source[:call_start] + replacement + source[end:], changed
 
 
 def _initializer_arguments_from_source(source: str, initializer_name: str) -> list[str]:
