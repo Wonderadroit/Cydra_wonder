@@ -189,6 +189,12 @@ def _initializer_setup_declarations(source: str, initializer_name: str) -> list[
         # the call. Keep declarations, but do not carry probe side effects into
         # the caller-role observation.
         first = statement.splitlines()[0].strip()
+        # The shared initialization renderer may wrap the initializer in
+        # Solidity try/catch. The token before the target call is control-flow
+        # syntax, not a declaration, and must never be copied into the
+        # prerequisite probe as `try;` (or an equivalent detached token).
+        if first in {"try", "catch", "else", "unchecked"}:
+            continue
         if first.startswith(("vm.", "assert", "target.")):
             continue
         declarations.append(statement + ";")
