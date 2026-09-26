@@ -122,6 +122,17 @@ function testInitializationInterfaceIsCallable() public {
     assert declarations == ["IHinkalHelper parameter0;"]
 
 
+def test_caller_probe_drops_try_control_token_from_renderer_prefix():
+    source = '''
+function testInitializationInterfaceIsCallable() public {
+    IHinkalHelper parameter0;
+    try target.initialize(parameter0, new address[](0), address(0xA11CE)) { } catch { }
+}
+'''
+    declarations = _initializer_setup_declarations(source, "initialize")
+    assert declarations == ["IHinkalHelper parameter0;"]
+
+
 def test_initializer_call_parser_allows_whitespace_before_semicolon():
     source = '''
 function testInitializationInterfaceIsCallable() public {
