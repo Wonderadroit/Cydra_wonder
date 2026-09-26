@@ -769,11 +769,17 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         capability = CLASS_CAPABILITIES[class_name]
         contract = _contract_for_hypothesis(result, hypothesis)
         function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+        execution_capabilities = (
+            frozenset({"callback_state_order_reachability"})
+            if class_name == "callback_state_order"
+            else frozenset()
+        )
         readiness = inspect_execution_readiness(
             contract,
             function,
             tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
             compiler_evidence.evidence,
+            execution_capabilities=execution_capabilities,
         )
         prerequisite_graph = build_prerequisite_graph(readiness)
         prerequisite_observation_evidence = ()
