@@ -71,7 +71,7 @@ No confirmed finding from this live campaign.
 
 The structured-input planner is now live-validated: the latest artifact contains a complete two-argument vector for `runAction`. The caller-prerequisite layer then exposed two generic implementation defects in its initializer-call rewriter: the whitespace terminator regex was over-escaped, and the replacement path referenced a nonexistent `match` variable. Those defects were repaired, but the latest live artifact exposed a third generic issue: the generated initialization lifecycle used Solidity `try target.initialize(...) {}` syntax, while the rewriter only accepted semicolon-terminated calls. The rewriter now preserves either `;` or `{` and has a regression test for try-call syntax.
 
-A generic caller-prerequisite layer is now being added:
+The generic caller-prerequisite layer is now being refined around the authorization boundary:
 - `src/cydra/caller_prerequisite.py` reuses the existing initialization generator and proxy topology;
 - it discovers an initializer/reinitializer from the model rather than naming a Hinkal function;
 - it only binds the attacker into semantically identified caller-identity parameters such as allowed/recipient/account collections;
@@ -79,6 +79,9 @@ A generic caller-prerequisite layer is now being added:
 - `scripts/run_benchmark_blind.py` applies that evidence through the existing fail-closed prerequisite graph.
 
 No Hinkal-specific selector, address, setup bypass, or target-specific workaround was added. Regression coverage is in `tests/test_caller_prerequisite.py`.
+
+The latest caller-role probe exposed an important boundary error: it treated successful completion of the entire target function as proof that the caller authorization requirement was satisfied. On the pinned Hinkal target, an authorized caller can pass `onlyAllowedRecipient` and still hit later `runAction` execution predicates, so a full-call revert is not sufficient to classify the caller role as unresolved. The probe now compares an unauthorized call with the same authorized call: unauthorized must fail, and the authorized call either succeeds or produces a different revert payload, demonstrating progress beyond the authorization failure. Identical revert payloads fail closed. Regression coverage was added for all four observation cases.
+
 
 ## Next action
 
