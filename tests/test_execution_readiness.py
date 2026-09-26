@@ -536,3 +536,46 @@ def test_execution_readiness_does_not_treat_returned_local_collection_as_runtime
         item.subject == "utxoSet.skipLast"
         for item in readiness.runtime_requirements
     )
+
+    
+def test_execution_readiness_allows_deterministic_local_guard_with_cast_binding():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        execution_predicates=("balanceChange < 0",),
+        execution_predicate_polarities=(("balanceChange < 0", "must_not_hold"),),
+        execution_value_bindings=(
+            ("balanceChange", "int256(after[i]) - int256(before[i])"),
+        ),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    assert readiness.execution_requirements[0].status == "constraint"
+
+
+def test_callback_reachability_capability_allows_external_call_outcome_guard():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (("op", "call"),),
+        1,
+        execution_predicates=("!success",),
+        execution_predicate_polarities=(("!success", "must_not_hold"),),
+        execution_value_bindings=(
+            ("success", "op.endpoint.call(op.callData)"),
+        ),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    blocked = inspect_execution_readiness(contract, function)
+    assert blocked.execution_requirements[0].status == "required"
+    reachable = inspect_execution_readiness(
+        contract,
+        function,
+        execution_capabilities=frozenset({"callback_state_order_reachability"}),
+    )
+    assert reachable.execution_requirements[0].status == "constraint"
