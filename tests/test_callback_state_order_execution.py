@@ -58,7 +58,7 @@ def test_callback_runtime_generator_builds_one_shot_reentrant_harness(tmp_path: 
     assert "CydraReentrantCaller" in rendered
     assert "callbackObserved" in rendered
     assert "reentrySucceeded" in rendered
-    assert 'abi.encodeWithSignature("execute(uint256)", 1)' in rendered
+    assert 'abi.encodeCall(target.execute, (1))' in rendered
 
 
 def test_callback_runtime_generator_rejects_incomplete_input_vector(tmp_path: Path):
