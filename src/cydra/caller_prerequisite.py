@@ -71,8 +71,6 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
     changed = False
     for index, name in enumerate(parameter_names):
         normalized = re.sub(r"[^a-z0-9]", "", name.lower())
-        if "[]" in normalized:
-            continue
         if any(hint in normalized for hint in _CALLER_PARAMETER_HINTS):
             parameter_expression = arguments[index]
             if parameter_expression.startswith("new address[]"):
@@ -121,7 +119,6 @@ def _replace_test_body(source: str, initializer_name: str, target_function: str,
         raise ValueError("generated initialization test lifecycle function is unterminated")
 
     args = ", ".join(target_arguments)
-    signature_types = ", ".join(argument.split("(")[0].strip() for argument in ())
     body = (
         f"function testCallerPrerequisite() public {{\n"
         f"        target.{initializer_name}({', '.join(_initializer_arguments_from_source(source, initializer_name))});\n"
