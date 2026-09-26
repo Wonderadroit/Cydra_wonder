@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   hinkal:
@@ -58,3 +58,11 @@ jobs:
           path: live-artifacts/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Checkpoint live dogfood state
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHONPATH: src
+        run: |
+          python scripts/update_live_dogfood_state.py
