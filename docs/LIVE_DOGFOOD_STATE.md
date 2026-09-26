@@ -19,10 +19,10 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Latest validated live run
 
 - Workflow: `CYDRA canonical live-target dogfood`
-- Run: `36262377280`
-- Artifact: `10912962138` (cydra-live-hinkal-a7499c6f91f5d30303006c78e17a3f2c459720f7)
-- Artifact URL: https://api.github.com/repos/Wonderadroit/Cydra_wonder/actions/artifacts/10912962138/zip
-- Artifact digest: `sha256:c65594777c5dcc01516e7aaa7584353e32331f324b49dd991a7fc6ad8943ec42`
+- Run: `36262635918`
+- Artifact: `10912698750` (cydra-live-hinkal-39a760d811e19c16040094ba52b3e51918cf9407)
+- Artifact URL: https://api.github.com/repos/Wonderadroit/Cydra_wonder/actions/artifacts/10912698750/zip
+- Artifact digest: `sha256:05479d203d036dcdb75ecb27a2900b58747de3eea1608e51219b5a102cc5e5b6`
 
 ## Last observed pipeline boundary
 
