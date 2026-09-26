@@ -68,9 +68,10 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
         elif char in ")]}":
             depth -= 1
             if depth == 0:
-                if source[index + 1:index + 2] != ";":
+                terminator = re.match(r"\\s*;", source[index + 1:])
+                if terminator is None:
                     raise ValueError(f"initializer call {initializer_name} is not terminated by ';'")
-                return start, index + 2, source[args_start:index]
+                return start, index + 1 + terminator.end(), source[args_start:index]
     raise ValueError(f"initializer call {initializer_name} is unterminated")
 
 
