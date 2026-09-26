@@ -436,7 +436,7 @@ contract CydraInitializationInvariantTest is Test {{
         target = {constructor_call};
         attacker = new CydraReentrantCaller(address(target));
         address cydraAttacker = address(attacker);
-        {setup}
+        {declarations}{setup}
         target.{initializer.name}({', '.join(initializer_args)});
         bytes memory reentryCallData = {reentry_call};
         attacker.setReentryCallData(reentryCallData);
