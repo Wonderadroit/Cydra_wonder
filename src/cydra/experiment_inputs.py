@@ -69,7 +69,7 @@ def _split_fields(body: str) -> tuple[str, ...]:
 
 def _definition(source: str, type_name: str) -> tuple[str, str, str] | None:
     short_name = type_name.split(".")[-1].strip()
-    struct_match = re.search(rf"\bstruct\s+{re.escape(short_name)}\s*\{", source)
+    struct_match = re.search(rf"\bstruct\s+{re.escape(short_name)}\s*" + r"\{", source)
     if struct_match:
         body = _balanced_body(source, struct_match.end() - 1)
         if body is not None:
