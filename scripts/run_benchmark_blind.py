@@ -623,7 +623,32 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
-def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:\n    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")\n    generated = generate_callback_state_order_test(\n        hypothesis,\n        experiment,\n        _target_import(contract, project),\n        contract.name,\n        output,\n        contract,\n    )\n    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")\n    return {\n        "generated_path": str(generated),\n        "execution": execution,\n        "classification": "NOT_REACHED",\n        "execution_status": execution.status,\n        "execution_executed": execution.executed,\n        "tests_run": execution.tests_run,\n        "tests_failed": execution.tests_failed,\n        "classification_blocked_reason": (\n            "callback execution reached the generic runtime boundary; "\n            "causal differential verification is required before classification"\n        ),\n    }\n\n\ndef _execution_adapter(class_name: str):
+def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+    generated = generate_callback_state_order_test(
+        hypothesis,
+        experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+    )
+    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    return {
+        "generated_path": str(generated),
+        "execution": execution,
+        "classification": "NOT_REACHED",
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
+        "classification_blocked_reason": (
+            "callback execution reached the generic runtime boundary; "
+            "causal differential verification is required before classification"
+        ),
+    }
+
+def _execution_adapter(class_name: str):
     """Return the generic runtime adapter for an executable capability class.
 
     This is the single runtime dispatch boundary. New reasoning surfaces may be
