@@ -347,15 +347,20 @@ def generate_caller_prerequisite_test(
         structured_type_imports.update(imports)
     target_call_arguments = ", ".join(typed_target_args)
     declarations_text = "".join(f"        {item}\n" for item in setup_declarations)
+    target_call_data = f"abi.encodeCall(target.{hypothesis.target_function}, ({target_call_arguments}))"
     body = (
         f"function testCallerPrerequisite() public {{\n"
         f"        address attacker = address(0xBEEF);\n"
+        f"        address unauthorized = address(0xA11CE);\n"
         f"{declarations_text}"
         f"        target.{initializer.name}({', '.join(initializer_args)});\n"
+        f"        vm.prank(unauthorized);\n"
+        f"        (bool unauthorizedOk, bytes memory unauthorizedData) = address(target).call({target_call_data});\n"
+        f'        assertFalse(unauthorizedOk, "caller-role prerequisite was not enforced for an unauthorized caller");\n'
         f"        vm.prank(attacker);\n"
-        f"        bool ok;\n"
-        f"        try target.{hypothesis.target_function}({target_call_arguments}) {{ ok = true; }} catch {{ ok = false; }}\n"
-        f'        assertTrue(ok, "caller-role prerequisite was not reached after target-provided initialization");\n'
+        f"        (bool authorizedOk, bytes memory authorizedData) = address(target).call({target_call_data});\n"
+        f"        bool callerRoleReached = authorizedOk || keccak256(authorizedData) != keccak256(unauthorizedData);\n"
+        f'        assertTrue(callerRoleReached, "caller-role prerequisite was not reached after target-provided initialization");\n'
         f"    }}"
     )
     source = source[:start] + body + source[end + 1:]
