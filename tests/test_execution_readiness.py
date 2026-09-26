@@ -604,3 +604,36 @@ def test_callback_reachability_capability_allows_selected_external_member_call_o
         execution_capabilities=frozenset({"callback_state_order_reachability"}),
     )
     assert reachable.execution_requirements[0].status == "constraint"
+
+
+def test_internal_callee_execution_guards_propagate_into_caller_readiness(tmp_path):
+    from cydra.execution_readiness import inspect_execution_readiness
+    from cydra.models import ContractModel, FunctionModel
+
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target {\\n"
+        "    function runAction() external { verifyWallet(); }\\n"
+        "    function verifyWallet() internal { if (!verified) revert(); }\\n"
+        "}\\n",
+        encoding="utf-8",
+    )
+    caller = FunctionModel(
+        "runAction", "external", (), (), (), 2,
+    )
+    callee = FunctionModel(
+        "verifyWallet", "internal", (), (), (), 3,
+        execution_predicates=("!verified",),
+        execution_predicate_polarities=(("!verified", "must_not_hold"),),
+    )
+    readiness = inspect_execution_readiness(
+        ContractModel("Target", str(source), (caller, callee)), caller,
+    )
+    propagated = [
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+    ]
+    assert len(propagated) == 1
+    assert propagated[0].subject == "verifyWallet: !verified"
+    assert propagated[0].status == "unresolved"
+    assert propagated[0].source == "runAction:internal-call->verifyWallet"
