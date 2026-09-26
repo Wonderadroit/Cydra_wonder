@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 import os
+import re
 
 from .foundry import generate_initialization_test
 from .experiment_inputs import _type_source
@@ -316,14 +316,14 @@ def generate_caller_prerequisite_test(
             f"target argument arity mismatch: expected {len(target_function.parameters)}, got {len(target_args)}"
         )
     typed_target_args: list[str] = []
-    structured_type_imports: set[str] = set()
+    structured_type_imports: set[tuple[str, str]] = set()
     for parameter, expression in zip(target_function.parameters, target_args):
         rendered, import_source = _qualify_planned_target_argument(
             parameter, expression, target_type, contract_model
         )
         typed_target_args.append(rendered)
         if import_source is not None:
-            structured_type_imports.add(import_source)
+            structured_type_imports.add((import_source, parameter.type.split()[0].rstrip("[]")))
     target_call_arguments = ", ".join(typed_target_args)
     declarations_text = "".join(f"        {item}\n" for item in setup_declarations)
     body = (
@@ -345,12 +345,12 @@ def generate_caller_prerequisite_test(
     if structured_type_imports:
         output_file = Path(generated)
         import_lines = []
-        for import_source in sorted(structured_type_imports):
+        for import_source, type_name in sorted(structured_type_imports):
             relative = Path(os.path.relpath(
                 Path(import_source).resolve(),
                 output_file.parent.resolve(),
             )).as_posix()
-            import_lines.append(f'import {{ {Path(import_source).stem} }} from "{relative}";')
+            import_lines.append(f'import {{ {type_name} }} from "{relative}";')
         source = source.replace(
             f'import {{ {target_type} }} from "',
             "\n".join(import_lines) + "\n" + f'import {{ {target_type} }} from "',
