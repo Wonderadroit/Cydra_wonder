@@ -17,7 +17,7 @@ from .experiment_inputs import _definition, _parameter_from_field, _split_fields
 
 
 def _function_body(source: str, function_name: str) -> str:
-    match = re.search(rf"\\bfunction\\s+{re.escape(function_name)}\\s*\\([^)]*\\)[^{{;]*{{", source)
+    match = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\([^)]*\)[^{{;]*{{", source)
     if not match:
         return ""
     depth = 1
@@ -41,7 +41,7 @@ def _decoded_callback_path(contract_model: ContractModel, function_name: str):
     source = Path(contract_model.source).read_text(encoding="utf-8")
     body = _function_body(source, function_name)
     decode = re.search(
-        r"\\b(?P<type>[A-Za-z_]\\w*)\\s+memory\\s+(?P<var>[A-Za-z_]\\w*)\\s*=\\s*abi\\.decode\\(\\s*(?P<expr>[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w+)*)\\s*,\\s*\\((?P<decoded>[A-Za-z_]\\w*)\\)\\s*\\)",
+        r"\b(?P<type>[A-Za-z_]\\w*)\s+memory\s+(?P<var>[A-Za-z_]\\w*)\s*=\s*abi\.decode\(\s*(?P<expr>[A-Za-z_]\\w*(?:\.[A-Za-z_]\\w+)*)\s*,\s*\((?P<decoded>[A-Za-z_]\\w*)\)\s*\)",
         body,
     )
     if not decode:
@@ -49,14 +49,14 @@ def _decoded_callback_path(contract_model: ContractModel, function_name: str):
     decoded_var = decode.group("var")
     decoded_type = decode.group("decoded")
     op = re.search(
-        rf"\\b(?P<op_type>[A-Za-z_]\\w*)\\s+memory\\s+(?P<op>[A-Za-z_]\\w*)\\s*=\\s*{re.escape(decoded_var)}\\.[A-Za-z_]\\w*\\[[^]]+\\]",
+        rf"\b(?P<op_type>[A-Za-z_]\\w*)\s+memory\s+(?P<op>[A-Za-z_]\\w*)\s*=\s*{re.escape(decoded_var)}\.[A-Za-z_]\\w*\\[[^]]+\\]",
         body,
     )
     if not op:
         return None
     op_var = op.group("op")
     call = re.search(
-        rf"\\b{re.escape(op_var)}\\.(?P<endpoint>[A-Za-z_]\\w*)\\.call(?:\\s*\\{{[^}}]*\\}})?\\s*\\(\\s*(?P<data>[^,)]*)",
+        rf"\b{re.escape(op_var)}\.(?P<endpoint>[A-Za-z_]\\w*)\.call(?:\s*\{{[^}}]*\\}})?\s*\(\s*(?P<data>[^,)]*)",
         body,
     )
     if not call:
@@ -141,20 +141,20 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
     if stack_with_ops is None:
         return None
     stack_expr = stack_with_ops[0]
-    declaration = f"{discovered['operation_type']}[] memory cydraOps = new {discovered['operation_type']}[](1);\\n        cydraOps[0] = {operation_value};\\n        {discovered['decoded_type']} memory cydraStack = {stack_expr};\\n        cydraStack.{ops_field.name} = cydraOps;"
+    declaration = f"{discovered['operation_type']}[] memory cydraOps = new {discovered['operation_type']}[](1);\n        cydraOps[0] = {operation_value};\n        {discovered['decoded_type']} memory cydraStack = {stack_expr};\n        cydraStack.{ops_field.name} = cydraOps;"
 
     metadata_field = parameter_path[-1]
     callback_input = target_arguments[0]
     typed, imports = _qualify_planned_target_argument(parameter, callback_input, target_type, contract_model)
     callback_input_name = "cydraCallbackInput"
     callback_setup = (
-        f"{parameter.type} memory {callback_input_name} = {typed};\\n"
+        f"{parameter.type} memory {callback_input_name} = {typed};\n"
         f"        {callback_input_name}.{'.'.join(parameter_path[1:])} = abi.encode(cydraStack);"
     )
     return {
         "parameter": parameter,
         "input_name": callback_input_name,
-        "setup": declaration + "\\n        " + callback_setup,
+        "setup": declaration + "\n        " + callback_setup,
         "imports": set(imports) | {(str(stack_path_name), discovered["decoded_type"]), (str(operation_path), discovered["operation_type"])} if operation_path else set(imports) | {(str(stack_path_name), discovered["decoded_type"])},
         "typed_call_args": (callback_input_name,) + tuple(target_arguments[1:]),
     }
@@ -280,6 +280,13 @@ pragma solidity {pragma};
 import {{Test}} from "forge-std/Test.sol";
 {chr(10).join(imports)}
 
+library CydraCallerSet {{
+    function one(address caller) internal pure returns (address[] memory callers) {{
+        callers = new address[](1);
+        callers[0] = caller;
+    }}
+}}
+
 contract CydraReentrantCaller {{
     address internal immutable target;
     bytes internal initialCallData;
@@ -337,13 +344,4 @@ contract CydraCallbackStateOrderTest is Test {{
     }}
 }}
 '''
-    # The metadata setup must refer to the actual deployed callback address.
-    # Replace the temporary symbolic address with the harness address after
-    # deployment by moving endpoint binding into the callback constructor is not
-    # possible for encoded metadata. Therefore the generic harness deploys the
-    # callback first and then constructs the input in the test body.
-    source = source.replace(
-        "        address attackerAddress = address(0xBEEF);\n",
-        "        address attackerAddress = address(0xBEEF);\n",
-    )
     return _write_test(source, path)
