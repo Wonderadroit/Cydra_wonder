@@ -676,3 +676,20 @@ def test_solidity_model_excludes_builtin_member_calls_from_runtime_dependencies(
     contract = parse_solidity(source)[0]
     function = next(item for item in contract.functions if item.name == "execute")
     assert function.external_calls == ()
+
+
+def test_execution_value_bindings_capture_tuple_assigned_external_call_outcomes(tmp_path: Path) -> None:
+    path = tmp_path / "TupleCall.sol"
+    path.write_text("""
+    contract TupleCall {
+        function target(address endpoint, bytes memory data) external {
+            bool success;
+            bytes memory err;
+            (success, err) = endpoint.call(data);
+            if (!success) revert();
+        }
+    }
+    """, encoding="utf-8")
+    function = parse_solidity(path)[0].functions[0]
+    assert ("success", "endpoint.call(data)") in function.execution_value_bindings
+    assert ("err", "endpoint.call(data)") in function.execution_value_bindings
