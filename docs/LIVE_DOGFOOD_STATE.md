@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current engineering head: `5ac471f2540f0dcd3d638fae507178c53149bb96`
+- Current engineering head: `1e531272320902bdbd4ff44e4a57c270e4319560`
 
 ## Latest validated live run
 
@@ -95,7 +95,28 @@ Next action: rerun the same canonical Hinkal workflow against target commit `61b
 The latest caller-role probe exposed an important boundary error: it treated successful completion of the entire target function as proof that the caller authorization requirement was satisfied. On the pinned Hinkal target, an authorized caller can pass `onlyAllowedRecipient` and still hit later `runAction` execution predicates, so a full-call revert is not sufficient to classify the caller role as unresolved. The probe now compares an unauthorized call with the same authorized call: unauthorized must fail, and the authorized call either succeeds or produces a different revert payload, demonstrating progress beyond the authorization failure. Identical revert payloads fail closed. Regression coverage was added for all four observation cases.
 
 
+## Current callback execution repair
+
+The latest canonical artifact proved the caller prerequisite is now verified. The remaining callback blocker was not caller authorization; it was the generic runtime adapter failing to construct the target-controlled external-call path. The adapter has now been extended to:
+
+- discover a target-local \`abi.decode\` value feeding an indexed operation;
+- discover the operation's external-call endpoint and call-data fields from source provenance;
+- construct a one-operation decoded payload with the callback actor as endpoint and zero call value;
+- deploy the callback actor before constructing the encoded target input, avoiding an address/data circularity;
+- keep the outer target invocation payload separate from the reentry payload;
+- reuse the canonical initializer/caller binding machinery;
+- reuse proxy initialization topology when the implementation disables direct initialization.
+
+No Hinkal function name, selector, address, or interface was added to CYDRA. The adapter remains fail-closed when the target does not expose this generic decoded-call shape.
+
+Engineering commits in this repair cluster: \`d41b1ebcb301ec81871e5292ceb2b8c96807095d\`, \`d62862748f95fe3c0feaaa71bf2f6f8b998a53ab\`, \`6f0e4ab5f0977dc2bb8624e3aa51a99bff00731b\`, \`7bd36e3ee50aaf380b38234c4f31d968918af226\`, \`8bffca48e347fc8352b2d4e6c3376cd9631ffbd8\`, \`d8926c51c4bdaa830b27e55e14b46e2\`, \`1320d31a50eb7bb321ce9c03d5744b3d80d54faf\`, \`1e531272320902bdbd4ff44e4a57c270e4319560\`.
+
+Validation status: **not yet live-validated**. Do not treat the callback hypothesis as executed until the same canonical Hinkal workflow produces a new artifact and Foundry evidence.
+
 ## Next action
+
+Run the canonical Hinkal workflow from \`dogfood-readiness-expression-provenance\` at head \`1e531272320902bdbd4ff44e4a57c270e4319560\`. Inspect the generated callback test first. If it compiles and reaches \`callbackObserved\`, then classify the reentry outcome from evidence; if generation/compilation fails, fix that generic failure before touching the hypothesis semantics.
+
 
 CI must validate this caller-prerequisite rewriter fix first. The latest live artifact was generated from `5d167035880c6d0b21fade3eca1e1024e492ace7`, so it genuinely tested the previous repair. After CI validation, dispatch the same canonical Hinkal workflow from `dogfood-readiness-expression-provenance`. If the probe cannot establish the caller role because later target execution predicates are not yet satisfiable, that failure is evidence of the next generic prerequisite gap; do not mark the role verified or bypass it.
 
