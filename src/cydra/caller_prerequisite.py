@@ -247,8 +247,7 @@ contract CydraCallerSet {
 """
     marker = f"contract CydraInitializationInvariantTest is Test {{"
     if "contract CydraCallerSet" not in source:
-        source = source.replace(marker, helper + "
-" + marker, 1)
+        source = source.replace(marker, helper + "\n" + marker, 1)
 
     generated.write_text(source, encoding="utf-8")
     return generated
