@@ -84,6 +84,15 @@ CLASS_CAPABILITIES = {
         "classify_blind": True,
         "classification_path": "single-sided initialization classifier",
     },
+    "callback_state_order": {
+        "extract": True,
+        "generate_hypothesis": True,
+        "plan_experiment": True,
+        "generate_foundry": True,
+        "execute_blind": True,
+        "classify_blind": False,
+        "classify_block_reason": "callback execution requires causal differential verification before classification",
+    },
     "arithmetic": {
         "extract": True,
         "generate_hypothesis": True,
