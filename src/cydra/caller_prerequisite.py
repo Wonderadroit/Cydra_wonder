@@ -68,10 +68,15 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
         elif char in ")]}":
             depth -= 1
             if depth == 0:
-                terminator = re.match(r"\s*;", source[index + 1:])
+                terminator = re.match(r"\s*(?:;|\\{)", source[index + 1:])
                 if terminator is None:
-                    raise ValueError(f"initializer call {initializer_name} is not terminated by ';'")
-                return start, index + 1 + terminator.end(), source[args_start:index]
+                    raise ValueError(
+                        f"initializer call {initializer_name} is not followed by a valid Solidity call terminator"
+                    )
+                # Return only through the closing ')'. Preserve the caller's
+                # existing ';' or '{' so both ordinary calls and try-call
+                # expressions remain syntactically valid after rewriting.
+                return start, index + 1, source[args_start:index]
     raise ValueError(f"initializer call {initializer_name} is unterminated")
 
 
