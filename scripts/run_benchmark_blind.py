@@ -44,6 +44,7 @@ from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
 from cydra.guard_parity_execution import generate_guard_parity_test
+from cydra.callback_state_order_execution import generate_callback_state_order_test
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
 
@@ -613,7 +614,7 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
-def _execution_adapter(class_name: str):
+def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:\n    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")\n    generated = generate_callback_state_order_test(\n        hypothesis,\n        experiment,\n        _target_import(contract, project),\n        contract.name,\n        output,\n        contract,\n    )\n    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")\n    return {\n        "generated_path": str(generated),\n        "execution": execution,\n        "classification": "NOT_REACHED",\n        "execution_status": execution.status,\n        "execution_executed": execution.executed,\n        "tests_run": execution.tests_run,\n        "tests_failed": execution.tests_failed,\n        "classification_blocked_reason": (\n            "callback execution reached the generic runtime boundary; "\n            "causal differential verification is required before classification"\n        ),\n    }\n\n\ndef _execution_adapter(class_name: str):
     """Return the generic runtime adapter for an executable capability class.
 
     This is the single runtime dispatch boundary. New reasoning surfaces may be
@@ -625,6 +626,7 @@ def _execution_adapter(class_name: str):
         "state": _run_state,
         "initialization": _run_initialization,
         "guard_parity": _run_guard_parity,
+        "callback_state_order": _run_callback_state_order,
     }.get(class_name)
 
 
@@ -663,6 +665,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
             class_name = "guard_parity"
         experiment = experiments[hypothesis.hypothesis_id]
+        if class_name is None and hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
+            class_name = "callback_state_order"
         if class_name is None:
             statuses.append(_unknown_reasoning_status(hypothesis, experiment))
             continue
