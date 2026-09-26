@@ -67,9 +67,13 @@ Generic repair commits:
 
 No confirmed finding from this live campaign.
 
+## Current repair in progress
+
+The latest live artifact reached the callback experiment correctly but stopped at prerequisite verification because `runAction` had structured parameters and the generic input planner produced `planned_inputs: []`. The repair extends the existing class-neutral input-planning boundary to recursively render source-defined structs, enums, and value types from the target model/import graph, then passes the `ContractModel` into that planner for both single-call and sequence inputs. No Hinkal-specific values or function names were added. A CI syntax defect in the first implementation was caught immediately and corrected in commit `c83a4945bde7a17d9dc3e92d7c39808d21161888`; this repair is not yet live-validated.
+
 ## Next action
 
-Dispatch the canonical workflow from `dogfood-readiness-expression-provenance` and inspect whether `H-CALLBACK-STATE-ORDER-runAction` is now Foundry-generated and executed. The next expected boundary is generic callback experiment input planning: the current experiment has `planned_inputs: []` while `runAction` has structured parameters, so the harness should fail closed and expose that missing generic argument-planning capability rather than inventing Hinkal-specific values. Classify the result only from execution evidence.
+Let CI validate the structured-input planner, then dispatch the canonical workflow from `dogfood-readiness-expression-provenance` and inspect whether `H-CALLBACK-STATE-ORDER-runAction` now has a complete planned input vector and reaches Foundry generation. The next blocker, if any, must again come from observed readiness/execution evidence. Do not invent Hinkal-specific inputs or bypass unresolved prerequisites.
 
 Canonical workflow:
 https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contest.yml
