@@ -107,7 +107,8 @@ function testInitializationInterfaceIsCallable() public {
     )
     assert changed is True
     assert "CydraCallerSet.one(attacker)" in rewritten
-    assert "try target.initialize(address(0xA11CE), CydraCallerSet.one(attacker)) { }" in rewritten\n    assert "try;" not in rewritten
+    assert "try target.initialize(address(0xA11CE), CydraCallerSet.one(attacker)) { }" in rewritten
+    assert "try;" not in rewritten
 
 
 def test_caller_probe_preserves_renderer_local_initializer_declarations():
@@ -176,8 +177,8 @@ def test_structured_planned_argument_is_qualified_for_target_struct():
         "EmporiumUpgradeable",
         contract,
     )
-    assert rendered == "(1, address(0xCAFE))"
-    assert import_source is None
+    assert rendered == "EmporiumUpgradeable.CircomData(1, address(0xCAFE))"
+    assert import_source == set()
 
 
 def test_structured_planned_argument_does_not_rewrite_primitive():
@@ -185,7 +186,9 @@ def test_structured_planned_argument_does_not_rewrite_primitive():
 
     parameter = ParameterModel("amount", "uint256", "calldata")
     contract = ContractModel("Target", "Target.sol", (_function("runAction", parameters=(parameter,)),))
-    assert _qualify_planned_target_argument(parameter, "1", "Target", contract) == "1"
+    rendered, imports = _qualify_planned_target_argument(parameter, "1", "Target", contract)
+    assert rendered == "1"
+    assert imports == set()
 
 
 def test_imported_struct_planned_argument_keeps_type_provenance(tmp_path):
@@ -216,7 +219,42 @@ def test_imported_struct_planned_argument_keeps_type_provenance(tmp_path):
         contract,
     )
     assert rendered == "CircomData(1)"
-    assert import_source == str(type_file.resolve())
+    assert imports == {(str(type_file.resolve()), "CircomData")}
+
+
+def test_nested_struct_planned_argument_is_qualified_recursively(tmp_path):
+    from cydra.caller_prerequisite import _qualify_planned_target_argument
+
+    types = tmp_path / "contracts" / "types"
+    types.mkdir(parents=True)
+    type_file = types / "Outer.sol"
+    type_file.write_text(
+        """struct Inner { address who; uint256 amount; }
+struct Outer { Inner inner; uint256 nonce; }""",
+        encoding="utf-8",
+    )
+    target_file = tmp_path / "contracts" / "Target.sol"
+    target_file.write_text(
+        "import {Outer} from './types/Outer.sol';\ncontract Target {}",
+        encoding="utf-8",
+    )
+    parameter = ParameterModel("value", "Outer", "calldata")
+    contract = ContractModel(
+        "Target",
+        str(target_file),
+        (_function("runAction", parameters=(parameter,)),),
+    )
+    rendered, imports = _qualify_planned_target_argument(
+        parameter,
+        "((address(0xCAFE), 1), 7)",
+        "Target",
+        contract,
+    )
+    assert rendered == "Outer(Inner(address(0xCAFE), 1), 7)"
+    assert imports == {
+        (str(type_file.resolve()), "Outer"),
+        (str(type_file.resolve()), "Inner"),
+    }
 
 
 def test_primitive_planned_argument_still_has_no_type_import():
@@ -224,6 +262,6 @@ def test_primitive_planned_argument_still_has_no_type_import():
 
     parameter = ParameterModel("amount", "uint256", "calldata")
     contract = ContractModel("Target", "Target.sol", (_function("runAction", parameters=(parameter,)),))
-    rendered, import_source = _qualify_planned_target_argument(parameter, "1", "Target", contract)
+    rendered, imports = _qualify_planned_target_argument(parameter, "1", "Target", contract)
     assert rendered == "1"
-    assert import_source is None
+    assert imports == set()
