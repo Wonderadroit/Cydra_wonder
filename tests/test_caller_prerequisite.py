@@ -36,7 +36,7 @@ function testInitializationInterfaceIsCallable() public {
         ("allowedRecipients", "_owner"),
     )
     assert changed is True
-    assert "CydraCallerSet.one(attacker)" in rewritten
+    assert "CydraCallerSet.one(cydraAttacker)" in rewritten
     assert "address(0xA11CE)" in rewritten
 
 
