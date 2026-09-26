@@ -1,9 +1,162 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from .models import ContractModel, Experiment, Hypothesis
-from .foundry import _constructor_argument, _layout_aware_import_path, _write_test
+from .foundry import _constructor_argument, _layout_aware_import_path, _write_test, generate_initialization_test
+from .caller_prerequisite import (
+    _caller_bound_initializer_arguments,
+    _initializer_function,
+    _initializer_setup_declarations,
+    _qualify_planned_target_argument,
+)
+from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, conservative_defaults
+
+
+
+def _function_body(source: str, function_name: str) -> str:
+    match = re.search(rf"\\bfunction\\s+{re.escape(function_name)}\\s*\\([^)]*\\)[^{{;]*{{", source)
+    if not match:
+        return ""
+    depth = 1
+    for index in range(match.end(), len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[match.end():index]
+    return ""
+
+
+def _decoded_callback_path(contract_model: ContractModel, function_name: str):
+    """Discover a decoded struct -> operation endpoint callback path from source.
+
+    This is syntax/data-flow discovery only. It requires the target itself to show
+    an abi.decode source feeding an operation endpoint external call; no target
+    names are recognized here.
+    """
+    source = Path(contract_model.source).read_text(encoding="utf-8")
+    body = _function_body(source, function_name)
+    decode = re.search(
+        r"\\b(?P<type>[A-Za-z_]\\w*)\\s+memory\\s+(?P<var>[A-Za-z_]\\w*)\\s*=\\s*abi\\.decode\\(\\s*(?P<expr>[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w+)*)\\s*,\\s*\\((?P<decoded>[A-Za-z_]\\w*)\\)\\s*\\)",
+        body,
+    )
+    if not decode:
+        return None
+    decoded_var = decode.group("var")
+    decoded_type = decode.group("decoded")
+    op = re.search(
+        rf"\\b(?P<op_type>[A-Za-z_]\\w*)\\s+memory\\s+(?P<op>[A-Za-z_]\\w*)\\s*=\\s*{re.escape(decoded_var)}\\.[A-Za-z_]\\w*\\[[^]]+\\]",
+        body,
+    )
+    if not op:
+        return None
+    op_var = op.group("op")
+    call = re.search(
+        rf"\\b{re.escape(op_var)}\\.(?P<endpoint>[A-Za-z_]\\w*)\\.call(?:\\s*\\{{[^}}]*\\}})?\\s*\\(\\s*(?P<data>[^,)]*)",
+        body,
+    )
+    if not call:
+        return None
+    return {
+        "parameter_path": decode.group("expr").split("."),
+        "decoded_type": decoded_type,
+        "operation_type": op.group("op_type"),
+        "endpoint_field": call.group("endpoint"),
+        "call_data_field": call.group("data").strip(),
+    }
+
+
+def _struct_fields(contract_model: ContractModel, type_name: str):
+    resolved = _type_source(contract_model, type_name)
+    if resolved is None:
+        return None
+    path, source = resolved
+    definition = _definition(source, type_name)
+    if definition is None or definition[0] != "struct":
+        return None
+    fields = []
+    for field_text in _split_fields(definition[2]):
+        field = _parameter_from_field(field_text)
+        if field is None:
+            return None
+        fields.append(field)
+    return path, fields
+
+
+def _named_struct_literal(contract_model: ContractModel, type_name: str, overrides: dict[str, str]):
+    resolved = _struct_fields(contract_model, type_name)
+    if resolved is None:
+        return None
+    path, fields = resolved
+    values = []
+    defaults = conservative_defaults(fields, contract_model)
+    if defaults is None:
+        defaults = {}
+    for field in fields:
+        value = overrides.get(field.name, defaults.get(field.name))
+        if value is None:
+            return None
+        values.append(f"{field.name}: {value}")
+    return f"{type_name}({{ {', '.join(values)} }})", path
+
+
+def _callback_metadata_setup(contract_model: ContractModel, function, target_arguments: tuple[str, ...], target_type: str):
+    """Return declarations/imports that bind a decoded external endpoint to attacker."""
+    discovered = _decoded_callback_path(contract_model, function.name)
+    if discovered is None:
+        return None
+    parameter_path = discovered["parameter_path"]
+    parameter = next((p for p in function.parameters if p.name == parameter_path[0]), None)
+    if parameter is None or len(parameter_path) < 2:
+        return None
+
+    stack_literal = _named_struct_literal(
+        contract_model,
+        discovered["decoded_type"],
+        {},
+    )
+    operation_literal = _named_struct_literal(
+        contract_model,
+        discovered["operation_type"],
+        {discovered["endpoint_field"]: "address(attacker)", "callData": "bytes(\"\")"},
+    )
+    if stack_literal is None or operation_literal is None:
+        return None
+    _stack_value, stack_path = stack_literal
+    operation_value, operation_path = operation_literal
+
+    stack_fields = _struct_fields(contract_model, discovered["decoded_type"])
+    if stack_fields is None:
+        return None
+    stack_path_name, fields = stack_fields
+    ops_field = next((field for field in fields if field.type.split()[0].rstrip("[]") == discovered["operation_type"] and field.type.endswith("[]")), None)
+    if ops_field is None:
+        return None
+    stack_overrides = {ops_field.name: f"new {discovered['operation_type']}[](1)"}
+    stack_with_ops = _named_struct_literal(contract_model, discovered["decoded_type"], stack_overrides)
+    if stack_with_ops is None:
+        return None
+    stack_expr = stack_with_ops[0]
+    declaration = f"{discovered['operation_type']}[] memory cydraOps = new {discovered['operation_type']}[](1);\\n        cydraOps[0] = {operation_value};\\n        {discovered['decoded_type']} memory cydraStack = {stack_expr};\\n        cydraStack.{ops_field.name} = cydraOps;"
+
+    metadata_field = parameter_path[-1]
+    callback_input = target_arguments[0]
+    typed, imports = _qualify_planned_target_argument(parameter, callback_input, target_type, contract_model)
+    callback_input_name = "cydraCallbackInput"
+    callback_setup = (
+        f"{parameter.type} memory {callback_input_name} = {typed};\\n"
+        f"        {callback_input_name}.{'.'.join(parameter_path[1:])} = abi.encode(cydraStack);"
+    )
+    return {
+        "parameter": parameter,
+        "input_name": callback_input_name,
+        "setup": declaration + "\\n        " + callback_setup,
+        "imports": set(imports) | {(str(stack_path_name), discovered["decoded_type"]), (str(operation_path), discovered["operation_type"])} if operation_path else set(imports) | {(str(stack_path_name), discovered["decoded_type"])},
+        "typed_call_args": (callback_input_name,) + tuple(target_arguments[1:]),
+    }
 
 
 def generate_callback_state_order_test(
