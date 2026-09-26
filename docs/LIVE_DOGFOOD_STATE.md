@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current engineering head: `87f90b963f38078e61149153198cd2a513814f05`
+- Current engineering head: `e2589b730ecffb54e37ca132767159176ccc3b2d`
 
 ## Latest validated live run
 
@@ -32,7 +32,7 @@ The previous live artifact showed false execution-readiness blockers:
 - Deterministic casts such as `bytes4(op.callData)` and `int256(...)` were still being reclassified as unresolved producer dependencies — generic repair added.
 - `utxoSet.skipLast` was treated as an external runtime dependency — generic local-value classification added.
 
-The latest run (36182788690 / artifact 10884960775) confirms the readiness repair worked:
+The latest readiness validation run (36182788690 / artifact 10884960775) confirms the readiness repair worked:
 - `abi.decode` is no longer a runtime dependency.
 - `bytes4(op.callData)` is classified as a deterministic local constraint.
 - `int256(balancesAfter[i]) - int256(balancesBefore[i])` is classified as a deterministic local constraint.
@@ -69,7 +69,7 @@ No confirmed finding from this live campaign.
 
 ## Current repair in progress
 
-The structured-input planner is now live-validated: the latest artifact contains a complete two-argument vector for `runAction`. The next genuine blocker is runtime verification of the caller prerequisite `onlyAllowedRecipient`.
+The structured-input planner is now live-validated: the latest artifact contains a complete two-argument vector for `runAction`. The caller-prerequisite layer then exposed two generic implementation defects in its initializer-call rewriter: the whitespace terminator regex was over-escaped, and the replacement path referenced a nonexistent `match` variable. Both are now repaired in `e2589b730ecffb54e37ca132767159176ccc3b2d`.
 
 A generic caller-prerequisite layer is now being added:
 - `src/cydra/caller_prerequisite.py` reuses the existing initialization generator and proxy topology;
@@ -82,7 +82,7 @@ No Hinkal-specific selector, address, setup bypass, or target-specific workaroun
 
 ## Next action
 
-CI must validate this generic caller-prerequisite layer first. After CI validation, dispatch the same canonical Hinkal workflow from `dogfood-readiness-expression-provenance`. If the probe cannot establish the caller role because later target execution predicates are not yet satisfiable, that failure is evidence of the next generic prerequisite gap; do not mark the role verified or bypass it.
+CI must validate this repaired generic caller-prerequisite layer first. After CI validation, dispatch the same canonical Hinkal workflow from `dogfood-readiness-expression-provenance`. If the probe cannot establish the caller role because later target execution predicates are not yet satisfiable, that failure is evidence of the next generic prerequisite gap; do not mark the role verified or bypass it.
 
 Canonical workflow:
 https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contest.yml
