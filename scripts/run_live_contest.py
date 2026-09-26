@@ -181,7 +181,7 @@ def main() -> int:
                         target_ref=spec["target_ref"],
                         target_path=source,
                         target_project=spec["project_path"],
-                        classes=("authorization", "initialization", "arithmetic", "state", "guard_parity"),
+                        classes=("authorization", "initialization", "arithmetic", "state", "guard_parity", "callback_state_order"),
                         freeze=artifact / "freeze",
                     )
             except Exception as error:
