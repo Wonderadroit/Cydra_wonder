@@ -48,12 +48,9 @@ def generate_callback_state_order_test(
         else f"new {target_type}()"
     )
 
-    signature_types = ", ".join(parameter.type.split()[0] for parameter in function.parameters)
-    initial_call = (
-        f"abi.encodeWithSignature("
-        f'"{function.name}({signature_types})"{", " if arguments else ""}'
-        f"{", ".join(arguments)})"
-    )
+    # abi.encodeCall preserves compiler-checked tuple/struct ABI types and avoids
+    # inventing canonical signature text for source-defined parameters.
+    initial_call = f"abi.encodeCall(target.{function.name}, ({", ".join(arguments)}))"
 
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
