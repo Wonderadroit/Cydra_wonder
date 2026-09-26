@@ -80,6 +80,18 @@ The generic caller-prerequisite layer is now being refined around the authorizat
 
 No Hinkal-specific selector, address, setup bypass, or target-specific workaround was added. Regression coverage is in `tests/test_caller_prerequisite.py`.
 
+
+### Latest canonical run: 36259368563 / artifact 10911264183
+
+The canonical workflow completed operationally, but the caller-prerequisite experiment was **UNMEASURABLE** because the generated Solidity harness from the prior repair had two generic generator defects: it emitted a Python-only helper name into Solidity, and its `unauthorized` local collided with an initializer-generated declaration. The security hypothesis remained `NOT_REACHED`; this was not evidence against Hinkal.
+
+Generic repair at CYDRA commit `94eb961e5a8604db7edf432d506da13a6235a764`:
+- generated caller variables now use collision-resistant harness-local names;
+- the authorization-boundary comparison is emitted entirely as Solidity-native logic;
+- the Python observation helper remains only as testable Python logic and is not referenced by generated Solidity.
+
+Next action: rerun the same canonical Hinkal workflow against target commit `61b6839aa80fc0c33bfdcde0323753c83cb2ce67`. Do not move to another capability until this generated-harness blocker is cleared.
+
 The latest caller-role probe exposed an important boundary error: it treated successful completion of the entire target function as proof that the caller authorization requirement was satisfied. On the pinned Hinkal target, an authorized caller can pass `onlyAllowedRecipient` and still hit later `runAction` execution predicates, so a full-call revert is not sufficient to classify the caller role as unresolved. The probe now compares an unauthorized call with the same authorized call: unauthorized must fail, and the authorized call either succeeds or produces a different revert payload, demonstrating progress beyond the authorization failure. Identical revert payloads fail closed. Regression coverage was added for all four observation cases.
 
 
