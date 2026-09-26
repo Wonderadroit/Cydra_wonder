@@ -359,6 +359,7 @@ def _execution_dataflow_requirements(
     contract: ContractModel,
     function: FunctionModel,
     semantic_evidence: tuple[SemanticRelationshipEvidence, ...] = (),
+    execution_capabilities: frozenset[str] = frozenset(),
 ) -> tuple[ExecutionRequirement, ...]:
     """Resolve local execution bindings to modeled function producers when possible.
 
@@ -375,11 +376,18 @@ def _execution_dataflow_requirements(
             continue
 
         pure_local_expression = _is_deterministic_expression(expression)
-        dataflow_status = "constraint" if pure_local_expression else "required"
+        callback_materialized_call = (
+            "callback_state_order_reachability" in execution_capabilities
+            and ".call" in expression
+        )
+        dataflow_status = "constraint" if pure_local_expression or callback_materialized_call else "required"
         dataflow_detail = (
             "deterministic local derivation used by an experiment constraint; "
             "the generated experiment must reproduce the derivation"
             if pure_local_expression
+            else "callback reachability adapter can materialize the discovered external call; "
+            "the generated experiment must record the resulting call outcome"
+            if callback_materialized_call
             else "execution predicate depends on a locally bound call/input value; "
             "the binding must be resolved before reachability is treated as satisfied"
         )
@@ -410,14 +418,23 @@ def _execution_dataflow_requirements(
             expression,
         )
         if member_call and not _runtime_receiver_is_library(contract, member_call.group("receiver").split("(")[0]):
+            member_dependency_status = (
+                "constraint"
+                if callback_materialized_call and member_call.group("method") == "call"
+                else "unresolved"
+            )
             requirements.append(
                 ExecutionRequirement(
                     "execution_value_runtime_dependency",
                     f"{member_call.group('receiver')}.{member_call.group('method')}",
                     f"{function.name}:value-binding",
-                    "unresolved",
-                    "execution value is produced by a non-library member call whose target/state "
-                    "must be resolved before the consumer is considered reachable",
+                    member_dependency_status,
+                    (
+                        "callback reachability adapter owns the discovered external-call endpoint"
+                        if member_dependency_status == "constraint"
+                        else "execution value is produced by a non-library member call whose target/state "
+                        "must be resolved before the consumer is considered reachable"
+                    ),
                 )
             )
         if producer is None:
@@ -436,9 +453,13 @@ def _execution_dataflow_requirements(
                     "execution_value_dependency",
                     expression,
                     f"{function.name}:value-binding",
-                    "unresolved",
-                    "call-shaped execution value has no compiler/model-resolved local producer; "
-                    "the value source must be resolved before reachability is treated as satisfied",
+                    "constraint" if callback_materialized_call else "unresolved",
+                    (
+                        "callback reachability adapter can materialize this discovered external call"
+                        if callback_materialized_call
+                        else "call-shaped execution value has no compiler/model-resolved local producer; "
+                        "the value source must be resolved before reachability is treated as satisfied"
+                    ),
                 )
             )
             continue
@@ -890,7 +911,7 @@ def inspect_execution_readiness(
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(contract, selected) if selected else (),
         execution_requirements=(
-            (*_execution_requirements(contract, selected, execution_capabilities), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
+            (*_execution_requirements(contract, selected, execution_capabilities), *_execution_dataflow_requirements(contract, selected, semantic_evidence, execution_capabilities))
             if selected else ()
         ),
         state_requirements=(
