@@ -6,6 +6,7 @@ import re
 
 from .models import ContractModel, Experiment, Hypothesis
 from .foundry import _constructor_argument, _layout_aware_import_path, _write_test, generate_initialization_test
+from .initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
 from .caller_prerequisite import (
     _caller_bound_initializer_arguments,
     _initializer_function,
@@ -160,6 +161,90 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
     }
 
 
+
+def _legacy_callback_test(
+    hypothesis: Hypothesis,
+    experiment: Experiment,
+    target_import: str,
+    target_type: str,
+    output_path: str | Path,
+    contract_model: ContractModel,
+) -> Path:
+    function = next(
+        (item for item in (*contract_model.functions, *contract_model.inherited_functions)
+         if item.name == hypothesis.target_function),
+        None,
+    )
+    if function is None:
+        raise ValueError(f"model has no callback target: {hypothesis.target_function}")
+    arguments = experiment.planned_inputs
+    if len(arguments) != len(function.parameters):
+        raise ValueError(
+            f"callback input arity mismatch for {function.name}: "
+            f"expected {len(function.parameters)}, got {len(arguments)}"
+        )
+    constructor_arguments = [
+        _constructor_argument(parameter)
+        for parameter in (contract_model.constructor.parameters if contract_model.constructor else ())
+    ]
+    constructor_call = (
+        f"new {target_type}({', '.join(constructor_arguments)})"
+        if constructor_arguments else f"new {target_type}()"
+    )
+    argument_text = ", ".join(arguments)
+    call_data = f"abi.encodeCall(target.{function.name}, ({argument_text}))"
+    pragma = contract_model.pragma or "^0.8.20"
+    path = Path(output_path)
+    target_import = _layout_aware_import_path(target_import, path)
+    source = f'''// SPDX-License-Identifier: UNLICENSED
+pragma solidity {pragma};
+import {{Test}} from "forge-std/Test.sol";
+import {{ {target_type} }} from "{target_import}";
+
+contract CydraReentrantCaller {{
+    address internal immutable target;
+    bytes internal reentryCallData;
+    bool public callbackObserved;
+    bool public reentrySucceeded;
+    bool internal entered;
+
+    constructor(address target_) {{ target = target_; }}
+    function setReentryCallData(bytes memory data) external {{ reentryCallData = data; }}
+    function invoke(bytes memory data) external {{
+        (bool ok,) = target.call(data);
+        require(ok, "initial target call reverted");
+    }}
+    fallback() external {{
+        callbackObserved = true;
+        if (!entered) {{
+            entered = true;
+            (reentrySucceeded,) = target.call(reentryCallData);
+        }}
+    }}
+}}
+
+contract CydraInitializationInvariantTest is Test {{
+    {target_type} internal target;
+    CydraReentrantCaller internal attacker;
+
+    function setUp() public {{
+        target = {constructor_call};
+        attacker = new CydraReentrantCaller(address(target));
+        bytes memory callData = {call_data};
+        attacker.setReentryCallData(callData);
+    }}
+
+    function testCallbackStateOrder() public {{
+        attacker.invoke(abi.encodeCall(target.{function.name}, ({argument_text})));
+        assertTrue(attacker.callbackObserved(), "target did not invoke the caller-controlled callback");
+    }}
+}}
+'''
+    if requires_proxy_initialization(Path(contract_model.source)):
+        source = adapt_generated_initialization_for_proxy(source, target_type)
+    return _write_test(source, path)
+
+
 def generate_callback_state_order_test(
     hypothesis: Hypothesis,
     experiment: Experiment,
@@ -188,7 +273,7 @@ def generate_callback_state_order_test(
 
     initializer = _initializer_function(contract_model)
     if initializer is None:
-        raise ValueError("callback experiment requires a generic initializer/reinitializer candidate")
+        return _legacy_callback_test(hypothesis, experiment, target_import, target_type, output_path, contract_model)
 
     path = Path(output_path)
     target_import = _layout_aware_import_path(target_import, path)
@@ -227,10 +312,7 @@ def generate_callback_state_order_test(
 
     metadata = _callback_metadata_setup(contract_model, function, arguments, target_type)
     if metadata is None:
-        raise ValueError(
-            "target does not expose a generic decoded external-call path that can bind "
-            "a caller-controlled endpoint"
-        )
+        return _legacy_callback_test(hypothesis, experiment, target_import, target_type, output_path, contract_model)
 
     typed_other_args: list[str] = []
     structured_imports: set[tuple[str, str]] = set(metadata["imports"])
