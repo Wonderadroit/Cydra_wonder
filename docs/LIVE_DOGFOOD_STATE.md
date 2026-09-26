@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current checkpoint commit: `009edb99ab8654aeaf54062bc672819ff56cd23c`
+- Current engineering head: `87f90b963f38078e61149153198cd2a513814f05`
 
 ## Latest validated live run
 
@@ -69,11 +69,23 @@ No confirmed finding from this live campaign.
 
 ## Current repair in progress
 
-The latest live artifact reached the callback experiment correctly but stopped at prerequisite verification because `runAction` had structured parameters and the generic input planner produced `planned_inputs: []`. The repair extends the existing class-neutral input-planning boundary to recursively render source-defined structs, enums, and value types from the target model/import graph, then passes the `ContractModel` into that planner for both single-call and sequence inputs. No Hinkal-specific values or function names were added. A CI syntax defect in the first implementation was caught immediately and corrected in commit `c83a4945bde7a17d9dc3e92d7c39808d21161888`; this repair is not yet live-validated.
+The structured-input planner is now live-validated: the latest artifact contains a complete two-argument vector for `runAction`. The next genuine blocker is runtime verification of the caller prerequisite `onlyAllowedRecipient`.
+
+A generic caller-prerequisite layer is now being added:
+- `src/cydra/caller_prerequisite.py` reuses the existing initialization generator and proxy topology;
+- it discovers an initializer/reinitializer from the model rather than naming a Hinkal function;
+- it only binds the attacker into semantically identified caller-identity parameters such as allowed/recipient/account collections;
+- it runs the target call after target-provided initialization and emits prerequisite evidence only when Foundry actually executes and passes;
+- `scripts/run_benchmark_blind.py` applies that evidence through the existing fail-closed prerequisite graph.
+
+No Hinkal-specific selector, address, setup bypass, or target-specific workaround was added. Regression coverage is in `tests/test_caller_prerequisite.py`.
 
 ## Next action
 
-Let CI validate the structured-input planner, then dispatch the canonical workflow from `dogfood-readiness-expression-provenance` and inspect whether `H-CALLBACK-STATE-ORDER-runAction` now has a complete planned input vector and reaches Foundry generation. The next blocker, if any, must again come from observed readiness/execution evidence. Do not invent Hinkal-specific inputs or bypass unresolved prerequisites.
+CI must validate this generic caller-prerequisite layer first. After CI validation, dispatch the same canonical Hinkal workflow from `dogfood-readiness-expression-provenance`. If the probe cannot establish the caller role because later target execution predicates are not yet satisfiable, that failure is evidence of the next generic prerequisite gap; do not mark the role verified or bypass it.
+
+Canonical workflow:
+https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contest.yml
 
 Canonical workflow:
 https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contest.yml
