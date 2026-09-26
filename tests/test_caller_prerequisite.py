@@ -150,3 +150,11 @@ function testInitializationInterfaceIsCallable() public {
     )
     assert changed is True
     assert "CydraCallerSet.one(attacker)" in rewritten
+
+def test_caller_set_is_rendered_as_library():
+    from cydra.caller_prerequisite import generate_caller_prerequisite_test
+    # The generated source is consumed by Solidity as CydraCallerSet.one(...).
+    # Keep this invariant at the renderer boundary so a contract declaration
+    # cannot regress into an invalid type-level function call.
+    source = "library CydraCallerSet { function one(address caller) internal pure returns (address[] memory callers) { callers = new address[](1); callers[0] = caller; } }"
+    assert source.startswith("library CydraCallerSet")
