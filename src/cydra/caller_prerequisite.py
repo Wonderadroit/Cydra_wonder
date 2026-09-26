@@ -162,6 +162,24 @@ def _initializer_arguments_from_source(source: str, initializer_name: str) -> li
     return _split_arguments(argument_text)
 
 
+def _caller_role_reached(
+    unauthorized_ok: bool,
+    unauthorized_data: bytes,
+    authorized_ok: bool,
+    authorized_data: bytes,
+) -> bool:
+    """Determine whether the authorized call crossed the caller-authorization boundary.
+
+    A successful authorized call proves the boundary was crossed. If the target
+    later rejects the authorized call, a different revert payload from the
+    unauthorized call proves execution progressed beyond the authorization
+    failure. Identical revert payloads remain unresolved and fail closed.
+    """
+    if unauthorized_ok:
+        return False
+    return authorized_ok or unauthorized_data != authorized_data
+
+
 def _qualify_planned_target_argument(
     parameter: object,
     expression: str,
@@ -359,7 +377,7 @@ def generate_caller_prerequisite_test(
         f'        assertFalse(unauthorizedOk, "caller-role prerequisite was not enforced for an unauthorized caller");\n'
         f"        vm.prank(attacker);\n"
         f"        (bool authorizedOk, bytes memory authorizedData) = address(target).call({target_call_data});\n"
-        f"        bool callerRoleReached = authorizedOk || keccak256(authorizedData) != keccak256(unauthorizedData);\n"
+        f"        bool callerRoleReached = _caller_role_reached(unauthorizedOk, unauthorizedData, authorizedOk, authorizedData);\n"
         f'        assertTrue(callerRoleReached, "caller-role prerequisite was not reached after target-provided initialization");\n'
         f"    }}"
     )
