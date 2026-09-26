@@ -309,6 +309,11 @@ def generate_callback_state_order_test(
         ),
     )
     lifecycle_source = lifecycle.read_text(encoding="utf-8")
+    lifecycle_imports = [
+        line.strip()
+        for line in lifecycle_source.splitlines()
+        if line.strip().startswith("import ") or line.strip().startswith("import{")
+    ]
     initializer_args = _caller_bound_initializer_arguments(
         lifecycle_source,
         initializer.name,
@@ -366,7 +371,7 @@ def generate_callback_state_order_test(
     )
 
     pragma = contract_model.pragma or "^0.8.20"
-    imports = [f'import {{ {target_type} }} from "{target_import}";']
+    imports = [f'import {{ {target_type} }} from "{target_import}";', *lifecycle_imports]
     output_file = path
     for import_source, type_name in sorted(structured_imports):
         relative = Path(os.path.relpath(
