@@ -414,6 +414,23 @@ def _execution_value_bindings(body: str) -> tuple[tuple[str, str], ...]:
     # such as `startDebt <- = 0) revert ...`. Keep the extractor deliberately
     # conservative: only statements beginning after a statement/brace boundary
     # are considered, and control-flow keywords cannot become declaration types.
+    tuple_pattern = re.compile(
+        r"(?:^|[;{}])\s*"
+        r"\((?P<names>[^()]+)\)\s*=\s*(?P<expression>[^;{}]+);"
+    )
+    for match in tuple_pattern.finditer(body):
+        names = [
+            item.strip()
+            for item in match.group("names").split(",")
+            if re.fullmatch(r"[A-Za-z_]\w*", item.strip())
+        ]
+        expression = match.group("expression").strip()
+        if len(names) >= 2 and expression and "(" in expression:
+            for name in names:
+                item = (name, expression)
+                if item not in bindings:
+                    bindings.append(item)
+
     pattern = re.compile(
         r"(?:^|[;{}])\s*"
         r"(?!if\b|for\b|while\b|return\b|emit\b|revert\b)"
