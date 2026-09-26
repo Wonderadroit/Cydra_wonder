@@ -158,3 +158,29 @@ def test_caller_set_is_rendered_as_library():
     # cannot regress into an invalid type-level function call.
     source = "library CydraCallerSet { function one(address caller) internal pure returns (address[] memory callers) { callers = new address[](1); callers[0] = caller; } }"
     assert source.startswith("library CydraCallerSet")
+
+
+def test_structured_planned_argument_is_qualified_for_target_struct():
+    from cydra.caller_prerequisite import _qualify_planned_target_argument
+
+    parameter = ParameterModel("circomData", "CircomData", "calldata")
+    contract = ContractModel(
+        "EmporiumUpgradeable",
+        "Target.sol",
+        (_function("runAction", parameters=(parameter,)),),
+        declared_types=("CircomData",),
+    )
+    assert _qualify_planned_target_argument(
+        parameter,
+        "(1, address(0xCAFE))",
+        "EmporiumUpgradeable",
+        contract,
+    ) == "EmporiumUpgradeable.CircomData(1, address(0xCAFE))"
+
+
+def test_structured_planned_argument_does_not_rewrite_primitive():
+    from cydra.caller_prerequisite import _qualify_planned_target_argument
+
+    parameter = ParameterModel("amount", "uint256", "calldata")
+    contract = ContractModel("Target", "Target.sol", (_function("runAction", parameters=(parameter,)),))
+    assert _qualify_planned_target_argument(parameter, "1", "Target", contract) == "1"
