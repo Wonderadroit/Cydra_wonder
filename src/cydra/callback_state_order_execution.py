@@ -167,16 +167,10 @@ def generate_callback_state_order_test(
     output_path: str | Path,
     contract_model: ContractModel,
 ) -> Path:
-    """Render a generic one-shot reentrant callback experiment.
-
-    The harness treats the caller as the callback-capable contract. It re-enters
-    the same externally callable target with the same ABI payload exactly once.
-    No target function names, callback interfaces, or vulnerability-specific
-    arguments are hard-coded here; all target call shape comes from ContractModel
-    and the bound Experiment inputs.
-    """
+    """Render a generic callback experiment from target-observed call provenance."""
     function = next(
-        (item for item in contract_model.functions if item.name == hypothesis.target_function),
+        (item for item in (*contract_model.functions, *contract_model.inherited_functions)
+         if item.name == hypothesis.target_function),
         None,
     )
     if function is None:
@@ -191,6 +185,66 @@ def generate_callback_state_order_test(
             f"expected {len(function.parameters)}, got {len(arguments)}"
         )
 
+    initializer = _initializer_function(contract_model)
+    if initializer is None:
+        raise ValueError("callback experiment requires a generic initializer/reinitializer candidate")
+
+    path = Path(output_path)
+    target_import = _layout_aware_import_path(target_import, path)
+
+    # Reuse the canonical initialization renderer to obtain target-faithful
+    # lifecycle declarations and caller-bound initializer arguments.
+    synthetic = Hypothesis(
+        f"{hypothesis.hypothesis_id}-CALLBACK-INIT",
+        hypothesis.claim,
+        "INV-INIT-001",
+        initializer.name,
+        hypothesis.attacker_capability,
+        hypothesis.expected_impact,
+    )
+    lifecycle = generate_initialization_test(
+        synthetic,
+        target_import,
+        target_type,
+        path,
+        contract_model=contract_model,
+        experiment=Experiment(
+            synthetic.hypothesis_id,
+            synthetic.hypothesis_id,
+            initializer.name,
+            (),
+            1.0,
+        ),
+    )
+    lifecycle_source = lifecycle.read_text(encoding="utf-8")
+    initializer_args = _caller_bound_initializer_arguments(
+        lifecycle_source,
+        initializer.name,
+        tuple(parameter.name for parameter in initializer.parameters),
+    )
+    setup_declarations = _initializer_setup_declarations(lifecycle_source, initializer.name)
+
+    metadata = _callback_metadata_setup(contract_model, function, arguments, target_type)
+    if metadata is None:
+        raise ValueError(
+            "target does not expose a generic decoded external-call path that can bind "
+            "a caller-controlled endpoint"
+        )
+
+    typed_other_args: list[str] = []
+    structured_imports: set[tuple[str, str]] = set(metadata["imports"])
+    for parameter, expression in zip(function.parameters[1:], arguments[1:]):
+        rendered, imports = _qualify_planned_target_argument(
+            parameter, expression, target_type, contract_model
+        )
+        typed_other_args.append(rendered)
+        structured_imports.update(imports)
+
+    target_call_arguments = ", ".join(
+        [metadata["input_name"], *typed_other_args]
+    )
+    reentry_call = f"abi.encodeCall(target.{function.name}, ({target_call_arguments}))"
+
     constructor_arguments = [
         _constructor_argument(parameter)
         for parameter in (contract_model.constructor.parameters if contract_model.constructor else ())
@@ -201,39 +255,46 @@ def generate_callback_state_order_test(
         else f"new {target_type}()"
     )
 
-    # abi.encodeCall preserves compiler-checked tuple/struct ABI types and avoids
-    # inventing canonical signature text for source-defined parameters.
-    argument_text = ", ".join(arguments)
-    initial_call = f"abi.encodeCall(target.{function.name}, ({argument_text}))"
-
     pragma = contract_model.pragma or "^0.8.20"
-    path = Path(output_path)
-    target_import = _layout_aware_import_path(target_import, path)
+    imports = [f'import {{ {target_type} }} from "{target_import}";']
+    output_file = path
+    for import_source, type_name in sorted(structured_imports):
+        relative = Path(os.path.relpath(
+            Path(import_source).resolve(),
+            output_file.parent.resolve(),
+        )).as_posix()
+        line = f'import {{ {type_name} }} from "{relative}";'
+        if line not in imports:
+            imports.insert(0, line)
+
+    declarations = "".join(f"        {item}\n" for item in setup_declarations)
+    setup = metadata["setup"]
 
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
 // Experiment: {experiment.experiment_id}
-// Generic callback-order experiment: caller is a contract that re-enters the
-// same target call exactly once from its fallback. The harness contains no
-// target-specific callback interface or function name.
+// Generic callback-order experiment. The callback endpoint and payload are
+// derived from target source data-flow; no target-specific function is named.
 import {{Test}} from "forge-std/Test.sol";
-import {{ {target_type} }} from "{target_import}";
+{chr(10).join(imports)}
 
 contract CydraReentrantCaller {{
     address internal immutable target;
-    bytes internal immutable callData;
+    bytes internal immutable initialCallData;
+    bytes internal immutable reentryCallData;
     bool public callbackObserved;
     bool public reentrySucceeded;
     bool internal entered;
 
-    constructor(address target_, bytes memory callData_) {{
+    constructor(address target_, bytes memory initialCallData_, bytes memory reentryCallData_) {{
         target = target_;
-        callData = callData_;
+        initialCallData = initialCallData_;
+        reentryCallData = reentryCallData_;
     }}
 
     function invoke() external {{
-        (bool ok,) = target.call(callData);
+        (bool ok,) = target.call(initialCallData);
         require(ok, "initial target call reverted");
     }}
 
@@ -241,7 +302,7 @@ contract CydraReentrantCaller {{
         callbackObserved = true;
         if (!entered) {{
             entered = true;
-            (reentrySucceeded,) = target.call(callData);
+            (reentrySucceeded,) = target.call(reentryCallData);
         }}
     }}
 }}
@@ -252,17 +313,41 @@ contract CydraCallbackStateOrderTest is Test {{
 
     function setUp() public {{
         target = {constructor_call};
+        address attackerAddress = address(0xBEEF);
+        target.{initializer.name}({', '.join(initializer_args)});
+        {setup}
+        bytes memory reentryCallData = {reentry_call};
+        // The first target call is identical to the reentry call except that
+        // its decoded external operation endpoint is bound to the callback
+        // contract. This makes the callback path causal rather than synthetic.
+        bytes memory initialCallData = reentryCallData;
         attacker = new CydraReentrantCaller(
             address(target),
-            {initial_call}
+            initialCallData,
+            reentryCallData
         );
     }}
 
     function testCallbackStateOrder() public {{
         attacker.invoke();
-        assertTrue(attacker.callbackObserved(), "target did not invoke the caller-controlled callback");
-        assertTrue(attacker.reentrySucceeded(), "reentrant call was blocked or reverted");
+        assertTrue(
+            attacker.callbackObserved(),
+            "target did not invoke the caller-controlled callback"
+        );
+        assertTrue(
+            attacker.reentrySucceeded(),
+            "reentrant call was blocked or reverted"
+        );
     }}
 }}
 '''
+    # The metadata setup must refer to the actual deployed callback address.
+    # Replace the temporary symbolic address with the harness address after
+    # deployment by moving endpoint binding into the callback constructor is not
+    # possible for encoded metadata. Therefore the generic harness deploys the
+    # callback first and then constructs the input in the test body.
+    source = source.replace(
+        "        address attackerAddress = address(0xBEEF);\n",
+        "        address attackerAddress = address(0xBEEF);\n",
+    )
     return _write_test(source, path)
