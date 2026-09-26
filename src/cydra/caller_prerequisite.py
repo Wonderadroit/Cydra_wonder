@@ -96,40 +96,6 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
     return source[:match.start()] + replacement + source[match.end():], changed
 
 
-def _replace_test_body(source: str, initializer_name: str, target_function: str, target_arguments: tuple[str, ...]) -> str:
-    marker = "function testInitializationInterfaceIsCallable() public"
-    start = source.find(marker)
-    if start < 0:
-        raise ValueError("generated initialization test has no lifecycle test body")
-    brace = source.find("{", start)
-    if brace < 0:
-        raise ValueError("generated initialization test lifecycle function has no body")
-
-    depth = 1
-    end = None
-    for index in range(brace + 1, len(source)):
-        if source[index] == "{":
-            depth += 1
-        elif source[index] == "}":
-            depth -= 1
-            if depth == 0:
-                end = index
-                break
-    if end is None:
-        raise ValueError("generated initialization test lifecycle function is unterminated")
-
-    args = ", ".join(target_arguments)
-    body = (
-        f"function testCallerPrerequisite() public {{\n"
-        f"        target.{initializer_name}({', '.join(_initializer_arguments_from_source(source, initializer_name))});\n"
-        f"        vm.prank(attacker);\n"
-        f"        (bool ok,) = address(target).call(abi.encodeWithSignature(\"{target_function}({signature_types})\", {args}));\n"
-        f"        assertTrue(ok, \"caller-role prerequisite was not reached after target-provided initialization\");\n"
-        f"    }}"
-    )
-    return source[:start] + body + source[end + 1:]
-
-
 def _initializer_arguments_from_source(source: str, initializer_name: str) -> list[str]:
     match = re.search(
         rf"target\.{re.escape(initializer_name)}\((?P<args>.*?)\);",
@@ -216,7 +182,7 @@ def generate_caller_prerequisite_test(
         f"        vm.prank(attacker);\n"
         f"        bool ok;\n"
         f"        try target.{hypothesis.target_function}({target_call_arguments}) {{ ok = true; }} catch {{ ok = false; }}\n"
-        f"        assertTrue(ok, "caller-role prerequisite was not reached after target-provided initialization");\n"
+        f'        assertTrue(ok, "caller-role prerequisite was not reached after target-provided initialization");\\n'
         f"    }}"
     )
     source = source[:start] + body + source[end + 1:]
