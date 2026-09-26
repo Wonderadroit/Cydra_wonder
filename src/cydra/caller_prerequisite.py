@@ -54,15 +54,29 @@ def _split_arguments(text: str) -> list[str]:
     return parts
 
 
-def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
-    pattern = re.compile(
-        rf"target\.{re.escape(initializer_name)}\((?P<args>.*?)\);",
-        re.DOTALL,
-    )
-    match = pattern.search(source)
-    if match is None:
+def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int, str]:
+    marker = f"target.{initializer_name}("
+    start = source.find(marker)
+    if start < 0:
         raise ValueError(f"generated initialization test has no {initializer_name} call")
-    arguments = _split_arguments(match.group("args"))
+    args_start = start + len(marker)
+    depth = 1
+    for index in range(args_start, len(source)):
+        char = source[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth == 0:
+                if source[index + 1:index + 2] != ";":
+                    raise ValueError(f"initializer call {initializer_name} is not terminated by ';'")
+                return start, index + 2, source[args_start:index]
+    raise ValueError(f"initializer call {initializer_name} is unterminated")
+
+
+def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
+    start, end, argument_text = _find_initializer_call(source, initializer_name)
+    arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
         raise ValueError(
             f"initializer argument arity mismatch: expected {len(parameter_names)}, got {len(arguments)}"
@@ -97,14 +111,8 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
 
 
 def _initializer_arguments_from_source(source: str, initializer_name: str) -> list[str]:
-    match = re.search(
-        rf"target\.{re.escape(initializer_name)}\((?P<args>.*?)\);",
-        source,
-        re.DOTALL,
-    )
-    if match is None:
-        raise ValueError(f"initializer call {initializer_name} not found")
-    return _split_arguments(match.group("args"))
+    _, _, argument_text = _find_initializer_call(source, initializer_name)
+    return _split_arguments(argument_text)
 
 
 def generate_caller_prerequisite_test(
