@@ -134,6 +134,7 @@ def _caller_bound_initializer_arguments(
     prerequisite replaces that lifecycle body afterwards, so rewriting the
     renderer call itself is unnecessary and can corrupt surrounding syntax.
     """
+    caller_variable = "cydraAttacker"
     _, _, argument_text = _find_initializer_call(source, initializer_name)
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
@@ -148,7 +149,7 @@ def _caller_bound_initializer_arguments(
             continue
         expression = arguments[index]
         if expression.startswith("new address[]"):
-            arguments[index] = "CydraCallerSet.one(attacker)"
+            arguments[index] = f"CydraCallerSet.one({caller_variable})"
             changed = True
         elif expression.startswith(("address(", "payable(")):
             arguments[index] = caller_variable
