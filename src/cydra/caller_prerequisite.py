@@ -172,7 +172,7 @@ def generate_caller_prerequisite_test(
         synthetic.hypothesis_id,
         initializer.name,
         (),
-        (),
+        1.0,
     )
     generated = generate_initialization_test(
         synthetic,
