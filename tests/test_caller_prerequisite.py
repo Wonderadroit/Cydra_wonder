@@ -1,4 +1,4 @@
-from cydra.caller_prerequisite import _initializer_function, _initializer_setup_declarations, _replace_initializer_call
+from cydra.caller_prerequisite import _caller_bound_initializer_arguments, _initializer_function, _initializer_setup_declarations, _replace_initializer_call
 from cydra.models import ContractModel, FunctionModel, ParameterModel
 
 
@@ -72,6 +72,23 @@ function testInitializationInterfaceIsCallable() public {
     assert changed is True
     assert "CydraCallerSet.one(attacker)" in rewritten
     assert "new bytes[](0)" in rewritten
+
+
+def test_caller_bound_arguments_ignore_renderer_try_wrapper():
+    source = '''
+function testInitializationInterfaceIsCallable() public {
+    try target.initialize(
+        address(0xA11CE),
+        new address[](0)
+    ) { } catch { }
+}
+'''
+    arguments = _caller_bound_initializer_arguments(
+        source,
+        "initialize",
+        ("_helper", "allowedRecipients"),
+    )
+    assert arguments == ["address(0xA11CE)", "CydraCallerSet.one(attacker)"]
 
 
 def test_initializer_call_parser_handles_try_call_body():
