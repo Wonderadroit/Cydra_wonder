@@ -125,7 +125,7 @@ def test_callback_runtime_generator_emits_initializer_declarations_before_call(t
     )
 
     def fake_lifecycle(*args, **kwargs):
-        path = Path(args[4])
+        path = Path(args[3])
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             "function testInitializationInterfaceIsCallable() public {\n"
