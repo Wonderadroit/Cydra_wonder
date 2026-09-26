@@ -1,4 +1,4 @@
-from cydra.caller_prerequisite import _initializer_function, _replace_initializer_call
+from cydra.caller_prerequisite import _initializer_function, _initializer_setup_declarations, _replace_initializer_call
 from cydra.models import ContractModel, FunctionModel, ParameterModel
 
 
@@ -91,3 +91,15 @@ function testInitializationInterfaceIsCallable() public {
     assert changed is True
     assert "CydraCallerSet.one(attacker)" in rewritten
     assert "try target.initialize(address(0xA11CE), CydraCallerSet.one(attacker)) { }" in rewritten
+
+
+def test_caller_probe_preserves_renderer_local_initializer_declarations():
+    source = '''
+function testInitializationInterfaceIsCallable() public {
+    IHinkalHelper parameter0;
+    target.initialize(parameter0, new address[](0), address(0xA11CE));
+    vm.expectRevert();
+}
+'''
+    declarations = _initializer_setup_declarations(source, "initialize")
+    assert declarations == ["IHinkalHelper parameter0;"]
