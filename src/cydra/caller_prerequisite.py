@@ -182,7 +182,7 @@ def generate_caller_prerequisite_test(
         f"        vm.prank(attacker);\n"
         f"        bool ok;\n"
         f"        try target.{hypothesis.target_function}({target_call_arguments}) {{ ok = true; }} catch {{ ok = false; }}\n"
-        f'        assertTrue(ok, "caller-role prerequisite was not reached after target-provided initialization");\\n'
+        f'        assertTrue(ok, "caller-role prerequisite was not reached after target-provided initialization");\n'
         f"    }}"
     )
     source = source[:start] + body + source[end + 1:]
