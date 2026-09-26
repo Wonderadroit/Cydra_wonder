@@ -1,0 +1,55 @@
+from cydra.caller_prerequisite import _initializer_function, _replace_initializer_call
+from cydra.models import ContractModel, FunctionModel, ParameterModel
+
+
+def _function(name, modifiers=(), parameters=()):
+    return FunctionModel(
+        name=name,
+        visibility="external",
+        modifiers=modifiers,
+        writes=(),
+        external_calls=(),
+        line=1,
+        parameters=parameters,
+    )
+
+
+def test_initializer_candidate_is_semantic_not_name_only():
+    initializer = _function(
+        "bootstrap",
+        modifiers=("initializer",),
+        parameters=(ParameterModel("allowedRecipients", "address[]", "memory"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (initializer,))
+    assert _initializer_function(contract) is initializer
+
+
+def test_caller_identity_parameter_is_replaced_with_runtime_attacker_set():
+    source = '''
+function testInitializationInterfaceIsCallable() public {
+    target.initialize(new address[](0), address(0xA11CE));
+}
+'''
+    rewritten, changed = _replace_initializer_call(
+        source,
+        "initialize",
+        ("allowedRecipients", "_owner"),
+    )
+    assert changed is True
+    assert "CydraCallerSet.one(attacker)" in rewritten
+    assert "address(0xA11CE)" in rewritten
+
+
+def test_caller_probe_fails_closed_without_semantic_identity_parameter():
+    source = '''
+function testInitializationInterfaceIsCallable() public {
+    target.initialize(address(0xA11CE));
+}
+'''
+    rewritten, changed = _replace_initializer_call(
+        source,
+        "initialize",
+        ("helper",),
+    )
+    assert changed is False
+    assert rewritten == source
