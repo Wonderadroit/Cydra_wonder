@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current engineering head: `1e531272320902bdbd4ff44e4a57c270e4319560`
+- Current engineering head: `84ee59e5760e0321e4719a5bb4f2a0ea5e3f56c9`
 
 ## Latest validated live run
 
@@ -97,7 +97,7 @@ The latest caller-role probe exposed an important boundary error: it treated suc
 
 ## Current callback execution repair
 
-The latest canonical artifact proved the caller prerequisite is now verified. The remaining callback blocker was not caller authorization; it was the generic runtime adapter failing to construct the target-controlled external-call path. The adapter has now been extended to:
+The latest canonical artifact proved the caller prerequisite is now verified. The remaining callback blocker was not caller authorization; it was execution-readiness treating adapter-satisfiable path guards as hard environment prerequisites. The adapter has now been extended to:
 
 - discover a target-local \`abi.decode\` value feeding an indexed operation;
 - discover the operation's external-call endpoint and call-data fields from source provenance;
@@ -111,7 +111,7 @@ No Hinkal function name, selector, address, or interface was added to CYDRA. The
 
 Engineering commits in this repair cluster: \`d41b1ebcb301ec81871e5292ceb2b8c96807095d\`, \`d62862748f95fe3c0feaaa71bf2f6f8b998a53ab\`, \`6f0e4ab5f0977dc2bb8624e3aa51a99bff00731b\`, \`7bd36e3ee50aaf380b38234c4f31d968918af226\`, \`8bffca48e347fc8352b2d4e6c3376cd9631ffbd8\`, \`d8926c51c4bdaa830b27e55e14b46e2\`, \`1320d31a50eb7bb321ce9c03d5744b3d80d54faf\`, \`1e531272320902bdbd4ff44e4a57c270e4319560\`.
 
-Validation status: **not yet live-validated**. Do not treat the callback hypothesis as executed until the same canonical Hinkal workflow produces a new artifact and Foundry evidence.
+Validation status: **generic repair committed, not yet live-validated**. The repair keeps ordinary call-derived/state prerequisites fail-closed, but lets the callback adapter own only deterministic local guards and discovered external-call outcomes. Do not treat the callback hypothesis as executed until the same canonical Hinkal workflow produces a new artifact and Foundry evidence.
 
 ## Next action
 
