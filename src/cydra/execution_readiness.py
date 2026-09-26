@@ -378,7 +378,7 @@ def _execution_dataflow_requirements(
         pure_local_expression = _is_deterministic_expression(expression)
         callback_materialized_call = (
             "callback_state_order_reachability" in execution_capabilities
-            and ".call" in expression
+            and re.search(r"\.\w+\s*\(", expression)
         )
         dataflow_status = "constraint" if pure_local_expression or callback_materialized_call else "required"
         dataflow_detail = (
@@ -619,7 +619,7 @@ def _is_experiment_constraint(
                 )
             )
             if call_result_guard and all(
-                re.search(r"\.call\s*\(", binding_by_name[name])
+                re.search(r"\.\w+\s*\(", binding_by_name[name])
                 for name in non_deterministic
             ):
                 return True
