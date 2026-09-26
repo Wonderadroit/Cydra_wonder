@@ -222,3 +222,41 @@ def test_structured_defaults_render_source_defined_structs(tmp_path):
         '(address(0xCAFE), 1, bytes(""))',
         "new int256[](0)",
     )
+
+
+def test_structured_defaults_resolve_imported_structs(tmp_path):
+    from cydra.experiment_inputs import plan_parameter_inputs
+    from cydra.models import ContractModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    types = tmp_path / "Types.sol"
+    types.write_text(
+        """
+        pragma solidity ^0.8.20;
+        struct Action {
+            address recipient;
+            uint256 amount;
+            bytes payload;
+        }
+        """,
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        import {Action} from "./Types.sol";
+        contract Target {
+            function execute(Action calldata action) external {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    model = ContractModel(name="Target", source=str(source), functions=())
+    result = plan_parameter_inputs(
+        (ParameterModel(name="action", type="Action"),),
+        (),
+        function_name="execute",
+        contract_model=model,
+    )
+    assert result == ('(address(0xCAFE), 1, bytes(""))',)
