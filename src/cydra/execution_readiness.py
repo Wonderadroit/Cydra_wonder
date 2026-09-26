@@ -633,11 +633,11 @@ def _source_function_body(contract: ContractModel, function: FunctionModel) -> s
         source = _strip_comments(Path(contract.source).read_text(encoding="utf-8"))
     except (FileNotFoundError, OSError, UnicodeError):
         return ""
-    declaration = re.compile(r"\\bfunction\\s+" + re.escape(function.name) + r"\\s*\\(")
+    declaration = re.compile(r"\bfunction\s+" + re.escape(function.name) + r"\s*\(")
     candidates = list(declaration.finditer(source))
     if not candidates:
         return ""
-    target = min(candidates, key=lambda match: abs(source.count("\\n", 0, match.start()) + 1 - function.line))
+    target = min(candidates, key=lambda match: abs(source.count("\n", 0, match.start()) + 1 - function.line))
     opening = source.find("{", target.end())
     if opening < 0:
         return ""
@@ -667,7 +667,7 @@ def _internal_execution_requirements(contract: ContractModel, function: Function
         if not body:
             return
         seen_names: set[str] = set()
-        for match in re.finditer(r"\\b([A-Za-z_]\\w*)\\s*\\(", body):
+        for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
             name = match.group(1)
             if name in ignored or name == caller.name or name in seen_names:
                 continue
