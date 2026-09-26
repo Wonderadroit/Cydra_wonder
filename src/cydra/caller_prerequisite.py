@@ -68,7 +68,7 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
         elif char in ")]}":
             depth -= 1
             if depth == 0:
-                terminator = re.match(r"\\s*;", source[index + 1:])
+                terminator = re.match(r"\s*;", source[index + 1:])
                 if terminator is None:
                     raise ValueError(f"initializer call {initializer_name} is not terminated by ';'")
                 return start, index + 1 + terminator.end(), source[args_start:index]
@@ -108,7 +108,7 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
                     break
 
     replacement = f"target.{initializer_name}({', '.join(arguments)});"
-    return source[:match.start()] + replacement + source[match.end():], changed
+    return source[:start] + replacement + source[end:], changed
 
 
 def _initializer_arguments_from_source(source: str, initializer_name: str) -> list[str]:
