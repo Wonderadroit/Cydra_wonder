@@ -118,6 +118,43 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
     return source[:call_start] + replacement + source[end:], changed
 
 
+def _caller_bound_initializer_arguments(
+    source: str,
+    initializer_name: str,
+    parameter_names: tuple[str, ...],
+) -> list[str]:
+    """Return initializer arguments with the caller identity bound to attacker.
+
+    This is deliberately an argument-level transformation. The generated
+    lifecycle renderer may wrap its initializer call in try/catch; the caller
+    prerequisite replaces that lifecycle body afterwards, so rewriting the
+    renderer call itself is unnecessary and can corrupt surrounding syntax.
+    """
+    _, _, argument_text = _find_initializer_call(source, initializer_name)
+    arguments = _split_arguments(argument_text)
+    if len(arguments) != len(parameter_names):
+        raise ValueError(
+            f"initializer argument arity mismatch: expected {len(parameter_names)}, got {len(arguments)}"
+        )
+
+    changed = False
+    for index, name in enumerate(parameter_names):
+        normalized = re.sub(r"[^a-z0-9]", "", name.lower())
+        if not any(hint in normalized for hint in _CALLER_PARAMETER_HINTS):
+            continue
+        expression = arguments[index]
+        if expression.startswith("new address[]"):
+            arguments[index] = "CydraCallerSet.one(attacker)"
+            changed = True
+        elif expression.startswith(("address(", "payable(")):
+            arguments[index] = "attacker"
+            changed = True
+
+    if not changed:
+        raise ValueError("initializer has no semantically identified caller-identity parameter")
+    return arguments
+
+
 def _initializer_arguments_from_source(source: str, initializer_name: str) -> list[str]:
     _, _, argument_text = _find_initializer_call(source, initializer_name)
     return _split_arguments(argument_text)
@@ -197,16 +234,17 @@ def generate_caller_prerequisite_test(
         experiment=initializer_experiment,
     )
     source = generated.read_text(encoding="utf-8")
-    source, changed = _replace_initializer_call(
+    # Bind the caller identity directly from the renderer's argument vector.
+    # Do not rewrite the renderer's call before replacing its lifecycle body:
+    # a surrounding Solidity try/catch belongs to the renderer and must never
+    # leak into the prerequisite probe as a detached "try;" token.
+    initializer_args = _caller_bound_initializer_arguments(
         source,
         initializer.name,
         tuple(parameter.name for parameter in initializer.parameters),
     )
-    if not changed:
-        raise ValueError("initializer has no semantically identified caller-identity parameter")
 
     setup_declarations = _initializer_setup_declarations(source, initializer.name)
-    initializer_args = _initializer_arguments_from_source(source, initializer.name)
     target_args = experiment.planned_inputs
     marker = "function testInitializationInterfaceIsCallable() public"
     start = source.find(marker)
