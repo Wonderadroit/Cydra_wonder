@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current checkpoint commit: `70130fc6384b0ee81ddbeb27b22bf5e3877bc211`
+- Current checkpoint commit: `feeea090010c8e3d87681b42230587f91b77102e`
 
 ## Latest validated live run
 
@@ -50,6 +50,12 @@ Implemented on this branch:
 - `tests/test_callback_state_order_execution.py`: generator regression coverage.
 
 The harness derives the target function, ABI shape (using compiler-checked `abi.encodeCall`), constructor shape, and experiment inputs from the model/experiment. It does not contain Hinkal-specific callback interfaces or function names. It deliberately reports execution as `NOT_REACHED` until causal differential verification is performed.
+
+
+
+### Latest failed live run
+
+Run `36182788690` reached the new callback adapter but failed before pipeline execution because `scripts/run_benchmark_blind.py` contained literal `\\n` escape text in the generated adapter block, producing a Python `SyntaxError` at import time. This is an implementation/validation failure in CYDRA, not a Hinkal target failure. The adapter block has been rewritten with real newlines in commit `feeea090010c8e3d87681b42230587f91b77102e`.
 
 ## Findings
 
