@@ -149,7 +149,11 @@ def _structured_default(
     base = parameter_type.split()[0].rstrip("[]")
     if base in seen:
         return None
-    definition = _type_source(contract_model, base)
+    type_source = _type_source(contract_model, base)
+    if type_source is None:
+        return None
+    _resolved_path, resolved_source = type_source
+    definition = _definition(resolved_source, base)
     if definition is None:
         return None
 
