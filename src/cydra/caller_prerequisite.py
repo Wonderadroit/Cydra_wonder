@@ -212,18 +212,14 @@ def generate_caller_prerequisite_test(
     if end is None:
         raise ValueError("generated initialization test lifecycle function is unterminated")
 
-    target_signature = next(
-        function for function in (*contract_model.functions, *contract_model.inherited_functions)
-        if function.name == hypothesis.target_function
-    )
-    signature_types = ", ".join(parameter.type.split()[0] for parameter in target_signature.parameters)
     target_call_arguments = ", ".join(target_args)
     body = (
         f"function testCallerPrerequisite() public {{\n"
         f"        target.{initializer.name}({', '.join(initializer_args)});\n"
         f"        vm.prank(attacker);\n"
-        f"        (bool ok,) = address(target).call(abi.encodeWithSignature(\"{hypothesis.target_function}({signature_types})\", {target_call_arguments}));\n"
-        f"        assertTrue(ok, \"caller-role prerequisite was not reached after target-provided initialization\");\n"
+        f"        bool ok;\n"
+        f"        try target.{hypothesis.target_function}({target_call_arguments}) {{ ok = true; }} catch {{ ok = false; }}\n"
+        f"        assertTrue(ok, "caller-role prerequisite was not reached after target-provided initialization");\n"
         f"    }}"
     )
     source = source[:start] + body + source[end + 1:]
