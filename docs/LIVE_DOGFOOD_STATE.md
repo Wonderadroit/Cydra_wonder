@@ -14,15 +14,15 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current checkpoint commit: `93fa562c48df5ef672b82c62b2a3dec8e0714d4f`
+- Current checkpoint commit: `aa68b51d44715de017602c3141b2cfd167e0b4a0`
 
 ## Latest validated live run
 
 - Workflow: `CYDRA canonical live-target dogfood`
-- Run: `36181923745`
-- Artifact: `10884308344`
-- Artifact URL: https://github.com/Wonderadroit/Cydra_wonder/actions/runs/36181923745/artifacts/10884308344
-- Artifact digest: `4ca6771f317b71cd890f7f1a45d588febafc11f76bf90086f0b3f4bfb390b893`
+- Run: `36182788690`
+- Artifact: `10884960775` (cydra-live-hinkal-93fa562c48df5ef30e1105ddaaa4ca05e53ab33b)
+- Artifact URL: https://github.com/Wonderadroit/Cydra_wonder/actions/runs/36182788690/artifacts/10884960775
+- Artifact digest: `sha256:893726515cf391f34bd595a311331417d010e2b6b2ffc88ce7df18106097633c`
 
 ## Last observed pipeline boundary
 
@@ -32,7 +32,13 @@ The previous live artifact showed false execution-readiness blockers:
 - Deterministic casts such as `bytes4(op.callData)` and `int256(...)` were still being reclassified as unresolved producer dependencies — generic repair added.
 - `utxoSet.skipLast` was treated as an external runtime dependency — generic local-value classification added.
 
-The next run must determine whether those blockers disappear and expose the next genuine execution gap.
+The latest run (36182788690 / artifact 10884960775) confirms the readiness repair worked:
+- `abi.decode` is no longer a runtime dependency.
+- `bytes4(op.callData)` is classified as a deterministic local constraint.
+- `int256(balancesAfter[i]) - int256(balancesBefore[i])` is classified as a deterministic local constraint.
+- `utxoSet.skipLast` is no longer a runtime requirement.
+- `runAction` now has zero runtime requirements and zero state-setup requirements in readiness.
+- The next genuine blocker is the missing generic runtime adapter for the generated callback-order reasoning surface.
 
 ## Latest generic repair
 
@@ -43,7 +49,7 @@ Branch `dogfood-readiness-expression-provenance` now contains generic execution-
 - local/parameter/bound-value member operations;
 - regression tests for deterministic expression provenance.
 
-Do not build the callback runtime adapter until the readiness artifact proves these false blockers are resolved.
+The readiness artifact has now proved those false blockers are resolved. The next engineering task is the generic callback-order runtime adapter; it must remain target-neutral.
 
 ## Findings
 
@@ -51,7 +57,7 @@ No confirmed finding from this live campaign.
 
 ## Next action
 
-Run the canonical workflow from the current branch, inspect the resulting artifact, and update this file with the new run/artifact/blocker.
+Implement the generic callback-order runtime adapter, add regression coverage, then rerun the same frozen Hinkal target. Do not claim a finding until causal execution and independent verification produce evidence.
 
 Canonical workflow:
 https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contest.yml
