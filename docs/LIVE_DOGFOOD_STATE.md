@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current engineering head: `ebcfd37336781d3e7aa2f8cb20ac567fcdc9f8e0`
+- Current engineering head: `e79a1c7ec359ed13f553dc6fa8dc4835f8b18b5a`
 
 ## Latest validated live run
 
@@ -111,7 +111,7 @@ No Hinkal function name, selector, address, or interface was added to CYDRA. The
 
 Engineering commits in this repair cluster: \`d41b1ebcb301ec81871e5292ceb2b8c96807095d\`, \`d62862748f95fe3c0feaaa71bf2f6f8b998a53ab\`, \`6f0e4ab5f0977dc2bb8624e3aa51a99bff00731b\`, \`7bd36e3ee50aaf380b38234c4f31d968918af226\`, \`8bffca48e347fc8352b2d4e6c3376cd9631ffbd8\`, \`d8926c51c4bdaa830b27e55e14b46e2\`, \`1320d31a50eb7bb321ce9c03d5744b3d80d54faf\`, \`1e531272320902bdbd4ff44e4a57c270e4319560\`.
 
-Validation status: **generic repair committed, not yet live-validated**. The repair keeps ordinary call-derived/state prerequisites fail-closed, but lets the callback adapter own only deterministic local guards and discovered external-call outcomes. Do not treat the callback hypothesis as executed until the same canonical Hinkal workflow produces a new artifact and Foundry evidence.
+Validation status: **partially live-validated**. Artifact `10912247113` proved deterministic execution predicates now become constraints, but `success` remained blocked because its modeled producer is a selected external member-call branch. The next generic repair recognizes adapter-selected external member-call outcomes; it is not yet live-validated. The repair keeps ordinary call-derived/state prerequisites fail-closed, but lets the callback adapter own only deterministic local guards and discovered external-call outcomes. Do not treat the callback hypothesis as executed until the same canonical Hinkal workflow produces a new artifact and Foundry evidence.
 
 ## Next action
 
