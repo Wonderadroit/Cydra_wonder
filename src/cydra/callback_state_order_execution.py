@@ -57,7 +57,7 @@ def _decoded_callback_path(contract_model: ContractModel, function_name: str):
         return None
     op_var = op.group("op")
     call = re.search(
-        rf"\b{re.escape(op_var)}\.(?P<endpoint>[A-Za-z_]\w*)\.call(?:\s*\{[^}]*\})?\s*\(\s*(?P<data>[^,)]*)",
+        rf"\b{re.escape(op_var)}\.(?P<endpoint>[A-Za-z_]\w*)\.call(?:\s*\{{[^}}]*\}})?\s*\(\s*(?P<data>[^,)]*)",
         body,
     )
     if not call:
