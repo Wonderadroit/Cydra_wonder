@@ -170,12 +170,14 @@ def test_structured_planned_argument_is_qualified_for_target_struct():
         (_function("runAction", parameters=(parameter,)),),
         declared_types=("CircomData",),
     )
-    assert _qualify_planned_target_argument(
+    rendered, import_source = _qualify_planned_target_argument(
         parameter,
         "(1, address(0xCAFE))",
         "EmporiumUpgradeable",
         contract,
-    ) == "EmporiumUpgradeable.CircomData(1, address(0xCAFE))"
+    )
+    assert rendered == "(1, address(0xCAFE))"
+    assert import_source is None
 
 
 def test_structured_planned_argument_does_not_rewrite_primitive():
@@ -184,3 +186,44 @@ def test_structured_planned_argument_does_not_rewrite_primitive():
     parameter = ParameterModel("amount", "uint256", "calldata")
     contract = ContractModel("Target", "Target.sol", (_function("runAction", parameters=(parameter,)),))
     assert _qualify_planned_target_argument(parameter, "1", "Target", contract) == "1"
+
+
+def test_imported_struct_planned_argument_keeps_type_provenance(tmp_path):
+    from cydra.caller_prerequisite import _qualify_planned_target_argument
+
+    types = tmp_path / "contracts" / "types"
+    types.mkdir(parents=True)
+    type_file = types / "CircomData.sol"
+    type_file.write_text(
+        "struct CircomData { uint256 value; }",
+        encoding="utf-8",
+    )
+    target_file = tmp_path / "contracts" / "Target.sol"
+    target_file.write_text(
+        "import {CircomData} from './types/CircomData.sol';\ncontract Target {}",
+        encoding="utf-8",
+    )
+    parameter = ParameterModel("circomData", "CircomData", "calldata")
+    contract = ContractModel(
+        "Target",
+        str(target_file),
+        (_function("runAction", parameters=(parameter,)),),
+    )
+    rendered, import_source = _qualify_planned_target_argument(
+        parameter,
+        "(1)",
+        "Target",
+        contract,
+    )
+    assert rendered == "CircomData(1)"
+    assert import_source == str(type_file.resolve())
+
+
+def test_primitive_planned_argument_still_has_no_type_import():
+    from cydra.caller_prerequisite import _qualify_planned_target_argument
+
+    parameter = ParameterModel("amount", "uint256", "calldata")
+    contract = ContractModel("Target", "Target.sol", (_function("runAction", parameters=(parameter,)),))
+    rendered, import_source = _qualify_planned_target_argument(parameter, "1", "Target", contract)
+    assert rendered == "1"
+    assert import_source is None
