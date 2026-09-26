@@ -103,3 +103,22 @@ function testInitializationInterfaceIsCallable() public {
 '''
     declarations = _initializer_setup_declarations(source, "initialize")
     assert declarations == ["IHinkalHelper parameter0;"]
+
+
+def test_initializer_call_parser_allows_whitespace_before_semicolon():
+    source = '''
+function testInitializationInterfaceIsCallable() public {
+    target.initialize(
+        address(0xA11CE),
+        new address[](0)
+    )
+    ;
+}
+'''
+    rewritten, changed = _replace_initializer_call(
+        source,
+        "initialize",
+        ("_helper", "allowedRecipients"),
+    )
+    assert changed is True
+    assert "CydraCallerSet.one(attacker)" in rewritten
