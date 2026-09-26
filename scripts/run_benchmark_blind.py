@@ -46,7 +46,7 @@ from cydra.structural_configuration_binding import generate_configuration_bindin
 from cydra.guard_parity_execution import generate_guard_parity_test
 from cydra.callback_state_order_execution import generate_callback_state_order_test
 
-SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
+SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity", "callback_state_order"}
 
 CLASS_CAPABILITIES = {
     "guard_parity": {
@@ -995,7 +995,7 @@ def run_source_investigation(
         unexecuted_reasoning_surfaces = []
         for hypothesis in result.hypotheses:
             class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
-            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-")):
+            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-", "INV-CALLBACK-STATE-ORDER-")):
                 continue
             if class_name is None:
                 experiment = next(
@@ -1019,6 +1019,8 @@ def run_source_investigation(
                 class_name = "state"
             if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
                 class_name = "guard_parity"
+            if class_name is None and hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
+                class_name = "callback_state_order"
             if class_name is None:
                 class_name = "reasoning_surface"
             elif class_name not in classes:
