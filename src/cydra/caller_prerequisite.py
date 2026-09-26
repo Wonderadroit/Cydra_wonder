@@ -68,7 +68,7 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
         elif char in ")]}":
             depth -= 1
             if depth == 0:
-                terminator = re.match(r"s*(?:;|{)", source[index + 1:])
+                terminator = re.match(r"\s*(?:;|{)", source[index + 1:])
                 if terminator is None:
                     raise ValueError(
                         f"initializer call {initializer_name} is not followed by a valid Solidity call terminator"
