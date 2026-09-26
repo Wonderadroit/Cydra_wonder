@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current checkpoint commit: `17879ced02215afcf3708fb04cbc9b2dc4e8c239`
+- Current checkpoint commit: `521efe91c9e67387f9b4c9a7aab3a0fd5e2bddeb`
 
 ## Latest validated live run
 
@@ -49,7 +49,7 @@ Implemented on this branch:
 - `scripts/run_benchmark_blind.py`: callback-state-order capability registration and runtime dispatch;
 - `tests/test_callback_state_order_execution.py`: generator regression coverage.
 
-The harness derives the target function, ABI shape, constructor shape, and experiment inputs from the model/experiment. It does not contain Hinkal-specific callback interfaces or function names. It deliberately reports execution as `NOT_REACHED` until causal differential verification is performed.
+The harness derives the target function, ABI shape (using compiler-checked `abi.encodeCall`), constructor shape, and experiment inputs from the model/experiment. It does not contain Hinkal-specific callback interfaces or function names. It deliberately reports execution as `NOT_REACHED` until causal differential verification is performed.
 
 ## Findings
 
