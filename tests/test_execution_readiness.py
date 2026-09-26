@@ -579,3 +579,28 @@ def test_callback_reachability_capability_allows_external_call_outcome_guard():
         execution_capabilities=frozenset({"callback_state_order_reachability"}),
     )
     assert reachable.execution_requirements[0].status == "constraint"
+
+
+def test_callback_reachability_capability_allows_selected_external_member_call_outcome():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        execution_predicates=("!success",),
+        execution_predicate_polarities=(("!success", "must_not_hold"),),
+        execution_value_bindings=(
+            ("success", "IHinkalWallet(stack.signerAddress).callHinkalWallet(op.endpoint, op.callData, op.value)"),
+        ),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    blocked = inspect_execution_readiness(contract, function)
+    assert blocked.execution_requirements[0].status == "required"
+    reachable = inspect_execution_readiness(
+        contract,
+        function,
+        execution_capabilities=frozenset({"callback_state_order_reachability"}),
+    )
+    assert reachable.execution_requirements[0].status == "constraint"
