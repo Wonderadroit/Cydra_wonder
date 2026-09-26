@@ -520,7 +520,12 @@ def _execution_dataflow_requirements(
     return tuple(dict.fromkeys(requirements))
 
 
-def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, predicate: str) -> bool:
+def _is_experiment_constraint(
+    contract: ContractModel,
+    function: FunctionModel,
+    predicate: str,
+    execution_capabilities: frozenset[str] = frozenset(),
+) -> bool:
     """Separate pure input/local path conditions from environment prerequisites.
 
     Predicates over ABI inputs, pure local derivations, literals, and source
@@ -575,7 +580,28 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
         for name, expression in function.execution_value_bindings
         if re.search(r"\b[A-Za-z_]\w*\s*\(", expression)
     }
-    if identifiers & call_bound_locals:
+    bound_call_names = identifiers & call_bound_locals
+    if bound_call_names:
+        binding_by_name = dict(function.execution_value_bindings)
+        non_deterministic = {
+            name for name in bound_call_names
+            if not _is_deterministic_expression(binding_by_name.get(name, ""))
+        }
+        if not non_deterministic:
+            return True
+        if "callback_state_order_reachability" in execution_capabilities:
+            call_result_guard = bool(
+                re.fullmatch(
+                    r"!\s*[A-Za-z_]\w*|"
+                    r"[A-Za-z_]\w*\s*(?:==|!=)\s*(?:true|false|0|1)",
+                    predicate.strip(),
+                )
+            )
+            if call_result_guard and all(
+                re.search(r"\.call\s*\(", binding_by_name[name])
+                for name in non_deterministic
+            ):
+                return True
         return False
     return True
 
@@ -583,6 +609,7 @@ def _is_experiment_constraint(contract: ContractModel, function: FunctionModel, 
 def _execution_requirements(
     contract: ContractModel,
     function: FunctionModel,
+    execution_capabilities: frozenset[str] = frozenset(),
 ) -> tuple[ExecutionRequirement, ...]:
     polarities = dict(function.execution_predicate_polarities)
     requirements: list[ExecutionRequirement] = []
@@ -593,7 +620,7 @@ def _execution_requirements(
             "must_not_hold": "execution predicate is a guarded revert condition and must not hold",
             "unknown": "execution predicate polarity could not be established statically",
         }.get(polarity, "execution predicate polarity is unknown")
-        status = "constraint" if _is_experiment_constraint(contract, function, predicate) else "required"
+        status = "constraint" if _is_experiment_constraint(contract, function, predicate, execution_capabilities) else "required"
         if status == "constraint":
             detail = (
                 "pure input/local execution constraint; the generated experiment "
@@ -853,6 +880,7 @@ def inspect_execution_readiness(
     function: FunctionModel | None = None,
     constraints: tuple[ConstraintEvidence, ...] = (),
     semantic_evidence: tuple[SemanticRelationshipEvidence, ...] = (),
+    execution_capabilities: frozenset[str] = frozenset(),
 ) -> ExecutionReadiness:
     """Derive target execution prerequisites without making vulnerability claims."""
     selected = function
@@ -862,7 +890,7 @@ def inspect_execution_readiness(
         caller_requirements=_caller_requirements(selected) if selected else (),
         runtime_requirements=_runtime_requirements(contract, selected) if selected else (),
         execution_requirements=(
-            (*_execution_requirements(contract, selected), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
+            (*_execution_requirements(contract, selected, execution_capabilities), *_execution_dataflow_requirements(contract, selected, semantic_evidence))
             if selected else ()
         ),
         state_requirements=(
