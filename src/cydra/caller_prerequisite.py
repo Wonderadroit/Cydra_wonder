@@ -160,6 +160,29 @@ def _initializer_arguments_from_source(source: str, initializer_name: str) -> li
     return _split_arguments(argument_text)
 
 
+def _qualify_planned_target_argument(
+    parameter: object,
+    expression: str,
+    target_type: str,
+    contract_model: ContractModel,
+) -> str:
+    """Make a structured planned argument explicit at a Solidity call boundary.
+
+    The input planner intentionally returns ABI-shaped values such as `(1, 1, ...)`
+    for source-defined structs. That shape is useful as planning evidence, but a
+    Solidity function call does not implicitly convert an untyped tuple literal to
+    a struct parameter. Qualify only source-defined custom struct tuple expressions;
+    primitive values and already-typed expressions remain untouched.
+    """
+    parameter_type = getattr(parameter, "type", "").strip()
+    base = parameter_type.split()[0].rstrip("[]") if parameter_type else ""
+    if not expression.lstrip().startswith("(") or not base:
+        return expression
+    if base in set(contract_model.declared_types):
+        return f"{target_type}.{base}{expression}"
+    return expression
+
+
 def _initializer_setup_declarations(source: str, initializer_name: str) -> list[str]:
     """Recover local declarations emitted by the shared initialization renderer.
 
@@ -268,7 +291,22 @@ def generate_caller_prerequisite_test(
     if end is None:
         raise ValueError("generated initialization test lifecycle function is unterminated")
 
-    target_call_arguments = ", ".join(target_args)
+    target_function = next(
+        (function for function in (*contract_model.functions, *contract_model.inherited_functions)
+         if function.name == hypothesis.target_function),
+        None,
+    )
+    if target_function is None:
+        raise ValueError(f"model has no target function: {hypothesis.target_function}")
+    if len(target_args) != len(target_function.parameters):
+        raise ValueError(
+            f"target argument arity mismatch: expected {len(target_function.parameters)}, got {len(target_args)}"
+        )
+    typed_target_args = tuple(
+        _qualify_planned_target_argument(parameter, expression, target_type, contract_model)
+        for parameter, expression in zip(target_function.parameters, target_args)
+    )
+    target_call_arguments = ", ".join(typed_target_args)
     declarations_text = "".join(f"        {item}\n" for item in setup_declarations)
     body = (
         f"function testCallerPrerequisite() public {{\n"
