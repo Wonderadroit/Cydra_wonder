@@ -191,6 +191,7 @@ def _attach_input_plan(
             function.parameters,
             constraints,
             function_name=function.name,
+            contract_model=contract,
         )
         bound = bind_experiment(
             hypothesis,
@@ -213,6 +214,7 @@ def _attach_input_plan(
             step_function.parameters,
             constraints,
             function_name=step_function.name,
+            contract_model=contract,
         )
         # An empty vector is the explicit "not safely planned" signal from the
         # generic planner. Preserve the existing step so the renderer fails closed
