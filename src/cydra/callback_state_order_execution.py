@@ -41,7 +41,7 @@ def _decoded_callback_path(contract_model: ContractModel, function_name: str):
     source = Path(contract_model.source).read_text(encoding="utf-8")
     body = _function_body(source, function_name)
     decode = re.search(
-        r"\b(?P<type>[A-Za-z_]\\w*)\s+memory\s+(?P<var>[A-Za-z_]\\w*)\s*=\s*abi\.decode\(\s*(?P<expr>[A-Za-z_]\\w*(?:\.[A-Za-z_]\\w+)*)\s*,\s*\((?P<decoded>[A-Za-z_]\\w*)\)\s*\)",
+        r"\b(?P<type>[A-Za-z_]\w*)\s+memory\s+(?P<var>[A-Za-z_]\w*)\s*=\s*abi\.decode\(\s*(?P<expr>[A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\s*,\s*\((?P<decoded>[A-Za-z_]\w*)\)\s*\)",
         body,
     )
     if not decode:
@@ -49,14 +49,14 @@ def _decoded_callback_path(contract_model: ContractModel, function_name: str):
     decoded_var = decode.group("var")
     decoded_type = decode.group("decoded")
     op = re.search(
-        rf"\b(?P<op_type>[A-Za-z_]\\w*)\s+memory\s+(?P<op>[A-Za-z_]\\w*)\s*=\s*{re.escape(decoded_var)}\.[A-Za-z_]\\w*\\[[^]]+\\]",
+        rf"\b(?P<op_type>[A-Za-z_]\w*)\s+memory\s+(?P<op>[A-Za-z_]\w*)\s*=\s*{re.escape(decoded_var)}\.[A-Za-z_]\w*\[[^]]+\]",
         body,
     )
     if not op:
         return None
     op_var = op.group("op")
     call = re.search(
-        rf"\b{re.escape(op_var)}\.(?P<endpoint>[A-Za-z_]\\w*)\.call(?:\s*\{{[^}}]*\\}})?\s*\(\s*(?P<data>[^,)]*)",
+        rf"\b{re.escape(op_var)}\.(?P<endpoint>[A-Za-z_]\w*)\.call(?:\s*\{[^}]*\})?\s*\(\s*(?P<data>[^,)]*)",
         body,
     )
     if not call:
@@ -303,7 +303,8 @@ contract CydraReentrantCaller {{
         reentryCallData = data;
     }}
 
-    function invoke() external {{
+    function invoke(bytes memory data) external {{
+        initialCallData = data;
         (bool ok,) = target.call(initialCallData);
         require(ok, "initial target call reverted");
     }}
