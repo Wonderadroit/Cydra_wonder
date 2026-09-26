@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import os
 
 from .foundry import generate_initialization_test
+from .experiment_inputs import _type_source
 from .initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
 from .models import ContractModel, Experiment, Hypothesis
 
@@ -165,22 +167,33 @@ def _qualify_planned_target_argument(
     expression: str,
     target_type: str,
     contract_model: ContractModel,
-) -> str:
-    """Make a structured planned argument explicit at a Solidity call boundary.
+) -> tuple[str, str | None]:
+    """Render a planned tuple with the type provenance required by Solidity.
 
-    The input planner intentionally returns ABI-shaped values such as `(1, 1, ...)`
-    for source-defined structs. That shape is useful as planning evidence, but a
-    Solidity function call does not implicitly convert an untyped tuple literal to
-    a struct parameter. Qualify only source-defined custom struct tuple expressions;
-    primitive values and already-typed expressions remain untouched.
+    The planner intentionally emits ABI-shaped tuple values. Execution must add
+    the type boundary without guessing: contract-scope declarations use the
+    contract qualifier; imported top-level declarations use their resolved source
+    and therefore require an explicit import in the generated test.
     """
     parameter_type = getattr(parameter, "type", "").strip()
     base = parameter_type.split()[0].rstrip("[]") if parameter_type else ""
     if not expression.lstrip().startswith("(") or not base:
-        return expression
+        return expression, None
+
     if base in set(contract_model.declared_types):
-        return f"{target_type}.{base}{expression}"
-    return expression
+        return f"{target_type}.{base}{expression}", None
+
+    resolved = _type_source(contract_model, base)
+    if resolved is None:
+        return expression, None
+    resolved_path, resolved_source = resolved
+
+    # A source-level struct is directly nameable once its defining file is
+    # imported. Keep this fail-closed if the definition is not actually a
+    # top-level struct; nested declarations require a different qualifier.
+    if re.search(rf"(?m)^\s*struct\s+{re.escape(base)}\s*\{{", resolved_source):
+        return f"{base}{expression}", str(resolved_path)
+    return expression, None
 
 
 def _initializer_setup_declarations(source: str, initializer_name: str) -> list[str]:
@@ -302,10 +315,15 @@ def generate_caller_prerequisite_test(
         raise ValueError(
             f"target argument arity mismatch: expected {len(target_function.parameters)}, got {len(target_args)}"
         )
-    typed_target_args = tuple(
-        _qualify_planned_target_argument(parameter, expression, target_type, contract_model)
-        for parameter, expression in zip(target_function.parameters, target_args)
-    )
+    typed_target_args: list[str] = []
+    structured_type_imports: set[str] = set()
+    for parameter, expression in zip(target_function.parameters, target_args):
+        rendered, import_source = _qualify_planned_target_argument(
+            parameter, expression, target_type, contract_model
+        )
+        typed_target_args.append(rendered)
+        if import_source is not None:
+            structured_type_imports.add(import_source)
     target_call_arguments = ", ".join(typed_target_args)
     declarations_text = "".join(f"        {item}\n" for item in setup_declarations)
     body = (
@@ -323,6 +341,21 @@ def generate_caller_prerequisite_test(
 
     if requires_proxy_initialization(Path(contract_model.source)):
         source = adapt_generated_initialization_for_proxy(source, contract_model.name)
+
+    if structured_type_imports:
+        output_file = Path(generated)
+        import_lines = []
+        for import_source in sorted(structured_type_imports):
+            relative = Path(os.path.relpath(
+                Path(import_source).resolve(),
+                output_file.parent.resolve(),
+            )).as_posix()
+            import_lines.append(f'import {{ {Path(import_source).stem} }} from "{relative}";')
+        source = source.replace(
+            f'import {{ {target_type} }} from "',
+            "\n".join(import_lines) + "\n" + f'import {{ {target_type} }} from "',
+            1,
+        )
 
     helper = """
 library CydraCallerSet {
