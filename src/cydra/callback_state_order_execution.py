@@ -50,7 +50,8 @@ def generate_callback_state_order_test(
 
     # abi.encodeCall preserves compiler-checked tuple/struct ABI types and avoids
     # inventing canonical signature text for source-defined parameters.
-    initial_call = f"abi.encodeCall(target.{function.name}, ({", ".join(arguments)}))"
+    argument_text = ", ".join(arguments)
+    initial_call = f"abi.encodeCall(target.{function.name}, ({argument_text}))"
 
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
