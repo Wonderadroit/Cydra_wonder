@@ -400,7 +400,7 @@ contract CydraReentrantCaller {{
     }}
 }}
 
-contract CydraCallbackStateOrderTest is Test {{
+contract CydraInitializationInvariantTest is Test {{
     {target_type} internal target;
     CydraReentrantCaller internal attacker;
     bytes internal testCallData;
@@ -427,4 +427,6 @@ contract CydraCallbackStateOrderTest is Test {{
     }}
 }}
 '''
+    if requires_proxy_initialization(Path(contract_model.source)):
+        source = adapt_generated_initialization_for_proxy(source, target_type)
     return _write_test(source, path)
