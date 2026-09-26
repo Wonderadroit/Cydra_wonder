@@ -1,4 +1,4 @@
-from cydra.caller_prerequisite import _caller_bound_initializer_arguments, _initializer_function, _initializer_setup_declarations, _replace_initializer_call
+from cydra.caller_prerequisite import _caller_bound_initializer_arguments, _caller_role_reached, _initializer_function, _initializer_setup_declarations, _replace_initializer_call
 from cydra.models import ContractModel, FunctionModel, ParameterModel
 
 
@@ -151,6 +151,22 @@ function testInitializationInterfaceIsCallable() public {
     )
     assert changed is True
     assert "CydraCallerSet.one(attacker)" in rewritten
+
+
+def test_caller_boundary_observation_accepts_authorized_success():
+    assert _caller_role_reached(False, b"unauthorized", True, b"") is True
+
+
+def test_caller_boundary_observation_accepts_distinct_downstream_revert():
+    assert _caller_role_reached(False, b"authorization", False, b"downstream") is True
+
+
+def test_caller_boundary_observation_fails_closed_on_identical_reverts():
+    assert _caller_role_reached(False, b"same", False, b"same") is False
+
+
+def test_caller_boundary_observation_rejects_unexpected_unauthorized_success():
+    assert _caller_role_reached(True, b"", True, b"") is False
 
 def test_caller_set_is_rendered_as_library():
     from cydra.caller_prerequisite import generate_caller_prerequisite_test
