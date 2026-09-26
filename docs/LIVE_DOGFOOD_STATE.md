@@ -57,13 +57,19 @@ The harness derives the target function, ABI shape (using compiler-checked `abi.
 
 Run `36182788690` reached the new callback adapter but failed before pipeline execution because `scripts/run_benchmark_blind.py` contained literal `\\n` escape text in the generated adapter block, producing a Python `SyntaxError` at import time. This is an implementation/validation failure in CYDRA, not a Hinkal target failure. The adapter block has been rewritten with real newlines in commit `feeea090010c8e3d87681b42230587f91b77102e`.
 
+The subsequent live run `36225095992` (artifact `10900701699`) completed successfully, but its artifact showed the callback hypothesis was still recorded as `UNIMPLEMENTED`. Diagnosis: the callback adapter had been implemented, but `run_live_contest.py` still passed only the legacy five-class tuple, and `run_benchmark_blind.py` did not include `callback_state_order` in `SUPPORTED_CLASSES`. This was a CYDRA integration omission, not a Hinkal execution result.
+
+Generic repair commits:
+- `3569d9d6ec1f6a4f5ddeadb0b8b989c58327de19`: register `callback_state_order` as a supported executable class and map its invariant family through the live execution/readiness paths.
+- `463d7d8e3dea6dddb75637703b527ee64debb3f3`: include `callback_state_order` in the canonical live runner class set.
+
 ## Findings
 
 No confirmed finding from this live campaign.
 
 ## Next action
 
-Dispatch the canonical workflow from `dogfood-readiness-expression-provenance` and inspect whether `H-CALLBACK-STATE-ORDER-runAction` is now Foundry-generated and executed. Classify the result only from execution evidence; if the generic harness cannot reach the callback, use that failure to identify the next generic prerequisite/argument-planning gap.
+Dispatch the canonical workflow from `dogfood-readiness-expression-provenance` and inspect whether `H-CALLBACK-STATE-ORDER-runAction` is now Foundry-generated and executed. The next expected boundary is generic callback experiment input planning: the current experiment has `planned_inputs: []` while `runAction` has structured parameters, so the harness should fail closed and expose that missing generic argument-planning capability rather than inventing Hinkal-specific values. Classify the result only from execution evidence.
 
 Canonical workflow:
 https://github.com/Wonderadroit/Cydra_wonder/actions/workflows/cydra-live-contest.yml
