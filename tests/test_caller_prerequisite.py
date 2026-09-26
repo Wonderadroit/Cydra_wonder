@@ -90,7 +90,7 @@ function testInitializationInterfaceIsCallable() public {
     )
     assert changed is True
     assert "CydraCallerSet.one(attacker)" in rewritten
-    assert "try target.initialize(address(0xA11CE), CydraCallerSet.one(attacker)) { }" in rewritten
+    assert "try target.initialize(address(0xA11CE), CydraCallerSet.one(attacker)) { }" in rewritten\n    assert "try;" not in rewritten
 
 
 def test_caller_probe_preserves_renderer_local_initializer_declarations():
