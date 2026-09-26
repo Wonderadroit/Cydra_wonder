@@ -5,7 +5,7 @@ import os
 import re
 
 from .foundry import generate_initialization_test
-from .experiment_inputs import _type_source
+from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source
 from .initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
 from .models import ContractModel, Experiment, Hypothesis
 
@@ -167,33 +167,55 @@ def _qualify_planned_target_argument(
     expression: str,
     target_type: str,
     contract_model: ContractModel,
-) -> tuple[str, str | None]:
-    """Render a planned tuple with the type provenance required by Solidity.
+) -> tuple[str, set[tuple[str, str]]]:
+    """Render structured values with recursive Solidity type provenance.
 
-    The planner intentionally emits ABI-shaped tuple values. Execution must add
-    the type boundary without guessing: contract-scope declarations use the
-    contract qualifier; imported top-level declarations use their resolved source
-    and therefore require an explicit import in the generated test.
+    Planned inputs are ABI-shaped tuples. Solidity requires every struct tuple
+    at a call boundary to carry its actual struct type, including nested struct
+    fields. Resolve that provenance recursively from the model's source graph;
+    never invent a qualifier when the definition cannot be resolved.
     """
-    parameter_type = getattr(parameter, "type", "").strip()
-    base = parameter_type.split()[0].rstrip("[]") if parameter_type else ""
-    if not expression.lstrip().startswith("(") or not base:
-        return expression, None
+    imports: set[tuple[str, str]] = set()
 
-    if base in set(contract_model.declared_types):
-        return f"{target_type}.{base}{expression}", None
+    def render(parameter_type: str, value: str, seen: tuple[str, ...] = ()) -> str:
+        parameter_type = parameter_type.strip()
+        if not parameter_type or not value.lstrip().startswith("("):
+            return value
 
-    resolved = _type_source(contract_model, base)
-    if resolved is None:
-        return expression, None
-    resolved_path, resolved_source = resolved
+        base = parameter_type.split()[0].rstrip("[]")
+        if not base:
+            return value
 
-    # A source-level struct is directly nameable once its defining file is
-    # imported. Keep this fail-closed if the definition is not actually a
-    # top-level struct; nested declarations require a different qualifier.
-    if re.search(rf"(?m)^\s*struct\s+{re.escape(base)}\s*\{{", resolved_source):
-        return f"{base}{expression}", str(resolved_path)
-    return expression, None
+        resolved = _type_source(contract_model, base)
+        if resolved is None:
+            return value
+        resolved_path, resolved_source = resolved
+        definition = _definition(resolved_source, base)
+        if definition is None or definition[0] != "struct" or base in seen:
+            return value
+
+        kind, name, body = definition
+        fields = _split_fields(body)
+        values = _split_arguments(value.strip()[1:-1])
+        if len(fields) != len(values):
+            return value
+
+        rendered_values: list[str] = []
+        for field_text, field_value in zip(fields, values):
+            field = _parameter_from_field(field_text)
+            if field is None:
+                return value
+            rendered_values.append(render(field.type, field_value, seen + (base,)))
+
+        if base in set(contract_model.declared_types):
+            qualified = f"{target_type}.{name}"
+        else:
+            qualified = name
+            imports.add((str(resolved_path), name))
+        return f"{qualified}({', '.join(rendered_values)})"
+
+    rendered = render(getattr(parameter, "type", ""), expression)
+    return rendered, imports
 
 
 def _initializer_setup_declarations(source: str, initializer_name: str) -> list[str]:
@@ -318,12 +340,11 @@ def generate_caller_prerequisite_test(
     typed_target_args: list[str] = []
     structured_type_imports: set[tuple[str, str]] = set()
     for parameter, expression in zip(target_function.parameters, target_args):
-        rendered, import_source = _qualify_planned_target_argument(
+        rendered, imports = _qualify_planned_target_argument(
             parameter, expression, target_type, contract_model
         )
         typed_target_args.append(rendered)
-        if import_source is not None:
-            structured_type_imports.add((import_source, parameter.type.split()[0].rstrip("[]")))
+        structured_type_imports.update(imports)
     target_call_arguments = ", ".join(typed_target_args)
     declarations_text = "".join(f"        {item}\n" for item in setup_declarations)
     body = (
