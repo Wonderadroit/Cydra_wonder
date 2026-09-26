@@ -627,6 +627,62 @@ def _is_experiment_constraint(
     return True
 
 
+def _source_function_body(contract: ContractModel, function: FunctionModel) -> str:
+    """Return one modeled function body from source using its recorded line."""
+    try:
+        source = _strip_comments(Path(contract.source).read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeError):
+        return ""
+    declaration = re.compile(r"\\bfunction\\s+" + re.escape(function.name) + r"\\s*\\(")
+    candidates = list(declaration.finditer(source))
+    if not candidates:
+        return ""
+    target = min(candidates, key=lambda match: abs(source.count("\\n", 0, match.start()) + 1 - function.line))
+    opening = source.find("{", target.end())
+    if opening < 0:
+        return ""
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[opening + 1:index]
+    return source[opening + 1:]
+
+
+def _internal_execution_requirements(contract: ContractModel, function: FunctionModel, *, max_depth: int = 4) -> tuple[ExecutionRequirement, ...]:
+    """Propagate modeled internal-call prerequisites into caller readiness."""
+    functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
+    by_name = {item.name: item for item in functions}
+    ignored = {"if", "for", "while", "require", "revert", "assert", "emit", "return", "new", "delete", "unchecked", "abi", "keccak256", "sha256", "ecrecover"}
+    results: list[ExecutionRequirement] = []
+    visited: set[tuple[str, int]] = set()
+    def visit(caller: FunctionModel, depth: int) -> None:
+        if depth > max_depth or (caller.name, depth) in visited:
+            return
+        visited.add((caller.name, depth))
+        body = _source_function_body(contract, caller)
+        if not body:
+            return
+        seen_names: set[str] = set()
+        for match in re.finditer(r"\\b([A-Za-z_]\\w*)\\s*\\(", body):
+            name = match.group(1)
+            if name in ignored or name == caller.name or name in seen_names:
+                continue
+            callee = by_name.get(name)
+            if callee is None:
+                continue
+            seen_names.add(name)
+            for predicate in (*callee.execution_predicates, *callee.state_predicates):
+                kind = "internal_execution_predicate" if predicate in callee.execution_predicates else "internal_state_predicate"
+                results.append(ExecutionRequirement(kind, f"{callee.name}: {predicate}", f"{caller.name}:internal-call->{callee.name}", "unresolved", "modeled internal callee guard; a generic construction or runtime observation must verify this prerequisite before the caller is considered reachable"))
+            visit(callee, depth + 1)
+    visit(function, 0)
+    return tuple(dict.fromkeys(results))
+
+
 def _execution_requirements(
     contract: ContractModel,
     function: FunctionModel,
@@ -656,6 +712,7 @@ def _execution_requirements(
                 detail,
             )
         )
+    requirements.extend(_internal_execution_requirements(contract, function))
     return tuple(requirements)
 
 
