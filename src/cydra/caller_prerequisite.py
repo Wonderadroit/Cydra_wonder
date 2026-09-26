@@ -68,14 +68,11 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
         elif char in ")]}":
             depth -= 1
             if depth == 0:
-                terminator = re.match(r"\s*(?:;|\{)", source[index + 1:])
+                terminator = re.match(r"s*(?:;|{)", source[index + 1:])
                 if terminator is None:
                     raise ValueError(
                         f"initializer call {initializer_name} is not followed by a valid Solidity call terminator"
                     )
-                # Return only through the closing ')'. Preserve the caller's
-                # existing ';' or '{' so both ordinary calls and try-call
-                # expressions remain syntactically valid after rewriting.
                 return start, index + 1, source[args_start:index]
     raise ValueError(f"initializer call {initializer_name} is unterminated")
 
@@ -100,9 +97,6 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
                 arguments[index] = "attacker"
                 changed = True
 
-    # Address arrays are the most direct generic representation of caller-role
-    # membership. If the parameter name did not expose the semantic hint, do not
-    # guess: the probe remains unavailable rather than inventing a setup.
     if not changed:
         for index, name in enumerate(parameter_names):
             if arguments[index].startswith("new address[]"):
@@ -112,13 +106,51 @@ def _replace_initializer_call(source: str, initializer_name: str, parameter_name
                     changed = True
                     break
 
-    replacement = f"target.{initializer_name}({', '.join(arguments)});"
+    # Preserve the original Solidity suffix (; for a normal call, { for a
+    # try-call) instead of manufacturing a semicolon that can invalidate the
+    # surrounding generated syntax.
+    replacement = f"target.{initializer_name}({', '.join(arguments)})"
     return source[:start] + replacement + source[end:], changed
 
 
 def _initializer_arguments_from_source(source: str, initializer_name: str) -> list[str]:
     _, _, argument_text = _find_initializer_call(source, initializer_name)
     return _split_arguments(argument_text)
+
+
+def _initializer_setup_declarations(source: str, initializer_name: str) -> list[str]:
+    """Recover local declarations emitted by the shared initialization renderer.
+
+    The caller-prerequisite probe reuses the renderer so custom ABI/reference
+    declarations stay centralized. Those declarations originally live inside
+    the generated lifecycle test and must survive when its assertion body is
+    replaced by the prerequisite probe.
+    """
+    marker = "function testInitializationInterfaceIsCallable() public"
+    function_start = source.find(marker)
+    if function_start < 0:
+        raise ValueError("generated initialization test lifecycle function is missing")
+    brace = source.find("{", function_start)
+    if brace < 0:
+        raise ValueError("generated initialization test lifecycle function has no body")
+    call_start, _, _ = _find_initializer_call(source, initializer_name)
+    if call_start <= brace:
+        return []
+
+    prefix = source[brace + 1:call_start]
+    declarations: list[str] = []
+    for statement in prefix.split(";"):
+        statement = statement.strip()
+        if not statement:
+            continue
+        # Generated lifecycle probes may contain setup instrumentation before
+        # the call. Keep declarations, but do not carry probe side effects into
+        # the caller-role observation.
+        first = statement.splitlines()[0].strip()
+        if first.startswith(("vm.", "assert", "target.")):
+            continue
+        declarations.append(statement + ";")
+    return declarations
 
 
 def generate_caller_prerequisite_test(
@@ -168,9 +200,7 @@ def generate_caller_prerequisite_test(
     if not changed:
         raise ValueError("initializer has no semantically identified caller-identity parameter")
 
-    # Preserve the generated initializer call while replacing only its lifecycle
-    # assertion body. This keeps constructor/interface/runtime stub generation
-    # centralized in the existing initialization renderer.
+    setup_declarations = _initializer_setup_declarations(source, initializer.name)
     initializer_args = _initializer_arguments_from_source(source, initializer.name)
     target_args = experiment.planned_inputs
     marker = "function testInitializationInterfaceIsCallable() public"
@@ -190,8 +220,11 @@ def generate_caller_prerequisite_test(
         raise ValueError("generated initialization test lifecycle function is unterminated")
 
     target_call_arguments = ", ".join(target_args)
+    declarations_text = "".join(f"        {item}\n" for item in setup_declarations)
     body = (
         f"function testCallerPrerequisite() public {{\n"
+        f"        address attacker = address(0xBEEF);\n"
+        f"{declarations_text}"
         f"        target.{initializer.name}({', '.join(initializer_args)});\n"
         f"        vm.prank(attacker);\n"
         f"        bool ok;\n"
@@ -214,7 +247,8 @@ contract CydraCallerSet {
 """
     marker = f"contract CydraInitializationInvariantTest is Test {{"
     if "contract CydraCallerSet" not in source:
-        source = source.replace(marker, helper + "\n" + marker, 1)
+        source = source.replace(marker, helper + "
+" + marker, 1)
 
     generated.write_text(source, encoding="utf-8")
     return generated
