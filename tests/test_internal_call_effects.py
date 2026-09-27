@@ -4,6 +4,7 @@ from cydra.internal_call_effects import effective_writes
 from cydra.models import ContractModel, FunctionModel
 from cydra.solidity_model import parse_solidity
 from cydra.solidity_system_model import project_contracts
+from cydra.structural_state import generate_cross_function_state_hypotheses
 
 
 def test_parser_resolves_direct_internal_calls_and_transitive_writes(tmp_path: Path):
@@ -49,3 +50,14 @@ def test_system_projection_records_internal_call_and_composed_write():
 
     assert any(e.source == entry_id and e.relation == "internal_call" and e.target == helper_id for e in model.edges)
     assert any(e.source == entry_id and e.relation == "writes" and e.target == state_id for e in model.edges)
+
+def test_state_reasoning_consumes_composed_writes():
+    helper = FunctionModel("helper", "internal", (), ("counter",), (), 2)
+    entry = FunctionModel("entry", "external", (), (), (), 3, internal_calls=("helper",))
+    peer = FunctionModel("peer", "external", (), ("counter",), (), 4)
+    contract = ContractModel("Target", "Target.sol", (helper, entry, peer), state_variables=("counter",))
+
+    contribution = generate_cross_function_state_hypotheses(contract)
+
+    assert contribution.invariants
+    assert {h.target_function for h in contribution.hypotheses} == {"entry", "peer"}
