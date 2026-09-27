@@ -319,9 +319,14 @@ def _state_relation_predicates(
         for predicate in current.execution_predicates:
             substituted = predicate
             for name, expression in substitutions.items():
+                replacement = (
+                    expression
+                    if re.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*", expression.strip())
+                    else f"({expression})"
+                )
                 substituted = re.sub(
                     rf"\b{re.escape(name)}\b",
-                    f"({expression})",
+                    replacement,
                     substituted,
                 )
             if re.search(rf"\b{re.escape(state)}\s*\[", substituted):
@@ -343,9 +348,14 @@ def _state_relation_predicates(
                 if parameter.name:
                     rendered = argument
                     for name, expression in substitutions.items():
+                        replacement = (
+                            expression
+                            if re.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*", expression.strip())
+                            else f"({expression})"
+                        )
                         rendered = re.sub(
                             rf"\b{re.escape(name)}\b",
-                            f"({expression})",
+                            replacement,
                             rendered,
                         )
                     child_substitutions[parameter.name] = rendered
