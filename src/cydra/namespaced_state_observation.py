@@ -45,8 +45,8 @@ _LOCATION_RE = re.compile(
     r"(?P<name>[A-Za-z_]\w*Location)\s*=\s*(?P<value>0x[0-9A-Fa-f]{64})\s*;"
 )
 _FIELD_RE = re.compile(
-    r"(?P<type>mapping\\s*\\([^;]+?\\)|[A-Za-z_]\\w*(?:\\s*\\[[^\\]]*\\])?)\\s+"
-    r"(?P<name>[A-Za-z_]\\w*)\\s*;"
+    r"(?P<type>mapping\s*\([^;]+?\)|[A-Za-z_]\w*(?:\s*\[[^\]]*\])?)\s+"
+    r"(?P<name>[A-Za-z_]\w*)\s*;"
 )
 def _candidate_sources(contract: ContractModel) -> tuple[Path, ...]:
     """Follow compiler-model inheritance provenance to locate storage declarations."""
