@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current engineering head: `e79a1c7ec359ed13f553dc6fa8dc4835f8b18b5a`
+- Current engineering head: `35c25d1302046cfc16fbe188062cb28c23ea4050`
 
 ## Latest validated live run
 
@@ -137,6 +137,16 @@ Generic repair: src/cydra/execution_readiness.py now discovers modeled internal 
 Engineering commits: 08b385ad3951166f8aec96ebcd3bbc1797823fac and a76ebbe91bb8c25b218b426038cef83db71450ee.
 
 No confirmed Hinkal finding exists. The next canonical run should verify that the callback experiment is no longer generated against an unsatisfied internal prerequisite and that the readiness report names the propagated verifyWallet requirements. If the next blocker is signature/proof construction, implement only the generic capability needed to represent and verify that prerequisite; do not add Hinkal-specific constants or bypasses.
+
+## Latest canonical diagnosis: artifact 10926452747 / run 36303694958
+
+The canonical live workflow completed successfully on CYDRA commit `b239035c7575355dacb8e485a92060790064ec9a`. Initialization and caller-prerequisite evidence passed, and the callback readiness graph propagated the internal `verifyWallet` requirements. However, the ERC-7201 `$.usedMessages[circomData.emporiumMessage]` prerequisite remained `state_observation / unresolved`, so the callback security experiment was not reached.
+
+Diagnosis: the new generic namespaced-state planner contained an over-escaped `_FIELD_RE`, so Solidity struct fields were not parsed. This was a CYDRA parser defect, not Hinkal evidence.
+
+Generic repair: commit `35c25d1302046cfc16fbe188062cb28c23ea4050` corrects the regex to parse mapping/ordinary struct fields. Existing positive/negative planner regressions already cover successful ERC-7201 mapping-slot derivation and fail-closed packed layouts.
+
+Next action: validate this repair in CI, then rerun the same canonical Hinkal workflow. Expected transition: `verifyWallet: $.usedMessages[circomData.emporiumMessage]` from `state_observation / unresolved` to `state_observation / constraint`. Only after that should the generated callback experiment be inspected/executed.
 
 ## Automatic checkpoint format
 
