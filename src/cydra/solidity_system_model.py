@@ -46,14 +46,6 @@ def project_contract_model(contract: ContractModel, system: SystemModel | None =
             if modifier_id not in system.nodes:
                 system.add_node(Node(modifier_id, "authorization", modifier, {"source": "solidity_model", "source_path": contract.source, "contract": contract.name}))
             system.add_edge(Edge(function_id, "enforces", modifier_id, {"provenance": "solidity_model"}))
-        for callee in function.internal_calls:
-            callee_functions = tuple(item for item in contract.functions if item.name == callee)
-            for callee_function in callee_functions:
-                callee_id = _function_id(contract, callee_function)
-                system.add_edge(Edge(function_id, "internal_call", callee_id, {
-                    "provenance": "solidity_model",
-                    "call_kind": "same_contract",
-                }))
         for state in (function.effective_writes or function.writes):
             state_id = f"state:{contract.source}:{contract.name}:{state}"
             if state_id not in system.nodes:
@@ -64,6 +56,17 @@ def project_contract_model(contract: ContractModel, system: SystemModel | None =
             if target_id not in system.nodes:
                 system.add_node(Node(target_id, "data_flow", target, {"source": "solidity_model", "source_path": contract.source, "contract": contract_id, "function": function_id}))
             system.add_edge(Edge(function_id, "external_call", target_id, {"provenance": "solidity_model"}))
+    for function in contract.functions:
+        function_id = _function_id(contract, function)
+        for callee in function.internal_calls:
+            for callee_function in contract.functions:
+                if callee_function.name != callee:
+                    continue
+                callee_id = _function_id(contract, callee_function)
+                system.add_edge(Edge(function_id, "internal_call", callee_id, {
+                    "provenance": "solidity_model",
+                    "call_kind": "same_contract",
+                }))
     return system
 
 
