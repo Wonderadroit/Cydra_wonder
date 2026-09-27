@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 from .interface_resolver import ResolvedInterface, resolve_interface, resolve_named_type_source
@@ -41,6 +42,56 @@ _STATE_DECLARATION_KEYWORDS = {
 _SOLIDITY_BUILTIN_RECEIVERS = {
     "abi", "block", "msg", "tx", "type", "super",
 }
+
+_INTERNAL_CALL_KEYWORDS = {
+    "if", "for", "while", "do", "switch", "return", "require", "assert",
+    "revert", "emit", "new", "delete", "unchecked", "try", "catch",
+}
+
+
+def _internal_calls(body: str, function_names: set[str]) -> tuple[str, ...]:
+    """Resolve direct same-contract calls against known function names only."""
+    calls: list[str] = []
+    for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
+        name = match.group(1)
+        if name in _INTERNAL_CALL_KEYWORDS or name not in function_names:
+            continue
+        if name not in calls:
+            calls.append(name)
+    return tuple(calls)
+
+
+def _effective_writes(functions: tuple[FunctionModel, ...]) -> tuple[FunctionModel, ...]:
+    """Compute cycle-safe transitive state-write summaries for internal calls."""
+    by_name: dict[str, set[str]] = {}
+    for function in functions:
+        by_name.setdefault(function.name, set()).update(function.writes)
+
+    cache: dict[str, frozenset[str]] = {}
+    visiting: set[str] = set()
+
+    def summarize(name: str) -> frozenset[str]:
+        if name in cache:
+            return cache[name]
+        if name in visiting:
+            return frozenset(by_name.get(name, ()))
+        visiting.add(name)
+        effects = set(by_name.get(name, ()))
+        for function in functions:
+            if function.name != name:
+                continue
+            for callee in function.internal_calls:
+                effects.update(summarize(callee))
+        visiting.remove(name)
+        result = frozenset(effects)
+        cache[name] = result
+        return result
+
+    return tuple(
+        replace(function, effective_writes=tuple(sorted(summarize(function.name))))
+        for function in functions
+    )
+
 
 
 def _strip_comments(source: str) -> str:
@@ -678,6 +729,11 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                 derived_interface_casts=derived_interface_casts,
             )
 
+        function_names = {
+            match.group(1)
+            for match in _FUNCTION_RE.finditer(contract_source)
+        }
+
         for match in _FUNCTION_RE.finditer(contract_source):
             name = match.group(1)
             parameter_text = match.group(2)
@@ -718,6 +774,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                 if match.group(1) not in _SOLIDITY_BUILTIN_RECEIVERS
                 and not re.search(r"\b(?:revert|emit)\s*$", body[max(0, match.start() - 32):match.start()])
             }))
+            internal_calls = _internal_calls(body, function_names)
             functions.append(
                 FunctionModel(
                     name=name,
@@ -726,6 +783,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                     writes=writes,
                     external_calls=external_calls,
                     line=_line_number(source, contract_start + match.start()),
+                    internal_calls=internal_calls,
                     parameters=_parameters(parameter_text),
                     authorization_predicates=_authorization_predicates(body),
                     state_predicates=_state_predicates(body, state_variables),
@@ -736,6 +794,8 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                     return_expressions=_return_expressions(body),
                 )
             )
+
+        functions = list(_effective_writes(tuple(functions)))
 
         contracts.append(
             ContractModel(
