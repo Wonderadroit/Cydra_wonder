@@ -143,14 +143,25 @@ def _structured_default(
         return f"new {base}[](0)"
 
     # Nested struct fields are not yet independently constraint-selected. Use
-    # the neutral zero address for structured defaults so optional address
-    # branches (for example, zero-address sentinels) are not forced into an
-    # authenticated/nonzero execution path. Top-level address parameters retain
-    # the historical nonzero default and can still be overridden by constraints.
+    # neutral zero defaults for structured values so optional/sentinel branches
+    # are not forced into authenticated or side-effecting execution paths.
+    # Top-level scalar parameters retain the historical defaults and can still
+    # be overridden by compiler-linked constraints.
     if parameter_type == "address":
         return "address(0)"
     if parameter_type == "address payable":
         return "payable(address(0))"
+    if parameter_type == "bool":
+        return "false"
+    if parameter_type.startswith(("uint", "int")):
+        return "0"
+    if parameter_type == "string":
+        return '""'
+    if parameter_type == "bytes":
+        return 'bytes("")'
+    if parameter_type.startswith("bytes") and parameter_type[5:].isdigit():
+        width = int(parameter_type[5:])
+        return f'{parameter_type}(0)'
 
     primitive = _default_for(parameter)
     if primitive is not None:
