@@ -1017,10 +1017,22 @@ def _internal_state_setup_candidates(
                 or parameter.type.strip().split()[0].rstrip("[]").startswith(("uint", "int", "bytes"))
                 for parameter in writer.parameters
             )
-            status = "constructible" if primitive_abi else "unresolved"
+            authorization_requirements = tuple(
+                item for item in _caller_requirements(writer)
+                if item.status == "required"
+            )
+            status = (
+                "constructible"
+                if primitive_abi and not authorization_requirements
+                else "unresolved"
+            )
             detail = (
                 f"target-derived internal predicate references persistent state {state}; "
                 f"writer {writer.name} has a constructible primitive ABI"
+                if primitive_abi and not authorization_requirements else
+                f"target-derived internal predicate references persistent state {state}; "
+                f"writer {writer.name} has unresolved authorization prerequisites: "
+                + ", ".join(item.subject for item in authorization_requirements)
                 if primitive_abi else
                 f"target-derived internal predicate references persistent state {state}; "
                 f"writer {writer.name} has non-primitive parameters"
@@ -1082,13 +1094,27 @@ def _state_setup_candidates(
                 for requirement in _runtime_requirements(contract, writer)
                 if requirement.subject.split(".")[-1] not in {"push", "pop"}
             )
-            status = "constructible" if primitive_abi and not runtime_dependencies else "unresolved"
+            authorization_requirements = tuple(
+                item for item in _caller_requirements(writer)
+                if item.status == "required"
+            )
+            status = (
+                "constructible"
+                if primitive_abi and not runtime_dependencies and not authorization_requirements
+                else "unresolved"
+            )
             if not primitive_abi:
                 detail = f"candidate transition {writer.name} has non-primitive parameters and cannot be synthesized generically"
             elif runtime_dependencies:
                 detail = (
                     f"candidate transition {writer.name} touches modeled prerequisite state {state} "
                     "but has unresolved runtime dependencies"
+                )
+            elif authorization_requirements:
+                detail = (
+                    f"candidate transition {writer.name} touches modeled prerequisite state {state} "
+                    "but its caller authorization is unresolved: "
+                    + ", ".join(item.subject for item in authorization_requirements)
                 )
             else:
                 detail = f"candidate transition that touches modeled prerequisite state {state}"
@@ -1161,7 +1187,32 @@ def constructible_state_setup_plan(
             memo[key] = None
             return None
         readiness = inspect_execution_readiness(contract, fn, constraints, semantic_evidence)
-        if any(item.status == "unresolved" for item in readiness.blockers):
+
+        # A state-observation prerequisite is not itself a reason to abandon
+        # planning when the target model already exposes a writer for that
+        # exact state. The writer must still pass its own readiness checks below;
+        # this is the boundary between "state is currently unknown" and "state
+        # can be established by a verified target transition". Other unresolved
+        # prerequisites remain hard blockers, and state with no writer remains
+        # unresolved.
+        planned_state_names = set(required_state_names(fn))
+        state_writer_names = {
+            state: tuple(writer.name for writer in writers_for(state))
+            for state in planned_state_names
+        }
+        hard_blockers = []
+        for item in readiness.blockers:
+            if (
+                item.status == "unresolved"
+                and item.category == "state_observation"
+                and any(
+                    state in item.subject and state_writer_names.get(state)
+                    for state in planned_state_names
+                )
+            ):
+                continue
+            hard_blockers.append(item)
+        if hard_blockers:
             memo[key] = None
             return None
         if any(item.kind == "caller_state_dependency" and item.status == "unresolved" for item in readiness.execution_requirements):
