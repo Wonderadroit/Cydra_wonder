@@ -297,3 +297,31 @@ def test_callback_runtime_generator_materializes_namespaced_constructor_struct(t
     generate_callback_state_order_test(hypothesis, experiment, str(source), "Callback", output, contract)
     rendered = output.read_text(encoding="utf-8")
     assert "new Callback((0, address(0)));" in rendered
+
+
+
+def test_callback_caller_binding_discovery_follows_modeled_internal_predicates(tmp_path):
+    from cydra.callback_state_order_execution import _caller_bound_parameter_paths
+
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Callback { "
+        "function execute(Data calldata data) external { check(data); } "
+        "function check(Data calldata data) internal { require(data.endpoint == msg.sender); } "
+        "struct Data { address endpoint; } }",
+        encoding="utf-8",
+    )
+    execute = FunctionModel(
+        name="execute", visibility="external", modifiers=(), writes=(),
+        external_calls=(), line=1,
+        parameters=(ParameterModel(name="data", type="Data"),),
+        internal_calls=("check",),
+    )
+    check = FunctionModel(
+        name="check", visibility="internal", modifiers=(), writes=(),
+        external_calls=(), line=1,
+        parameters=(ParameterModel(name="data", type="Data"),),
+        execution_predicates=("data.endpoint == msg.sender",),
+    )
+    contract = ContractModel("Callback", str(source), (execute, check), pragma="^0.8.20")
+    assert _caller_bound_parameter_paths(contract, execute) == ("data.endpoint",)
