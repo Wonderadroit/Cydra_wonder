@@ -183,7 +183,7 @@ def _caller_bound_parameter_paths(contract_model: ContractModel, function) -> tu
             body = _function_body(Path(contract_model.source).read_text(encoding="utf-8"), current.name)
         except (OSError, UnicodeError):
             return
-        for call in re.finditer(r"\\b([A-Za-z_]\\w*)\\s*\\(", body):
+        for call in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
             callee = functions.get(call.group(1))
             if callee is not None:
                 visit(callee)
