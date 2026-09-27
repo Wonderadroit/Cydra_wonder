@@ -236,3 +236,25 @@ def test_callback_runtime_generator_emits_causal_reentry_oracle(tmp_path: Path):
     rendered = output.read_text(encoding="utf-8")
     assert "assertFalse(attacker.reentrySucceeded()" in rendered
     assert "CydraCallbackObservation" in rendered
+
+
+def test_callback_classifier_uses_asserted_observation_not_stdout():
+    from types import SimpleNamespace
+    from scripts.run_benchmark_blind import _classify_callback_state_order_execution
+
+    passing = SimpleNamespace(executed=True, tests_failed=0, stdout="", stderr="")
+    assert _classify_callback_state_order_execution(passing) == (
+        "rejected",
+        "callback was observed and the reentrant invocation was blocked",
+    )
+
+    candidate = SimpleNamespace(
+        executed=True,
+        tests_failed=1,
+        stdout='Error: reentrant callback succeeded',
+        stderr="",
+    )
+    assert _classify_callback_state_order_execution(candidate) == (
+        "candidate",
+        "callback was observed and the reentrant invocation succeeded",
+    )
