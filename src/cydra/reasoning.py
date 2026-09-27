@@ -5,6 +5,7 @@ import re
 
 from .experiment_planning import plan_experiment as _plan_experiment
 from .models import Evidence, Experiment, Hypothesis, Invariant, ContractModel, FunctionModel
+from .internal_call_effects import effective_writes
 
 
 _FUNCTION_SIGNATURE_RE = re.compile(r"\bfunction\s+(?P<name>\w+)\s*\((?P<parameters>[^)]*)\)\s*(?P<tail>[^\{;]*)\{", re.MULTILINE)
@@ -82,7 +83,7 @@ def _has_caller_authorization_predicate(function: FunctionModel) -> bool:
 
 
 def _state_changing_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    return tuple(f for f in contract.functions if f.visibility in _STATE_CHANGING_VISIBILITIES and f.writes)
+    return tuple(f for f in contract.functions if f.visibility in _STATE_CHANGING_VISIBILITIES and effective_writes(contract, f))
 
 
 def _externally_callable_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
