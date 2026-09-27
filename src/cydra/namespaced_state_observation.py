@@ -83,16 +83,52 @@ def _source(contract: ContractModel) -> str:
         return ""
 
 
-def _whole_slot_field(type_name: str) -> bool:
+def _whole_slot_field(type_name: str, source_paths: tuple[Path, ...]) -> bool:
     base = type_name.strip()
     if base.startswith("mapping") or "[" in base:
         return False
     if base == "address":
         return True
-    return bool(re.fullmatch(r"(?:u?int|bytes)256", base))
+    if re.fullmatch(r"(?:u?int|bytes)256", base):
+        return True
+
+    # User-defined contract/interface references are address-sized storage
+    # values. Resolve the declaration instead of assuming every capitalized
+    # identifier is one slot: structs and enums can span or pack differently.
+    if not re.fullmatch(r"[A-Za-z_]\w*", base):
+        return False
+    declaration = re.compile(
+        rf"\b(?P<kind>contract|interface|library)\s+{re.escape(base)}\b"
+    )
+    for path in source_paths:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        if declaration.search(source):
+            return True
+        try:
+            root = next(
+                parent for parent in (path.parent, *path.parents)
+                if (parent / "foundry.toml").exists()
+            )
+            resolved, _ = resolve_named_type_source(root, path, base)
+        except (FileNotFoundError, ValueError, OSError, UnicodeError, StopIteration):
+            continue
+        try:
+            resolved_source = (root / resolved).resolve().read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        if declaration.search(resolved_source):
+            return True
+    return False
 
 
-def _struct_layout_offset(struct_body: str, target_name: str) -> int | None:
+def _struct_layout_offset(
+    struct_body: str,
+    target_name: str,
+    source_paths: tuple[Path, ...],
+) -> int | None:
     """Return a conservative whole-slot offset for one struct member."""
     offset = 0
     for match in _FIELD_RE.finditer(struct_body):
@@ -100,7 +136,7 @@ def _struct_layout_offset(struct_body: str, target_name: str) -> int | None:
         name = match.group("name")
         if name == target_name:
             return offset
-        if not _whole_slot_field(field_type):
+        if not _whole_slot_field(field_type, source_paths):
             return None
         offset += 1
     return None
@@ -123,8 +159,9 @@ def plan_namespaced_state_observation(
     if match is None:
         return None
 
+    source_paths = (Path(contract.source).resolve(), *_candidate_sources(contract))
     sources = [_source(contract)]
-    for candidate in _candidate_sources(contract):
+    for candidate in source_paths[1:]:
         if candidate == Path(contract.source).resolve():
             continue
         try:
@@ -151,7 +188,7 @@ def plan_namespaced_state_observation(
     if struct_match is None:
         return None
 
-    offset = _struct_layout_offset(struct_match.group("body"), state)
+    offset = _struct_layout_offset(struct_match.group("body"), state, source_paths)
     if offset is None:
         return None
 
