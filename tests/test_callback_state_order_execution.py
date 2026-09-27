@@ -194,3 +194,20 @@ def test_callback_execution_context_uses_conservative_timestamp_extreme(tmp_path
         pragma="^0.8.20",
     )
     assert _execution_context_warp(contract, run_action) is None
+    guarded = FunctionModel(
+        name="verifyGuarded",
+        visibility="internal",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=5,
+        execution_predicates=("block.timestamp > deadline",),
+        execution_predicate_polarities=(("block.timestamp > deadline", "must_not_hold"),),
+    )
+    guarded_contract = ContractModel(
+        "Context",
+        str(source),
+        (run_action, guarded),
+        pragma="^0.8.20",
+    )
+    assert _execution_context_warp(guarded_contract, run_action) == "vm.warp(0);"
