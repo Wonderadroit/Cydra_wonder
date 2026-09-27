@@ -444,24 +444,36 @@ def generate_callback_state_order_test(
                 bound_key,
             )
         state_observation_assertions.append(plan.assertion_for(bound_key))
-    for callee_name in ("verifyWallet",):
-        # Internal prerequisites are modeled on their callee, so inspect the
-        # propagated source predicate rather than relying on target names.
-        for candidate in (*contract_model.functions, *contract_model.inherited_functions):
-            if candidate.name != callee_name:
+    # Internal prerequisites are modeled on their callees. Discover those
+    # callees from the same source call graph used by readiness; never name a
+    # target-specific function in the adapter.
+    try:
+        callback_source = Path(contract_model.source).read_text(encoding="utf-8")
+        callback_body = _function_body(callback_source, function.name)
+    except (OSError, UnicodeError):
+        callback_body = ""
+    modeled_functions = {
+        item.name: item
+        for item in (*contract_model.functions, *contract_model.inherited_functions)
+    }
+    seen_callees: set[str] = set()
+    for call_match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", callback_body):
+        callee = modeled_functions.get(call_match.group(1))
+        if callee is None or callee.name in seen_callees:
+            continue
+        seen_callees.add(callee.name)
+        for predicate in callee.execution_predicates:
+            plan = plan_namespaced_state_observation(contract_model, callee, predicate)
+            if plan is None:
                 continue
-            for predicate in candidate.execution_predicates:
-                plan = plan_namespaced_state_observation(contract_model, candidate, predicate)
-                if plan is None:
-                    continue
-                bound_key = plan.key_expression
-                if function.parameters:
-                    bound_key = re.sub(
-                        rf"\b{re.escape(function.parameters[0].name)}\b",
-                        metadata["input_name"],
-                        bound_key,
-                    )
-                state_observation_assertions.append(plan.assertion_for(bound_key))
+            bound_key = plan.key_expression
+            for parameter in function.parameters:
+                bound_key = re.sub(
+                    rf"\b{re.escape(parameter.name)}\b",
+                    metadata["input_name"],
+                    bound_key,
+                )
+            state_observation_assertions.append(plan.assertion_for(bound_key))
 
 
     source = f'''// SPDX-License-Identifier: UNLICENSED
