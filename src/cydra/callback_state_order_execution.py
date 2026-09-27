@@ -170,8 +170,8 @@ def _caller_bound_parameter_paths(contract_model: ContractModel, function) -> tu
         predicates = current.execution_predicates
         for predicate in predicates:
             match = re.search(
-                r"\\b(?P<path>[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w+)*)\\s*==\\s*msg\\.sender\\b|"
-                r"\\bmsg\\.sender\\s*==\\s*(?P<reverse>[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w+)*)\\b",
+                r"\b(?P<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\s*==\s*msg\.sender\b|"
+                r"\bmsg\.sender\s*==\s*(?P<reverse>[A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\b",
                 predicate,
             )
             if not match:
