@@ -644,10 +644,10 @@ def test_internal_execution_prerequisite_categories_are_descriptive(tmp_path):
     source.write_text("""
     contract Target {
         bool verified;
-        function runAction(bytes32 digest, bytes calldata signature) external { verifyWallet(digest, signature); }
-        function verifyWallet(bytes32 digest, bytes calldata signature) internal {
+        function runAction(uint256 amount) external { verifyWallet(amount); }
+        function verifyWallet(uint256 amount) internal {
             require(!verified);
-            require(signature.length == 65);
+            require(amount > 0);
         }
     }
     """)
