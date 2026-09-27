@@ -17,16 +17,18 @@ class NamespacedStateObservationPlan:
     value_type: str
     source: str
 
-    @property
-    def assertion(self) -> str:
-        """Render a read-only Foundry assertion against the target storage slot."""
+    def assertion_for(self, key_expression: str) -> str:
+        """Render a read-only Foundry assertion for a bound mapping key."""
         return (
             f'assertEq(uint256(vm.load(address(target), '
-            f'keccak256(abi.encode(uint256({self.key_expression}), '
+            f'keccak256(abi.encode(uint256({key_expression}), '
             f'uint256({self.storage_slot}))))), 0, '
-            f'"unverified prerequisite: $.{self.state}[{self.key_expression}]");'
+            f'"unverified prerequisite: $.{self.state}[{key_expression}]");'
         )
 
+    @property
+    def assertion(self) -> str:
+        return self.assertion_for(self.key_expression)
 
 _MAPPING_RE = re.compile(
     r"mapping\s*\(\s*(?P<key>[^=]+?)\s*=>\s*(?P<value>[^)]+?)\s*\)"
