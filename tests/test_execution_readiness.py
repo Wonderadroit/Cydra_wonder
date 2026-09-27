@@ -790,5 +790,8 @@ def test_nonreentrant_modifier_is_not_a_caller_role():
         name="transact",
         visibility="external",
         modifiers=("nonReentrant",),
+        writes=(),
+        external_calls=(),
+        line=1,
     )
     assert _caller_requirements(function) == ()
