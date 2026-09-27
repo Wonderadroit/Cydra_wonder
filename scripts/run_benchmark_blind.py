@@ -1107,11 +1107,17 @@ def run_source_investigation(
                 continue
             contract = _contract_for_hypothesis(result, hypothesis)
             function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+            execution_capabilities = (
+                frozenset({"callback_state_order_reachability"})
+                if class_name == "callback_state_order"
+                else frozenset()
+            )
             readiness = inspect_execution_readiness(
                 contract,
                 function,
                 tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
                 compiler_evidence.evidence,
+                execution_capabilities=execution_capabilities,
             )
             execution_readiness.append({
                 "hypothesis_id": hypothesis.hypothesis_id,
