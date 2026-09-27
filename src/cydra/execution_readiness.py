@@ -771,12 +771,29 @@ def _internal_execution_requirements(
                     "execution_context": "internal callee prerequisite requires generic blockchain execution context",
                     "local_execution": "internal callee prerequisite depends on a callee-local value whose provenance is not yet constructible",
                 }[category]
-                if constraint:
-                    status = "constraint"
-                    detail = (
-                        "internal callee prerequisite is a pure input/local constraint; "
-                        "the caller experiment must construct values satisfying it"
+                capability_constraint = (
+                    category == "execution_context"
+                    and "callback_state_order_reachability" in execution_capabilities
+                    and dict(callee.execution_predicate_polarities).get(predicate) == "must_not_hold"
+                    and bool(
+                        re.search(
+                            r"\\bblock\\.timestamp\\s*(?:>|>=|<|<=)",
+                            predicate,
+                        )
                     )
+                )
+                if constraint or capability_constraint:
+                    status = "constraint"
+                    if capability_constraint and not constraint:
+                        detail = (
+                            "callback execution-context adapter can satisfy this guarded "
+                            "ambient-time prerequisite without changing target semantics"
+                        )
+                    else:
+                        detail = (
+                            "internal callee prerequisite is a pure input/local constraint; "
+                            "the caller experiment must construct values satisfying it"
+                        )
                 else:
                     status = "unresolved"
                 results.append(ExecutionRequirement(
