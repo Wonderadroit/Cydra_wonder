@@ -198,10 +198,10 @@ def caller_role(function: FunctionModel) -> str | None:
 def _caller_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
     for modifier in function.modifiers:
-        # Lifecycle modifiers control initialization state, not caller identity.
-        # Treating initializer/reinitializer/onlyInitializing as caller roles
-        # creates a false prerequisite and blocks legitimate lifecycle tests.
-        if modifier in {"initializer", "reinitializer", "onlyInitializing"}:
+        # Lifecycle and reentrancy modifiers do not establish caller identity.
+        # Treating them as caller roles creates false prerequisites and can
+        # trigger an initializer-based caller probe on constructor targets.
+        if modifier in {"initializer", "reinitializer", "onlyInitializing", "nonReentrant", "nonReentrantView"}:
             continue
         if modifier.startswith(("returns", "override")):
             continue
