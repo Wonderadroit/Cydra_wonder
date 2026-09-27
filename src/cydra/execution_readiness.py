@@ -742,7 +742,7 @@ def _internal_execution_requirements(
             seen_names.add(name)
             for predicate in (*callee.execution_predicates, *callee.state_predicates):
                 kind = "internal_execution_predicate" if predicate in callee.execution_predicates else "internal_state_predicate"
-                category = _classify_internal_predicate(contract, predicate)
+                category = _classify_internal_predicate(contract, callee, predicate)
                 constraint = _is_experiment_constraint(
                     contract,
                     callee,
@@ -753,6 +753,8 @@ def _internal_execution_requirements(
                     "state_observation": "internal callee prerequisite requires generic state observation/setup",
                     "input_construction": "internal callee prerequisite requires generic experiment-input construction",
                     "cryptographic_witness": "internal callee prerequisite requires generic cryptographic witness construction",
+                    "execution_context": "internal callee prerequisite requires generic blockchain execution context",
+                    "local_execution": "internal callee prerequisite depends on a callee-local value whose provenance is not yet constructible",
                 }[category]
                 if constraint:
                     status = "constraint"
