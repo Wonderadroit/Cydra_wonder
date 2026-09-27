@@ -659,3 +659,26 @@ def test_internal_execution_prerequisite_categories_are_descriptive(tmp_path):
     assert "state_observation" in categories
     assert "input_construction" in categories
     assert all(item.status == "unresolved" for item in readiness.execution_requirements if item.kind == "internal_execution_predicate")
+
+
+def test_internal_execution_input_prerequisite_can_be_an_experiment_constraint(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        function runAction() external { verify(1); }
+        function verify(uint256 amount) internal {
+            require(amount > 0);
+        }
+    }
+    """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "runAction")
+    readiness = inspect_execution_readiness(contract, function)
+    propagated = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+    )
+    assert propagated.subject == "verify: amount > 0"
+    assert propagated.status == "constraint"
+    assert propagated.category == "input_construction"
