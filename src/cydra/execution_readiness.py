@@ -653,18 +653,54 @@ def _source_function_body(contract: ContractModel, function: FunctionModel) -> s
     return source[opening + 1:]
 
 
-def _classify_internal_predicate(contract: ContractModel, predicate: str) -> str:
-    """Classify an internal prerequisite without claiming that it is satisfied."""
+def _classify_internal_predicate(
+    contract: ContractModel,
+    callee: FunctionModel,
+    predicate: str,
+) -> str:
+    """Classify a propagated prerequisite from the callee's modeled provenance.
+
+    Classification is descriptive only. It must not turn a discovered
+    prerequisite into evidence that the prerequisite is satisfiable.
+    """
     normalized = predicate.lower()
+    binding_by_name = dict(callee.execution_value_bindings)
+    predicate_names = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
+
+    # A cryptographic witness can be introduced indirectly: the guard may only
+    # reference a local such as verified while that local is produced by
+    # signature/hash/recovery machinery earlier in the callee.
+    for name in predicate_names:
+        expression = binding_by_name.get(name, "")
+        if expression and any(term in expression.lower() for term in (
+            "signature", "digest", "hash", "recover", "ecrecover", "ecdsa",
+            "proof", "nonce", "typeddata", "domainseparator",
+        )):
+            return "cryptographic_witness"
+
     if any(term in normalized for term in (
         "signature", "digest", "hash", "recover", "ecrecover", "ecdsa",
         "proof", "nonce", "typeddata", "domainseparator",
     )):
         return "cryptographic_witness"
+
+    # Ambient blockchain context is neither caller input nor persistent target
+    # state. It requires a generic execution-context capability before it can
+    # be treated as constructible.
+    if re.search(r"\b(?:block\.timestamp|block\.number|block\.chainid|block\.prevrandao|tx\.timestamp|now)\b", predicate):
+        return "execution_context"
+
     state_names = set(contract.state_variables)
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
-    if identifiers & state_names:
+    if identifiers & state_names or "$." in predicate:
         return "state_observation"
+
+    # Callee-local values are not automatically caller inputs. Keep their
+    # provenance conservative unless a deterministic input binding proves so.
+    local_names = set(binding_by_name)
+    if identifiers & local_names:
+        return "local_execution"
+
     return "input_construction"
 
 
