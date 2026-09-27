@@ -684,13 +684,17 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
     }
 
 def _classify_callback_state_order_execution(execution) -> tuple[str, str]:
-    """Classify the generic callback oracle without using target-specific names."""
+    """Classify the generic callback oracle from the generated test's assertions."""
     if not execution.executed:
         return "UNMEASURABLE", "callback execution did not execute"
-    if execution.tests_failed == 0 and "reentrant callback succeeded" not in execution.stdout:
-        return "rejected", "callback reached and the reentrant invocation was blocked"
-    if "reentrant callback succeeded" in execution.stdout:
-        return "candidate", "callback reached and the reentrant invocation succeeded"
+    # The generated harness asserts callbackObserved == true before the causal
+    # assertion. Therefore a passing test proves the callback was observed and
+    # the reentrant invocation was rejected. Do not depend on Foundry printing
+    # emitted events in stdout.
+    if execution.tests_failed == 0:
+        return "rejected", "callback was observed and the reentrant invocation was blocked"
+    if "reentrant callback succeeded" in execution.stdout or "reentrant callback succeeded" in execution.stderr:
+        return "candidate", "callback was observed and the reentrant invocation succeeded"
     return "UNMEASURABLE", "callback execution failed without a causal callback oracle result"
 
 
