@@ -150,3 +150,47 @@ def test_callback_runtime_generator_emits_initializer_declarations_before_call(t
     assert declaration in rendered
     assert initializer_call in rendered
     assert rendered.index(declaration) < rendered.index(initializer_call)
+
+
+def test_callback_execution_context_uses_conservative_timestamp_extreme(tmp_path: Path):
+    from cydra.callback_state_order_execution import _execution_context_warp
+
+    source = tmp_path / "Context.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Context {
+            function runAction() external { verify(); }
+            function verify() internal {
+                require(block.timestamp <= deadline);
+            }
+            uint256 deadline;
+        }
+        """,
+        encoding="utf-8",
+    )
+    run_action = FunctionModel(
+        name="runAction",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=4,
+    )
+    verify = FunctionModel(
+        name="verify",
+        visibility="internal",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=5,
+        execution_predicates=("block.timestamp <= deadline",),
+        execution_predicate_polarities=(("block.timestamp <= deadline", "must_hold"),),
+    )
+    contract = ContractModel(
+        "Context",
+        str(source),
+        (run_action, verify),
+        pragma="^0.8.20",
+    )
+    assert _execution_context_warp(contract, run_action) is None
