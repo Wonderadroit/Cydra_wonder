@@ -35,10 +35,9 @@ _MAPPING_RE = re.compile(
     r"\s+(?P<name>[A-Za-z_]\w*)\s*;"
 )
 _STRUCT_RE = re.compile(
-    r"@custom:storage-location\s+erc7201:[^\s\n]+\s*"
+    r"(?:///\s*|/\*\*?\s*\*?\s*)?@custom:storage-location\s+erc7201:[^\s\n]+\s*"
     r"(?:\*/\s*)?struct\s+(?P<name>[A-Za-z_]\w*)\s*\{(?P<body>.*?)\}",
     re.DOTALL,
-)
 _LOCATION_RE = re.compile(
     r"\b(?:bytes32\s+)?(?:private\s+)?constant\s+"
     r"(?P<name>[A-Za-z_]\w*Location)\s*=\s*(?P<value>0x[0-9A-Fa-f]{64})\s*;"
@@ -121,16 +120,8 @@ def plan_namespaced_state_observation(
     if offset is None:
         return None
 
-    location = next(
-        (
-            item.group("value")
-            for item in _LOCATION_RE.finditer(source)
-            if item.start() < struct_match.start()
-        ),
-        None,
-    )
-    if location is None:
-        return None
+    location_candidates = list(_LOCATION_RE.finditer(source, struct_match.end()))
+    location = location_candidates[0].group("value") if location_candidates else None
 
     try:
         base = int(location, 16)
