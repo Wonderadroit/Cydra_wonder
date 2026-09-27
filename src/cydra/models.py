@@ -75,6 +75,8 @@ class FunctionModel:
     # Return expressions are syntax/data-flow evidence for functions that may produce
     # a value consumed by an execution predicate. They do not prove satisfiability.
     return_expressions: tuple[str, ...] = field(default_factory=tuple)
+    # Direct same-contract function calls resolved from source. External calls and `this.foo()` remain runtime boundaries.
+    internal_calls: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
