@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 from .models import ContractModel, FunctionModel
+from .interface_resolver import resolve_named_type_source
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,35 @@ _FIELD_RE = re.compile(
     r"(?P<name>[A-Za-z_]\w*)\s*;"
 )
 
+
+
+def _candidate_sources(contract: ContractModel) -> tuple[Path, ...]:
+    """Follow compiler-model inheritance provenance to locate storage declarations."""
+    source_path = Path(contract.source).resolve()
+    project_root = next(
+        (
+            parent
+            for parent in (source_path.parent, *source_path.parents)
+            if (parent / "foundry.toml").exists()
+        ),
+        source_path.parent,
+    )
+    paths: list[Path] = [source_path]
+    for inherited_name in contract.inherits:
+        try:
+            resolved, _ = resolve_named_type_source(
+                project_root,
+                source_path,
+                inherited_name,
+            )
+        except (FileNotFoundError, ValueError, OSError, UnicodeError):
+            continue
+        candidate = Path(resolved)
+        if not candidate.is_absolute():
+            candidate = (project_root / candidate).resolve()
+        if candidate not in paths:
+            paths.append(candidate)
+    return tuple(paths)
 
 def _source(contract: ContractModel) -> str:
     try:
@@ -95,9 +125,16 @@ def plan_namespaced_state_observation(
     if match is None:
         return None
 
-    source = _source(contract)
-    if not source:
-        return None
+    sources = [_source(contract)]
+    for candidate in _candidate_sources(contract):
+        if candidate == Path(contract.source).resolve():
+            continue
+        try:
+            sources.append(candidate.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            continue
+    source = "\n".join(sources)
+
 
     state = match.group("state")
     key = match.group("key").strip()
