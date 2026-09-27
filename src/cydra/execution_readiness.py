@@ -9,6 +9,7 @@ from .interface_resolver import resolve_interface, resolve_named_type_source, re
 from .models import ContractModel, FunctionModel
 from .ast_dataflow import SemanticRelationshipEvidence
 from .semantic_state_effects import build_state_effect_index, state_reads_for_function, state_writes_for_function
+from .namespaced_state_observation import plan_namespaced_state_observation
 
 
 @dataclass(frozen=True)
@@ -764,6 +765,10 @@ def _internal_execution_requirements(
                     predicate,
                     execution_capabilities,
                 )
+                state_observation = (
+                    category == "state_observation"
+                    and plan_namespaced_state_observation(contract, callee, predicate) is not None
+                )
                 detail = {
                     "state_observation": "internal callee prerequisite requires generic state observation/setup",
                     "input_construction": "internal callee prerequisite requires generic experiment-input construction",
@@ -782,12 +787,17 @@ def _internal_execution_requirements(
                         )
                     )
                 )
-                if constraint or capability_constraint:
+                if constraint or capability_constraint or state_observation:
                     status = "constraint"
                     if capability_constraint and not constraint:
                         detail = (
                             "callback execution-context adapter can satisfy this guarded "
                             "ambient-time prerequisite without changing target semantics"
+                        )
+                    elif state_observation:
+                        detail = (
+                            "compiler/source-backed ERC-7201 state observation can verify this "
+                            "mapping prerequisite before the experiment"
                         )
                     else:
                         detail = (
