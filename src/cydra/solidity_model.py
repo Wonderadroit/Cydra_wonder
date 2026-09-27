@@ -452,6 +452,22 @@ def _execution_value_bindings(body: str) -> tuple[tuple[str, str], ...]:
     return tuple(bindings)
 
 
+def _internal_calls(body: str, function_names: set[str]) -> tuple[str, ...]:
+    """Resolve direct same-contract calls without crossing an external boundary.
+
+    Only a bare function identifier is considered. Qualified calls such as
+    this.foo() and other.foo() are deliberately excluded because they use a
+    runtime call boundary and may re-enter or execute different code.
+    """
+    if not function_names:
+        return ()
+    calls: list[str] = []
+    for match in re.finditer(r"(?<![.\w])([A-Za-z_]\w*)\s*\(", body):
+        name = match.group(1)
+        if name in function_names and name not in calls:
+            calls.append(name)
+    return tuple(calls)
+
 def _return_expressions(body: str) -> tuple[str, ...]:
     """Extract simple return expressions as conservative producer evidence."""
     expressions: list[str] = []
@@ -678,6 +694,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                 derived_interface_casts=derived_interface_casts,
             )
 
+        function_names = {match.group(1) for match in _FUNCTION_RE.finditer(contract_source)}
         for match in _FUNCTION_RE.finditer(contract_source):
             name = match.group(1)
             parameter_text = match.group(2)
@@ -734,6 +751,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                     execution_predicate_polarities=_execution_predicate_polarities(body, state_variables),
                     execution_value_bindings=_execution_value_bindings(body),
                     return_expressions=_return_expressions(body),
+                    internal_calls=_internal_calls(body, function_names - {name}),
                 )
             )
 
