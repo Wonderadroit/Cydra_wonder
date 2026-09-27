@@ -211,3 +211,27 @@ def test_callback_execution_context_uses_conservative_timestamp_extreme(tmp_path
         pragma="^0.8.20",
     )
     assert _execution_context_warp(guarded_contract, run_action) == "vm.warp(0);"
+
+
+def test_callback_runtime_generator_emits_causal_reentry_oracle(tmp_path: Path):
+    source = tmp_path / "Callback.sol"
+    source.write_text("pragma solidity ^0.8.20; contract Callback {}", encoding="utf-8")
+    function = FunctionModel(
+        name="execute", visibility="external", modifiers=(), writes=(),
+        external_calls=(), line=1, parameters=(ParameterModel(name="amount", type="uint256"),),
+    )
+    contract = ContractModel("Callback", str(source), (function,), pragma="^0.8.20")
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute", "claim", "INV-CALLBACK-STATE-ORDER-execute",
+        "execute", "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute", hypothesis.hypothesis_id,
+        "reenter", (), 2.0, planned_inputs=("1",), target_function="execute",
+    )
+    # This test targets the legacy renderer only when no initializer exists.
+    output = tmp_path / "test" / "generated.t.sol"
+    generate_callback_state_order_test(hypothesis, experiment, str(source), "Callback", output, contract)
+    rendered = output.read_text(encoding="utf-8")
+    assert "assertFalse(attacker.reentrySucceeded()" in rendered
+    assert "CydraCallbackObservation" in rendered
