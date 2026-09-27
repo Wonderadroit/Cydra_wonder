@@ -152,6 +152,47 @@ def _named_struct_literal(contract_model: ContractModel, type_name: str, overrid
     return f"{type_name}({{ {', '.join(values)} }})", path
 
 
+def _caller_bound_parameter_paths(contract_model: ContractModel, function) -> tuple[str, ...]:
+    """Discover calldata paths that the target explicitly binds to msg.sender.
+
+    This is target-derived predicate/data-flow reasoning. The adapter does not
+    name a field or contract; it only materializes an equality already expressed
+    by the target's modeled execution predicates.
+    """
+    functions = {item.name: item for item in (*contract_model.functions, *contract_model.inherited_functions)}
+    ordered: list[str] = []
+    visited: set[str] = set()
+
+    def visit(current) -> None:
+        if current.name in visited:
+            return
+        visited.add(current.name)
+        predicates = current.execution_predicates
+        for predicate in predicates:
+            match = re.search(
+                r"\\b(?P<path>[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w+)*)\\s*==\\s*msg\\.sender\\b|"
+                r"\\bmsg\\.sender\\s*==\\s*(?P<reverse>[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w+)*)\\b",
+                predicate,
+            )
+            if not match:
+                continue
+            path = match.group("path") or match.group("reverse")
+            if path.split(".", 1)[0] == function.parameters[0].name and path not in ordered:
+                ordered.append(path)
+        try:
+            body = _function_body(Path(contract_model.source).read_text(encoding="utf-8"), current.name)
+        except (OSError, UnicodeError):
+            return
+        for call in re.finditer(r"\\b([A-Za-z_]\\w*)\\s*\\(", body):
+            callee = functions.get(call.group(1))
+            if callee is not None:
+                visit(callee)
+
+    if function.parameters:
+        visit(function)
+    return tuple(ordered)
+
+
 def _callback_metadata_setup(contract_model: ContractModel, function, target_arguments: tuple[str, ...], target_type: str):
     """Return declarations/imports that bind a decoded external endpoint to attacker."""
     discovered = _decoded_callback_path(contract_model, function.name)
@@ -199,6 +240,13 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
         f"{parameter.type} memory {callback_input_name} = {typed};\n"
         f"        {callback_input_name}.{'.'.join(parameter_path[1:])} = abi.encode(cydraStack);"
     )
+    caller_bindings = _caller_bound_parameter_paths(contract_model, function)
+    if caller_bindings:
+        callback_setup += "".join(
+            f"\n        {callback_input_name}.{path.split('.', 1)[1]} = address(attacker);"
+            for path in caller_bindings
+            if path.startswith(parameter.name + ".")
+        )
     return {
         "parameter": parameter,
         "input_name": callback_input_name,
