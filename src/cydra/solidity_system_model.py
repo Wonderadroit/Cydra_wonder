@@ -7,6 +7,7 @@ reasoning can operate on system structure rather than vulnerability-class heuris
 from __future__ import annotations
 
 from .models import ContractModel
+from .internal_call_effects import effective_writes, internal_call_edges
 from .system_model import Edge, Node, SystemModel
 
 
@@ -44,7 +45,7 @@ def project_contract_model(contract: ContractModel, system: SystemModel | None =
             if modifier_id not in system.nodes:
                 system.add_node(Node(modifier_id, "authorization", modifier, {"source": "solidity_model", "source_path": contract.source, "contract": contract.name}))
             system.add_edge(Edge(function_id, "enforces", modifier_id, {"provenance": "solidity_model"}))
-        for state in function.writes:
+        for state in effective_writes(contract, function):
             state_id = f"state:{contract.source}:{contract.name}:{state}"
             if state_id not in system.nodes:
                 system.add_node(Node(state_id, "state_variable", state, {"source": "solidity_model", "source_path": contract.source, "contract": contract_id}))
@@ -54,6 +55,23 @@ def project_contract_model(contract: ContractModel, system: SystemModel | None =
             if target_id not in system.nodes:
                 system.add_node(Node(target_id, "data_flow", target, {"source": "solidity_model", "source_path": contract.source, "contract": contract_id, "function": function_id}))
             system.add_edge(Edge(function_id, "external_call", target_id, {"provenance": "solidity_model"}))
+    for caller, callee in internal_call_edges(contract):
+        caller_id = next(
+            _function_id(contract, item)
+            for item in contract.functions
+            if item.name == caller
+        )
+        callee_id = next(
+            _function_id(contract, item)
+            for item in contract.functions
+            if item.name == callee
+        )
+        system.add_edge(Edge(
+            caller_id,
+            "internal_call",
+            callee_id,
+            {"provenance": "solidity_model", "execution_context": "same_contract"},
+        ))
     return system
 
 
