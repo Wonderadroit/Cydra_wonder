@@ -704,7 +704,7 @@ def _internal_execution_requirements(contract: ContractModel, function: Function
                     f"{caller.name}:internal-call->{callee.name}",
                     "unresolved",
                     detail,
-                    category,
+                    category=category,
                 ))
             visit(callee, depth + 1)
     visit(function, 0)
