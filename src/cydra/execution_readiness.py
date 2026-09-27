@@ -667,15 +667,30 @@ def _classify_internal_predicate(
     binding_by_name = dict(callee.execution_value_bindings)
     predicate_names = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
 
-    # A cryptographic witness can be introduced indirectly: the guard may only
-    # reference a local such as verified while that local is produced by
-    # signature/hash/recovery machinery earlier in the callee.
-    for name in predicate_names:
+    # A cryptographic witness may be derived through several deterministic
+    # locals. Follow modeled value provenance transitively rather than requiring
+    # the guard variable itself to contain a crypto keyword.
+    crypto_terms = (
+        "signature", "digest", "hash", "recover", "ecrecover", "ecdsa",
+        "proof", "nonce", "typeddata", "domainseparator",
+    )
+    visited: set[str] = set()
+
+    def has_crypto_provenance(name: str, depth: int = 0) -> bool:
+        if depth > 8 or name in visited:
+            return False
+        visited.add(name)
         expression = binding_by_name.get(name, "")
-        if expression and any(term in expression.lower() for term in (
-            "signature", "digest", "hash", "recover", "ecrecover", "ecdsa",
-            "proof", "nonce", "typeddata", "domainseparator",
-        )):
+        if not expression:
+            return False
+        normalized_expression = expression.lower()
+        if any(term in normalized_expression for term in crypto_terms):
+            return True
+        identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", expression))
+        return any(has_crypto_provenance(identifier, depth + 1) for identifier in identifiers)
+
+    for name in predicate_names:
+        if has_crypto_provenance(name):
             return "cryptographic_witness"
 
     if any(term in normalized for term in (
