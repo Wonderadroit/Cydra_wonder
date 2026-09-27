@@ -19,7 +19,7 @@ from .caller_prerequisite import (
     _initializer_setup_declarations,
     _qualify_planned_target_argument,
 )
-from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, conservative_defaults
+from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, _structured_default, conservative_defaults
 from .namespaced_state_observation import plan_namespaced_state_observation
 
 
@@ -230,10 +230,15 @@ def _legacy_callback_test(
             f"callback input arity mismatch for {function.name}: "
             f"expected {len(function.parameters)}, got {len(arguments)}"
         )
-    constructor_arguments = [
-        _constructor_argument(parameter)
-        for parameter in (contract_model.constructor.parameters if contract_model.constructor else ())
-    ]
+    constructor_arguments = []
+    for parameter in (contract_model.constructor.parameters if contract_model.constructor else ()):
+        rendered = _structured_default(parameter, contract_model)
+        if rendered is None:
+            # Preserve the existing fail-closed behavior for genuinely unresolved
+            # constructor shapes; custom/namespaced structs are materialized from
+            # source-backed field definitions rather than guessed ABI values.
+            rendered = _constructor_argument(parameter)
+        constructor_arguments.append(rendered)
     constructor_call = (
         f"new {target_type}({', '.join(constructor_arguments)})"
         if constructor_arguments else f"new {target_type}()"
