@@ -21,6 +21,7 @@ from .caller_prerequisite import (
 )
 from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, _structured_default, conservative_defaults
 from .namespaced_state_observation import plan_namespaced_state_observation
+from .execution_readiness import constructible_state_setup_plan, role_address_expression
 
 
 
@@ -257,6 +258,92 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
 
 
 
+def _state_setup_argument_vector(
+    contract_model: ContractModel,
+    consumer,
+    writer,
+    state: str,
+    callback_input_name: str,
+) -> tuple[str, ...] | None:
+    """Derive writer arguments from the consumer's target-observed state relation."""
+    relation = None
+    for predicate in consumer.execution_predicates:
+        match = re.search(
+            rf"\b{re.escape(state)}\s*\[\s*(?P<key>[^\]]+)\s*\]\s*==\s*(?P<value>[^&|]+?)\s*(?:&&|$)",
+            predicate,
+        ) or re.search(
+            rf"(?P<value>[^&|]+?)\s*==\s*\b{re.escape(state)}\s*\[\s*(?P<key>[^\]]+)\s*\]",
+            predicate,
+        )
+        if match:
+            relation = (match.group("key").strip(), match.group("value").strip())
+            break
+    if relation is None or len(writer.parameters) < 2:
+        return None
+
+    def bind(expression: str) -> str:
+        bound = expression
+        for parameter in consumer.parameters:
+            bound = re.sub(
+                rf"\b{re.escape(parameter.name)}\b",
+                callback_input_name,
+                bound,
+            )
+        return bound
+
+    arguments = [bind(relation[0]), bind(relation[1])]
+    for parameter in writer.parameters[2:]:
+        rendered = _structured_default(parameter, contract_model)
+        if rendered is None:
+            return None
+        arguments.append(rendered)
+    return tuple(arguments)
+
+
+def _state_setup_source(
+    contract_model: ContractModel,
+    consumer,
+    callback_input_name: str,
+) -> tuple[str, tuple[str, ...]]:
+    """Render only fully constructible target-derived state setup transitions."""
+    actions = constructible_state_setup_plan(contract_model, consumer)
+    if not actions:
+        return "", ()
+    functions = {
+        item.name: item
+        for item in (*contract_model.functions, *contract_model.inherited_functions)
+    }
+    rendered: list[str] = []
+    active_role: str | None = None
+    for action in actions:
+        writer = functions.get(action.function)
+        if writer is None:
+            return "", ()
+        state = next((part for part in action.provenance if part in contract_model.state_variables), None)
+        if state is None:
+            return "", ()
+        arguments = _state_setup_argument_vector(
+            contract_model, consumer, writer, state, callback_input_name
+        )
+        if arguments is None:
+            return "", ()
+        role = action.caller_role
+        if role != active_role:
+            if active_role is not None:
+                rendered.append("vm.stopPrank();")
+            if role is not None:
+                address_expr = role_address_expression(role)
+                if address_expr is None:
+                    return "", ()
+                rendered.append(f"vm.startPrank({address_expr});")
+            active_role = role
+        rendered.append(f"target.{writer.name}({', '.join(arguments)});")
+    if active_role is not None:
+        rendered.append("vm.stopPrank();")
+    return "\n        ".join(rendered), tuple(action.function for action in actions)
+
+
+
 def _legacy_callback_test(
     hypothesis: Hypothesis,
     experiment: Experiment,
@@ -483,6 +570,11 @@ def generate_callback_state_order_test(
 
     declarations = "".join(f"        {item}\n" for item in setup_declarations)
     setup = metadata["setup"]
+    state_setup, state_setup_functions = _state_setup_source(
+        contract_model, function, metadata["input_name"]
+    )
+    if state_setup:
+        setup = setup + "\n        " + state_setup
     execution_context_warp = _execution_context_warp(contract_model, function) or ""
 
     # Internal callee guards may reference private ERC-7201 mapping state through
