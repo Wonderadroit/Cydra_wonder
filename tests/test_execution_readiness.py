@@ -637,3 +637,25 @@ def test_internal_callee_execution_guards_propagate_into_caller_readiness(tmp_pa
     assert propagated[0].subject == "verifyWallet: !verified"
     assert propagated[0].status == "unresolved"
     assert propagated[0].source == "runAction:internal-call->verifyWallet"
+
+
+def test_internal_execution_prerequisite_categories_are_descriptive(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        bool verified;
+        function runAction(bytes32 digest, bytes calldata signature) external { verifyWallet(digest, signature); }
+        function verifyWallet(bytes32 digest, bytes calldata signature) internal {
+            require(!verified);
+            require(signature.length == 65);
+        }
+    }
+    """)
+    from cydra.solidity_model import parse_contract_source
+    contract = parse_contract_source(source)
+    function = next(item for item in contract.functions if item.name == "runAction")
+    readiness = inspect_execution_readiness(contract, function)
+    categories = {item.category for item in readiness.execution_requirements if item.kind == "internal_execution_predicate"}
+    assert "state_observation" in categories
+    assert "input_construction" in categories
+    assert all(item.status == "unresolved" for item in readiness.execution_requirements if item.kind == "internal_execution_predicate")
