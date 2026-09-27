@@ -729,6 +729,31 @@ def test_internal_execution_input_prerequisite_can_be_an_experiment_constraint(t
     assert propagated.status == "constraint"
     assert propagated.category == "input_construction"
 
+def test_internal_mapping_predicate_feeds_generic_state_setup_candidates(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        mapping(uint256 => address) registry;
+        function run(uint256 key) external { verify(key); }
+        function verify(uint256 key) internal {
+            require(registry[key] != address(0));
+        }
+        function register(uint256 key, address value) external {
+            registry[key] = value;
+        }
+    }
+    """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, function)
+    candidates = [
+        item for item in readiness.state_setup_candidates
+        if item.kind == "internal_state_setup_candidate"
+    ]
+    assert any(item.subject == "register" and item.status == "constructible" for item in candidates)
+
+
 def test_internal_namespaced_state_observation_can_satisfy_erc7201_guard(tmp_path):
     storage = tmp_path / "EmporiumStorage.sol"
     storage.write_text(
