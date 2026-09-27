@@ -5,6 +5,7 @@ from collections import defaultdict
 from .ast_dataflow import SemanticRelationshipEvidence
 from .models import ContractModel, Hypothesis, Invariant
 from .reasoning_surface import ReasoningContribution
+from .internal_call_effects import effective_writes
 
 
 def _shared_state_writers(
@@ -28,7 +29,7 @@ def _shared_state_writers(
         # executable state hypotheses that knowingly invoke them as attacker.
         if function.modifiers:
             continue
-        for state in function.writes:
+        for state in effective_writes(contract, function):
             writers[state].add(function.name)
 
     # Compiler-linked evidence can recover/strengthen the model when the parser's
