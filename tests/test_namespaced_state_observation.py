@@ -69,3 +69,63 @@ def test_erc7201_observation_fails_closed_on_packed_prefix(tmp_path: Path) -> No
         function,
         "$.usedMessages[message]",
     ) is None
+
+
+def test_erc7201_mapping_observation_resolves_contract_reference_prefix(tmp_path: Path) -> None:
+    helper = tmp_path / "IHinkalHelper.sol"
+    helper.write_text(
+        """
+        interface IHinkalHelper {
+            function calculateRelayFee(
+                uint256 amount,
+                uint256 flatFee,
+                uint256 variableRate
+            ) external view returns (uint256);
+        }
+        """,
+        encoding="utf-8",
+    )
+    storage = tmp_path / "EmporiumStorage.sol"
+    storage.write_text(
+        """
+        import {IHinkalHelper} from "./IHinkalHelper.sol";
+
+        contract EmporiumStorage {
+            /// @custom:storage-location erc7201:hinkal.storage.Emporium
+            struct EmporiumStorageVars {
+                IHinkalHelper _hinkalHelper;
+                mapping(uint256 => bool) usedMessages;
+            }
+
+            bytes32 private constant EmporiumStorageLocation =
+                0xf10f423c12af70b7aa31f6f1bd94310f38d85adab8d26b5c90b7f07c98bf0800;
+        }
+        """,
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    source.write_text(
+        """
+        import "./EmporiumStorage.sol";
+
+        contract Target is EmporiumStorage {
+            function verify(uint256 message) internal {
+                if ($.usedMessages[message]) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    function = FunctionModel(
+        "verify", "internal", (), (), (), 10,
+        execution_predicates=("$.usedMessages[message]",),
+        execution_predicate_polarities=(("$.usedMessages[message]", "must_not_hold"),),
+    )
+    plan = plan_namespaced_state_observation(
+        ContractModel("Target", str(source), (function,), inherits=("EmporiumStorage",)),
+        function,
+        "$.usedMessages[message]",
+    )
+    assert plan is not None
+    assert plan.storage_slot == "0xf10f423c12af70b7aa31f6f1bd94310f38d85adab8d26b5c90b7f07c98bf0801"
