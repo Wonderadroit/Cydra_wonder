@@ -708,6 +708,13 @@ def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -
         ),
     }
 
+def _execution_capabilities_for_class(class_name: str) -> frozenset[str]:
+    """Return runtime capabilities owned by the selected experiment adapter."""
+    if class_name == "callback_state_order":
+        return frozenset({"callback_state_order_reachability"})
+    return frozenset()
+
+
 def _execution_adapter(class_name: str):
     """Return the generic runtime adapter for an executable capability class.
 
@@ -769,11 +776,7 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         capability = CLASS_CAPABILITIES[class_name]
         contract = _contract_for_hypothesis(result, hypothesis)
         function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
-        execution_capabilities = (
-            frozenset({"callback_state_order_reachability"})
-            if class_name == "callback_state_order"
-            else frozenset()
-        )
+        execution_capabilities = _execution_capabilities_for_class(class_name)
         readiness = inspect_execution_readiness(
             contract,
             function,
@@ -1107,11 +1110,7 @@ def run_source_investigation(
                 continue
             contract = _contract_for_hypothesis(result, hypothesis)
             function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
-            execution_capabilities = (
-                frozenset({"callback_state_order_reachability"})
-                if class_name == "callback_state_order"
-                else frozenset()
-            )
+            execution_capabilities = _execution_capabilities_for_class(class_name)
             readiness = inspect_execution_readiness(
                 contract,
                 function,
