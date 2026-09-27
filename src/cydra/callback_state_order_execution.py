@@ -285,6 +285,8 @@ contract CydraInitializationInvariantTest is Test {{
     function testCallbackStateOrder() public {{
         attacker.invoke(abi.encodeCall(target.{function.name}, ({argument_text})));
         assertTrue(attacker.callbackObserved(), "target did not invoke the caller-controlled callback");
+        emit CydraCallbackObservation(attacker.callbackObserved(), attacker.reentrySucceeded());
+        assertFalse(attacker.reentrySucceeded(), "reentrant callback succeeded");
     }}
 }}
 '''
