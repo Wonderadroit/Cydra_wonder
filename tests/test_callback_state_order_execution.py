@@ -258,3 +258,42 @@ def test_callback_classifier_uses_asserted_observation_not_stdout():
         "candidate",
         "callback was observed and the reentrant invocation succeeded",
     )
+
+
+def test_callback_runtime_generator_materializes_namespaced_constructor_struct(tmp_path):
+    interface = tmp_path / "IMerkle.sol"
+    interface.write_text(
+        "interface IMerkle { struct MerkleConstructorArgs { uint128 levels; address poseidon2; } }\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import "./IMerkle.sol"; '
+        'contract Callback { constructor(IMerkle.MerkleConstructorArgs memory args) {} '
+        'function execute(uint256 amount) external {} }\n',
+        encoding="utf-8",
+    )
+    function = FunctionModel(
+        name="execute", visibility="external", modifiers=(), writes=(),
+        external_calls=(), line=4,
+        parameters=(ParameterModel(name="amount", type="uint256"),),
+    )
+    from cydra.models import ConstructorModel
+    contract = ContractModel(
+        "Callback", str(source), (function,), pragma="^0.8.20",
+        constructor=ConstructorModel(
+            (ParameterModel("args", "IMerkle.MerkleConstructorArgs"),), 2
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute", "claim", "INV-CALLBACK-STATE-ORDER-execute",
+        "execute", "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute", hypothesis.hypothesis_id,
+        "reenter", (), 2.0, planned_inputs=("1",), target_function="execute",
+    )
+    output = tmp_path / "test" / "generated.t.sol"
+    generate_callback_state_order_test(hypothesis, experiment, str(source), "Callback", output, contract)
+    rendered = output.read_text(encoding="utf-8")
+    assert "new Callback((0, address(0)));" in rendered
