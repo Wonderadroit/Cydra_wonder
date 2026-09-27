@@ -956,6 +956,85 @@ def _state_names_from_predicates(function: FunctionModel) -> tuple[str, ...]:
                 names.append(name)
     return tuple(names)
 
+def _state_names_from_internal_predicates(
+    contract: ContractModel,
+    function: FunctionModel,
+    *,
+    max_depth: int = 4,
+) -> tuple[str, ...]:
+    """Discover persistent state referenced by internal execution predicates."""
+    state_names = set(contract.state_variables)
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    discovered: list[str] = []
+    visited: set[tuple[str, int]] = set()
+
+    def visit(current: FunctionModel, depth: int) -> None:
+        if depth > max_depth or (current.name, depth) in visited:
+            return
+        visited.add((current.name, depth))
+        for predicate in current.execution_predicates:
+            for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate):
+                if name in state_names and name not in discovered:
+                    discovered.append(name)
+        body = _source_function_body(contract, current)
+        seen: set[str] = set()
+        for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
+            callee = functions.get(match.group(1))
+            if callee is None or callee.name in seen:
+                continue
+            seen.add(callee.name)
+            visit(callee, depth + 1)
+
+    visit(function, 0)
+    return tuple(discovered)
+
+
+def _internal_state_setup_candidates(
+    contract: ContractModel,
+    function: FunctionModel,
+    semantic_evidence: tuple[SemanticRelationshipEvidence, ...] = (),
+) -> tuple[ExecutionRequirement, ...]:
+    """Expose constructible writers for state referenced only by internal callees."""
+    state_names = _state_names_from_internal_predicates(contract, function)
+    if not state_names:
+        return ()
+    effects = build_state_effect_index(semantic_evidence)
+    candidates: list[ExecutionRequirement] = []
+    functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
+    for state in state_names:
+        for writer in functions:
+            if writer.name == function.name or writer.visibility not in {"public", "external"}:
+                continue
+            semantic_writes = state_writes_for_function(effects, writer.name)
+            touched = state in writer.writes or (semantic_writes is not None and state in semantic_writes) or any(
+                receiver == state and method in {"push", "pop"}
+                for receiver, method in writer.external_calls
+            )
+            if not touched:
+                continue
+            primitive_abi = all(
+                parameter.type.strip().split()[0].rstrip("[]") in {"address", "bool", "string", "bytes"}
+                or parameter.type.strip().split()[0].rstrip("[]").startswith(("uint", "int", "bytes"))
+                for parameter in writer.parameters
+            )
+            status = "constructible" if primitive_abi else "unresolved"
+            detail = (
+                f"target-derived internal predicate references persistent state {state}; "
+                f"writer {writer.name} has a constructible primitive ABI"
+                if primitive_abi else
+                f"target-derived internal predicate references persistent state {state}; "
+                f"writer {writer.name} has non-primitive parameters"
+            )
+            candidates.append(ExecutionRequirement(
+                "internal_state_setup_candidate",
+                writer.name,
+                f"{function.name}:internal-state:{state}",
+                status,
+                detail,
+                category="state_observation",
+            ))
+    return tuple(dict.fromkeys(candidates))
+
 def _state_setup_candidates(
     contract: ContractModel,
     function: FunctionModel,
@@ -970,6 +1049,7 @@ def _state_setup_candidates(
     role model.
     """
     state_names = set(_state_names_from_predicates(function))
+    state_names.update(_state_names_from_internal_predicates(contract, function))
     for constraint in constraints:
         if constraint.function != function.name or ".length" not in constraint.predicate:
             continue
@@ -1150,5 +1230,9 @@ def inspect_execution_readiness(
             (*_state_requirements(selected), *_constraint_state_requirements(selected, constraints))
             if selected else ()
         ),
-        state_setup_candidates=_state_setup_candidates(contract, selected, constraints, semantic_evidence) if selected else (),
+        state_setup_candidates=(
+            (*_state_setup_candidates(contract, selected, constraints, semantic_evidence),
+             *_internal_state_setup_candidates(contract, selected, semantic_evidence))
+            if selected else ()
+        ),
     )
