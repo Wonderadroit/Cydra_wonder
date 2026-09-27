@@ -26,3 +26,30 @@ def test_callback_state_order_surface_detects_external_transfer_then_write(tmp_p
     assert hypothesis.invariant_id == "INV-CALLBACK-STATE-ORDER-trade"
     experiment = next(item for item in result.experiments if item.hypothesis_id == hypothesis.hypothesis_id)
     assert "reenters" in experiment.action
+
+
+def test_callback_state_order_surface_detects_external_interface_call_then_write(tmp_path: Path):
+    source = tmp_path / "InterfaceCallback.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        interface IHook {
+            function beforeAction() external;
+        }
+        contract InterfaceCallback {
+            IHook public hook;
+            uint256 public state;
+            function act() external {
+                hook.beforeAction();
+                state = 1;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    result = investigate(source)
+    hypothesis = next(
+        item for item in result.hypotheses
+        if item.hypothesis_id == "H-CALLBACK-STATE-ORDER-act"
+    )
+    assert hypothesis.invariant_id == "INV-CALLBACK-STATE-ORDER-act"
