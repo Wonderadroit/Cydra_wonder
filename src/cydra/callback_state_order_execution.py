@@ -527,6 +527,7 @@ contract CydraReentrantCaller {{
 }}
 
 contract CydraInitializationInvariantTest is Test {{
+    event CydraCallbackObservation(bool callbackObserved, bool reentrySucceeded);
     {target_type} internal target;
     CydraReentrantCaller internal attacker;
     bytes internal testCallData;
