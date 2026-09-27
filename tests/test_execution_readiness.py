@@ -840,3 +840,18 @@ def test_execution_readiness_treats_parameter_equal_caller_as_constructible_inpu
     requirement = readiness.execution_requirements[0]
     assert requirement.status == "constraint"
     assert requirement.category == "input_construction"
+
+
+def test_execution_readiness_treats_msg_value_equal_parameter_as_constructible_input():
+    predicate = "msg.value == _value"
+    function = FunctionModel(
+        "transfer", "internal", (), (), (), 1,
+        parameters=(ParameterModel("_value", "uint256"),),
+        execution_predicates=(predicate,),
+        execution_predicate_polarities=((predicate, "must_hold"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.status == "constraint"
+    assert requirement.category == "unknown"
