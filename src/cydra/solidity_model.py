@@ -54,7 +54,8 @@ def _internal_calls(body: str, function_names: set[str]) -> tuple[str, ...]:
     calls: list[str] = []
     for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
         name = match.group(1)
-        if name in _INTERNAL_CALL_KEYWORDS or name not in function_names:
+        previous = body[match.start() - 1] if match.start() > 0 else ""
+        if previous == "." or name in _INTERNAL_CALL_KEYWORDS or name not in function_names:
             continue
         if name not in calls:
             calls.append(name)
