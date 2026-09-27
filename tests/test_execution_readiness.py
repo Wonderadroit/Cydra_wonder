@@ -780,3 +780,15 @@ def test_internal_namespaced_state_observation_can_satisfy_erc7201_guard(tmp_pat
     )
     assert propagated.category == "state_observation"
     assert propagated.status == "constraint"
+
+
+def test_nonreentrant_modifier_is_not_a_caller_role():
+    from cydra.models import FunctionModel, Parameter
+    from cydra.execution_readiness import _caller_requirements
+
+    function = FunctionModel(
+        name="transact",
+        visibility="external",
+        modifiers=("nonReentrant",),
+    )
+    assert _caller_requirements(function) == ()
