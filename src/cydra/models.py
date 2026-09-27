@@ -49,14 +49,6 @@ class FunctionModel:
     writes: tuple[str, ...]
     external_calls: tuple[str, ...]
     line: int
-    # Direct same-contract calls observed in this function body. These are
-    # resolved only against functions declared by the same ContractModel;
-    # external/member calls remain outside this relation.
-    internal_calls: tuple[str, ...] = field(default_factory=tuple)
-    # State writes reachable through the same-contract internal-call graph,
-    # including this function's direct writes. This is a derived effect
-    # summary, not a replacement for the direct `writes` evidence.
-    effective_writes: tuple[str, ...] = field(default_factory=tuple)
     parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
     authorization_predicates: tuple[str, ...] = field(default_factory=tuple)
     state_predicates: tuple[str, ...] = field(default_factory=tuple)
@@ -75,6 +67,14 @@ class FunctionModel:
     # Return expressions are syntax/data-flow evidence for functions that may produce
     # a value consumed by an execution predicate. They do not prove satisfiability.
     return_expressions: tuple[str, ...] = field(default_factory=tuple)
+    # Direct same-contract calls observed in this function body. These are
+    # resolved only against functions declared by the same ContractModel;
+    # external/member calls remain outside this relation.
+    internal_calls: tuple[str, ...] = field(default_factory=tuple)
+    # State writes reachable through the same-contract internal-call graph,
+    # including this function's direct writes. This is a derived effect
+    # summary, not a replacement for the direct `writes` evidence.
+    effective_writes: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
