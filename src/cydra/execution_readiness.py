@@ -25,6 +25,7 @@ class ExecutionRequirement:
     source: str
     status: str = "required"
     detail: str = ""
+    category: str = "unknown"
 
 
 @dataclass(frozen=True)
