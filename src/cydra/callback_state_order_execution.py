@@ -258,6 +258,103 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
 
 
 
+
+def _call_arguments(body: str, opening: int) -> tuple[str, ...]:
+    """Split one same-contract call's arguments without parsing Solidity semantics."""
+    depth = 0
+    bracket = 0
+    start = opening + 1
+    arguments: list[str] = []
+    for index in range(opening + 1, len(body)):
+        char = body[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            if depth == 0:
+                value = body[start:index].strip()
+                if value:
+                    arguments.append(value)
+                return tuple(arguments)
+            depth -= 1
+        elif char == "[":
+            bracket += 1
+        elif char == "]":
+            bracket = max(0, bracket - 1)
+        elif char == "," and depth == 0 and bracket == 0:
+            arguments.append(body[start:index].strip())
+            start = index + 1
+    return ()
+
+
+def _state_relation_predicates(
+    contract_model: ContractModel,
+    function,
+    state: str,
+    *,
+    max_depth: int = 6,
+) -> tuple[str, ...]:
+    """Propagate state predicates through the modeled same-contract call graph.
+
+    The returned predicates remain target-derived expressions. At each internal
+    call boundary, callee parameters are substituted with the actual call
+    expressions observed at that boundary, so a state relation discovered in a
+    helper can be rendered against the original experiment input.
+    """
+    functions = {
+        item.name: item
+        for item in (*contract_model.functions, *contract_model.inherited_functions)
+    }
+    source = Path(contract_model.source).read_text(encoding="utf-8")
+    visited: set[tuple[str, int, tuple[tuple[str, str], ...]]] = set()
+    results: list[str] = []
+
+    def visit(current, substitutions: dict[str, str], depth: int) -> None:
+        if depth > max_depth:
+            return
+        key = (current.name, depth, tuple(sorted(substitutions.items())))
+        if key in visited:
+            return
+        visited.add(key)
+
+        for predicate in current.execution_predicates:
+            substituted = predicate
+            for name, expression in substitutions.items():
+                substituted = re.sub(
+                    rf"\b{re.escape(name)}\b",
+                    f"({expression})",
+                    substituted,
+                )
+            if re.search(rf"\b{re.escape(state)}\s*\[", substituted):
+                if substituted not in results:
+                    results.append(substituted)
+
+        body = _function_body(source, current.name)
+        if not body:
+            return
+        for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
+            callee = functions.get(match.group(1))
+            if callee is None:
+                continue
+            arguments = _call_arguments(body, match.end() - 1)
+            if len(arguments) != len(callee.parameters):
+                continue
+            child_substitutions = dict(substitutions)
+            for parameter, argument in zip(callee.parameters, arguments):
+                if parameter.name:
+                    rendered = argument
+                    for name, expression in substitutions.items():
+                        rendered = re.sub(
+                            rf"\b{re.escape(name)}\b",
+                            f"({expression})",
+                            rendered,
+                        )
+                    child_substitutions[parameter.name] = rendered
+            visit(callee, child_substitutions, depth + 1)
+
+    visit(function, {}, 0)
+    return tuple(results)
+
+
 def _state_setup_argument_vector(
     contract_model: ContractModel,
     consumer,
@@ -265,9 +362,9 @@ def _state_setup_argument_vector(
     state: str,
     callback_input_name: str,
 ) -> tuple[str, ...] | None:
-    """Derive writer arguments from the consumer's target-observed state relation."""
+    """Derive writer arguments from a target-observed state relation."""
     relation = None
-    for predicate in consumer.execution_predicates:
+    for predicate in _state_relation_predicates(contract_model, consumer, state):
         match = re.search(
             rf"\b{re.escape(state)}\s*\[\s*(?P<key>[^\]]+)\s*\]\s*==\s*(?P<value>[^&|]+?)\s*(?:&&|$)",
             predicate,
