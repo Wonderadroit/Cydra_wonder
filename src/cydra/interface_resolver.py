@@ -146,38 +146,72 @@ def _imports_for(path: Path) -> tuple[str, ...]:
 
 
 def resolve_interface(root: str | Path, importer: str | Path, name: str) -> ResolvedInterface:
+    """Resolve an interface through the target's import/dependency graph.
+
+    Solidity names can be used through an import that is several source units
+    away from the target contract (for example Hinkal -> HinkalBase -> IMerkle).
+    Resolution follows only declared imports, never a repository-wide filename
+    search, so provenance remains bounded to the target's dependency graph.
+    """
     root = Path(root).resolve()
     importer = Path(importer).resolve()
-    imports = _imports_for(importer)
-    for import_path in imports:
-        if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
-            continue
-        resolved = resolve_import(root, importer, import_path)
-        if resolved is None:
-            raise FileNotFoundError(
-                f"Unable to resolve interface {name}: declared import {import_path} "
-                f"from {importer} has no remapping or relative target"
-            )
-        path, method = resolved
-        return _extract_interface(name, path, method, root)
+    visited: set[Path] = set()
 
-    # Some repositories alias or aggregate interface declarations in files
-    # whose filename does not match the symbol. Inspect resolved imports as a
-    # generic fallback rather than requiring filename/name coincidence.
-    for import_path in imports:
-        resolved = resolve_import(root, importer, import_path)
-        if resolved is None:
-            continue
-        path, method = resolved
+    def walk(path: Path) -> ResolvedInterface | None:
+        path = path.resolve()
+        if path in visited or not path.is_file():
+            return None
+        visited.add(path)
+
+        imports = _imports_for(path)
+
+        # Preserve the existing strict behavior for a direct import whose
+        # filename explicitly identifies the requested interface.
+        for import_path in imports:
+            if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
+                continue
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                if path == importer:
+                    raise FileNotFoundError(
+                        f"Unable to resolve interface {name}: declared import {import_path} "
+                        f"from {path} has no remapping or relative target"
+                    )
+                continue
+            resolved_path, method = resolved
+            try:
+                source = _strip_comments(resolved_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                continue
+            if re.search(rf"\binterface\s+{re.escape(name)}\b", source):
+                return _extract_interface(name, resolved_path, method, root)
+
+        # A source unit may aggregate or alias the interface without a
+        # filename/name match. Inspect the unit itself before descending.
         try:
             source = _strip_comments(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError):
-            continue
+            source = ""
         if re.search(rf"\binterface\s+{re.escape(name)}\b", source):
+            method = "dependency_graph" if path != importer else "direct_source"
             return _extract_interface(name, path, method, root)
 
+        # Follow every resolvable declared import. This is the generic
+        # transitive dependency case; cycles are bounded by the visited set.
+        for import_path in imports:
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            result = walk(resolved[0])
+            if result is not None:
+                return result
+        return None
+
+    resolved = walk(importer)
+    if resolved is not None:
+        return resolved
     raise FileNotFoundError(
-        f"Unable to resolve interface {name}: no declared import matching {name}.sol in {importer}"
+        f"Unable to resolve interface {name} through imports from {importer}"
     )
 
 
