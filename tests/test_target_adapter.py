@@ -72,3 +72,32 @@ def test_foundry_target_intake_resolves_namespaced_interface_struct_constructor(
     intake = inspect_target(tmp_path, source)
     assert intake.unresolved_constructor_types == ()
     assert intake.blockers == ()
+
+
+def test_foundry_target_intake_resolves_transitive_namespaced_interface_struct_constructor(tmp_path, monkeypatch):
+    (tmp_path / "foundry.toml").write_text(
+        "[profile.default]\nsolc='0.8.24'\nlibs=['lib']\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "IMerkle.sol").write_text(
+        "interface IMerkle { struct MerkleConstructorArgs { uint128 levels; address poseidon2; } }\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src" / "Base.sol").write_text(
+        'import "./IMerkle.sol"; contract Base {}\n',
+        encoding="utf-8",
+    )
+    source = tmp_path / "src" / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.24; import "./Base.sol"; '
+        'contract Target { constructor(IMerkle.MerkleConstructorArgs memory args) {} }\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "cydra.target_adapter._foundry_config",
+        lambda project: {"solc": "0.8.24", "optimizer": False, "via_ir": False, "test": "test", "libs": ["lib"]},
+    )
+    intake = inspect_target(tmp_path, source)
+    assert intake.unresolved_constructor_types == ()
+    assert intake.blockers == ()
