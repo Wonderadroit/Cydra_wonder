@@ -150,6 +150,7 @@ def test_callback_runtime_generator_emits_initializer_declarations_before_call(t
     assert declaration in rendered
     assert initializer_call in rendered
     assert rendered.index(declaration) < rendered.index(initializer_call)
+    assert "event CydraCallbackObservation(bool callbackObserved, bool reentrySucceeded);" in rendered
 
 
 def test_callback_execution_context_uses_conservative_timestamp_extreme(tmp_path: Path):
