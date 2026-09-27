@@ -795,3 +795,33 @@ def test_nonreentrant_modifier_is_not_a_caller_role():
         line=1,
     )
     assert _caller_requirements(function) == ()
+
+
+def test_namespaced_interface_struct_constructor_dependency_is_constructible(tmp_path):
+    interface = tmp_path / "IMerkle.sol"
+    interface.write_text(
+        "interface IMerkle { struct MerkleConstructorArgs { uint128 levels; address poseidon2; } }\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import "./IMerkle.sol"; '
+        'contract Target { constructor(IMerkle.MerkleConstructorArgs memory args) {} }\n',
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (),
+        constructor=ConstructorModel(
+            (ParameterModel("args", "IMerkle.MerkleConstructorArgs"),),
+            1,
+        ),
+    )
+    readiness = inspect_execution_readiness(model)
+    dependency = next(
+        item for item in readiness.constructor_requirements
+        if item.kind == "constructor_dependency"
+    )
+    assert dependency.subject == "IMerkle.MerkleConstructorArgs"
+    assert dependency.status == "constraint"
