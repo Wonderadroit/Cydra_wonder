@@ -825,3 +825,18 @@ def test_namespaced_interface_struct_constructor_dependency_is_constructible(tmp
     )
     assert dependency.subject == "IMerkle.MerkleConstructorArgs"
     assert dependency.status == "constraint"
+
+
+
+def test_execution_readiness_treats_parameter_equal_caller_as_constructible_input():
+    function = FunctionModel(
+        "transact", "external", (), (), (), 1,
+        parameters=(ParameterModel("data", "Data"),),
+        execution_predicates=("data.externalAddress == msg.sender",),
+        execution_predicate_polarities=(("data.externalAddress == msg.sender", "must_hold"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.status == "constraint"
+    assert requirement.category == "input_construction"
