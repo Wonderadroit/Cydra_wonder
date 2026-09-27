@@ -651,8 +651,8 @@ def test_internal_execution_prerequisite_categories_are_descriptive(tmp_path):
         }
     }
     """)
-    from cydra.solidity_model import parse_contract_source
-    contract = parse_contract_source(source)
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
     function = next(item for item in contract.functions if item.name == "runAction")
     readiness = inspect_execution_readiness(contract, function)
     categories = {item.category for item in readiness.execution_requirements if item.kind == "internal_execution_predicate"}
