@@ -668,8 +668,21 @@ def _classify_internal_predicate(contract: ContractModel, predicate: str) -> str
     return "input_construction"
 
 
-def _internal_execution_requirements(contract: ContractModel, function: FunctionModel, *, max_depth: int = 4) -> tuple[ExecutionRequirement, ...]:
-    """Propagate modeled internal-call prerequisites into caller readiness."""
+def _internal_execution_requirements(
+    contract: ContractModel,
+    function: FunctionModel,
+    *,
+    max_depth: int = 4,
+    execution_capabilities: frozenset[str] = frozenset(),
+) -> tuple[ExecutionRequirement, ...]:
+    """Propagate modeled internal-call prerequisites into caller readiness.
+
+    Internal callees use the same execution-predicate language as top-level
+    actions. Reuse the generic input/local constraint classifier here rather
+    than treating every propagated predicate as an unresolved environment
+    blocker. State, ambient-context, and unresolved local predicates remain
+    fail-closed.
+    """
     functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
     by_name = {item.name: item for item in functions}
     ignored = {"if", "for", "while", "require", "revert", "assert", "emit", "return", "new", "delete", "unchecked", "abi", "keccak256", "sha256", "ecrecover"}
@@ -694,16 +707,30 @@ def _internal_execution_requirements(contract: ContractModel, function: Function
             for predicate in (*callee.execution_predicates, *callee.state_predicates):
                 kind = "internal_execution_predicate" if predicate in callee.execution_predicates else "internal_state_predicate"
                 category = _classify_internal_predicate(contract, predicate)
+                constraint = _is_experiment_constraint(
+                    contract,
+                    callee,
+                    predicate,
+                    execution_capabilities,
+                )
                 detail = {
                     "state_observation": "internal callee prerequisite requires generic state observation/setup",
                     "input_construction": "internal callee prerequisite requires generic experiment-input construction",
                     "cryptographic_witness": "internal callee prerequisite requires generic cryptographic witness construction",
                 }[category]
+                if constraint:
+                    status = "constraint"
+                    detail = (
+                        "internal callee prerequisite is a pure input/local constraint; "
+                        "the caller experiment must construct values satisfying it"
+                    )
+                else:
+                    status = "unresolved"
                 results.append(ExecutionRequirement(
                     kind,
                     f"{callee.name}: {predicate}",
                     f"{caller.name}:internal-call->{callee.name}",
-                    "unresolved",
+                    status,
                     detail,
                     category=category,
                 ))
@@ -741,7 +768,13 @@ def _execution_requirements(
                 detail,
             )
         )
-    requirements.extend(_internal_execution_requirements(contract, function))
+    requirements.extend(
+        _internal_execution_requirements(
+            contract,
+            function,
+            execution_capabilities=execution_capabilities,
+        )
+    )
     return tuple(requirements)
 
 
