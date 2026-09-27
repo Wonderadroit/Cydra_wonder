@@ -598,8 +598,8 @@ def _is_experiment_constraint(
     # an input-construction constraint, not an ambient environment blocker. This
     # remains fail-closed for expressions whose value provenance is not modeled.
     transaction_value_binding = re.fullmatch(
-        r"msg\\.value\\s*==\\s*(?P<rhs>[A-Za-z_]\\w*|(?:0x[0-9A-Fa-f]+|\\d+))|"
-        r"(?P<lhs>[A-Za-z_]\\w*|(?:0x[0-9A-Fa-f]+|\\d+))\\s*==\\s*msg\\.value",
+        r"msg\.value\s*==\s*(?P<rhs>[A-Za-z_]\w*|(?:0x[0-9A-Fa-f]+|\d+))|"
+        r"(?P<lhs>[A-Za-z_]\w*|(?:0x[0-9A-Fa-f]+|\d+))\s*==\s*msg\.value",
         predicate.strip(),
     )
     if transaction_value_binding:
