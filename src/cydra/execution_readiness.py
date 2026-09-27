@@ -136,6 +136,10 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
 
     def resolves_to_interface(type_name: str) -> bool:
         try:
+            if "." in type_name:
+                namespace, member = type_name.split(".", 1)
+                resolved = resolve_interface(project_root, source_path, namespace)
+                return member in resolved.declared_types
             resolved = resolve_interface(project_root, source_path, type_name)
         except (FileNotFoundError, ValueError, OSError, UnicodeError):
             return False
