@@ -440,7 +440,12 @@ def _execution_value_bindings(body: str) -> tuple[tuple[str, str], ...]:
     for match in pattern.finditer(body):
         name = match.group("name")
         expression = match.group("expression").strip()
-        if expression and ("(" in expression or re.search(r"\b(?:msg|tx|block)\.", expression)):
+        # Preserve deterministic local dataflow as well as call-shaped
+        # producers. Downstream readiness may need to follow a local such as
+        # "verified" back to the cryptographic call that produced "err".
+        # The extractor remains statement-bounded and therefore does not infer
+        # arbitrary control-flow semantics.
+        if expression:
             item = (name, expression)
             if item not in bindings:
                 bindings.append(item)
