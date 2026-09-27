@@ -409,10 +409,12 @@ def generate_callback_state_order_test(
     )
     reentry_call = f"abi.encodeCall(target.{function.name}, ({target_call_arguments}))"
 
-    constructor_arguments = [
-        _constructor_argument(parameter)
-        for parameter in (contract_model.constructor.parameters if contract_model.constructor else ())
-    ]
+    constructor_arguments = []
+    for parameter in (contract_model.constructor.parameters if contract_model.constructor else ()):
+        rendered = _structured_default(parameter, contract_model)
+        if rendered is None:
+            rendered = _constructor_argument(parameter)
+        constructor_arguments.append(rendered)
     constructor_call = (
         f"new {target_type}({', '.join(constructor_arguments)})"
         if constructor_arguments
