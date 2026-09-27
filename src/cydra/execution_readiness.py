@@ -578,6 +578,21 @@ def _is_experiment_constraint(
     if parameter_state_order:
         return True
 
+    # A calldata value explicitly required to equal the current caller is
+    # constructible by the experiment runner: the generated call is made from
+    # the attacker/caller identity. This is a semantic input binding, not a
+    # target-specific authorization shortcut.
+    caller_bound_input = re.search(
+        r"\b(?P<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\s*==\s*msg\.sender\b|"
+        r"\bmsg\.sender\s*==\s*(?P<reverse>[A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\b",
+        predicate,
+    )
+    if caller_bound_input:
+        path = caller_bound_input.group("path") or caller_bound_input.group("reverse")
+        root = path.split(".", 1)[0]
+        if root in parameter_names:
+            return True
+
     if identifiers & state_names or identifiers & ambient or "$." in predicate:
         return False
     bound_names = parameter_names | local_names
