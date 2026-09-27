@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from cydra.compiler_constraints import ConstraintEvidence
-from cydra.execution_readiness import inspect_execution_readiness
+from cydra.execution_readiness import inspect_execution_readiness, constructible_state_setup_plan
 from cydra.models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
 
 
@@ -880,3 +880,59 @@ def test_execution_readiness_treats_msg_value_equal_parameter_as_constructible_i
     requirement = readiness.execution_requirements[0]
     assert requirement.status == "constraint"
     assert requirement.category == "unknown"
+
+
+def test_state_setup_planner_can_use_internal_state_writer_without_hardcoding(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => address) registry;
+            function run(Data calldata data) external { verify(data); }
+            function verify(Data calldata data) internal {
+                require(registry[data.key] == data.endpoint);
+            }
+            function register(uint256 key, address endpoint) external {
+                registry[key] = endpoint;
+            }
+            struct Data { uint256 key; address endpoint; }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "run")
+    plan = constructible_state_setup_plan(contract, function)
+    assert tuple(action.function for action in plan) == ("register",)
+
+
+def test_state_setup_candidate_fails_closed_on_unresolved_custom_modifier(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => address) registry;
+            function run(uint256 key) external { verify(key); }
+            function verify(uint256 key) internal {
+                require(registry[key] != address(0));
+            }
+            function register(uint256 key, address endpoint) external onlyRole(DEFAULT_ADMIN_ROLE) {
+                registry[key] = endpoint;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, function)
+    candidate = next(
+        item for item in readiness.state_setup_candidates
+        if item.subject == "register"
+    )
+    assert candidate.status == "unresolved"
+    assert "authorization" in candidate.detail
