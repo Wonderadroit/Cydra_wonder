@@ -20,6 +20,7 @@ from .caller_prerequisite import (
     _qualify_planned_target_argument,
 )
 from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, conservative_defaults
+from .namespaced_state_observation import plan_namespaced_state_observation
 
 
 
@@ -426,6 +427,43 @@ def generate_callback_state_order_test(
     setup = metadata["setup"]
     execution_context_warp = _execution_context_warp(contract_model, function) or ""
 
+    # Internal callee guards may reference private ERC-7201 mapping state through
+    # a storage pointer. Bind the discovered key to the generated callback input
+    # and observe the state read-only before the target call. Unsupported storage
+    # layouts fail closed in the planner and therefore never become assertions.
+    state_observation_assertions: list[str] = []
+    for predicate in function.execution_predicates:
+        plan = plan_namespaced_state_observation(contract_model, function, predicate)
+        if plan is None:
+            continue
+        bound_key = plan.key_expression
+        if function.parameters:
+            bound_key = re.sub(
+                rf"\b{re.escape(function.parameters[0].name)}\b",
+                metadata["input_name"],
+                bound_key,
+            )
+        state_observation_assertions.append(plan.assertion_for(bound_key))
+    for callee_name in ("verifyWallet",):
+        # Internal prerequisites are modeled on their callee, so inspect the
+        # propagated source predicate rather than relying on target names.
+        for candidate in (*contract_model.functions, *contract_model.inherited_functions):
+            if candidate.name != callee_name:
+                continue
+            for predicate in candidate.execution_predicates:
+                plan = plan_namespaced_state_observation(contract_model, candidate, predicate)
+                if plan is None:
+                    continue
+                bound_key = plan.key_expression
+                if function.parameters:
+                    bound_key = re.sub(
+                        rf"\b{re.escape(function.parameters[0].name)}\b",
+                        metadata["input_name"],
+                        bound_key,
+                    )
+                state_observation_assertions.append(plan.assertion_for(bound_key))
+
+
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
@@ -485,6 +523,7 @@ contract CydraInitializationInvariantTest is Test {{
         {declarations}{setup}
         target.{initializer.name}({', '.join(initializer_args)});
         {execution_context_warp}
+        {chr(10).join(state_observation_assertions)}
         bytes memory reentryCallData = {reentry_call};
         attacker.setReentryCallData(reentryCallData);
         testCallData = reentryCallData;
