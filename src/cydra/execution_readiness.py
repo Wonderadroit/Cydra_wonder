@@ -777,7 +777,7 @@ def _internal_execution_requirements(
                     and dict(callee.execution_predicate_polarities).get(predicate) == "must_not_hold"
                     and bool(
                         re.search(
-                            r"\\bblock\\.timestamp\\s*(?:>|>=|<|<=)",
+                            r"\bblock\.timestamp\s*(?:>|>=|<|<=)",
                             predicate,
                         )
                     )
