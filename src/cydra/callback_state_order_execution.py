@@ -271,6 +271,7 @@ contract CydraReentrantCaller {{
 }}
 
 contract CydraInitializationInvariantTest is Test {{
+    event CydraCallbackObservation(bool callbackObserved, bool reentrySucceeded);
     {target_type} internal target;
     CydraReentrantCaller internal attacker;
 
@@ -547,8 +548,7 @@ contract CydraInitializationInvariantTest is Test {{
             attacker.callbackObserved(),
             "target did not invoke the caller-controlled callback"
         );
-        // Reentry success/failure is an observation, not a prerequisite.
-        // Causal classification consumes the recorded outcome separately.
+        emit CydraCallbackObservation(attacker.callbackObserved(), attacker.reentrySucceeded());
     }}
 }}
 '''
