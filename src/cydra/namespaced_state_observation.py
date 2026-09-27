@@ -39,6 +39,7 @@ _STRUCT_RE = re.compile(
     r"(?:///\s*|/\*\*?\s*\*?\s*)?@custom:storage-location\s+erc7201:[^\s\n]+\s*"
     r"(?:\*/\s*)?struct\s+(?P<name>[A-Za-z_]\w*)\s*\{(?P<body>.*?)\}",
     re.DOTALL,
+)
 _LOCATION_RE = re.compile(
     r"\b(?:bytes32\s+)?(?:private\s+)?constant\s+"
     r"(?P<name>[A-Za-z_]\w*Location)\s*=\s*(?P<value>0x[0-9A-Fa-f]{64})\s*;"
