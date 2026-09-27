@@ -728,3 +728,55 @@ def test_internal_execution_input_prerequisite_can_be_an_experiment_constraint(t
     assert propagated.subject == "verify: amount > 0"
     assert propagated.status == "constraint"
     assert propagated.category == "input_construction"
+
+def test_internal_namespaced_state_observation_can_satisfy_erc7201_guard(tmp_path):
+    storage = tmp_path / "EmporiumStorage.sol"
+    storage.write_text(
+        """
+        contract EmporiumStorage {
+            /// @custom:storage-location erc7201:test.storage
+            struct Storage {
+                address helper;
+                mapping(uint256 => bool) usedMessages;
+            }
+            bytes32 private constant TestLocation =
+                0x1000000000000000000000000000000000000000000000000000000000000000;
+        }
+        """,
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    source.write_text(
+        """
+        import "./EmporiumStorage.sol";
+        contract Target is EmporiumStorage {
+            function run(uint256 message) external { verify(message); }
+            function verify(uint256 message) internal {
+                if ($.usedMessages[message]) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    caller = FunctionModel("run", "external", (), (), (), 5)
+    callee = FunctionModel(
+        "verify", "internal", (), (), (), 6,
+        execution_predicates=("$.usedMessages[message]",),
+        execution_predicate_polarities=(("$.usedMessages[message]", "must_not_hold"),),
+    )
+    readiness = inspect_execution_readiness(
+        ContractModel(
+            "Target",
+            str(source),
+            (caller, callee),
+            inherits=("EmporiumStorage",),
+        ),
+        caller,
+    )
+    propagated = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+    )
+    assert propagated.category == "state_observation"
+    assert propagated.status == "constraint"
