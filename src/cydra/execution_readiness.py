@@ -652,6 +652,21 @@ def _source_function_body(contract: ContractModel, function: FunctionModel) -> s
     return source[opening + 1:]
 
 
+def _classify_internal_predicate(contract: ContractModel, predicate: str) -> str:
+    """Classify an internal prerequisite without claiming that it is satisfied."""
+    normalized = predicate.lower()
+    if any(term in normalized for term in (
+        "signature", "digest", "hash", "recover", "ecrecover", "ecdsa",
+        "proof", "nonce", "typeddata", "domainseparator",
+    )):
+        return "cryptographic_witness"
+    state_names = set(contract.state_variables)
+    identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
+    if identifiers & state_names:
+        return "state_observation"
+    return "input_construction"
+
+
 def _internal_execution_requirements(contract: ContractModel, function: FunctionModel, *, max_depth: int = 4) -> tuple[ExecutionRequirement, ...]:
     """Propagate modeled internal-call prerequisites into caller readiness."""
     functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
@@ -677,7 +692,20 @@ def _internal_execution_requirements(contract: ContractModel, function: Function
             seen_names.add(name)
             for predicate in (*callee.execution_predicates, *callee.state_predicates):
                 kind = "internal_execution_predicate" if predicate in callee.execution_predicates else "internal_state_predicate"
-                results.append(ExecutionRequirement(kind, f"{callee.name}: {predicate}", f"{caller.name}:internal-call->{callee.name}", "unresolved", "modeled internal callee guard; a generic construction or runtime observation must verify this prerequisite before the caller is considered reachable"))
+                category = _classify_internal_predicate(contract, predicate)
+                detail = {
+                    "state_observation": "internal callee prerequisite requires generic state observation/setup",
+                    "input_construction": "internal callee prerequisite requires generic experiment-input construction",
+                    "cryptographic_witness": "internal callee prerequisite requires generic cryptographic witness construction",
+                }[category]
+                results.append(ExecutionRequirement(
+                    kind,
+                    f"{callee.name}: {predicate}",
+                    f"{caller.name}:internal-call->{callee.name}",
+                    "unresolved",
+                    detail,
+                    category,
+                ))
             visit(callee, depth + 1)
     visit(function, 0)
     return tuple(dict.fromkeys(results))
