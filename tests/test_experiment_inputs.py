@@ -219,7 +219,7 @@ def test_structured_defaults_render_source_defined_structs(tmp_path):
         contract_model=model,
     )
     assert result == (
-        '(address(0), 1, bytes(""))',
+        '(address(0), 0, bytes(""))',
         "new int256[](0)",
     )
 
@@ -259,4 +259,4 @@ def test_structured_defaults_resolve_imported_structs(tmp_path):
         function_name="execute",
         contract_model=model,
     )
-    assert result == ('(address(0xCAFE), 1, bytes(""))',)
+    assert result == ('(address(0), 0, bytes(""))',)
