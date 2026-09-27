@@ -38,6 +38,46 @@ def _function_body(source: str, function_name: str) -> str:
     return ""
 
 
+def _execution_context_warp(contract_model: ContractModel, function) -> str | None:
+    """Return a conservative Foundry time control for guarded internal predicates.
+
+    Only a must-not-hold timestamp comparison is controllable here. The adapter
+    chooses the extremal EVM timestamp that makes the guarded comparison false;
+    mixed low/high requirements fail closed rather than guessing an interval.
+    """
+    functions = {item.name: item for item in (*contract_model.functions, *contract_model.inherited_functions)}
+    visited: set[str] = set()
+    modes: set[str] = set()
+
+    def visit(current) -> None:
+        if current.name in visited:
+            return
+        visited.add(current.name)
+        for predicate, polarity in current.execution_predicate_polarities:
+            if polarity != "must_not_hold":
+                continue
+            match = re.search(r"\bblock\.timestamp\s*(>=|>|<=|<)", predicate)
+            if not match:
+                continue
+            modes.add("low" if match.group(1) in {">", ">="} else "high")
+
+        body = _function_body(Path(contract_model.source).read_text(encoding="utf-8"), current.name)
+        for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
+            callee = functions.get(match.group(1))
+            if callee is not None:
+                visit(callee)
+
+    try:
+        visit(function)
+    except (OSError, UnicodeError):
+        return None
+
+    if modes == {"low"}:
+        return "vm.warp(0);"
+    if modes == {"high"}:
+        return "vm.warp(type(uint256).max);"
+    return None
+
 def _decoded_callback_path(contract_model: ContractModel, function_name: str):
     """Discover a decoded struct -> operation endpoint callback path from source.
 
@@ -384,6 +424,7 @@ def generate_callback_state_order_test(
 
     declarations = "".join(f"        {item}\n" for item in setup_declarations)
     setup = metadata["setup"]
+    execution_context_warp = _execution_context_warp(contract_model, function) or ""
 
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
@@ -443,6 +484,7 @@ contract CydraInitializationInvariantTest is Test {{
         address cydraAttacker = address(attacker);
         {declarations}{setup}
         target.{initializer.name}({', '.join(initializer_args)});
+        {execution_context_warp}
         bytes memory reentryCallData = {reentry_call};
         attacker.setReentryCallData(reentryCallData);
         testCallData = reentryCallData;
