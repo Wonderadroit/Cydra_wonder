@@ -593,6 +593,20 @@ def _is_experiment_constraint(
         if root in parameter_names:
             return True
 
+    # Transaction value is caller-controlled execution input. A predicate that
+    # equates msg.value with a modeled ABI parameter (or a literal) is therefore
+    # an input-construction constraint, not an ambient environment blocker. This
+    # remains fail-closed for expressions whose value provenance is not modeled.
+    transaction_value_binding = re.fullmatch(
+        r"msg\\.value\\s*==\\s*(?P<rhs>[A-Za-z_]\\w*|(?:0x[0-9A-Fa-f]+|\\d+))|"
+        r"(?P<lhs>[A-Za-z_]\\w*|(?:0x[0-9A-Fa-f]+|\\d+))\\s*==\\s*msg\\.value",
+        predicate.strip(),
+    )
+    if transaction_value_binding:
+        value_name = transaction_value_binding.group("rhs") or transaction_value_binding.group("lhs")
+        if value_name in parameter_names or value_name.isdigit() or value_name.startswith("0x"):
+            return True
+
     if identifiers & state_names or identifiers & ambient or "$." in predicate:
         return False
     bound_names = parameter_names | local_names
