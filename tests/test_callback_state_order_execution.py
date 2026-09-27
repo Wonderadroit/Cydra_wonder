@@ -325,3 +325,55 @@ def test_callback_caller_binding_discovery_follows_modeled_internal_predicates(t
     )
     contract = ContractModel("Callback", str(source), (execute, check), pragma="^0.8.20")
     assert _caller_bound_parameter_paths(contract, execute) == ("data.endpoint",)
+
+
+def test_callback_state_setup_uses_target_derived_mapping_relation(tmp_path: Path):
+    from cydra.callback_state_order_execution import _state_setup_source
+
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Callback {
+            mapping(uint256 => address) registry;
+            function execute(Data calldata data) external {
+                check(data);
+            }
+            function check(Data calldata data) internal {
+                require(registry[data.key] == data.endpoint);
+            }
+            function register(uint256 key, address endpoint) external {
+                registry[key] = endpoint;
+            }
+            struct Data { uint256 key; address endpoint; }
+        }
+        """,
+        encoding="utf-8",
+    )
+    execute = FunctionModel(
+        name="execute", visibility="external", modifiers=(), writes=(),
+        external_calls=(), line=5,
+        parameters=(ParameterModel("data", "Data", "calldata"),),
+        internal_calls=("check",),
+    )
+    check = FunctionModel(
+        name="check", visibility="internal", modifiers=(), writes=(),
+        external_calls=(), line=8,
+        parameters=(ParameterModel("data", "Data", "calldata"),),
+        execution_predicates=("registry[data.key] == data.endpoint",),
+    )
+    register = FunctionModel(
+        name="register", visibility="external", modifiers=(), writes=("registry",),
+        external_calls=(), line=11,
+        parameters=(
+            ParameterModel("key", "uint256"),
+            ParameterModel("endpoint", "address"),
+        ),
+    )
+    contract = ContractModel(
+        "Callback", str(source), (execute, check, register),
+        pragma="^0.8.20", state_variables=("registry",),
+    )
+    rendered, functions = _state_setup_source(contract, execute, "cydraCallbackInput")
+    assert functions == ("register",)
+    assert "target.register(cydraCallbackInput.key, cydraCallbackInput.endpoint);" in rendered
