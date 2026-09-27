@@ -135,3 +135,28 @@ def test_preserves_top_level_types_separately_from_interface_types(tmp_path: Pat
     resolved = resolve_interface(root, root / "contracts" / "Target.sol", "IManager")
     assert resolved.declared_types == ("Nested",)
     assert resolved.top_level_types == ("SettingsParams",)
+
+
+def test_resolves_interface_through_transitive_import_graph(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "Target.sol",
+        'import "./Base.sol";\ncontract Target {}\n',
+    )
+    _write(
+        root / "contracts" / "Base.sol",
+        'import "./types/IMerkle.sol";\ncontract Base {}\n',
+    )
+    _write(
+        root / "contracts" / "types" / "IMerkle.sol",
+        "interface IMerkle {\n"
+        "    struct MerkleConstructorArgs { uint128 levels; address poseidon2; }\n"
+        "}\n",
+    )
+
+    resolved = resolve_interface(root, root / "contracts" / "Target.sol", "IMerkle")
+
+    assert resolved.name == "IMerkle"
+    assert resolved.source_path == "contracts/types/IMerkle.sol"
+    assert resolved.resolution_method == "relative_import"
+    assert resolved.declared_types == ("MerkleConstructorArgs",)
