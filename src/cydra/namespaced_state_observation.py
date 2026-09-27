@@ -123,6 +123,9 @@ def plan_namespaced_state_observation(
     location_candidates = list(_LOCATION_RE.finditer(source, struct_match.end()))
     location = location_candidates[0].group("value") if location_candidates else None
 
+    if not location:
+        return None
+
     try:
         base = int(location, 16)
         mapping_slot = base + offset
