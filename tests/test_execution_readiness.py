@@ -685,31 +685,21 @@ def test_internal_execution_temporal_prerequisite_is_execution_context(tmp_path)
 
 def test_internal_execution_local_crypto_witness_is_not_plain_input(tmp_path):
     source = tmp_path / "Target.sol"
-    source.write_text(
-        "contract Target { function runAction() external { verify(); } }",
-        encoding="utf-8",
-    )
-    from cydra.models import FunctionModel
-    caller = FunctionModel("runAction", "external", (), (), (), 1)
-    callee = FunctionModel(
-        "verify",
-        "internal",
-        (),
-        (),
-        (),
-        1,
-        execution_predicates=("!verified",),
-        execution_predicate_polarities=(("!verified", "must_not_hold"),),
-        execution_value_bindings=(
-            ("verified", "ecrecover(digest, v, r, s) != address(0)"),
-        ),
-    )
-    contract = ContractModel(
-        "Target",
-        str(source),
-        (caller, callee),
-    )
-    readiness = inspect_execution_readiness(contract, caller)
+    source.write_text("""
+    contract Target {
+        function runAction() external { verify(); }
+        function verify() internal {
+            (address recoveredAddress, uint8 err) = ECDSA.tryRecover(digest, v, r, s);
+            bool verified = err == ECDSA.RecoverError.NoError &&
+                recoveredAddress == signerAddress;
+            require(!verified);
+        }
+    }
+    """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "runAction")
+    readiness = inspect_execution_readiness(contract, function)
     propagated = next(
         item for item in readiness.execution_requirements
         if item.kind == "internal_execution_predicate"
