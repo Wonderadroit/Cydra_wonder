@@ -377,3 +377,72 @@ def test_callback_state_setup_uses_target_derived_mapping_relation(tmp_path: Pat
     rendered, functions = _state_setup_source(contract, execute, "cydraCallbackInput")
     assert functions == ("register",)
     assert "target.register(cydraCallbackInput.key, cydraCallbackInput.endpoint);" in rendered
+
+
+def test_callback_runtime_generator_materializes_state_backed_constructor_interface_stub(tmp_path: Path):
+    interface = tmp_path / "IHelper.sol"
+    interface.write_text(
+        """
+        interface IHelper {
+            function performChecks(uint256 value) external view returns (uint256[] memory);
+            function performSideEffects(uint256 value) external;
+        }
+        """,
+        encoding="utf-8",
+    )
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        import "./IHelper.sol";
+        contract Callback {
+            IHelper public helper;
+            constructor(address helperAddress) {
+                helper = IHelper(helperAddress);
+            }
+            function execute(uint256 amount) external {
+                helper.performChecks(amount);
+                helper.performSideEffects(amount);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    function = FunctionModel(
+        name="execute",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(("helper", "performChecks"), ("helper", "performSideEffects")),
+        line=8,
+        parameters=(ParameterModel("amount", "uint256"),),
+    )
+    from cydra.models import ConstructorModel
+    contract = ContractModel(
+        "Callback",
+        str(source),
+        (function,),
+        pragma="^0.8.20",
+        constructor=ConstructorModel(
+            (ParameterModel("helperAddress", "address"),), 4
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute", "claim",
+        "INV-CALLBACK-STATE-ORDER-execute", "execute",
+        "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute", hypothesis.hypothesis_id,
+        "reenter", (), 2.0, planned_inputs=("1",), target_function="execute",
+    )
+    output = tmp_path / "test" / "generated.t.sol"
+    generate_callback_state_order_test(
+        hypothesis, experiment, str(source), "Callback", output, contract
+    )
+    rendered = output.read_text(encoding="utf-8")
+    assert "contract CydraIHelperStub" in rendered
+    assert "IHelper internal helperStub" not in rendered
+    assert "helperStub = new CydraIHelperStub();" in rendered
+    assert "new Callback(address(helperStub))" in rendered
+    assert "function performChecks(uint256 value) external view returns (uint256[] memory)" in rendered
