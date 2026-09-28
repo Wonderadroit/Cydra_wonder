@@ -50,3 +50,6 @@ Use `src/cydra/exploration.py` as the current boundary:
 - never invent target facts or bypass readiness.
 
 The intended loop is **model → frontier → test → evidence → updated model/frontier → repeat**. Connect this to the canonical live orchestration before adding more individual detectors.
+
+### Current continuation boundary
+The next generic orchestration capability is bounded recursive exploration via run_bounded_exploration. It must delegate execution to the existing canonical path, feed returned evidence into the investigation model, refresh the frontier, and stop on budget/frontier exhaustion. Do not invent target facts or create a second execution engine.
