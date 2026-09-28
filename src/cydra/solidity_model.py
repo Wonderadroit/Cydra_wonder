@@ -557,6 +557,24 @@ def _project_root(path: Path) -> Path:
     return resolved.parent
 
 
+def _constructor_role_grants(body: str) -> tuple[tuple[str, str], ...]:
+    """Extract standard role-establishment calls from constructor source."""
+    grants: list[tuple[str, str]] = []
+    for match in re.finditer(r"\b(?:_grantRole|_setupRole|grantRole)\s*\(", body):
+        arguments = _balanced_parenthesized(body, body.find("(", match.start()))
+        parts = _split_parameters(arguments)
+        if len(parts) < 2:
+            continue
+        role = parts[0].strip()
+        account = parts[1].strip()
+        if not role or not account:
+            continue
+        item = (role, account)
+        if item not in grants:
+            grants.append(item)
+    return tuple(grants)
+
+
 def _constructor_interface_casts(
     body: str,
     parameters: tuple[ParameterModel, ...],
@@ -798,6 +816,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
             constructor = ConstructorModel(
                 parameters=parameters,
                 line=_line_number(source, contract_start + constructor_match.start()),
+                role_grants=_constructor_role_grants(body),
                 interface_casts=interface_casts,
                 resolved_interface_casts=resolved_interface_casts,
                 derived_interface_casts=derived_interface_casts,
