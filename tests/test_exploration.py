@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from cydra.exploration import ExplorationState, derive_exploration_frontier
-from cydra.models import ContractModel, Experiment, FunctionModel, Hypothesis, InvestigationResult, Invariant
+from cydra.models import ContractModel, Evidence, Experiment, FunctionModel, Hypothesis, InvestigationResult, Invariant
 
 
 def _result() -> InvestigationResult:
@@ -114,3 +114,15 @@ def test_frontier_refresh_preserves_exploration_history():
     assert refreshed.explored_hypothesis_ids == ("H-1",)
     assert all(q.question_id != "Q-HYP-H-1" for q in refreshed.unresolved_questions)
     assert refreshed.budget_used == 2.0
+
+
+def test_execution_evidence_is_attached_to_selected_hypothesis():
+    from cydra.exploration import apply_exploration_evidence, select_next_question
+    state = ExplorationState.from_investigation(_result())
+    decision = select_next_question(state, 2.0)
+    assert decision is not None
+    evidence = Evidence("E-EXEC-H-1", "execution", "execution attempted", "foundry")
+    updated = apply_exploration_evidence(_result(), decision, (evidence,))
+    hypothesis = next(item for item in updated.hypotheses if item.hypothesis_id == "H-1")
+    assert hypothesis.evidence_ids == ("E-EXEC-H-1",)
+    assert updated.evidence == (evidence,)
