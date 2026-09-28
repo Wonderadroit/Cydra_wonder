@@ -126,3 +126,20 @@ def test_execution_evidence_is_attached_to_selected_hypothesis():
     hypothesis = next(item for item in updated.hypotheses if item.hypothesis_id == "H-1")
     assert hypothesis.evidence_ids == ("E-EXEC-H-1",)
     assert updated.evidence == (evidence,)
+
+
+def test_bounded_controller_reenters_frontier_after_feedback():
+    from cydra.exploration import run_bounded_exploration
+    calls = []
+
+    def execute(result, decision):
+        calls.append(decision.question_id)
+        evidence = Evidence(f"E-{len(calls)}", "execution", "attempted", "test")
+        return result, (evidence,)
+
+    run = run_bounded_exploration(_result(), budget=4.0, execute_question=execute)
+
+    assert run.rounds == 2
+    assert run.state.budget_used == 4.0
+    assert calls == ["Q-HYP-H-1", "Q-FN-Target.observe"]
+    assert run.stopped_reason == "budget_exhausted"
