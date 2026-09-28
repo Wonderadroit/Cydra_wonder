@@ -180,7 +180,7 @@ def _caller_bound_parameter_paths(contract_model: ContractModel, function) -> tu
             if not match:
                 continue
             path = match.group("path") or match.group("reverse")
-            if path.split(".", 1)[0] == function.parameters[0].name and path not in ordered:
+            if any(path.split(".", 1)[0] == parameter.name for parameter in function.parameters) and path not in ordered:
                 ordered.append(path)
         try:
             body = _function_body(Path(contract_model.source).read_text(encoding="utf-8"), current.name)
@@ -453,6 +453,52 @@ def _state_setup_source(
 
 
 
+def _legacy_structured_parameter_setup(
+    contract_model: ContractModel,
+    function,
+    arguments: tuple[str, ...],
+    target_type: str,
+    attacker_expression: str,
+) -> tuple[str, tuple[str, ...], dict[str, str]]:
+    """Materialize target-derived structured inputs needed by prerequisite setup."""
+    declarations: list[str] = []
+    imports: set[tuple[str, str]] = set()
+    rendered_arguments: dict[str, str] = {}
+    caller_bindings = _caller_bound_parameter_paths(contract_model, function)
+    setup_actions = constructible_state_setup_plan(contract_model, function)
+    referenced_roots = {path.split(".", 1)[0] for path in caller_bindings}
+    for action in setup_actions:
+        for part in action.provenance:
+            for predicate in _state_relation_predicates(contract_model, function, part):
+                for parameter in function.parameters:
+                    if re.search(rf"\b{re.escape(parameter.name)}\b", predicate):
+                        referenced_roots.add(parameter.name)
+    for parameter, expression in zip(function.parameters, arguments):
+        if parameter.name not in referenced_roots:
+            rendered_arguments[parameter.name] = expression
+            continue
+        typed, typed_imports = _qualify_planned_target_argument(
+            parameter, expression, target_type, contract_model
+        )
+        imports.update(typed_imports)
+        if parameter.type.split()[0] in {"address", "bool", "string", "bytes"} or parameter.type.split()[0].startswith(("uint", "int", "bytes")):
+            rendered_arguments[parameter.name] = typed
+            continue
+        base = parameter.type.split()[0].rstrip("[]")
+        resolved = _type_source(contract_model, base)
+        if resolved is not None and base not in set(contract_model.declared_types):
+            imports.add((str(resolved[0]), base))
+        local = f"cydra_{parameter.name}"
+        declarations.append(f"{parameter.type} memory {local} = {typed};")
+        for path in caller_bindings:
+            if path.startswith(parameter.name + "."):
+                declarations.append(
+                    f"{local}.{path.split('.', 1)[1]} = {attacker_expression};"
+                )
+        rendered_arguments[parameter.name] = local
+    return "\n        ".join(declarations), tuple(sorted(imports)), rendered_arguments
+
+
 def _legacy_callback_test(
     hypothesis: Hypothesis,
     experiment: Experiment,
@@ -505,15 +551,42 @@ def _legacy_callback_test(
         f"new {target_type}({', '.join(constructor_arguments)})"
         if constructor_arguments else f"new {target_type}()"
     )
-    argument_text = ", ".join(arguments)
+    parameter_setup, parameter_imports, rendered_arguments = _legacy_structured_parameter_setup(
+        contract_model,
+        function,
+        tuple(arguments),
+        target_type,
+        "address(attacker)",
+    )
+    argument_vector = tuple(
+        rendered_arguments.get(parameter.name, argument)
+        for parameter, argument in zip(function.parameters, arguments)
+    )
+    argument_text = ", ".join(argument_vector)
     call_data = f"abi.encodeCall(target.{function.name}, ({argument_text}))"
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
     target_import = _layout_aware_import_path(target_import, path)
+    state_setup, state_setup_functions = _state_setup_source(
+        contract_model, function,
+        next(
+            (f"cydra_{parameter.name}" for parameter in function.parameters
+             if parameter.name in rendered_arguments and f"cydra_{parameter.name}" in parameter_setup),
+            function.parameters[-1].name if function.parameters else "",
+        ),
+    )
+    if state_setup:
+        parameter_setup = parameter_setup + ("\n        " if parameter_setup else "") + state_setup
+    imports = [f'import {{ {target_type} }} from "{target_import}";']
+    for import_source, type_name in parameter_imports:
+        relative = Path(os.path.relpath(Path(import_source).resolve(), Path(output_path).resolve().parent)).as_posix()
+        line = f'import {{ {type_name} }} from "{relative}";'
+        if line not in imports:
+            imports.append(line)
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 import {{Test}} from "forge-std/Test.sol";
-import {{ {target_type} }} from "{target_import}";
+{chr(10).join(imports)}
 {runtime_stub_source}
 contract CydraReentrantCaller {{
     address internal immutable target;
@@ -546,6 +619,7 @@ contract CydraInitializationInvariantTest is Test {{
     function setUp() public {{
         {runtime_stub_setup}
         target = {constructor_call};
+        {parameter_setup}
         attacker = new CydraReentrantCaller(address(target));
         bytes memory callData = {call_data};
         attacker.setReentryCallData(callData);
