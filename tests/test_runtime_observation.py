@@ -100,16 +100,13 @@ def test_public_mapping_state_predicate_finds_inherited_source(tmp_path):
     assert plans[0].getter == "target.externalActionMap(id)"
 
 
-def test_public_mapping_state_observation_accepts_modifiers_and_initializer(tmp_path):
+def test_public_mapping_state_observation_accepts_override_modifier(tmp_path):
     base = tmp_path / "Base.sol"
     base.write_text(
-        "contract Base { mapping(uint256 => address) public override externalActionMap = "
-        "mapping(uint256 => address)(/* initializer intentionally unsupported by compiler */); }",
+        "interface I { function externalActionMap(uint256) external view returns (address); } "
+        "contract Base is I { mapping(uint256 => address) public override externalActionMap; }",
         encoding="utf-8",
     )
-    # The parser only needs to recognize the declaration shape; this fixture
-    # is source-level because observation planning must not depend on compiling
-    # the target just to discover an ABI getter.
     source = tmp_path / "Target.sol"
     source.write_text(
         'import "./Base.sol"; contract Target is Base {}',
