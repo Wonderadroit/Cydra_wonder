@@ -935,3 +935,12 @@ The resolver must fail closed for unsupported or unresolved custom field types. 
 
 A regression covers an imported interface containing `MerkleConstructorArgs`-style source-defined fields. The live target remains the authoritative test surface; do not add target-specific constructor values merely to bypass a readiness failure.
 
+
+
+## 45. Generated execution diagnostics must be valid Solidity literals
+
+When CYDRA renders source-derived predicates, relations, or other diagnostic text into generated Solidity tests, the diagnostic text must be encoded as a Solidity string literal before insertion into the generated source. Source predicates may contain newlines, quotes, backslashes, or tabs because they come from formatted target expressions. Raw insertion can therefore turn a valid modeled prerequisite into a compiler failure before the observation executes.
+
+The generic sequence renderer now centralizes diagnostic-string escaping and applies it to prerequisite and state-relation assertion messages. This is a renderer-boundary concern, not a target-specific workaround. Regression coverage must include multiline source predicates and verify that the generated test remains single-line syntactically valid Solidity while preserving the diagnostic content.
+
+The rule is: **model/source text may be arbitrary diagnostic content; generated Solidity must receive a correctly escaped literal.** A rendering failure is an execution-capability gap and must be fixed generically before the security experiment is classified.
