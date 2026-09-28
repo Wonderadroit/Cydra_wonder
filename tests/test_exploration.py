@@ -143,3 +143,51 @@ def test_bounded_controller_reenters_frontier_after_feedback():
     assert run.state.budget_used == 4.0
     assert calls == ["Q-HYP-H-1", "Q-FN-Target.observe"]
     assert run.stopped_reason == "budget_exhausted"
+
+
+def test_canonical_execution_bridge_scopes_one_question_and_preserves_full_result(monkeypatch, tmp_path):
+    from scripts import run_benchmark_blind
+    from cydra.exploration import select_next_question
+
+    result = _result()
+    state = ExplorationState.from_investigation(result)
+    decision = select_next_question(state, 2.0)
+    assert decision is not None
+
+    observed = {}
+
+    def fake_run_layers(scoped, project, classes, compiler_evidence):
+        observed["hypotheses"] = tuple(item.hypothesis_id for item in scoped.hypotheses)
+        observed["experiments"] = tuple(item.experiment_id for item in scoped.experiments)
+        return (
+            [{
+                "hypothesis_id": "H-1",
+                "class": "authorization",
+                "classification": "NOT_REACHED",
+            }],
+            [],
+            (Evidence("E-BRIDGE", "execution", "bridge executed", "test"),),
+        )
+
+    monkeypatch.setattr(run_benchmark_blind, "run_layers", fake_run_layers)
+    trace = []
+    executions = []
+    evidence = []
+
+    updated, returned_evidence = run_benchmark_blind._execute_exploration_question(
+        result,
+        decision,
+        tmp_path,
+        ("authorization",),
+        None,
+        trace,
+        executions,
+        evidence,
+    )
+
+    assert observed == {"hypotheses": ("H-1",), "experiments": ("X-1",)}
+    assert tuple(item.hypothesis_id for item in updated.hypotheses) == ("H-1",)
+    assert tuple(item.hypothesis_id for item in result.hypotheses) == ("H-1",)
+    assert [item.evidence_id for item in returned_evidence] == ["E-BRIDGE"]
+    assert trace[0]["question_id"] == "Q-HYP-H-1"
+    assert evidence[0].evidence_id == "E-BRIDGE"
