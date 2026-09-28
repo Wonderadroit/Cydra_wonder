@@ -69,3 +69,32 @@ def test_non_public_or_complex_state_is_fail_closed(tmp_path):
         ),
     )
     assert plan_public_state_observations(model, model.functions[0]) == ()
+
+
+def test_public_mapping_state_predicate_finds_inherited_source(tmp_path):
+    base = tmp_path / "Base.sol"
+    base.write_text(
+        "contract Base { mapping(uint256 => address) public externalActionMap; }",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'import "./Base.sol"; contract Target is Base {}',
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "use", "external", (), (), (), 1,
+                execution_predicates=(
+                    "externalActionMap[id] == expected && "
+                    "externalActionMap[id] != address(0)",
+                ),
+            ),
+        ),
+    )
+    plans = plan_public_state_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].getter == "target.externalActionMap(id)"
