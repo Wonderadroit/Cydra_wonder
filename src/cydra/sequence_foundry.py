@@ -5,7 +5,7 @@ import os
 import re
 
 from .models import ContractModel, Experiment, Hypothesis
-from .interface_resolver import resolve_interface, resolve_named_type_source
+from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_struct_fields
 from .execution_readiness import _address_role, caller_role
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
@@ -233,7 +233,38 @@ def generate_sequence_test_from_experiment(
             relative = Path(os.path.relpath(resolved_path, path.parent)).as_posix()
             constructor_imports.append(f'import {{ {base} }} from "{relative}";')
         elif "." in base:
-            raise ValueError(f"unsupported sequence constructor namespaced type: {parameter.type}")
+            namespace, type_name = base.split(".", 1)
+            try:
+                resolved_namespace = resolve_interface(project_root, contract_model.source, namespace)
+                fields = resolve_struct_fields(project_root, resolved_namespace.source_path, type_name)
+            except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                fields = ()
+                resolved_namespace = None
+            if not fields or resolved_namespace is None:
+                raise ValueError(f"unsupported sequence constructor namespaced type: {parameter.type}")
+            field_values: list[str] = []
+            for field_name, field_type in fields:
+                normalized = field_type.strip()
+                field_base = normalized.split()[0].rstrip("[]")
+                if normalized.endswith("[]"):
+                    if field_base.startswith(("uint", "int", "bytes", "address", "bool")):
+                        value = f"new {field_base}[](0)"
+                    else:
+                        raise ValueError(f"unsupported namespaced struct field type: {field_type}")
+                elif field_base == "address":
+                    value = "address(0)"
+                elif normalized == "address payable":
+                    value = "payable(address(0))"
+                elif field_base == "bool":
+                    value = "false"
+                elif field_base.startswith(("uint", "int", "bytes")):
+                    value = "0"
+                else:
+                    raise ValueError(f"unsupported namespaced struct field type: {field_type}")
+                field_values.append(f"{field_name}: {value}")
+            constructor_arguments.append(f"{namespace}.{type_name}({{{', '.join(field_values)}}})")
+            relative = Path(os.path.relpath(project_root / resolved_namespace.source_path, path.parent)).as_posix()
+            constructor_imports.append(f'import {{ {namespace} }} from "{relative}";')
         else:
             raise ValueError(f"unsupported sequence constructor type: {parameter.type}")
 
