@@ -1082,22 +1082,49 @@ def _execution_requirements(
     return tuple(requirements)
 
 
-def _state_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+def _state_requirements(
+    contract: ContractModel,
+    function: FunctionModel,
+) -> tuple[ExecutionRequirement, ...]:
     polarities = dict(function.state_predicate_polarities)
-    return tuple(
-        ExecutionRequirement(
-            "state_predicate",
-            predicate,
-            f"{function.name}:body",
-            "required",
-            {
-                "must_hold": "state predicate must hold for the normal execution path",
-                "must_not_hold": "state predicate is a guarded revert condition and must not hold",
-                "unknown": "state predicate polarity could not be established statically",
-            }.get(polarities.get(predicate, "unknown"), "state predicate polarity is unknown"),
+    requirements: list[ExecutionRequirement] = []
+    setup_actions = constructible_state_setup_plan(contract, function)
+    setup_states = {
+        part
+        for action in setup_actions
+        for part in action.provenance
+        if part
+    }
+    for predicate in function.state_predicates:
+        state_names = set(re.findall(r"\b([A-Za-z_]\w*)\b", predicate))
+        default_solution = any(
+            _state_observation_has_default_solution(contract, function, state)
+            for state in state_names
         )
-        for predicate in function.state_predicates
-    )
+        setup_solution = bool(setup_states.intersection(state_names))
+        status = "constraint" if default_solution or setup_solution else "required"
+        requirements.append(
+            ExecutionRequirement(
+                "state_predicate",
+                predicate,
+                f"{function.name}:body",
+                status,
+                (
+                    "state predicate has a target-derived constructible setup transition; "
+                    "the generated experiment must apply that transition before the security assertion"
+                    if setup_solution
+                    else "state predicate is satisfied by the modeled default state; "
+                    "the generated experiment must preserve that default"
+                    if default_solution
+                    else {
+                        "must_hold": "state predicate must hold for the normal execution path",
+                        "must_not_hold": "state predicate is a guarded revert condition and must not hold",
+                        "unknown": "state predicate polarity could not be established statically",
+                    }.get(polarities.get(predicate, "unknown"), "state predicate polarity is unknown")
+                ),
+            )
+        )
+    return tuple(requirements)
 
 
 def _constraint_state_requirements(
@@ -1513,7 +1540,7 @@ def inspect_execution_readiness(
             if selected else ()
         ),
         state_requirements=(
-            (*_state_requirements(selected), *_constraint_state_requirements(selected, constraints))
+            (*_state_requirements(contract, selected), *_constraint_state_requirements(selected, constraints))
             if selected else ()
         ),
         state_setup_candidates=(
