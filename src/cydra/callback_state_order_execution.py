@@ -22,86 +22,10 @@ from .caller_prerequisite import (
 )
 from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, _structured_default, conservative_defaults
 from .namespaced_state_observation import plan_namespaced_state_observation
-from .execution_readiness import constructible_state_setup_plan, role_address_expression
+from .execution_readiness import constructible_state_setup_plan, role_address_expression, runtime_dependency_constructor_bindings
 from .interface_resolver import resolve_import, resolve_interface, _imports_for
 
 
-
-def _runtime_dependency_constructor_bindings(contract_model: ContractModel, function) -> tuple[tuple[str, object], ...]:
-    """Resolve state-backed runtime receivers to constructor interface dependencies.
-
-    Some targets accept an address in a constructor, cast that address to an
-    interface, and store it in state before later calls use the state receiver.
-    Reuse the existing interface-stub machinery when the target source proves
-    that binding. No receiver, contract, or parameter name is special-cased.
-    """
-    source_path = Path(contract_model.source).resolve()
-    root = next(
-        (parent for parent in (source_path.parent, *source_path.parents)
-         if any((parent / marker).exists() for marker in ("foundry.toml", "package.json", "remappings.txt"))),
-        source_path.parent,
-    )
-    constructor_parameters = {
-        parameter.name for parameter in (contract_model.constructor.parameters if contract_model.constructor else ())
-        if parameter.name
-    }
-    if not constructor_parameters:
-        return ()
-
-    queue = [source_path]
-    visited: set[Path] = set()
-    sources: list[Path] = []
-    while queue:
-        path = queue.pop()
-        path = path.resolve()
-        if path in visited or not path.is_file():
-            continue
-        visited.add(path)
-        sources.append(path)
-        try:
-            imports = _imports_for(path)
-        except (OSError, UnicodeError):
-            continue
-        for import_path in imports:
-            resolved = resolve_import(root, path, import_path)
-            if resolved is not None:
-                queue.append(resolved[0])
-
-    runtime_receivers = {
-        receiver
-        for receiver, _method in function.external_calls
-        if receiver not in {"abi", "block", "msg", "tx", "type", "super"}
-    }
-    bindings: list[tuple[str, object]] = []
-    for receiver in sorted(runtime_receivers):
-        declaration = re.compile(
-            rf"\\b(?P<type>[A-Za-z_]\\w*)\\s+(?:(?:public|private|internal|external|immutable|constant)\\s+)*"
-            rf"{re.escape(receiver)}\\s*;"
-        )
-        for path in sources:
-            try:
-                source = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeError):
-                continue
-            match = declaration.search(source)
-            if not match:
-                continue
-            interface_name = match.group("type")
-            assignment = re.search(
-                rf"\\b{re.escape(receiver)}\\s*=\\s*{re.escape(interface_name)}\\s*\\(\\s*(?P<parameter>[A-Za-z_]\\w*)\\s*\\)",
-                source,
-            )
-            if assignment is None or assignment.group("parameter") not in constructor_parameters:
-                continue
-            try:
-                resolved = resolve_interface(root, path, interface_name)
-            except (FileNotFoundError, ValueError, OSError, UnicodeError):
-                continue
-            item = (assignment.group("parameter"), resolved)
-            if item not in bindings:
-                bindings.append(item)
-            break
-    return tuple(bindings)
 
 def _function_body(source: str, function_name: str) -> str:
     match = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\([^)]*\)[^{{;]*{{", source)
@@ -550,7 +474,7 @@ def _legacy_callback_test(
             f"callback input arity mismatch for {function.name}: "
             f"expected {len(function.parameters)}, got {len(arguments)}"
         )
-    runtime_bindings = _runtime_dependency_constructor_bindings(contract_model, function)
+    runtime_bindings = runtime_dependency_constructor_bindings(contract_model, function)
     runtime_stub_source, runtime_stub_variables = _runtime_stub_source(
         runtime_bindings, (), (), False, output_path
     )
