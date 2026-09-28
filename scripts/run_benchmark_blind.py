@@ -33,6 +33,7 @@ from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 from cydra.target_adapter import inspect_target
 from cydra.execution_readiness import constructible_state_setup_plan, inspect_execution_readiness, role_address_expression
+from cydra.exploration import ExplorationState
 from cydra.prerequisite_graph import apply_observations, build_prerequisite_graph, can_enter_security_experiment
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
@@ -146,6 +147,7 @@ FREEZE_FILES = (
     "execution-human.txt",
     "integrity-check.json",
     "classification.json",
+    "exploration-state.json",
     "manifest.sha256",
     "README.md",
 )
@@ -1158,6 +1160,7 @@ def run_source_investigation(
                 "target_function": hypothesis.target_function,
                 "readiness": readiness,
             })
+        exploration_state = ExplorationState.from_investigation(result)
         build_capture = _command_capture(project, "forge", "build")
         provenance_env, _, forge_config_text = _environment_provenance(root, project)
 
@@ -1259,6 +1262,7 @@ def run_source_investigation(
             "experiments.json": result.experiments,
             "execution.json": execution_json,
             "classification.json": classification,
+            "exploration-state.json": exploration_state,
         }
         create_freeze(files, text_files, freeze)
 
