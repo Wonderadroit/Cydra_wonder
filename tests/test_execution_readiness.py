@@ -884,6 +884,42 @@ def test_execution_readiness_treats_msg_value_equal_parameter_as_constructible_i
     assert requirement.category == "unknown"
 
 
+def test_runtime_dependency_constructor_interface_binding_is_constructible(tmp_path):
+    helper = tmp_path / "IHelper.sol"
+    helper.write_text(
+        """
+        interface IHelper {
+            function performChecks() external view returns (uint256[] memory);
+        }
+        """,
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        import "./IHelper.sol";
+        contract Target {
+            IHelper internal helper;
+            constructor(address helper_) {
+                helper = IHelper(helper_);
+            }
+            function run() external {
+                helper.performChecks();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = next(item for item in readiness.runtime_requirements)
+    assert requirement.status == "constructible"
+    assert "generic runtime-stub capability" in requirement.detail
+
+
 def test_state_setup_planner_can_use_internal_state_writer_without_hardcoding(tmp_path):
     source = tmp_path / "Target.sol"
     source.write_text(
