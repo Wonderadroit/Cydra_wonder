@@ -47,7 +47,7 @@ def _source_graph(contract: ContractModel) -> tuple[Path, ...]:
         except (OSError, UnicodeError):
             continue
         paths.append(path)
-        for match in re.finditer(r"""import\\s+(?:[^"']+\\s+from\\s+)?["']([^"']+)["']\\s*;""", text):
+        for match in re.finditer(r"""import\s+(?:[^"']+\s+from\s+)?["']([^"']+)["']\s*;""", text):
             imported = Path(match.group(1))
             candidate = (path.parent / imported).resolve()
             if candidate.exists():
