@@ -5,7 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .interface_resolver import ResolvedInterface, resolve_interface, resolve_named_type_source
-from .models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
+from .models import ConstructorModel, ContractModel, FunctionModel, ModifierModel, ParameterModel
 
 
 _CONTRACT_RE = re.compile(r"\b(?:contract|library)\s+(?P<name>\w+)(?:\s+is\s+(?P<inherits>[^\{]+))?")
@@ -15,6 +15,10 @@ _FUNCTION_RE = re.compile(
 )
 _CONSTRUCTOR_RE = re.compile(
     r"\bconstructor\s*\(([^)]*)\)\s*([^\{;]*)\{", re.MULTILINE
+)
+_MODIFIER_RE = re.compile(
+    r"\bmodifier\s+(?P<name>[A-Za-z_]\w*)\s*\((?P<parameters>[^)]*)\)\s*[^\{;]*\{",
+    re.MULTILINE,
 )
 _INTERFACE_CAST_RE = re.compile(r"\b(I[A-Z]\w*)\s*\(")
 _DECLARED_TYPE_RE = re.compile(
@@ -604,6 +608,75 @@ def _constructor_interface_casts(
     return tuple(casts), tuple(resolved_casts), tuple(derived_casts)
 
 
+def _modifier_models(contract_source: str, source: str, contract_start: int, function_names: set[str]) -> tuple[ModifierModel, ...]:
+    """Extract modifier definitions without interpreting their authorization semantics."""
+    modifiers: list[ModifierModel] = []
+    for match in _MODIFIER_RE.finditer(contract_source):
+        body = _body(contract_source, match.end() - 1)
+        modifiers.append(
+            ModifierModel(
+                name=match.group("name"),
+                parameters=_parameters(match.group("parameters")),
+                body=body,
+                line=_line_number(source, contract_start + match.start()),
+                internal_calls=_internal_calls(body, function_names),
+            )
+        )
+    return tuple(modifiers)
+
+
+def _modifier_invocations(signature_tail: str, keywords: set[str]) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Preserve modifier invocation arguments from a function signature."""
+    invocations: list[tuple[str, tuple[str, ...]]] = []
+    for match in re.finditer(r"\b([A-Za-z_]\w*)\s*(?:\(([^()]*)\))?", signature_tail):
+        name = match.group(1)
+        if name in keywords:
+            continue
+        args = () if match.group(2) is None else tuple(
+            item.strip() for item in _split_parameters(match.group(2)) if item.strip()
+        )
+        item = (name, args)
+        if item not in invocations:
+            invocations.append(item)
+    return tuple(invocations)
+
+
+def _inherited_modifiers(
+    root: Path,
+    importer: Path,
+    inherits: tuple[str, ...],
+    seen: set[Path] | None = None,
+) -> tuple[ModifierModel, ...]:
+    """Resolve concrete inherited modifiers through the source inheritance graph."""
+    seen = set() if seen is None else seen
+    modifiers: list[ModifierModel] = []
+    for inherited_name in inherits:
+        try:
+            source_path, _method = resolve_named_type_source(root, importer, inherited_name)
+        except (FileNotFoundError, ValueError):
+            continue
+        resolved_path = (root / source_path).resolve()
+        if resolved_path in seen:
+            continue
+        seen.add(resolved_path)
+        try:
+            contracts = parse_solidity(resolved_path, include_inherited=False)
+        except (OSError, UnicodeError):
+            continue
+        base = next((item for item in contracts if item.name == inherited_name), None)
+        if base is None:
+            continue
+        modifiers.extend(base.modifiers)
+        modifiers.extend(_inherited_modifiers(root, resolved_path, base.inherits, seen))
+    deduped: list[ModifierModel] = []
+    seen_names: set[str] = set()
+    for modifier in modifiers:
+        if modifier.name not in seen_names:
+            seen_names.add(modifier.name)
+            deduped.append(modifier)
+    return tuple(deduped)
+
+
 def _inherited_functions(
     root: Path,
     importer: Path,
@@ -734,6 +807,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
             match.group(1)
             for match in _FUNCTION_RE.finditer(contract_source)
         }
+        contract_modifiers = _modifier_models(contract_source, source, contract_start, function_names)
 
         for match in _FUNCTION_RE.finditer(contract_source):
             name = match.group(1)
@@ -758,7 +832,8 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                     continue
                 if depth == 0 and token not in solidity_signature_keywords:
                     modifier_tokens.append(token)
-            modifiers = tuple(modifier_tokens)
+            modifier_names = tuple(modifier_tokens)
+            modifier_invocations = _modifier_invocations(signature_tail, solidity_signature_keywords)
             visibility_match = re.search(r"\b(public|external|internal|private)\b", signature_tail)
             visibility = visibility_match.group(1) if visibility_match else "unspecified"
             write_candidates = re.findall(
@@ -780,7 +855,8 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                 FunctionModel(
                     name=name,
                     visibility=visibility,
-                    modifiers=modifiers,
+                    modifiers=modifier_names,
+                    modifier_invocations=modifier_invocations,
                     writes=writes,
                     external_calls=external_calls,
                     line=_line_number(source, contract_start + match.start()),
@@ -810,6 +886,8 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                 declared_types=declared_types,
                 inherited_resolved_interfaces=tuple(inherited_resolved_interfaces),
                 inherited_functions=_inherited_functions(root, path, inherits) if include_inherited else (),
+                modifiers=contract_modifiers,
+                inherited_modifiers=_inherited_modifiers(root, path, inherits) if include_inherited else (),
             )
         )
 
