@@ -1423,6 +1423,7 @@ def constructible_state_setup_plan(
             state for state in planned_state_names
             if _state_observation_has_default_solution(contract, fn, state)
         }
+        all_planned_state_names = set(planned_state_names)
         planned_state_names.difference_update(default_satisfied_states)
         state_writer_names = {
             state: tuple(writer.name for writer in writers_for(state))
@@ -1435,7 +1436,7 @@ def constructible_state_setup_plan(
                 and item.category == "state_observation"
                 and not any(
                     state in item.subject and state in default_satisfied_states
-                    for state in planned_state_names
+                    for state in all_planned_state_names
                 )
                 and any(
                     state in item.subject and state_writer_names.get(state)
