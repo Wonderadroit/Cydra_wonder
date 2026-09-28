@@ -10,7 +10,7 @@ from .models import ContractModel, FunctionModel
 from .ast_dataflow import SemanticRelationshipEvidence
 from .semantic_state_effects import build_state_effect_index, state_reads_for_function, state_writes_for_function
 from .namespaced_state_observation import plan_namespaced_state_observation
-from .solidity_model import parse_solidity
+from .solidity_model import parse_solidity, _resolve_inherited_contract_source
 
 
 @dataclass(frozen=True)
@@ -222,10 +222,11 @@ def _constructor_role_grants(contract: ContractModel) -> tuple[tuple[str, str], 
         current_path = Path(current.source).resolve()
         for inherited_name in current.inherits:
             try:
-                resolved, _ = resolve_named_type_source(project_root, current_path, inherited_name)
-            except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                resolved_path = _resolve_inherited_contract_source(project_root, current_path, inherited_name)
+            except (OSError, UnicodeError):
                 continue
-            resolved_path = (project_root / resolved).resolve()
+            if resolved_path is None:
+                continue
             if resolved_path in visited:
                 continue
             visited.add(resolved_path)
