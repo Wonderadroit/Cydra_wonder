@@ -36,3 +36,17 @@ LLMs propose. Tools test. Evidence decides.
 ## Continuation requirement
 
 Never assume an earlier chat message is authoritative. The latest repository checkpoint, workflow artifact, and commit history are authoritative.
+
+
+## Current architectural direction: recursive exploration
+
+The next generic capability is recursive target exploration built on the existing model/reasoning/evidence machinery.
+
+Use `src/cydra/exploration.py` as the current boundary:
+- derive frontier questions from the existing investigation result;
+- prefer unresolved hypotheses with executable experiments;
+- retain uncovered functions/state surfaces as explicit exploration questions;
+- enforce an investigation budget;
+- never invent target facts or bypass readiness.
+
+The intended loop is **model → frontier → test → evidence → updated model/frontier → repeat**. Connect this to the canonical live orchestration before adding more individual detectors.
