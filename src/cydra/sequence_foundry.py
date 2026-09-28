@@ -11,6 +11,15 @@ from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
 
 
+def _solidity_string_literal(value: str) -> str:
+    """Encode arbitrary diagnostic text as a valid Solidity string literal."""
+    return (
+        '"'
+        + value.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+        + '"'
+    )
+
+
 def generate_sequence_test_from_experiment(
     hypothesis: Hypothesis,
     experiment: Experiment,
@@ -66,7 +75,7 @@ def generate_sequence_test_from_experiment(
                     "security sequence must fail closed"
                 )
             rendered.extend(
-                f'        assertTrue({observation.expression}, "unverified prerequisite: {observation.predicate}");'
+                f"        assertTrue({observation.expression}, {_solidity_string_literal(f'unverified prerequisite: {observation.predicate}')});"
                 for observation in observations
             )
             break
