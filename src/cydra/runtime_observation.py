@@ -25,8 +25,43 @@ _MAPPING_RE = re.compile(
 )
 
 
-def _public_mapping_getters(source: str) -> set[str]:
-    return {match.group("name") for match in _MAPPING_RE.finditer(source)}
+def _source_graph(contract: ContractModel) -> tuple[Path, ...]:
+    """Return the target source plus reachable local Solidity imports.
+
+    Public state may be declared in an inherited contract rather than the
+    concrete target file. Observation planning must therefore inspect the
+    source graph, while remaining fail-closed for unresolved imports.
+    """
+    root = Path(contract.source).resolve()
+    seen: set[Path] = set()
+    pending = [root]
+    paths: list[Path] = []
+
+    while pending:
+        path = pending.pop()
+        if path in seen:
+            continue
+        seen.add(path)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        paths.append(path)
+        for match in re.finditer(r"""import\\s+(?:[^"']+\\s+from\\s+)?["']([^"']+)["']\\s*;""", text):
+            imported = Path(match.group(1))
+            candidate = (path.parent / imported).resolve()
+            if candidate.exists():
+                pending.append(candidate)
+
+    return tuple(paths)
+
+
+def _public_mapping_getters(sources: tuple[str, ...]) -> set[str]:
+    return {
+        match.group("name")
+        for source in sources
+        for match in _MAPPING_RE.finditer(source)
+    }
 
 
 def plan_public_mapping_state_observations(
@@ -34,11 +69,14 @@ def plan_public_mapping_state_observations(
     predicate: str,
 ) -> tuple[StateObservationPlan, ...]:
     """Plan a public mapping observation for a source-backed state predicate."""
-    try:
-        source = Path(contract.source).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
+    sources = _source_graph(contract)
+    if not sources:
         return ()
-    getters = _public_mapping_getters(source)
+    source_texts = tuple(
+        path.read_text(encoding="utf-8")
+        for path in sources
+    )
+    getters = _public_mapping_getters(source_texts)
     normalized = re.sub(r"\s+", " ", predicate).strip()
 
     # Positive mapping relation, optionally paired with a non-zero address guard.
