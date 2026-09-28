@@ -696,6 +696,41 @@ def test_execution_value_bindings_capture_tuple_assigned_external_call_outcomes(
 
 
 
+def test_inherited_modifier_from_scoped_dependency_is_resolved(tmp_path: Path) -> None:
+    access = tmp_path / "node_modules" / "@openzeppelin" / "contracts" / "access" / "AccessControl.sol"
+    access.parent.mkdir(parents=True)
+    access.write_text(
+        """
+        abstract contract AccessControl {
+            modifier onlyRole(bytes32 role) {
+                require(hasRole(role, msg.sender));
+                _;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    base = tmp_path / "HinkalBase.sol"
+    base.write_text(
+        'import "@openzeppelin/contracts/access/AccessControl.sol";\n'
+        "contract HinkalBase is AccessControl {}\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        'import "./HinkalBase.sol";\n'
+        "contract Target is HinkalBase {\n"
+        "    function register() external onlyRole(DEFAULT_ADMIN_ROLE) {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(target)[0]
+
+    assert any(modifier.name == "onlyRole" for modifier in contract.inherited_modifiers)
+    assert any("hasRole(role, msg.sender)" in modifier.body for modifier in contract.inherited_modifiers)
+
+
 def test_modifier_definitions_and_invocation_arguments_are_preserved(tmp_path: Path) -> None:
     path = tmp_path / "ModifierModel.sol"
     path.write_text(
