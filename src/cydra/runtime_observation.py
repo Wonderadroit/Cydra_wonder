@@ -111,6 +111,7 @@ def plan_public_state_observations(
     polarities = dict(function.state_predicate_polarities)
     plans: list[StateObservationPlan] = []
 
+    # Direct scalar predicates remain the first observation surface.
     for predicate in function.state_predicates:
         polarity = polarities.get(predicate, "unknown")
         if polarity not in {"must_hold", "must_not_hold"}:
@@ -135,4 +136,34 @@ def plan_public_state_observations(
                 source=f"{contract.source}:{function.line}",
             )
         )
-    return tuple(plans)
+
+    # Internal execution predicates are part of the target-derived state model.
+    # Reuse the generic public-mapping observer for predicates reached through
+    # the modeled same-contract call graph; never name a target-specific state.
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    visited: set[str] = set()
+
+    def visit(current) -> None:
+        if current.name in visited:
+            return
+        visited.add(current.name)
+        for predicate in current.execution_predicates:
+            plans.extend(plan_public_mapping_state_observations(contract, predicate))
+        try:
+            source_text = Path(contract.source).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return
+        match_body = re.search(
+            rf"\bfunction\s+{re.escape(current.name)}\s*\([^)]*\)[^{{;]*{{(?P<body>.*?)\n\s*}}",
+            source_text,
+            re.DOTALL,
+        )
+        if not match_body:
+            return
+        for call in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", match_body.group("body")):
+            callee = functions.get(call.group(1))
+            if callee is not None:
+                visit(callee)
+
+    visit(function)
+    return tuple(dict((plan.predicate, plan) for plan in plans).values())
