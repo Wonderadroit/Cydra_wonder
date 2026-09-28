@@ -273,3 +273,42 @@ def apply_exploration_evidence(
         hypotheses=hypotheses,
         evidence=tuple(by_id.values()),
     )
+
+
+@dataclass(frozen=True)
+class ExplorationRun:
+    state: ExplorationState
+    result: InvestigationResult
+    rounds: int
+    stopped_reason: str
+
+
+def run_bounded_exploration(
+    result: InvestigationResult,
+    *,
+    budget: float,
+    execute_question: Callable[[InvestigationResult, ExplorationDecision], tuple[InvestigationResult, tuple["Evidence", ...]]],
+) -> ExplorationRun:
+    """Drive bounded frontier feedback through the existing execution boundary.
+
+    The callback is injected: the exploration layer chooses questions, while the
+    canonical runner owns readiness, generation, execution, classification, and
+    causal verification. No second executor is introduced.
+    """
+    state = ExplorationState.from_investigation(result)
+    rounds = 0
+    while state.budget_used < budget:
+        remaining = budget - state.budget_used
+        decision = select_next_question(state, remaining)
+        if decision is None:
+            return ExplorationRun(state, result, rounds, "frontier_exhausted_or_budget_insufficient")
+        updated_result, evidence = execute_question(result, decision)
+        result = apply_exploration_evidence(updated_result, decision, evidence)
+        state = record_exploration_step(
+            state,
+            decision,
+            evidence_ids=tuple(item.evidence_id for item in evidence),
+        )
+        state = refresh_exploration_frontier(result, state)
+        rounds += 1
+    return ExplorationRun(state, result, rounds, "budget_exhausted")
