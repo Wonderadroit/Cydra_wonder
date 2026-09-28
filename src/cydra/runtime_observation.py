@@ -19,6 +19,68 @@ class StateObservationPlan:
     source: str
 
 
+_MAPPING_RE = re.compile(
+    r"mapping\s*\(\s*(?P<key>[^=]+?)\s*=>\s*(?P<value>[^)]+?)\s*\)\s+"
+    r"(?P<visibility>public)\s+(?P<name>[A-Za-z_]\w*)\s*;"
+)
+
+
+def _public_mapping_getters(source: str) -> set[str]:
+    return {match.group("name") for match in _MAPPING_RE.finditer(source)}
+
+
+def plan_public_mapping_state_observations(
+    contract: ContractModel,
+    predicate: str,
+) -> tuple[StateObservationPlan, ...]:
+    """Plan a public mapping observation for a source-backed state predicate."""
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ()
+    getters = _public_mapping_getters(source)
+    normalized = re.sub(r"\s+", " ", predicate).strip()
+
+    # Positive mapping relation, optionally paired with a non-zero address guard.
+    match = re.fullmatch(
+        r"(?P<state>[A-Za-z_]\w*)\s*\[(?P<key>[^\]]+)\]\s*==\s*"
+        r"(?P<value>[^&]+?)(?:\s*&&\s*(?P=state)\s*\[\s*(?P=key)\s*\]\s*!=\s*address\(0\))?",
+        normalized,
+    )
+    if match and match.group("state") in getters:
+        state = match.group("state")
+        key = match.group("key").strip()
+        value = match.group("value").strip()
+        condition = f"target.{state}({key}) == {value}"
+        return (StateObservationPlan(
+            state=state,
+            getter=f"target.{state}({key})",
+            expression=condition,
+            predicate=predicate,
+            polarity="must_hold",
+            source=f"{contract.source}:mapping",
+        ),)
+
+    # Default-false mapping guard.
+    match = re.fullmatch(
+        r"!\s*(?P<state>[A-Za-z_]\w*)\s*\[(?P<key>[^\]]+)\]",
+        normalized,
+    )
+    if match and match.group("state") in getters:
+        state = match.group("state")
+        key = match.group("key").strip()
+        condition = f"target.{state}({key}) == false"
+        return (StateObservationPlan(
+            state=state,
+            getter=f"target.{state}({key})",
+            expression=condition,
+            predicate=predicate,
+            polarity="must_hold",
+            source=f"{contract.source}:mapping",
+        ),)
+    return ()
+
+
 _PUBLIC_SCALAR_RE = re.compile(
     r"\b(?P<type>(?:uint\d*|int\d*|bool|address|bytes\d*))\s+"
     r"(?P<visibility>public)\s+(?P<name>[A-Za-z_]\w*)\s*(?:=[^;]*)?;"
