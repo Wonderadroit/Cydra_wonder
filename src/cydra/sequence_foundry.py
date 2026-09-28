@@ -138,7 +138,7 @@ def generate_sequence_test_from_experiment(
                     )
         if verify_state_prerequisites and function.name == hypothesis.target_function:
             observations = plan_public_state_observations(contract_model, function)
-            if function.state_predicates and not observations:
+            if not observations:
                 raise ValueError(
                     "state prerequisite has no deterministic public runtime observation; "
                     "security sequence must fail closed"
