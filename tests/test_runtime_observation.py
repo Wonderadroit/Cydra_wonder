@@ -125,3 +125,31 @@ def test_public_mapping_state_observation_accepts_override_modifier(tmp_path):
     plans = plan_public_state_observations(model, model.functions[0])
     assert len(plans) == 1
     assert plans[0].getter == "target.externalActionMap(id)"
+
+
+def test_public_mapping_observation_accepts_separate_nonzero_guard(tmp_path):
+    base = tmp_path / "Base.sol"
+    base.write_text(
+        "contract Base { mapping(uint256 => address) public externalActionMap; }",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'import "./Base.sol"; contract Target is Base {}',
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "use", "external", (), (), (), 1,
+                execution_predicates=(
+                    "externalActionMap[id] == externalAddress && externalAddress != address(0)",
+                ),
+            ),
+        ),
+    )
+    plans = plan_public_state_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].getter == "target.externalActionMap(id)"
