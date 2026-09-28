@@ -1321,6 +1321,38 @@ def _state_setup_candidates(
     return tuple(dict.fromkeys(candidates))
 
 
+def _state_observation_has_default_solution(
+    contract: ContractModel,
+    function: FunctionModel,
+    state: str,
+) -> bool:
+    """Recognize state predicates whose required value is Solidity's zero/default value."""
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    visited: set[str] = set()
+
+    def visit(current: FunctionModel) -> bool:
+        if current.name in visited:
+            return False
+        visited.add(current.name)
+        polarities = dict(current.execution_predicate_polarities)
+        for predicate in current.execution_predicates:
+            if polarities.get(predicate) != "must_hold":
+                continue
+            normalized = re.sub(r"\s+", " ", predicate).strip()
+            if re.fullmatch(rf"!\s*{re.escape(state)}\s*\[[^\]]+\]", normalized):
+                return True
+            if re.fullmatch(rf"{re.escape(state)}\s*\[[^\]]+\]\s*==\s*false", normalized):
+                return True
+        body = _source_function_body(contract, current)
+        for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
+            callee = functions.get(match.group(1))
+            if callee is not None and visit(callee):
+                return True
+        return False
+
+    return visit(function)
+
+
 def constructible_state_setup_plan(
     contract: ContractModel,
     function: FunctionModel,
@@ -1379,6 +1411,11 @@ def constructible_state_setup_plan(
             return None
         readiness = inspect_execution_readiness(contract, fn, constraints, semantic_evidence)
 
+        default_satisfied_states = {
+            state for state in planned_state_names
+            if _state_observation_has_default_solution(contract, fn, state)
+        }
+
         # A state-observation prerequisite is not itself a reason to abandon
         # planning when the target model already exposes a writer for that
         # exact state. The writer must still pass its own readiness checks below;
@@ -1387,6 +1424,11 @@ def constructible_state_setup_plan(
         # prerequisites remain hard blockers, and state with no writer remains
         # unresolved.
         planned_state_names = set(required_state_names(fn))
+        default_satisfied_states = {
+            state for state in planned_state_names
+            if _state_observation_has_default_solution(contract, fn, state)
+        }
+        planned_state_names.difference_update(default_satisfied_states)
         state_writer_names = {
             state: tuple(writer.name for writer in writers_for(state))
             for state in planned_state_names
@@ -1396,6 +1438,10 @@ def constructible_state_setup_plan(
             if (
                 item.status == "unresolved"
                 and item.category == "state_observation"
+                and not any(
+                    state in item.subject and state in default_satisfied_states
+                    for state in planned_state_names
+                )
                 and any(
                     state in item.subject and state_writer_names.get(state)
                     for state in planned_state_names
