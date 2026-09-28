@@ -284,8 +284,7 @@ def test_sequence_renderer_escapes_multiline_prerequisite_diagnostics(tmp_path):
     )
     rendered = generated.read_text(encoding="utf-8")
     assert 'assertTrue(target.epoch() > 0 &&\\nepoch < 10, "unverified prerequisite: epoch > 0 &&\\nepoch < 10");' in rendered
-    assert 'unverified prerequisite: epoch > 0 &&\nepoch < 10' in rendered
-    assert "\n        assertTrue" not in rendered
+    assert 'epoch > 0 &&\nepoch < 10' not in rendered
 
 
 def test_sequence_renderer_can_verify_source_backed_state_relation(tmp_path):
