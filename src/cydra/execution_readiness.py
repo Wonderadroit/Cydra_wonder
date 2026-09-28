@@ -1000,7 +1000,7 @@ def _internal_execution_requirements(
                     execution_capabilities,
                 )
                 predicate_state_names = {
-                    name for name in re.findall(r"\\b[A-Za-z_]\\w*\\b", predicate)
+                    name for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
                     if name in set(contract.state_variables)
                 }
                 state_setup = (
