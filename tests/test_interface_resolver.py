@@ -160,3 +160,57 @@ def test_resolves_interface_through_transitive_import_graph(tmp_path: Path) -> N
     assert resolved.source_path == "contracts/types/IMerkle.sol"
     assert resolved.resolution_method == "relative_import"
     assert resolved.declared_types == ("MerkleConstructorArgs",)
+
+
+def test_resolves_import_through_foundry_toml_remapping(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "foundry.toml",
+        '[profile.default]\nremappings = ["@oz/=lib/openzeppelin/contracts/"]\n',
+    )
+    _write(
+        root / "contracts" / "Token.sol",
+        'import "@oz/token/IERC20.sol";\ncontract Token {}\n',
+    )
+    _write(
+        root / "lib" / "openzeppelin" / "contracts" / "token" / "IERC20.sol",
+        "interface IERC20 { function decimals() external view returns (uint8); }\n",
+    )
+
+    resolved = resolve_interface(root, root / "contracts" / "Token.sol", "IERC20")
+
+    assert resolved.source_path == "lib/openzeppelin/contracts/token/IERC20.sol"
+    assert resolved.resolution_method == "remapping"
+
+
+def test_resolves_import_through_bounded_foundry_dependency_path(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "Token.sol",
+        'import "@openzeppelin/contracts/access/IAccessControl.sol";\ncontract Token {}\n',
+    )
+    _write(
+        root / "lib" / "openzeppelin-contracts" / "contracts" / "access" / "IAccessControl.sol",
+        "interface IAccessControl { function hasRole(bytes32, address) external view returns (bool); }\n",
+    )
+
+    resolved = resolve_interface(root, root / "contracts" / "Token.sol", "IAccessControl")
+
+    assert resolved.source_path == "lib/openzeppelin-contracts/contracts/access/IAccessControl.sol"
+    assert resolved.resolution_method == "dependency_path"
+
+
+def test_ambiguous_dependency_path_fails_closed(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "Token.sol",
+        'import "@vendor/contracts/access/IAccessControl.sol";\ncontract Token {}\n',
+    )
+    for name in ("one", "two"):
+        _write(
+            root / "lib" / name / "contracts" / "access" / "IAccessControl.sol",
+            "interface IAccessControl {}\n",
+        )
+
+    with pytest.raises(FileNotFoundError):
+        resolve_interface(root, root / "contracts" / "Token.sol", "IAccessControl")
