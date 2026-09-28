@@ -77,7 +77,7 @@ class ExplorationState:
         eligible = [
             question
             for question in self.unresolved_questions
-            if question.question_id not in self.explored_hypothesis_ids
+            if (question.hypothesis_id is None or question.hypothesis_id not in self.explored_hypothesis_ids)
             and question.estimated_cost <= remaining_budget
         ]
         if not eligible:
