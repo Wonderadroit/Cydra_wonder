@@ -398,6 +398,7 @@ def _resolved_interface_method(contract: ContractModel, receiver: str, method: s
 def runtime_dependency_constructor_bindings(
     contract_model: ContractModel,
     function: FunctionModel,
+    receiver_name: str | None = None,
 ) -> tuple[tuple[str, object], ...]:
     """Resolve state-backed external receivers that can be materialized generically."""
     source_path = Path(contract_model.source).resolve()
@@ -435,6 +436,7 @@ def runtime_dependency_constructor_bindings(
     runtime_receivers = {
         receiver for receiver, _method in function.external_calls
         if receiver not in {"abi", "block", "msg", "tx", "type", "super"}
+        and (receiver_name is None or receiver == receiver_name)
     }
     bindings: list[tuple[str, object]] = []
     for receiver in sorted(runtime_receivers):
@@ -517,7 +519,7 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
         )
         constructible_binding = bool(
             (configured or configured_cast)
-            and runtime_dependency_constructor_bindings(contract, function)
+            and runtime_dependency_constructor_bindings(contract, function, receiver)
         )
         status = (
             "constructible"
