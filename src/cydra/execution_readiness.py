@@ -1532,7 +1532,11 @@ def constructible_state_setup_plan(
                 # second target-specific proof path.
                 if constructible_candidates.get((state, writer.name)) is not None:
                     writer_states = tuple(
-                        item for item in required_state_names(writer)
+                        item
+                        for item in (
+                            *required_state_names(writer),
+                            *_state_names_from_internal_predicates(contract, writer),
+                        )
                         if not _state_observation_has_default_solution(contract, writer, item)
                     )
                     if not writer_states:
