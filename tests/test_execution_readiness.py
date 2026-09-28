@@ -884,6 +884,33 @@ def test_execution_readiness_treats_msg_value_equal_parameter_as_constructible_i
     assert requirement.category == "unknown"
 
 
+def test_state_setup_planner_accepts_default_false_mapping_guard(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(bytes32 => bool) used;
+            function run(bytes32 key) external {
+                verify(key);
+            }
+            function verify(bytes32 key) internal {
+                require(!used[key]);
+            }
+            function mark(bytes32 key) external {
+                used[key] = true;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "run")
+    plan = constructible_state_setup_plan(contract, function)
+    assert plan == ()
+
+
 def test_runtime_dependency_constructor_interface_binding_is_constructible(tmp_path):
     helper = tmp_path / "IHelper.sol"
     helper.write_text(
