@@ -76,3 +76,18 @@ def test_frontier_is_budget_bounded():
     state = ExplorationState.from_investigation(_result())
 
     assert state.next_question(remaining_budget=0.5) is None
+
+
+def test_frontier_does_not_reselect_explored_hypothesis():
+    state = ExplorationState.from_investigation(_result())
+    state = ExplorationState(
+        **{
+            **state.__dict__,
+            "explored_hypothesis_ids": ("H-1",),
+        }
+    )
+
+    question = state.next_question(remaining_budget=2.0)
+
+    assert question is not None
+    assert question.hypothesis_id != "H-1"
