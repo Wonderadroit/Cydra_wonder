@@ -2010,3 +2010,18 @@ PR #229 subsequently rebased the state-relation mismatch evidence boundary onto 
 The immediate next boundary remains behavioral and causal: use the newly connected shared-state discovery surface and mismatch evidence in unfamiliar-target campaigns, then diagnose whether CYDRA can turn a generic state inconsistency into a discriminating causal experiment and independently reproducible impact without benchmark-specific PoCs. Do not add another detector unless an unfamiliar investigation demonstrates a missing general capability.
 
 Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+
+
+## Milestone 91 — recursive target exploration frontier
+
+The live-target dogfood cycle exposed a higher-level orchestration gap: CYDRA can already build a target/system model, derive invariants and hypotheses, plan experiments, track execution readiness, collect evidence, and preserve causal/finding gates, but it did not yet maintain a generic exploration frontier that decides what unresolved part of the model should be investigated next.
+
+The new `src/cydra/exploration.py` layer introduces a class-neutral `ExplorationState` and `ExplorationQuestion`. It derives frontier questions from the existing `InvestigationResult` rather than creating a parallel target model. Proposed hypotheses with experiments become testable frontier items; functions and state surfaces not yet covered by a hypothesis remain explicit model-understanding questions instead of being silently skipped. Selection is bounded by an investigation budget and ranks questions by expected information gain per estimated cost.
+
+This is an orchestration capability, not a vulnerability detector. It does not invent target facts, promote hypotheses, execute tests, or bypass readiness. Existing reasoning surfaces, experiment planners, execution-readiness machinery, evidence handling, causal verification, and the finding gate remain authoritative. The intended future loop is:
+
+**model → frontier → hypothesis/test selection → execution → evidence → model/frontier update → repeat**
+
+The frontier must remain generic and target-derived. LLM reasoning may consume the current frontier and evidence to propose hypotheses, but deterministic tools and evidence decide whether those hypotheses survive. No target-specific hypothesis, benchmark expansion, or maturity-gate reopening is permitted.
+
+Regression coverage is required for budget-bounded frontier selection and for preserving uncovered function/state surfaces as explicit questions. The next implementation boundary is to connect this frontier state to the existing canonical live orchestration so one run can consume an updated frontier repeatedly, rather than requiring the human operator to manually choose the next investigation step.
