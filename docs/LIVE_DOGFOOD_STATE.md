@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current engineering head: `35c25d1302046cfc16fbe188062cb28c23ea4050`
+- Current engineering head: `30274e1938be382fd7e249aa488e76efed948c8d`
 
 ## Latest validated live run
 
@@ -151,3 +151,17 @@ Next action: validate this repair in CI, then rerun the same canonical Hinkal wo
 ## Automatic checkpoint format
 
 After each canonical workflow run, the workflow updates the run/artifact/commit metadata in this file. Human/agent engineering changes should update the diagnosis and next-action sections.
+
+
+## Exploration frontier integration
+
+The generic recursive exploration layer is now persisted in every canonical source freeze as `exploration-state.json`.
+
+- `ExplorationState.from_investigation()` derives the frontier from the existing model/hypotheses/experiments/evidence.
+- Proposed hypotheses with executable experiments are prioritized by information-gain-per-cost.
+- Functions and state surfaces without hypothesis coverage remain explicit unresolved questions.
+- The frontier is budget-bounded and fail-closed; it does not invent vulnerabilities or bypass readiness.
+
+Current status: **implemented and artifact-wired, not yet exercised by a new canonical Hinkal run**.
+
+Next action: validate the new module and freeze wiring, then run the same canonical Hinkal workflow. Inspect `exploration-state.json` first and use the live artifact to identify the next missing generic capability.
