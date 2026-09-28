@@ -1,3 +1,51 @@
+def test_constructor_established_role_satisfies_inherited_only_role_for_deployer(tmp_path: Path) -> None:
+    access = tmp_path / "AccessControl.sol"
+    access.write_text(
+        """
+        abstract contract AccessControl {
+            modifier onlyRole(bytes32 role) {
+                require(hasRole(role, msg.sender));
+                _;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    base = tmp_path / "Base.sol"
+    base.write_text(
+        """
+        import "./AccessControl.sol";
+        contract Base is AccessControl {
+            constructor() {
+                _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        """
+        import "./Base.sol";
+        contract Target is Base {
+            function register(uint256 id, address action)
+                external
+                onlyRole(DEFAULT_ADMIN_ROLE)
+            {}
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(target)[0]
+    function = contract.functions[0]
+    requirements = _caller_requirements(function, contract)
+
+    assert requirements
+    assert requirements[0].status == "constraint"
+    assert "deployment caller" in requirements[0].detail
+
+
 from dataclasses import replace
 from pathlib import Path
 
