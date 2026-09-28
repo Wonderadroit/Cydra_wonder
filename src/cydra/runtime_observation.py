@@ -149,13 +149,34 @@ def plan_public_state_observations(
         visited.add(current.name)
         for predicate in current.execution_predicates:
             plans.extend(plan_public_mapping_state_observations(contract, predicate))
-        # The parser already records same-contract calls as structured model
-        # provenance. Reuse that graph instead of reparsing Solidity source with
-        # a regex that cannot safely match nested braces.
-        for call_name in current.internal_calls:
-            callee = functions.get(call_name)
-            if callee is not None:
-                visit(callee)
+        # Follow same-contract calls from the source with brace-aware
+        # function-body extraction. This mirrors the target model's provenance
+        # without relying on a regex that terminates at an inner closing brace.
+        try:
+            source = Path(contract.source).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return
+        marker = re.search(rf"\bfunction\s+{re.escape(current.name)}\s*\([^)]*\)[^{{;]*{{", source)
+        if marker:
+            start = marker.end()
+            depth = 1
+            index = start
+            while index < len(source) and depth:
+                if source[index] == "{":
+                    depth += 1
+                elif source[index] == "}":
+                    depth -= 1
+                index += 1
+            body = source[start:index - 1] if depth == 0 else ""
+            seen_calls: set[str] = set()
+            for call in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
+                name = call.group(1)
+                if name in seen_calls:
+                    continue
+                seen_calls.add(name)
+                callee = functions.get(name)
+                if callee is not None:
+                    visit(callee)
 
     visit(function)
     return tuple(dict((plan.predicate, plan) for plan in plans).values())
