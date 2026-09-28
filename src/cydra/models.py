@@ -56,12 +56,12 @@ class FunctionModel:
     name: str
     visibility: str
     modifiers: tuple[str, ...]
-    # Modifier invocations preserve arguments instead of collapsing them to names.
-    # This is required to trace target-derived role expressions such as onlyRole(X).
-    modifier_invocations: tuple[tuple[str, tuple[str, ...]], ...] = field(default_factory=tuple)
     writes: tuple[str, ...]
     external_calls: tuple[str, ...]
     line: int
+    # Modifier invocations preserve arguments instead of collapsing them to names.
+    # This is required to trace target-derived role expressions such as onlyRole(X).
+    modifier_invocations: tuple[tuple[str, tuple[str, ...]], ...] = field(default_factory=tuple)
     parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
     authorization_predicates: tuple[str, ...] = field(default_factory=tuple)
     state_predicates: tuple[str, ...] = field(default_factory=tuple)
