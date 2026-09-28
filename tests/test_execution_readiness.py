@@ -911,6 +911,34 @@ def test_state_setup_planner_accepts_default_false_mapping_guard(tmp_path):
     assert plan == ()
 
 
+
+
+def test_state_prerequisite_with_constructible_writer_becomes_constraint(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => address) public registry;
+            function register(uint256 key, address value) external {
+                registry[key] = value;
+            }
+            function execute(uint256 key, address value) external {
+                require(registry[key] == value);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    execute = next(item for item in contract.functions if item.name == "execute")
+    readiness = inspect_execution_readiness(contract, execute)
+    requirement = next(
+        item for item in readiness.state_requirements
+        if item.subject == "registry[key] == value"
+    )
+    assert requirement.status == "constraint"
 def test_runtime_dependency_constructor_interface_binding_is_constructible(tmp_path):
     helper = tmp_path / "IHelper.sol"
     helper.write_text(
