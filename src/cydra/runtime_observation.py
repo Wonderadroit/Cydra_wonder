@@ -99,10 +99,11 @@ def plan_public_mapping_state_observations(
     getters = _public_mapping_getters(source_texts)
     normalized = re.sub(r"\s+", " ", predicate).strip()
 
-    # Positive mapping relation, optionally paired with a non-zero address guard.
+    # Positive mapping relation. Additional conjuncts may constrain the
+    # mapped value or inputs; those conjuncts are separate execution predicates.
     match = re.fullmatch(
         r"(?P<state>[A-Za-z_]\w*)\s*\[(?P<key>[^\]]+)\]\s*==\s*"
-        r"(?P<value>[^&]+?)(?:\s*&&\s*(?P=state)\s*\[\s*(?P=key)\s*\]\s*!=\s*address\(0\))?",
+        r"(?P<value>[^&]+?)(?:\s*&&\s*.+)?",
         normalized,
     )
     if match and match.group("state") in getters:
