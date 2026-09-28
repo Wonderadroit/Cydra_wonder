@@ -84,8 +84,15 @@ class ExplorationState:
         ]
         if not eligible:
             return None
+        # A frontier question is only executable today when it is backed by a
+        # target-derived hypothesis with an existing experiment. Do not spend the
+        # bounded execution budget on descriptive function/state questions that the
+        # canonical callback cannot yet execute; those remain model-understanding
+        # work for a later generic reasoning adapter.
+        executable = [question for question in eligible if question.hypothesis_id is not None]
+        candidates = executable or eligible
         return max(
-            eligible,
+            candidates,
             key=lambda question: (
                 question.estimated_information_gain / max(question.estimated_cost, 0.01),
                 question.estimated_information_gain,
