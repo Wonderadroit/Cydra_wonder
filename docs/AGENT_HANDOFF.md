@@ -54,3 +54,17 @@ Canonical runner:
 ## Handoff rule
 
 A new agent must reconstruct the current task from the files above before changing code. If the state says a blocker is unresolved, reproduce/inspect that blocker before proposing the next architecture.
+
+
+## Exploration architecture
+
+CYDRA now has a generic exploration frontier in `src/cydra/exploration.py`.
+
+- `ExplorationState.from_investigation()` derives a durable, class-neutral view from the existing `InvestigationResult`.
+- `ExplorationQuestion` represents unresolved model understanding or an unvalidated hypothesis without naming a target-specific bug.
+- `next_question(remaining_budget)` selects the highest information-gain-per-cost question that fits the budget.
+- Proposed hypotheses with experiments are prioritized; uncovered functions and state surfaces remain explicit frontier questions.
+
+This layer is deliberately orchestration-only. It does not replace the existing system model, generate target-specific hypotheses, bypass execution readiness, or promote findings. The next engineering step is to connect it to the canonical live runner so exploration can iterate on updated evidence/model state within one bounded run.
+
+Do not reopen maturity work or create benchmarks for this capability.
