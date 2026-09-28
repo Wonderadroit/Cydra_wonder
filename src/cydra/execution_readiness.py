@@ -199,25 +199,64 @@ def caller_role(function: FunctionModel) -> str | None:
     return None
 
 
-def _caller_requirements(function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
+def _caller_requirements(
+    function: FunctionModel,
+    contract: ContractModel | None = None,
+) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
+    modifier_map = {
+        item.name: item
+        for item in (
+            (*contract.modifiers, *contract.inherited_modifiers)
+            if contract is not None
+            else ()
+        )
+    }
+    invocations = dict(function.modifier_invocations)
+
     for modifier in function.modifiers:
         # Lifecycle and reentrancy modifiers do not establish caller identity.
-        # Treating them as caller roles creates false prerequisites and can
-        # trigger an initializer-based caller probe on constructor targets.
         if modifier in {"initializer", "reinitializer", "onlyInitializing", "nonReentrant", "nonReentrantView"}:
             continue
         if modifier.startswith(("returns", "override")):
             continue
+
+        invocation_args = invocations.get(modifier, ())
+        definition = modifier_map.get(modifier)
+        if definition is not None:
+            caller_tokens = ("msg.sender", "_msgSender()", "tx.origin")
+            role_tokens = ("hasRole(", "_checkRole(", "onlyRole", "role")
+            has_caller_check = any(token in definition.body for token in caller_tokens)
+            has_role_check = any(token in definition.body for token in role_tokens)
+            if has_caller_check or has_role_check:
+                rendered_args = ", ".join(invocation_args)
+                detail = (
+                    f"resolved modifier body establishes caller authorization semantics"
+                    f"{': invocation arguments ' + rendered_args if rendered_args else ''}; "
+                    "the required identity/role must still be established from target state or "
+                    "a legitimate role-establishment transition"
+                )
+            else:
+                detail = (
+                    "resolved modifier definition does not expose a recognized caller/role "
+                    "predicate; authorization remains unresolved"
+                )
+        else:
+            detail = (
+                "function signature declares a custom modifier whose definition could not be "
+                "resolved through the target import/inheritance graph"
+            )
+
         requirements.append(
             ExecutionRequirement(
                 "caller_role",
-                modifier,
+                f"{modifier}({', '.join(invocation_args)})" if invocation_args else modifier,
                 f"{function.name}:modifier",
                 "required",
-                "function signature declares a custom modifier",
+                detail,
             )
         )
+
     for predicate in function.authorization_predicates:
         requirements.append(
             ExecutionRequirement(
@@ -1018,7 +1057,7 @@ def _internal_state_setup_candidates(
                 for parameter in writer.parameters
             )
             authorization_requirements = tuple(
-                item for item in _caller_requirements(writer)
+                item for item in _caller_requirements(writer, contract)
                 if item.status == "required"
             )
             status = (
@@ -1271,7 +1310,7 @@ def inspect_execution_readiness(
     return ExecutionReadiness(
         contract=contract.name,
         constructor_requirements=_constructor_requirements(contract),
-        caller_requirements=_caller_requirements(selected) if selected else (),
+        caller_requirements=_caller_requirements(selected, contract) if selected else (),
         runtime_requirements=_runtime_requirements(contract, selected) if selected else (),
         execution_requirements=(
             (*_execution_requirements(contract, selected, execution_capabilities), *_execution_dataflow_requirements(contract, selected, semantic_evidence, execution_capabilities))
