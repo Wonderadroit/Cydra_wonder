@@ -82,3 +82,64 @@ def test_observation_id_is_stable():
     first = observations_from_execution("SETUP-001", (plan,), _execution())[0]
     second = observations_from_execution("SETUP-001", (plan,), _execution())[0]
     assert first.evidence_id == second.evidence_id
+
+
+def test_internal_mapping_observation_traverses_nested_same_contract_calls(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        contract Target {
+            mapping(address => address) public externalActionMap;
+
+            function transact() external {
+                if (true) {
+                    _externalTransact();
+                }
+            }
+
+            function _externalTransact() internal {
+                if (true) {
+                    require(
+                        externalActionMap[msg.sender] == msg.sender &&
+                        externalActionMap[msg.sender] != address(0)
+                    );
+                }
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    target = FunctionModel(
+        name="transact",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=4,
+    )
+    callee = FunctionModel(
+        name="_externalTransact",
+        visibility="internal",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=10,
+        execution_predicates=(
+            "externalActionMap[msg.sender] == msg.sender && externalActionMap[msg.sender] != address(0)",
+        ),
+    )
+    contract = ContractModel(
+        name="Target",
+        source=str(source),
+        functions=(target, callee),
+        state_variables=("externalActionMap",),
+    )
+
+    from cydra.runtime_observation import plan_public_state_observations
+
+    plans = plan_public_state_observations(contract, target)
+    assert any(
+        plan.state == "externalActionMap"
+        and plan.getter == "target.externalActionMap(msg.sender)"
+        for plan in plans
+    )
