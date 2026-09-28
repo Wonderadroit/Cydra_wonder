@@ -14,7 +14,7 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 ## Current CYDRA branch
 
 - Branch: `dogfood-readiness-expression-provenance`
-- Current engineering head: `5d972e9ee76eeb194e6c35a5feb7c670fc4647fd`
+- Current engineering head: `0d1280c383910f20d9e72ea16ad8ed352259e94f`
 
 ## Latest validated live run
 
