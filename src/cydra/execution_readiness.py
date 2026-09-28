@@ -10,6 +10,7 @@ from .models import ContractModel, FunctionModel
 from .ast_dataflow import SemanticRelationshipEvidence
 from .semantic_state_effects import build_state_effect_index, state_reads_for_function, state_writes_for_function
 from .namespaced_state_observation import plan_namespaced_state_observation
+from .solidity_model import parse_solidity
 
 
 @dataclass(frozen=True)
@@ -229,9 +230,7 @@ def _constructor_role_grants(contract: ContractModel) -> tuple[tuple[str, str], 
                 continue
             visited.add(resolved_path)
             try:
-                bases = __import__("cydra.solidity_model", fromlist=["parse_solidity"]).parse_solidity(
-                    resolved_path, include_inherited=False
-                )
+                bases = parse_solidity(resolved_path, include_inherited=False)
             except (OSError, UnicodeError):
                 continue
             base = next((item for item in bases if item.name == inherited_name), None)
