@@ -68,3 +68,6 @@ CYDRA now has a generic exploration frontier in `src/cydra/exploration.py`.
 This layer is deliberately orchestration-only. It does not replace the existing system model, generate target-specific hypotheses, bypass execution readiness, or promote findings. The canonical live runner now persists `exploration-state.json` in each source freeze. The next engineering step is to consume updated frontier state repeatedly within one bounded run so new evidence creates the next questions automatically.
 
 Do not reopen maturity work or create benchmarks for this capability.
+
+### Recursive exploration controller
+The exploration layer now includes a bounded controller. It owns question selection/history/budget and delegates each selected question to the existing execution boundary. Execution evidence is attached to the investigation result and the frontier is rebuilt before the next round. Do not add a parallel executor or interpret execution evidence inside the frontier layer.
