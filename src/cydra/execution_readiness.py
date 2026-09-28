@@ -1134,7 +1134,7 @@ def _state_setup_candidates(
                 if requirement.subject.split(".")[-1] not in {"push", "pop"}
             )
             authorization_requirements = tuple(
-                item for item in _caller_requirements(writer)
+                item for item in _caller_requirements(writer, contract)
                 if item.status == "required"
             )
             status = (
