@@ -395,6 +395,79 @@ def _resolved_interface_method(contract: ContractModel, receiver: str, method: s
     return any(item.name == method for item in interface.methods)
 
 
+def runtime_dependency_constructor_bindings(
+    contract_model: ContractModel,
+    function: FunctionModel,
+) -> tuple[tuple[str, object], ...]:
+    """Resolve state-backed external receivers that can be materialized generically."""
+    source_path = Path(contract_model.source).resolve()
+    root = next(
+        (
+            parent for parent in (source_path.parent, *source_path.parents)
+            if any((parent / marker).exists() for marker in ("foundry.toml", "package.json", "remappings.txt"))
+        ),
+        source_path.parent,
+    )
+    constructor_parameters = {
+        parameter.name
+        for parameter in (contract_model.constructor.parameters if contract_model.constructor else ())
+        if parameter.name
+    }
+    if not constructor_parameters:
+        return ()
+    queue = [source_path]
+    visited: set[Path] = set()
+    sources: list[Path] = []
+    while queue:
+        path = queue.pop().resolve()
+        if path in visited or not path.is_file():
+            continue
+        visited.add(path)
+        sources.append(path)
+        try:
+            imports = _imports_for(path)
+        except (OSError, UnicodeError):
+            continue
+        for import_path in imports:
+            resolved = resolve_import(root, path, import_path)
+            if resolved is not None:
+                queue.append(resolved[0])
+    runtime_receivers = {
+        receiver for receiver, _method in function.external_calls
+        if receiver not in {"abi", "block", "msg", "tx", "type", "super"}
+    }
+    bindings: list[tuple[str, object]] = []
+    for receiver in sorted(runtime_receivers):
+        declaration = re.compile(
+            rf"\b(?P<type>[A-Za-z_]\w*)\s+"
+            rf"(?:(?:public|private|internal|external|immutable|constant)\s+)*"
+            rf"{re.escape(receiver)}\s*;"
+        )
+        for path in sources:
+            try:
+                source = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            match = declaration.search(source)
+            if not match:
+                continue
+            interface_name = match.group("type")
+            assignment = re.search(
+                rf"\b{re.escape(receiver)}\s*=\s*{re.escape(interface_name)}\s*\(\s*(?P<parameter>[A-Za-z_]\w*)\s*\)",
+                source,
+            )
+            if assignment is None or assignment.group("parameter") not in constructor_parameters:
+                continue
+            try:
+                resolved = resolve_interface(root, path, interface_name)
+            except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                continue
+            item = (assignment.group("parameter"), resolved)
+            if item not in bindings:
+                bindings.append(item)
+            break
+    return tuple(bindings)
+
 def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> tuple[ExecutionRequirement, ...]:
     requirements: list[ExecutionRequirement] = []
     state_names = set(contract.state_variables)
@@ -442,9 +515,22 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
             token in state_names
             for token in re.findall(r"\b[A-Za-z_]\w*\b", normalized_receiver)
         )
-        status = "discovered" if configured or configured_cast else "required"
+        constructible_binding = bool(
+            (configured or configured_cast)
+            and runtime_dependency_constructor_bindings(contract, function)
+        )
+        status = (
+            "constructible"
+            if constructible_binding
+            else "discovered"
+            if configured or configured_cast
+            else "required"
+        )
         detail = (
-            "external call receiver is a modeled contract state value; runtime behavior "
+            "state-backed external receiver is bound from a constructor interface parameter "
+            "and can be materialized by the generic runtime-stub capability"
+            if constructible_binding
+            else "external call receiver is a modeled contract state value; runtime behavior "
             "must still be verified against the target's configured dependency"
             if configured
             else "compiler/source-resolved interface method uses a modeled target state value; "
