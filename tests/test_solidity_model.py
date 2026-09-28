@@ -693,3 +693,38 @@ def test_execution_value_bindings_capture_tuple_assigned_external_call_outcomes(
     function = parse_solidity(path)[0].functions[0]
     assert ("success", "endpoint.call(data)") in function.execution_value_bindings
     assert ("err", "endpoint.call(data)") in function.execution_value_bindings
+
+
+
+def test_modifier_definitions_and_invocation_arguments_are_preserved(tmp_path: Path) -> None:
+    path = tmp_path / "ModifierModel.sol"
+    path.write_text(
+        """
+        contract ModifierModel {
+            bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+
+            modifier onlyRole(bytes32 role) {
+                require(hasRole(role, msg.sender));
+                _;
+            }
+
+            function register(uint256 id, address action)
+                external
+                onlyRole(ADMIN_ROLE)
+            {
+                id;
+                action;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    function = contract.functions[0]
+
+    assert function.modifiers == ("onlyRole",)
+    assert function.modifier_invocations == (("onlyRole", ("ADMIN_ROLE",)),)
+    assert contract.modifiers[0].name == "onlyRole"
+    assert [(p.name, p.type) for p in contract.modifiers[0].parameters] == [("role", "bytes32")]
+    assert "hasRole(role, msg.sender)" in contract.modifiers[0].body
