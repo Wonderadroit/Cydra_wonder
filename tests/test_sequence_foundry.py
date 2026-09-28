@@ -619,3 +619,37 @@ def test_sequence_renderer_refreshes_state_mapping_index_between_transitions(tmp
     assert "target.queue(7);" in rendered
     assert "target.advance();" in rendered
     assert "target.queue(9);" in rendered
+
+
+def test_sequence_renderer_constructs_namespaced_struct_constructor_type(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "IMerkle.sol").write_text(
+        "interface IMerkle { struct MerkleConstructorArgs { uint128 levels; address poseidon2; address poseidon4; address poseidon5; } }\\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        'pragma solidity ^0.8.20; import { IMerkle } from "./interfaces/IMerkle.sol"; '
+        'contract Target { constructor(IMerkle.MerkleConstructorArgs memory args) {} '
+        'function seed() external {} }\\n',
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(target),
+        (FunctionModel("seed", "external", (), (), (), 3),),
+        constructor=ConstructorModel(
+            (ParameterModel("args", "IMerkle.MerkleConstructorArgs", "memory"),), 2
+        ),
+    )
+    hypothesis, experiment = _experiment()
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { IMerkle } from "../interfaces/IMerkle.sol";' in rendered
+    assert "IMerkle.MerkleConstructorArgs({levels: 0, poseidon2: address(0), poseidon4: address(0), poseidon5: address(0)})" in rendered
