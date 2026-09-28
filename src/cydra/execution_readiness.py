@@ -1411,11 +1411,6 @@ def constructible_state_setup_plan(
             return None
         readiness = inspect_execution_readiness(contract, fn, constraints, semantic_evidence)
 
-        default_satisfied_states = {
-            state for state in planned_state_names
-            if _state_observation_has_default_solution(contract, fn, state)
-        }
-
         # A state-observation prerequisite is not itself a reason to abandon
         # planning when the target model already exposes a writer for that
         # exact state. The writer must still pass its own readiness checks below;
@@ -1470,6 +1465,8 @@ def constructible_state_setup_plan(
             return None
         actions = []
         for state in required_state_names(fn):
+            if state in default_satisfied_states:
+                continue
             selected = None
             for writer in writers_for(state):
                 if writer.name in stack or writer.name == fn.name:
