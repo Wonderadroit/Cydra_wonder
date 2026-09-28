@@ -1402,9 +1402,9 @@ def _state_observation_has_default_solution(
             if polarities.get(predicate) != "must_hold":
                 continue
             normalized = re.sub(r"\s+", " ", predicate).strip()
-            if re.fullmatch(rf"!\s*{re.escape(state)}\s*\[[^\]]+\]", normalized):
+            if re.fullmatch(rf"!\s*{re.escape(state)}(?:\s*\[[^\]]*\])+", normalized):
                 return True
-            if re.fullmatch(rf"{re.escape(state)}\s*\[[^\]]+\]\s*==\s*false", normalized):
+            if re.fullmatch(rf"{re.escape(state)}(?:\s*\[[^\]]*\])+\s*==\s*false", normalized):
                 return True
         body = _source_function_body(contract, current)
         for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
