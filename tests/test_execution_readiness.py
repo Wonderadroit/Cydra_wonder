@@ -899,6 +899,32 @@ def test_state_setup_planner_accepts_default_false_mapping_guard(tmp_path):
             }
             function mark(bytes32 key) external {
 
+def test_internal_state_prerequisite_supports_nested_mapping_default_state(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => mapping(uint256 => bool)) used;
+            function run(uint256 outerKey, uint256 innerKey) external {
+                check(outerKey, innerKey);
+            }
+            function check(uint256 outerKey, uint256 innerKey) internal {
+                require(!used[outerKey][innerKey]);
+            }
+        }
+        """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+    used = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "check: !used[outerKey][innerKey]"
+    )
+    assert used.status == "constraint"
+    assert "default value" in used.detail
+
+
 def test_internal_state_prerequisite_uses_constructible_writer_or_default_state(tmp_path):
     source = tmp_path / "Target.sol"
     source.write_text(
