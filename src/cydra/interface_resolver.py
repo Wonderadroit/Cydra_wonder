@@ -410,6 +410,28 @@ def _extract_interface(
     )
 
 
+def resolve_struct_fields(root: str | Path, source_path: str | Path, struct_name: str) -> tuple[tuple[str, str], ...]:
+    """Resolve top-level fields of a source-defined Solidity struct."""
+    path = (Path(root) / source_path).resolve()
+    try:
+        source = _strip_comments(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        return ()
+    match = re.search(rf"\\bstruct\\s+{re.escape(struct_name)}\\s*\\{{(?P<body>.*?)\\}}", source, re.DOTALL)
+    if not match:
+        return ()
+    fields: list[tuple[str, str]] = []
+    for statement in match.group("body").split(";"):
+        statement = statement.strip()
+        if not statement:
+            continue
+        parts = statement.split()
+        if len(parts) < 2:
+            continue
+        fields.append((parts[-1], " ".join(parts[:-1])))
+    return tuple(fields)
+
+
 def resolve_named_type_source(root: str | Path, importer: str | Path, name: str) -> tuple[str, str]:
     """Resolve a user-defined Solidity type through the import graph.
 
