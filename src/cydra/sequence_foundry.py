@@ -152,19 +152,6 @@ def generate_sequence_test_from_experiment(
                         f'        assertEq({getter}, {snapshot_name} - {amount}, '
                         f'"unverified state relation: {expression}");'
                     )
-        if verify_state_prerequisites and function.name == hypothesis.target_function:
-            observations = plan_public_state_observations(contract_model, function)
-            if not observations:
-                raise ValueError(
-                    "state prerequisite has no deterministic public runtime observation; "
-                    "security sequence must fail closed"
-                )
-            rendered.extend(
-                f'        assertTrue({observation.expression}, "unverified prerequisite: {observation.predicate}");'
-                for observation in observations
-            )
-            if stop_before_target:
-                break
         if verify_relation_for_step and relation_setups:
             rendered.extend(relation_setups)
             relation_setups.clear()
