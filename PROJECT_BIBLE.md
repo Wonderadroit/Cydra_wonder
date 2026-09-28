@@ -117,6 +117,7 @@ The readiness model records, without making vulnerability claims:
 - caller roles and caller-identity predicates;
 - external runtime dependencies and trust-boundary calls;
 - unresolved prerequisites and their provenance.
+- prerequisite observation may intentionally stop before the target transition; in that mode, the target function identifies the observation surface but its ABI arguments must not be materialized or executed. Complex/custom target types therefore cannot become a false readiness blocker before setup-state verification.
 
 The execution planner must distinguish three states: prerequisites already satisfied, prerequisites deterministically constructible by the adapter/harness, and prerequisites unresolved. An unresolved prerequisite is an execution/environment gap, not evidence of a vulnerability.
 
