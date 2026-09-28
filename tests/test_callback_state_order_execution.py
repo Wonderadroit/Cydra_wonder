@@ -446,3 +446,92 @@ def test_callback_runtime_generator_materializes_state_backed_constructor_interf
     assert "helperStub = new CydraIHelperStub();" in rendered
     assert "new Callback(address(helperStub))" in rendered
     assert "function performChecks(uint256 value) external view returns (uint256[] memory)" in rendered
+
+
+def test_callback_caller_binding_can_target_non_first_parameter():
+    from cydra.callback_state_order_execution import _caller_bound_parameter_paths
+
+    source = Path("/tmp/Callback.sol")
+    function = FunctionModel(
+        name="execute",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=1,
+        parameters=(
+            ParameterModel("proof", "uint256"),
+            ParameterModel("data", "Data"),
+        ),
+    )
+    check = FunctionModel(
+        name="check",
+        visibility="internal",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=2,
+        parameters=(ParameterModel("data", "Data"),),
+        execution_predicates=("data.endpoint == msg.sender",),
+    )
+    contract = ContractModel(
+        "Callback",
+        str(source),
+        (function, check),
+        pragma="^0.8.20",
+    )
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Callback { "
+        "function execute(uint256 proof, Data calldata data) external { check(data); } "
+        "function check(Data calldata data) internal { require(data.endpoint == msg.sender); } "
+        "struct Data { address endpoint; } }",
+        encoding="utf-8",
+    )
+    assert _caller_bound_parameter_paths(contract, function) == ("data.endpoint",)
+
+
+def test_legacy_callback_renderer_materializes_target_derived_state_setup_and_caller_binding(tmp_path: Path):
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Callback {
+            mapping(uint256 => address) registry;
+            struct Data { uint256 key; address endpoint; }
+            function execute(uint256 proof, Data calldata data) external {
+                check(data);
+            }
+            function check(Data calldata data) internal {
+                require(data.endpoint == msg.sender);
+                require(registry[data.key] == data.endpoint);
+                (bool ok,) = msg.sender.call("");
+                require(ok);
+            }
+            function register(uint256 key, address endpoint) external {
+                registry[key] = endpoint;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Callback")
+    contract = replace(contract, state_variables=("registry",))
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute", "claim",
+        "INV-CALLBACK-STATE-ORDER-execute", "execute", "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute", hypothesis.hypothesis_id,
+        "reenter", (), 2.0,
+        planned_inputs=("1", "(0, address(0))"),
+        target_function="execute",
+    )
+    output = tmp_path / "test" / "generated.t.sol"
+    generate_callback_state_order_test(
+        hypothesis, experiment, str(source), "Callback", output, contract,
+    )
+    rendered = output.read_text(encoding="utf-8")
+    assert "cydra_data.endpoint = address(attacker);" in rendered
+    assert "target.register(cydra_data.key, cydra_data.endpoint);" in rendered
+    assert "abi.encodeCall(target.execute, (1, cydra_data))" in rendered
