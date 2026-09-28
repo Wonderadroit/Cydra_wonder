@@ -149,19 +149,11 @@ def plan_public_state_observations(
         visited.add(current.name)
         for predicate in current.execution_predicates:
             plans.extend(plan_public_mapping_state_observations(contract, predicate))
-        try:
-            source_text = Path(contract.source).read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            return
-        match_body = re.search(
-            rf"\bfunction\s+{re.escape(current.name)}\s*\([^)]*\)[^{{;]*{{(?P<body>.*?)\n\s*}}",
-            source_text,
-            re.DOTALL,
-        )
-        if not match_body:
-            return
-        for call in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", match_body.group("body")):
-            callee = functions.get(call.group(1))
+        # The parser already records same-contract calls as structured model
+        # provenance. Reuse that graph instead of reparsing Solidity source with
+        # a regex that cannot safely match nested braces.
+        for call_name in current.internal_calls:
+            callee = functions.get(call_name)
             if callee is not None:
                 visit(callee)
 
