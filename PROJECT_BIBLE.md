@@ -921,4 +921,17 @@ The demonstrated implementation rule is:
 This is a generic execution-readiness capability. It must not contain target-specific function names, vulnerability-class branches, or Hinkal-specific assumptions.
 
 The live dogfood target remains the source of evidence for the next missing capability. After this repair, rerun the same target and inspect whether the security experiment becomes reachable. Do not add another abstraction until the next observed blocker justifies it.
+## Live dogfood milestone — source-defined namespaced constructor materialization
+
+The Hinkal live dogfood campaign exposed a generic constructor-materialization gap while trying to verify prerequisites for a callback-state-order hypothesis.
+
+A constructor parameter may use a Solidity namespaced struct type such as `Namespace.StructName`. The sequence renderer must resolve the namespace through the target's declared import graph, resolve the struct fields from the defining source unit, and materialize compiler-valid field values without naming the target or supplying target-specific constants.
+
+The implementation now follows this generic boundary:
+
+**namespaced constructor type → resolve imported namespace → resolve source-defined struct fields → materialize supported field defaults → render/import the namespaced struct → let runtime execution verify semantic validity.**
+
+The resolver must fail closed for unsupported or unresolved custom field types. Compiler-valid defaults are not treated as verified runtime dependencies; if deployment or subsequent execution rejects them, that becomes the next observed execution-readiness gap.
+
+A regression covers an imported interface containing `MerkleConstructorArgs`-style source-defined fields. The live target remains the authoritative test surface; do not add target-specific constructor values merely to bypass a readiness failure.
 
