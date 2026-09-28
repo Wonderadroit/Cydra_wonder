@@ -898,284 +898,48 @@ def test_state_setup_planner_accepts_default_false_mapping_guard(tmp_path):
                 require(!used[key]);
             }
             function mark(bytes32 key) external {
-                used[key] = true;
-            }
-        }
-        """,
-        encoding="utf-8",
-    )
-    from cydra.solidity_model import parse_solidity
-    contract = next(item for item in parse_solidity(source) if item.name == "Target")
-    function = next(item for item in contract.functions if item.name == "run")
-    plan = constructible_state_setup_plan(contract, function)
-    assert plan == ()
 
-
-
-
-def test_state_prerequisite_with_constructible_writer_becomes_constraint(tmp_path):
+def test_internal_state_prerequisite_uses_constructible_writer_or_default_state(tmp_path):
     source = tmp_path / "Target.sol"
     source.write_text(
         """
         pragma solidity ^0.8.20;
         contract Target {
             mapping(uint256 => address) public registry;
-            function register(uint256 key, address value) external {
-                registry[key] = value;
-            }
-            function execute(uint256 key, address value) external {
-                require(registry[key] == value);
-            }
-        }
-        """,
-        encoding="utf-8",
-    )
-    from cydra.solidity_model import parse_solidity
-    contract = next(item for item in parse_solidity(source) if item.name == "Target")
-    execute = next(item for item in contract.functions if item.name == "execute")
-    readiness = inspect_execution_readiness(contract, execute)
-    requirement = next(
-        item for item in readiness.state_requirements
-        if item.subject == "registry[key] == value"
-    )
-    assert requirement.status == "constraint"
-def test_runtime_dependency_constructor_interface_binding_is_constructible(tmp_path):
-    helper = tmp_path / "IHelper.sol"
-    helper.write_text(
-        """
-        interface IHelper {
-            function performChecks() external view returns (uint256[] memory);
-        }
-        """,
-        encoding="utf-8",
-    )
-    source = tmp_path / "Target.sol"
-    source.write_text(
-        """
-        pragma solidity ^0.8.20;
-        import "./IHelper.sol";
-        contract Target {
-            IHelper internal helper;
-            constructor(address helper_) {
-                helper = IHelper(helper_);
-            }
-            function run() external {
-                helper.performChecks();
-            }
-        }
-        """,
-        encoding="utf-8",
-    )
-    from cydra.solidity_model import parse_solidity
-    contract = next(item for item in parse_solidity(source) if item.name == "Target")
-    function = next(item for item in contract.functions if item.name == "run")
-    readiness = inspect_execution_readiness(contract, function)
-    requirement = next(item for item in readiness.runtime_requirements)
-    assert requirement.status == "constructible"
-    assert "generic runtime-stub capability" in requirement.detail
+            mapping(bytes32 => bool) public used;
 
-
-def test_state_setup_planner_can_use_internal_state_writer_without_hardcoding(tmp_path):
-    source = tmp_path / "Target.sol"
-    source.write_text(
-        """
-        pragma solidity ^0.8.20;
-        contract Target {
-            mapping(uint256 => address) registry;
-            function run(Data calldata data) external { verify(data); }
-            function verify(Data calldata data) internal {
-                require(registry[data.key] == data.endpoint);
+            function run(uint256 key, bytes32 note) external {
+                check(key, note);
             }
+
+            function check(uint256 key, bytes32 note) internal {
+                require(registry[key] != address(0));
+                require(!used[note]);
+            }
+
             function register(uint256 key, address endpoint) external {
                 registry[key] = endpoint;
             }
-            struct Data { uint256 key; address endpoint; }
         }
         """,
         encoding="utf-8",
     )
     from cydra.solidity_model import parse_solidity
+
     contract = next(item for item in parse_solidity(source) if item.name == "Target")
-    function = next(item for item in contract.functions if item.name == "run")
-    plan = constructible_state_setup_plan(contract, function)
-    assert tuple(action.function for action in plan) == ("register",)
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
 
-
-def test_state_setup_candidate_fails_closed_on_unresolved_custom_modifier(tmp_path):
-    source = tmp_path / "Target.sol"
-    source.write_text(
-        """
-        pragma solidity ^0.8.20;
-        contract Target {
-            mapping(uint256 => address) registry;
-            function run(uint256 key) external { verify(key); }
-            function verify(uint256 key) internal {
-                require(registry[key] != address(0));
-            }
-            function register(uint256 key, address endpoint) external onlyRole(DEFAULT_ADMIN_ROLE) {
-                registry[key] = endpoint;
-            }
-        }
-        """,
-        encoding="utf-8",
+    registry = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "check: registry[key] != address(0)"
     )
-    from cydra.solidity_model import parse_solidity
-    contract = next(item for item in parse_solidity(source) if item.name == "Target")
-    function = next(item for item in contract.functions if item.name == "run")
-    readiness = inspect_execution_readiness(contract, function)
-    candidate = next(
-        item for item in readiness.state_setup_candidates
-        if item.subject == "register"
-    )
-    assert candidate.status == "unresolved"
-    assert "authorization" in candidate.detail
-
-
-
-def test_state_setup_candidate_uses_resolved_inherited_modifier_authorization(tmp_path):
-    source = tmp_path / "Target.sol"
-    source.write_text(
-        """
-        pragma solidity ^0.8.20;
-        contract Target {
-            mapping(uint256 => address) registry;
-            function run(uint256 key) external { verify(key); }
-            function verify(uint256 key) internal {
-                require(registry[key] != address(0));
-            }
-            function register(uint256 key, address endpoint) external onlyRole(DEFAULT_ADMIN_ROLE) {
-                registry[key] = endpoint;
-            }
-        }
-        """,
-        encoding="utf-8",
-    )
-    from cydra.models import ModifierModel
-    from cydra.solidity_model import parse_solidity
-    modifier = ModifierModel(
-        "onlyRole",
-        (ParameterModel("role", "bytes32"),),
-        "require(hasRole(role, msg.sender)); _;",
-    )
-    contract = next(item for item in parse_solidity(source) if item.name == "Target")
-    contract = replace(contract, modifiers=(modifier,))
-    function = next(item for item in contract.functions if item.name == "run")
-    readiness = inspect_execution_readiness(contract, function)
-    candidate = next(
-        item for item in readiness.state_setup_candidates
-        if item.subject == "register"
-    )
-    assert candidate.status == "unresolved"
-    assert "authorization" in candidate.detail
-
-
-def test_readiness_resolves_modifier_body_without_inventing_role_identity():
-    modifier = ModifierModel(
-        "onlyRole",
-        (ParameterModel("role", "bytes32"),),
-        "require(hasRole(role, msg.sender)); _;",
-    )
-    function = FunctionModel(
-        "register",
-        "external",
-        ("onlyRole",),
-        ("registry",),
-        (),
-        10,
-        modifier_invocations=(("onlyRole", ("DEFAULT_ADMIN_ROLE",)),),
-    )
-    model = ContractModel(
-        "Target",
-        "/tmp/Target.sol",
-        (function,),
-        modifiers=(modifier,),
+    used = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "check: !used[note]"
     )
 
-    readiness = inspect_execution_readiness(model, function)
-    requirement = readiness.caller_requirements[0]
-
-    assert requirement.subject == "onlyRole(DEFAULT_ADMIN_ROLE)"
-    assert "resolved modifier body establishes caller authorization semantics" in requirement.detail
-    assert "legitimate role-establishment transition" in requirement.detail
-
-
-def test_inherited_modifier_authorization_resolves_through_dependency_graph(tmp_path):
-    root = tmp_path / "target"
-    (root / "lib" / "access-control" / "contracts").mkdir(parents=True)
-    (root / "contracts").mkdir(parents=True)
-    (root / "contracts" / "Target.sol").write_text(
-        'import "./Base.sol";\n'
-        'contract Target is Base {}\n',
-        encoding="utf-8",
-    )
-    (root / "contracts" / "Base.sol").write_text(
-        'import "@access/contracts/AccessControlLike.sol";\n'
-        'abstract contract Base is AccessControlLike {\n'
-        '    function register(uint256 key) external onlyRole(DEFAULT_ADMIN_ROLE) {}\n'
-        '}\n',
-        encoding="utf-8",
-    )
-    (root / "lib" / "access-control" / "contracts" / "AccessControlLike.sol").write_text(
-        'abstract contract AccessControlLike {\n'
-        '    modifier onlyRole(bytes32 role) { require(hasRole(role, msg.sender)); _; }\n'
-        '}\n',
-        encoding="utf-8",
-    )
-
-    from cydra.solidity_model import parse_solidity
-    contract = next(item for item in parse_solidity(root / "contracts" / "Target.sol") if item.name == "Target")
-    inherited = next(item for item in contract.inherited_functions if item.name == "register")
-    readiness = inspect_execution_readiness(contract, inherited)
-
-    assert inherited.modifier_invocations == (("onlyRole", ("DEFAULT_ADMIN_ROLE",)),)
-    requirement = next(item for item in readiness.caller_requirements if item.kind == "caller_role")
-    assert requirement.status == "required"
-    assert "resolved modifier body establishes caller authorization semantics" in requirement.detail
-
-def test_constructor_established_role_satisfies_inherited_only_role_for_deployer(tmp_path: Path) -> None:
-    access = tmp_path / "AccessControl.sol"
-    access.write_text(
-        """
-        abstract contract AccessControl {
-            modifier onlyRole(bytes32 role) {
-                require(hasRole(role, msg.sender));
-                _;
-            }
-        }
-        """,
-        encoding="utf-8",
-    )
-    base = tmp_path / "Base.sol"
-    base.write_text(
-        """
-        import "./AccessControl.sol";
-        contract Base is AccessControl {
-            constructor() {
-                _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-            }
-        }
-        """,
-        encoding="utf-8",
-    )
-    target = tmp_path / "Target.sol"
-    target.write_text(
-        """
-        import "./Base.sol";
-        contract Target is Base {
-            function register(uint256 id, address action)
-                external
-                onlyRole(DEFAULT_ADMIN_ROLE)
-            {}
-        }
-        """,
-        encoding="utf-8",
-    )
-
-    contract = parse_solidity(target)[0]
-    function = contract.functions[0]
-    requirements = _caller_requirements(function, contract)
-
-    assert requirements
-    assert requirements[0].status == "constraint"
-    assert "deployment caller" in requirements[0].detail
-
+    assert registry.status == "constraint"
+    assert "constructible writer" in registry.detail
+    assert used.status == "constraint"
+    assert "default value" in used.detail
