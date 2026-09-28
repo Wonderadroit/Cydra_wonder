@@ -837,7 +837,7 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                 status_prerequisite = {
                     "caller_prerequisite_failure": f"{type(error).__name__}: {error}"
                 }
-        if class_name in {"state", "callback_state_order"} and readiness.state_requirements:
+        if class_name in {"state", "callback_state_order"} and (readiness.state_requirements or readiness.state_setup_candidates):
             setup_actions = constructible_state_setup_plan(
                 contract,
                 function,
