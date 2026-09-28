@@ -597,7 +597,6 @@ def _execution_dataflow_requirements(
                 dataflow_detail,
             )
         )
-
         # Deterministic Solidity casts/builtins are already classified as local
         # dataflow constraints above. Do not reintroduce them as unresolved
         # call-shaped producer dependencies merely because their syntax contains
@@ -962,6 +961,17 @@ def _internal_execution_requirements(
     functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
     by_name = {item.name: item for item in functions}
     ignored = {"if", "for", "while", "require", "revert", "assert", "emit", "return", "new", "delete", "unchecked", "abi", "keccak256", "sha256", "ecrecover"}
+    # Internal guards can depend on persistent state that is not directly
+    # named by the top-level action. Reuse the same target-derived setup
+    # surface used by the recursive readiness planner. A constructible writer
+    # is evidence that the state can be established; it is not evidence that
+    # the security hypothesis is true.
+    internal_state_setup_candidates = _internal_state_setup_candidates(contract, function)
+    constructible_internal_states = {
+        candidate.source.rsplit(":", 1)[-1]
+        for candidate in internal_state_setup_candidates
+        if candidate.status == "constructible"
+    }
     results: list[ExecutionRequirement] = []
     visited: set[tuple[str, int]] = set()
     def visit(caller: FunctionModel, depth: int) -> None:
@@ -989,6 +999,21 @@ def _internal_execution_requirements(
                     predicate,
                     execution_capabilities,
                 )
+                predicate_state_names = {
+                    name for name in re.findall(r"\\b[A-Za-z_]\\w*\\b", predicate)
+                    if name in set(contract.state_variables)
+                }
+                state_setup = (
+                    category == "state_observation"
+                    and bool(predicate_state_names.intersection(constructible_internal_states))
+                )
+                default_state = (
+                    category == "state_observation"
+                    and any(
+                        _state_observation_has_default_solution(contract, callee, state)
+                        for state in predicate_state_names
+                    )
+                )
                 state_observation = (
                     category == "state_observation"
                     and plan_namespaced_state_observation(contract, callee, predicate) is not None
@@ -1011,12 +1036,23 @@ def _internal_execution_requirements(
                         )
                     )
                 )
-                if constraint or capability_constraint or state_observation:
+                if constraint or capability_constraint or state_observation or state_setup or default_state:
                     status = "constraint"
                     if capability_constraint and not constraint:
                         detail = (
                             "callback execution-context adapter can satisfy this guarded "
                             "ambient-time prerequisite without changing target semantics"
+                        )
+                    elif state_setup:
+                        detail = (
+                            "target-derived state setup planner found a constructible writer "
+                            "for this persistent prerequisite; the experiment must apply and "
+                            "verify that transition before the security assertion"
+                        )
+                    elif default_state:
+                        detail = (
+                            "fresh target state satisfies this persistent prerequisite by its "
+                            "modeled default value; the experiment must preserve that state"
                         )
                     elif state_observation:
                         detail = (
