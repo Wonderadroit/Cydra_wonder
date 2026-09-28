@@ -206,16 +206,20 @@ def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> 
                     return candidate, "dependency_package"
 
     # Foundry library directories may use a repository directory name that
-    # differs from the package name. Accept only an exact imported-path suffix
-    # under a direct dependency root.
+    # differs from the import package name (for example an OpenZeppelin library).
+    # Compare only the path after the import package prefix, and require a unique
+    # match across direct dependency roots. Ambiguity remains unresolved.
+    candidates: list[Path] = []
     for dependency_root in _dependency_roots(root):
-        for package_dir in dependency_root.iterdir():
+        for package_dir in sorted(dependency_root.iterdir(), key=lambda item: item.name):
             if not package_dir.is_dir():
                 continue
             for source_root in ("", "src", "contracts"):
-                candidate = (package_dir / source_root / import_path).resolve()
-                if candidate.is_file():
-                    return candidate, "dependency_path"
+                candidate = (package_dir / source_root / suffix).resolve()
+                if candidate.is_file() and candidate not in candidates:
+                    candidates.append(candidate)
+    if len(candidates) == 1:
+        return candidates[0], "dependency_path"
 
     return None
 
