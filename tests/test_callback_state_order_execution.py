@@ -516,7 +516,6 @@ def test_legacy_callback_renderer_materializes_target_derived_state_setup_and_ca
     )
     from cydra.solidity_model import parse_solidity
     contract = next(item for item in parse_solidity(source) if item.name == "Callback")
-    contract = replace(contract, state_variables=("registry",))
     hypothesis = Hypothesis(
         "H-CALLBACK-STATE-ORDER-execute", "claim",
         "INV-CALLBACK-STATE-ORDER-execute", "execute", "callback", "impact",
