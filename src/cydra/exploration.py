@@ -237,3 +237,39 @@ def refresh_exploration_frontier(result: InvestigationResult, previous: Explorat
         explored_question_ids=previous.explored_question_ids,
         budget_used=previous.budget_used,
     )
+
+
+def apply_exploration_evidence(
+    result: InvestigationResult,
+    decision: ExplorationDecision,
+    evidence: tuple["Evidence", ...],
+) -> InvestigationResult:
+    """Attach execution evidence to the selected hypothesis without interpreting it.
+
+    Interpretation remains owned by the existing causal/hypothesis-update machinery.
+    This bridge only preserves provenance so a refreshed frontier can see that the
+    selected question has produced new evidence.
+    """
+    from dataclasses import replace
+    by_id = {item.evidence_id: item for item in result.evidence}
+    for item in evidence:
+        by_id[item.evidence_id] = item
+
+    hypotheses = result.hypotheses
+    if decision.hypothesis_id is not None:
+        ids = tuple(item.evidence_id for item in evidence)
+        hypotheses = tuple(
+            replace(
+                hypothesis,
+                evidence_ids=tuple(dict.fromkeys((*hypothesis.evidence_ids, *ids))),
+            )
+            if hypothesis.hypothesis_id == decision.hypothesis_id
+            else hypothesis
+            for hypothesis in hypotheses
+        )
+
+    return replace(
+        result,
+        hypotheses=hypotheses,
+        evidence=tuple(by_id.values()),
+    )
