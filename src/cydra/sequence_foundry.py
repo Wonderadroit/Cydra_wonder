@@ -54,6 +54,22 @@ def generate_sequence_test_from_experiment(
             raise ValueError(f"model has no sequence function: {step.function}")
         if function.visibility not in {"public", "external"}:
             raise ValueError(f"sequence function is not externally callable: {step.function}")
+        # In prerequisite-observation mode the target is deliberately not
+        # executed. Its step only identifies the observation surface, so ABI
+        # argument materialization/arity must not block observation of setup
+        # transitions for targets with complex or custom parameter types.
+        if verify_state_prerequisites and stop_before_target and function.name == hypothesis.target_function:
+            observations = plan_public_state_observations(contract_model, function)
+            if not observations:
+                raise ValueError(
+                    "state prerequisite has no deterministic public runtime observation; "
+                    "security sequence must fail closed"
+                )
+            rendered.extend(
+                f'        assertTrue({observation.expression}, "unverified prerequisite: {observation.predicate}");'
+                for observation in observations
+            )
+            break
         if len(step.arguments) != len(function.parameters):
             raise ValueError(
                 f"sequence input arity mismatch for {step.function}: "
