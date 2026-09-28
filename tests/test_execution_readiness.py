@@ -939,6 +939,43 @@ def test_state_setup_candidate_fails_closed_on_unresolved_custom_modifier(tmp_pa
 
 
 
+def test_state_setup_candidate_uses_resolved_inherited_modifier_authorization(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => address) registry;
+            function run(uint256 key) external { verify(key); }
+            function verify(uint256 key) internal {
+                require(registry[key] != address(0));
+            }
+            function register(uint256 key, address endpoint) external onlyRole(DEFAULT_ADMIN_ROLE) {
+                registry[key] = endpoint;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.models import ModifierModel
+    from cydra.solidity_model import parse_solidity
+    modifier = ModifierModel(
+        "onlyRole",
+        (ParameterModel("role", "bytes32"),),
+        "require(hasRole(role, msg.sender)); _;",
+    )
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    contract = replace(contract, modifiers=(modifier,))
+    function = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, function)
+    candidate = next(
+        item for item in readiness.state_setup_candidates
+        if item.subject == "register"
+    )
+    assert candidate.status == "unresolved"
+    assert "authorization" in candidate.detail
+
+
 def test_readiness_resolves_modifier_body_without_inventing_role_identity():
     modifier = ModifierModel(
         "onlyRole",
