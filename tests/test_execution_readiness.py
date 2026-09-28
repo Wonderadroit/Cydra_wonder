@@ -967,3 +967,37 @@ def test_readiness_resolves_modifier_body_without_inventing_role_identity():
     assert requirement.subject == "onlyRole(DEFAULT_ADMIN_ROLE)"
     assert "resolved modifier body establishes caller authorization semantics" in requirement.detail
     assert "legitimate role-establishment transition" in requirement.detail
+
+
+def test_inherited_modifier_authorization_resolves_through_dependency_graph(tmp_path):
+    root = tmp_path / "target"
+    (root / "lib" / "access-control" / "contracts").mkdir(parents=True)
+    (root / "contracts").mkdir(parents=True)
+    (root / "contracts" / "Target.sol").write_text(
+        'import "./Base.sol";\n'
+        'contract Target is Base {}\n',
+        encoding="utf-8",
+    )
+    (root / "contracts" / "Base.sol").write_text(
+        'import "@access/contracts/AccessControlLike.sol";\n'
+        'abstract contract Base is AccessControlLike {\n'
+        '    function register(uint256 key) external onlyRole(DEFAULT_ADMIN_ROLE) {}\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    (root / "lib" / "access-control" / "contracts" / "AccessControlLike.sol").write_text(
+        'abstract contract AccessControlLike {\n'
+        '    modifier onlyRole(bytes32 role) { require(hasRole(role, msg.sender)); _; }\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(root / "contracts" / "Target.sol") if item.name == "Target")
+    inherited = next(item for item in contract.inherited_functions if item.name == "register")
+    readiness = inspect_execution_readiness(contract, inherited)
+
+    assert inherited.modifier_invocations == (("onlyRole", ("DEFAULT_ADMIN_ROLE",)),)
+    requirement = next(item for item in readiness.caller_requirements if item.kind == "caller_role")
+    assert requirement.status == "required"
+    assert "resolved modifier body establishes caller authorization semantics" in requirement.detail
