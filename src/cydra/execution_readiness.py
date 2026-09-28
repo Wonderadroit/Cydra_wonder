@@ -1492,6 +1492,20 @@ def constructible_state_setup_plan(
             memo[key] = None
             return None
         actions = []
+        # The readiness surface is the authoritative evidence that a writer is
+        # constructible.  The recursive planner still resolves nested state
+        # prerequisites, but it must not discard an already-proven primitive
+        # writer merely because re-inspecting that writer through a different
+        # call-graph context loses provenance that was established at the
+        # consumer boundary.  This is especially important for inherited
+        # writers whose authorization/state model is assembled across contracts.
+        constructible_candidates = {}
+        for candidate in readiness.state_setup_candidates:
+            if candidate.status != "constructible":
+                continue
+            marker = candidate.source.rsplit(":", 1)[-1]
+            constructible_candidates.setdefault((marker, candidate.subject), candidate)
+
         for state in required_state_names(fn):
             if state in default_satisfied_states:
                 continue
@@ -1510,6 +1524,20 @@ def constructible_state_setup_plan(
                 if nested is not None:
                     selected = (*nested, SetupAction(writer.name, caller_role(writer), (*stack, fn.name, state)))
                     break
+
+                # A constructible candidate has already passed the generic ABI,
+                # runtime-dependency, and authorization checks. If that writer
+                # has no additional state prerequisites of its own, it is safe
+                # to consume that evidence directly instead of inventing a
+                # second target-specific proof path.
+                if constructible_candidates.get((state, writer.name)) is not None:
+                    writer_states = tuple(
+                        item for item in required_state_names(writer)
+                        if item not in _state_observation_has_default_solution(contract, writer, item)
+                    )
+                    if not writer_states:
+                        selected = (SetupAction(writer.name, caller_role(writer), (*stack, fn.name, state)),)
+                        break
             if selected is None:
                 memo[key] = None
                 return None
