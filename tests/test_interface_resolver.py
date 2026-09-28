@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cydra.interface_resolver import resolve_interface
+from cydra.interface_resolver import resolve_interface, resolve_struct_fields
 
 
 def _write(path: Path, content: str) -> None:
@@ -233,3 +233,28 @@ def test_ambiguous_dependency_path_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError):
         resolve_interface(root, root / "contracts" / "Token.sol", "IAccessControl")
+
+
+def test_resolves_source_defined_struct_fields(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    source = root / "contracts" / "types" / "IMerkle.sol"
+    _write(
+        source,
+        "interface IMerkle {\n"
+        "    struct MerkleConstructorArgs {\n"
+        "        uint128 levels;\n"
+        "        address poseidon2;\n"
+        "        address poseidon4;\n"
+        "        address poseidon5;\n"
+        "    }\n"
+        "}\n",
+    )
+
+    fields = resolve_struct_fields(root, "contracts/types/IMerkle.sol", "MerkleConstructorArgs")
+
+    assert fields == (
+        ("levels", "uint128"),
+        ("poseidon2", "address"),
+        ("poseidon4", "address"),
+        ("poseidon5", "address"),
+    )
