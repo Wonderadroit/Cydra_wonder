@@ -1067,6 +1067,8 @@ def _execute_exploration_question(
     classes: tuple[str, ...],
     compiler_evidence: CompilerEvidenceResult,
     trace: list[dict[str, Any]],
+    execution_sink: list[ExecutionResult],
+    evidence_sink: list[Any],
 ):
     """Execute one selected frontier hypothesis through the existing canonical boundary.
 
@@ -1099,6 +1101,8 @@ def _execute_exploration_question(
 
     scoped = replace(result, hypotheses=(hypothesis,), experiments=(experiment,))
     statuses, executions, evidence = run_layers(scoped, project, classes, compiler_evidence)
+    execution_sink.extend(executions)
+    evidence_sink.extend(evidence)
     trace.append({
         "question_id": decision.question_id,
         "hypothesis_id": decision.hypothesis_id,
@@ -1182,6 +1186,8 @@ def run_source_investigation(
                 })
 
         exploration_trace: list[dict[str, Any]] = []
+        exploration_executions: list[ExecutionResult] = []
+        exploration_evidence: list[Any] = []
         exploration = run_bounded_exploration(
             result,
             budget=exploration_budget,
@@ -1192,6 +1198,8 @@ def run_source_investigation(
                 classes,
                 compiler_evidence,
                 exploration_trace,
+                exploration_executions,
+                exploration_evidence,
             ),
         )
         result = exploration.result
@@ -1200,12 +1208,8 @@ def run_source_investigation(
             for round_result in exploration_trace
             for status in round_result.get("statuses", [])
         ]
-        executions = [
-            execution
-            for round_result in exploration_trace
-            for execution in round_result.get("executions", [])
-        ]
-        evidence = list(result.evidence)
+        executions = exploration_executions
+        evidence = exploration_evidence
         experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
         execution_readiness = []
         for hypothesis in result.hypotheses:
