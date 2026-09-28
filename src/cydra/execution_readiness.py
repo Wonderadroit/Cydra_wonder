@@ -199,6 +199,49 @@ def caller_role(function: FunctionModel) -> str | None:
     return None
 
 
+def _constructor_role_grants(contract: ContractModel) -> tuple[tuple[str, str], ...]:
+    """Collect constructor role grants across the modeled inheritance graph."""
+    source_path = Path(contract.source).resolve()
+    project_root = next(
+        (
+            parent
+            for parent in (source_path.parent, *source_path.parents)
+            if any((parent / marker).exists() for marker in ("foundry.toml", "package.json", "remappings.txt"))
+        ),
+        source_path.parent,
+    )
+    grants: list[tuple[str, str]] = []
+    visited: set[Path] = set()
+
+    def visit(current: ContractModel) -> None:
+        if current.constructor is not None:
+            for item in current.constructor.role_grants:
+                if item not in grants:
+                    grants.append(item)
+        current_path = Path(current.source).resolve()
+        for inherited_name in current.inherits:
+            try:
+                resolved, _ = resolve_named_type_source(project_root, current_path, inherited_name)
+            except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                continue
+            resolved_path = (project_root / resolved).resolve()
+            if resolved_path in visited:
+                continue
+            visited.add(resolved_path)
+            try:
+                bases = __import__("cydra.solidity_model", fromlist=["parse_solidity"]).parse_solidity(
+                    resolved_path, include_inherited=False
+                )
+            except (OSError, UnicodeError):
+                continue
+            base = next((item for item in bases if item.name == inherited_name), None)
+            if base is not None:
+                visit(base)
+
+    visit(contract)
+    return tuple(grants)
+
+
 def _caller_requirements(
     function: FunctionModel,
     contract: ContractModel | None = None,
@@ -230,6 +273,27 @@ def _caller_requirements(
             has_role_check = any(token in definition.body for token in role_tokens)
             if has_caller_check or has_role_check:
                 rendered_args = ", ".join(invocation_args)
+                role_established_for_deployer = bool(
+                    has_role_check
+                    and invocation_args
+                    and any(
+                        role == invocation_args[0]
+                        and account in {"msg.sender", "_msgSender()"}
+                        for role, account in _constructor_role_grants(contract)
+                    )
+                )
+                if role_established_for_deployer:
+                    requirements.append(
+                        ExecutionRequirement(
+                            "caller_role",
+                            f"{modifier}({rendered_args})",
+                            f"{function.name}:modifier",
+                            "constraint",
+                            "target constructor establishes the invoked role for its deployment caller; "
+                            "state setup is executed by that same deployment caller",
+                        )
+                    )
+                    continue
                 detail = (
                     f"resolved modifier body establishes caller authorization semantics"
                     f"{': invocation arguments ' + rendered_args if rendered_args else ''}; "
