@@ -534,8 +534,14 @@ def _run_state_prerequisite_observation(
     target_function = functions.get(hypothesis.target_function)
     if target_function is None:
         raise ValueError(f"state target function is not modeled: {hypothesis.target_function}")
-    target_arguments = tuple(_setup_argument(target_function, i, None) for i in range(len(target_function.parameters)))
-    observation_steps = (*setup_steps, ExperimentStep(function=hypothesis.target_function, arguments=target_arguments))
+    # The target step is a marker for prerequisite observation. When the
+    # sequence renderer is asked to stop before the target, its arguments are
+    # never rendered or executed, so requiring a fully materializable target
+    # ABI here would create a false blocker before state setup can be verified.
+    observation_steps = (
+        *setup_steps,
+        ExperimentStep(function=hypothesis.target_function, arguments=()),
+    )
     observation_experiment = replace(experiment, experiment_id=f"{experiment.experiment_id}-PREREQ", steps=observation_steps)
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}-prereq.t.sol")
     generated = generate_sequence_test_from_experiment(
