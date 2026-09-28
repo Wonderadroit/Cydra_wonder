@@ -165,3 +165,7 @@ The generic recursive exploration layer is now persisted in every canonical sour
 Current status: **implemented and artifact-wired, not yet exercised by a new canonical Hinkal run**.
 
 Next action: validate the new module and freeze wiring, then run the same canonical Hinkal workflow. Inspect `exploration-state.json` first and use the live artifact to identify the next missing generic capability.
+
+
+### Latest exploration-controller state
+The frontier now has a generic bounded recursive controller and an evidence-feedback bridge. It has regression coverage but has not yet been exercised through the live canonical Hinkal workflow. Next action: wire the existing canonical execution callback into one bounded exploration round, then rerun the same target and inspect the resulting exploration history.
