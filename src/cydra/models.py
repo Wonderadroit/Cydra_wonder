@@ -36,6 +36,10 @@ class ParameterModel:
 class ConstructorModel:
     parameters: tuple[ParameterModel, ...]
     line: int
+    # Role assignments established during construction, represented as
+    # (role_expression, account_expression). This is source-derived state
+    # evidence, not a guessed role identity.
+    role_grants: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     interface_casts: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     resolved_interface_casts: tuple[tuple[str, ResolvedInterface], ...] = field(default_factory=tuple)
     derived_interface_casts: tuple[tuple[str, str, ResolvedInterface], ...] = field(default_factory=tuple)
