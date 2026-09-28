@@ -1406,6 +1406,23 @@ def constructible_state_setup_plan(
                 result.append(candidate)
         return tuple(result)
 
+    def planner_readiness(fn: FunctionModel) -> ExecutionReadiness:
+        """Readiness view that deliberately excludes recursive state requirements."""
+        return ExecutionReadiness(
+            contract=contract.name,
+            constructor_requirements=_constructor_requirements(contract),
+            caller_requirements=_caller_requirements(fn, contract),
+            runtime_requirements=_runtime_requirements(contract, fn),
+            execution_requirements=(
+                *_execution_requirements(contract, fn),
+                *_execution_dataflow_requirements(contract, fn, semantic_evidence, frozenset()),
+            ),
+            state_setup_candidates=(
+                *_state_setup_candidates(contract, fn, constraints, semantic_evidence),
+                *_internal_state_setup_candidates(contract, fn, semantic_evidence),
+            ),
+        )
+
     def required_state_names(fn: FunctionModel) -> tuple[str, ...]:
         names = list(_state_names_from_predicates(fn))
         for constraint in constraints:
@@ -1420,7 +1437,7 @@ def constructible_state_setup_plan(
         # a positive maxWithdraw(msg.sender) path requires the caller to own
         # shares. Feed those discovered state dependencies into the same
         # recursive writer solver used for ordinary state predicates.
-        readiness = inspect_execution_readiness(contract, fn, constraints, semantic_evidence)
+        readiness = planner_readiness(fn)
         for requirement in readiness.execution_requirements:
             if requirement.kind != "caller_state_dependency" or requirement.status != "discovered":
                 continue
@@ -1436,7 +1453,7 @@ def constructible_state_setup_plan(
         if depth > max_depth or fn.name in stack:
             memo[key] = None
             return None
-        readiness = inspect_execution_readiness(contract, fn, constraints, semantic_evidence)
+        readiness = planner_readiness(fn)
 
         # A state-observation prerequisite is not itself a reason to abandon
         # planning when the target model already exposes a writer for that
