@@ -4,7 +4,7 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-from .interface_resolver import ResolvedInterface, resolve_interface, resolve_named_type_source
+from .interface_resolver import ResolvedInterface, resolve_import, resolve_interface, resolve_named_type_source, _imports_for
 from .models import ConstructorModel, ContractModel, FunctionModel, ModifierModel, ParameterModel
 
 
