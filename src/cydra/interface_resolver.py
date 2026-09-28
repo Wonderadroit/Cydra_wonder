@@ -417,7 +417,7 @@ def resolve_struct_fields(root: str | Path, source_path: str | Path, struct_name
         source = _strip_comments(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError):
         return ()
-    match = re.search(rf"\\bstruct\\s+{re.escape(struct_name)}\\s*\\{{(?P<body>.*?)\\}}", source, re.DOTALL)
+    match = re.search(rf"\bstruct\s+{re.escape(struct_name)}\s*\{(?P<body>.*?)\}", source, re.DOTALL)
     if not match:
         return ()
     fields: list[tuple[str, str]] = []
