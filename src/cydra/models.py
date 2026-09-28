@@ -42,10 +42,23 @@ class ConstructorModel:
 
 
 @dataclass(frozen=True)
+class ModifierModel:
+    """Syntactic modifier definition preserved for authorization reasoning."""
+    name: str
+    parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
+    body: str = ""
+    line: int = 0
+    internal_calls: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class FunctionModel:
     name: str
     visibility: str
     modifiers: tuple[str, ...]
+    # Modifier invocations preserve arguments instead of collapsing them to names.
+    # This is required to trace target-derived role expressions such as onlyRole(X).
+    modifier_invocations: tuple[tuple[str, tuple[str, ...]], ...] = field(default_factory=tuple)
     writes: tuple[str, ...]
     external_calls: tuple[str, ...]
     line: int
@@ -91,6 +104,8 @@ class ContractModel:
     # Concrete inherited functions discovered through the source import/inheritance graph.
     # This is model provenance, not a claim that an inherited path is executable.
     inherited_functions: tuple[FunctionModel, ...] = field(default_factory=tuple)
+    modifiers: tuple[ModifierModel, ...] = field(default_factory=tuple)
+    inherited_modifiers: tuple[ModifierModel, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
