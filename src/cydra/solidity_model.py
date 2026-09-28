@@ -659,6 +659,57 @@ def _modifier_invocations(signature_tail: str, keywords: set[str]) -> tuple[tupl
     return tuple(invocations)
 
 
+def _resolve_inherited_contract_source(
+    root: Path,
+    importer: Path,
+    name: str,
+) -> Path | None:
+    """Resolve a concrete inherited contract through declared imports only."""
+    visited: set[Path] = set()
+
+    def walk(path: Path) -> Path | None:
+        path = path.resolve()
+        if path in visited or not path.is_file():
+            return None
+        visited.add(path)
+        try:
+            imports = _imports_for(path)
+        except (OSError, UnicodeError):
+            return None
+
+        for import_path in imports:
+            if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
+                continue
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            candidate = resolved[0].resolve()
+            try:
+                source = _strip_comments(candidate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                continue
+            if re.search(rf"\b(?:abstract\s+)?contract\s+{re.escape(name)}\b", source):
+                return candidate
+
+        for import_path in imports:
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            candidate = resolved[0]
+            try:
+                source = _strip_comments(candidate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                continue
+            if re.search(rf"\b(?:abstract\s+)?contract\s+{re.escape(name)}\b", source):
+                return candidate
+            found = walk(candidate)
+            if found is not None:
+                return found
+        return None
+
+    return walk(importer)
+
+
 def _inherited_modifiers(
     root: Path,
     importer: Path,
@@ -669,11 +720,9 @@ def _inherited_modifiers(
     seen = set() if seen is None else seen
     modifiers: list[ModifierModel] = []
     for inherited_name in inherits:
-        try:
-            source_path, _method = resolve_named_type_source(root, importer, inherited_name)
-        except (FileNotFoundError, ValueError):
+        resolved_path = _resolve_inherited_contract_source(root, importer, inherited_name)
+        if resolved_path is None:
             continue
-        resolved_path = (root / source_path).resolve()
         if resolved_path in seen:
             continue
         seen.add(resolved_path)
