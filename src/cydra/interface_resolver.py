@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import json
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,50 @@ def _split_parameters(text: str) -> tuple[str, ...]:
     return tuple(parts)
 
 
+def _foundry_remappings(root: str | Path) -> tuple[tuple[str, str], ...]:
+    """Read explicit remappings from foundry.toml without requiring a TOML package."""
+    path = Path(root) / "foundry.toml"
+    if not path.exists():
+        return ()
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ()
+    match = re.search(r"(?m)^\s*remappings\s*=\s*\[([^\]]*)\]", source)
+    if not match:
+        return ()
+    result: list[tuple[str, str]] = []
+    for item in re.finditer(r'"([^"]+)"', match.group(1)):
+        parsed = _REMAP_RE.match(item.group(1))
+        if parsed:
+            result.append(parsed.groups())
+    return tuple(result)
+
+
+def _dependency_roots(root: str | Path) -> tuple[Path, ...]:
+    """Return bounded Foundry/npm dependency roots used by the target adapter."""
+    root = Path(root).resolve()
+    roots: list[Path] = []
+    for name in ("lib", "node_modules"):
+        candidate = root / name
+        if candidate.is_dir() and candidate not in roots:
+            roots.append(candidate)
+    return tuple(roots)
+
+
+def _package_name(path: Path) -> str | None:
+    """Read an optional package manifest name for dependency provenance."""
+    manifest = path / "package.json"
+    if not manifest.is_file():
+        return None
+    try:
+        value = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    name = value.get("name") if isinstance(value, dict) else None
+    return name if isinstance(name, str) and name else None
+
+
 def parse_remappings(root: str | Path) -> tuple[tuple[str, str], ...]:
     root = Path(root)
     path = root / "remappings.txt"
@@ -117,9 +162,9 @@ def parse_remappings(root: str | Path) -> tuple[tuple[str, str], ...]:
 def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> tuple[Path, str] | None:
     root = Path(root).resolve()
     importer = Path(importer).resolve()
-    remappings = parse_remappings(root)
+    remappings = (*parse_remappings(root), *_foundry_remappings(root))
 
-    for prefix, destination in sorted(remappings, key=lambda item: len(item[0]), reverse=True):
+    for prefix, destination in sorted(dict.fromkeys(remappings), key=lambda item: len(item[0]), reverse=True):
         if import_path.startswith(prefix):
             candidate = root / destination / import_path[len(prefix):]
             if candidate.is_file():
@@ -136,6 +181,41 @@ def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> 
     repository_relative = (root / import_path).resolve()
     if repository_relative.is_file():
         return repository_relative, "project_relative"
+
+    # Foundry's auto-detected dependency remappings may not exist in
+    # remappings.txt or foundry.toml. Resolve them only inside declared
+    # dependency roots; do not scan the target source tree for symbols.
+    parts = import_path.split("/")
+    if import_path.startswith("@") and len(parts) >= 2:
+        package_candidates = ["/".join(parts[:2])]
+        suffix = "/".join(parts[2:])
+    elif parts:
+        package_candidates = [parts[0]]
+        suffix = "/".join(parts[1:])
+    else:
+        package_candidates = []
+        suffix = ""
+
+    for dependency_root in _dependency_roots(root):
+        for package_dir in dependency_root.iterdir():
+            if not package_dir.is_dir() or _package_name(package_dir) not in package_candidates:
+                continue
+            for source_root in ("", "src", "contracts"):
+                candidate = (package_dir / source_root / suffix).resolve()
+                if candidate.is_file():
+                    return candidate, "dependency_package"
+
+    # Foundry library directories may use a repository directory name that
+    # differs from the package name. Accept only an exact imported-path suffix
+    # under a direct dependency root.
+    for dependency_root in _dependency_roots(root):
+        for package_dir in dependency_root.iterdir():
+            if not package_dir.is_dir():
+                continue
+            for source_root in ("", "src", "contracts"):
+                candidate = (package_dir / source_root / import_path).resolve()
+                if candidate.is_file():
+                    return candidate, "dependency_path"
 
     return None
 
