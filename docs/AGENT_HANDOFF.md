@@ -65,6 +65,6 @@ CYDRA now has a generic exploration frontier in `src/cydra/exploration.py`.
 - `next_question(remaining_budget)` selects the highest information-gain-per-cost question that fits the budget.
 - Proposed hypotheses with experiments are prioritized; uncovered functions and state surfaces remain explicit frontier questions.
 
-This layer is deliberately orchestration-only. It does not replace the existing system model, generate target-specific hypotheses, bypass execution readiness, or promote findings. The next engineering step is to connect it to the canonical live runner so exploration can iterate on updated evidence/model state within one bounded run.
+This layer is deliberately orchestration-only. It does not replace the existing system model, generate target-specific hypotheses, bypass execution readiness, or promote findings. The canonical live runner now persists `exploration-state.json` in each source freeze. The next engineering step is to consume updated frontier state repeatedly within one bounded run so new evidence creates the next questions automatically.
 
 Do not reopen maturity work or create benchmarks for this capability.
