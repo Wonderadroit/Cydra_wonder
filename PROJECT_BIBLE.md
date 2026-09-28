@@ -2027,3 +2027,27 @@ The frontier must remain generic and target-derived. LLM reasoning may consume t
 Regression coverage is required for budget-bounded frontier selection and for preserving uncovered function/state surfaces as explicit questions. The frontier is now persisted in the canonical live-source freeze as `exploration-state.json`. The next implementation boundary is to make the canonical orchestration consume updated frontier state repeatedly within a bounded run, so evidence can create new questions and the engine can select the next investigation step without requiring the human operator to manually drive every iteration.
 
 **Recursive controller boundary:** The exploration frontier now has a bounded controller (run_bounded_exploration) that selects a question, delegates execution to the existing canonical runner through an injected callback, records execution evidence, refreshes the frontier, and repeats until budget exhaustion/frontier exhaustion. It deliberately does not implement readiness, execution, or causal interpretation itself.
+
+## Milestone 92 — canonical live dogfood consumes the recursive exploration controller
+
+The canonical live-target runner now drives the existing bounded exploration controller instead of executing every initially generated hypothesis in one batch and merely snapshotting the frontier afterward.
+
+The integration preserves the architectural boundary:
+- src/cydra/exploration.py selects the next target-derived question;
+- the canonical runner remains the sole owner of execution readiness, prerequisite verification, experiment generation, Foundry execution, classification, and causal evidence;
+- one selected hypothesis is scoped into the existing execution path for each exploration round;
+- execution evidence is fed back into the investigation result;
+- the exploration controller refreshes the frontier and selects the next question within a bounded budget;
+- the final exploration-state.json records the actual recursive run state rather than only an unused initial snapshot.
+
+This is intentionally an orchestration integration, not a new detector and not target-specific Hinkal logic. The live pipeline therefore now has the intended behavioral spine:
+
+diagnose target -> model intent/system behavior -> build frontier -> select unresolved question -> test -> collect evidence -> update investigation state -> rebuild frontier -> continue -> causal verification -> finding gate
+
+The current bridge executes hypothesis-backed frontier questions. If the real target exposes a model-understanding question that cannot yet be converted into an executable hypothesis through an existing generic reasoning surface, that is recorded as a capability gap rather than fabricated into a security conclusion. The next implementation must be driven by that observed gap if the live target exposes it.
+
+The initial canonical exploration budget is bounded at 4.0 cost units. This is an execution safety bound, not a claim that four rounds are sufficient for a target.
+
+The next evidence boundary is behavioral: run the canonical Hinkal dogfood from the updated branch and inspect whether successive rounds actually change the frontier and expose the next missing generic capability. Do not add target-specific hypotheses, reopen maturity, or expand benchmark coverage to compensate for a live-target limitation.
+
+Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
