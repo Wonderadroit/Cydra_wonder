@@ -33,7 +33,7 @@ from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 from cydra.target_adapter import inspect_target
 from cydra.execution_readiness import constructible_state_setup_plan, inspect_execution_readiness, role_address_expression
-from cydra.exploration import ExplorationState
+from cydra.exploration import ExplorationState, run_bounded_exploration
 from cydra.prerequisite_graph import apply_observations, build_prerequisite_graph, can_enter_security_experiment
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
@@ -1060,6 +1060,57 @@ def _blind_planner(hypothesis):
     # crash the entire blind investigation with a planner KeyError.
     return _default_experiment_planner(hypothesis)
 
+def _execute_exploration_question(
+    result,
+    decision,
+    project: Path,
+    classes: tuple[str, ...],
+    compiler_evidence: CompilerEvidenceResult,
+    trace: list[dict[str, Any]],
+):
+    """Execute one selected frontier hypothesis through the existing canonical boundary.
+
+    Exploration owns selection; run_layers remains the sole readiness/generation/
+    execution/classification boundary. A scoped result prevents one exploration
+    round from re-running every hypothesis while preserving the full investigation
+    result for the controller's feedback/update cycle.
+    """
+    if decision.hypothesis_id is None:
+        trace.append({
+            "question_id": decision.question_id,
+            "hypothesis_id": None,
+            "status": "NOT_EXECUTABLE",
+            "reason": "frontier question has no hypothesis-backed execution adapter",
+        })
+        return result, ()
+
+    hypothesis = next(
+        (item for item in result.hypotheses if item.hypothesis_id == decision.hypothesis_id),
+        None,
+    )
+    if hypothesis is None:
+        raise RuntimeError(f"exploration selected unknown hypothesis: {decision.hypothesis_id}")
+    experiment = next(
+        (item for item in result.experiments if item.hypothesis_id == decision.hypothesis_id),
+        None,
+    )
+    if experiment is None:
+        raise RuntimeError(f"exploration hypothesis has no experiment: {decision.hypothesis_id}")
+
+    scoped = replace(result, hypotheses=(hypothesis,), experiments=(experiment,))
+    statuses, executions, evidence = run_layers(scoped, project, classes, compiler_evidence)
+    trace.append({
+        "question_id": decision.question_id,
+        "hypothesis_id": decision.hypothesis_id,
+        "statuses": statuses,
+        "executions": [_json(item) for item in executions],
+        "evidence_ids": [item.evidence_id for item in evidence],
+    })
+    return replace(
+        result,
+        evidence=tuple(dict.fromkeys((*result.evidence, *evidence))),
+    ), tuple(evidence)
+
 def run_source_investigation(
     *,
     target_repo: str,
@@ -1068,6 +1119,7 @@ def run_source_investigation(
     target_project: str,
     classes: list[str] | tuple[str, ...],
     freeze: Path,
+    exploration_budget: float = 4.0,
 ) -> int:
     require_frozen_source()
     classes = validate_classes(list(classes))
@@ -1129,7 +1181,31 @@ def run_source_investigation(
                     "reason": "reasoning surface is generated and planned by the canonical pipeline but has no generic runtime adapter",
                 })
 
-        statuses, executions, evidence = run_layers(result, project, classes, compiler_evidence)
+        exploration_trace: list[dict[str, Any]] = []
+        exploration = run_bounded_exploration(
+            result,
+            budget=exploration_budget,
+            execute_question=lambda current_result, decision: _execute_exploration_question(
+                current_result,
+                decision,
+                project,
+                classes,
+                compiler_evidence,
+                exploration_trace,
+            ),
+        )
+        result = exploration.result
+        statuses = [
+            status
+            for round_result in exploration_trace
+            for status in round_result.get("statuses", [])
+        ]
+        executions = [
+            execution
+            for round_result in exploration_trace
+            for execution in round_result.get("executions", [])
+        ]
+        evidence = list(result.evidence)
         experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
         execution_readiness = []
         for hypothesis in result.hypotheses:
@@ -1160,13 +1236,19 @@ def run_source_investigation(
                 "target_function": hypothesis.target_function,
                 "readiness": readiness,
             })
-        exploration_state = ExplorationState.from_investigation(result)
+        exploration_state = exploration.state
         build_capture = _command_capture(project, "forge", "build")
         provenance_env, _, forge_config_text = _environment_provenance(root, project)
 
         classification = {
             "surface": "compiler-backed-planned-execution",
             "hypotheses": statuses,
+            "exploration": {
+                "budget": exploration_budget,
+                "rounds": exploration.rounds,
+                "stopped_reason": exploration.stopped_reason,
+                "trace": exploration_trace,
+            },
             "outcome_taxonomy": {
                 "initialization": {"TP": "confirmed", "FP": "rejected", "FN": "not_confirmed"},
                 "authorization": {"execution": "measured", "classification": "requires_patched_counterpart"},
