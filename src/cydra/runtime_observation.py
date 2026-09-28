@@ -23,7 +23,7 @@ def _public_mapping_getters(sources: tuple[str, ...]) -> set[str]:
     """Return public mapping state names using balanced declaration parsing."""
     getters: set[str] = set()
     for source in sources:
-        for marker in re.finditer(r"\\bmapping\\s*\\(", source):
+        for marker in re.finditer(r"\bmapping\s*\(", source):
             index = marker.end() - 1
             depth = 0
             while index < len(source):
@@ -41,11 +41,11 @@ def _public_mapping_getters(sources: tuple[str, ...]) -> set[str]:
             if declaration_end < 0:
                 continue
             declaration = source[marker.start():declaration_end + 1]
-            if not re.search(r"\\bpublic\\b", declaration):
+            if not re.search(r"\bpublic\b", declaration):
                 continue
             after_type = source[index + 1:declaration_end + 1]
             name_match = re.search(
-                r"\\b([A-Za-z_]\\w*)\\s*(?:=[^;]*)?;\\s*$",
+                r"\b([A-Za-z_]\w*)\s*(?:=[^;]*)?;\s*$",
                 after_type,
             )
             if name_match:
