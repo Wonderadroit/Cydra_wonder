@@ -91,3 +91,26 @@ def test_frontier_does_not_reselect_explored_hypothesis():
 
     assert question is not None
     assert question.hypothesis_id != "H-1"
+
+
+def test_controller_records_attempt_and_updates_budget():
+    from cydra.exploration import record_exploration_step, select_next_question
+    state = ExplorationState.from_investigation(_result())
+    decision = select_next_question(state, 2.0)
+    assert decision is not None
+    advanced = record_exploration_step(state, decision, evidence_ids=("E-BLOCKED",))
+    assert advanced.explored_question_ids == ("Q-HYP-H-1",)
+    assert advanced.explored_hypothesis_ids == ("H-1",)
+    assert advanced.evidence_ids == ("E-BLOCKED",)
+    assert advanced.budget_used == 2.0
+
+def test_frontier_refresh_preserves_exploration_history():
+    from cydra.exploration import record_exploration_step, refresh_exploration_frontier, select_next_question
+    state = ExplorationState.from_investigation(_result())
+    decision = select_next_question(state, 2.0)
+    assert decision is not None
+    advanced = record_exploration_step(state, decision)
+    refreshed = refresh_exploration_frontier(_result(), advanced)
+    assert refreshed.explored_hypothesis_ids == ("H-1",)
+    assert all(q.question_id != "Q-HYP-H-1" for q in refreshed.unresolved_questions)
+    assert refreshed.budget_used == 2.0
