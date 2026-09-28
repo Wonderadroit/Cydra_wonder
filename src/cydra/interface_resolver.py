@@ -130,6 +130,31 @@ def _dependency_roots(root: str | Path) -> tuple[Path, ...]:
     return tuple(roots)
 
 
+def _dependency_package_dirs(root: str | Path) -> tuple[Path, ...]:
+    """Return bounded direct dependency package directories, including npm scopes."""
+    result: list[Path] = []
+    for dependency_root in _dependency_roots(root):
+        try:
+            children = tuple(sorted(dependency_root.iterdir(), key=lambda item: item.name))
+        except OSError:
+            continue
+        for child in children:
+            if not child.is_dir():
+                continue
+            result.append(child)
+            # npm scoped packages live one level below the scope directory,
+            # e.g. node_modules/@openzeppelin/contracts. Keep this bounded to
+            # the package-manager's direct scope layout; never recursively scan
+            # arbitrary dependency trees.
+            if child.name.startswith("@"):
+                try:
+                    scoped = tuple(sorted(child.iterdir(), key=lambda item: item.name))
+                except OSError:
+                    continue
+                result.extend(item for item in scoped if item.is_dir())
+    return tuple(dict.fromkeys(result))
+
+
 def _package_name(path: Path) -> str | None:
     """Read an optional package manifest name for dependency provenance."""
     manifest = path / "package.json"
@@ -197,8 +222,8 @@ def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> 
         suffix = ""
 
     for dependency_root in _dependency_roots(root):
-        for package_dir in dependency_root.iterdir():
-            if not package_dir.is_dir() or _package_name(package_dir) not in package_candidates:
+        for package_dir in _dependency_package_dirs(root):
+            if _package_name(package_dir) not in package_candidates:
                 continue
             for source_root in ("", "src", "contracts"):
                 candidate = (package_dir / source_root / suffix).resolve()
@@ -211,7 +236,7 @@ def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> 
     # match across direct dependency roots. Ambiguity remains unresolved.
     candidates: list[Path] = []
     for dependency_root in _dependency_roots(root):
-        for package_dir in sorted(dependency_root.iterdir(), key=lambda item: item.name):
+        for package_dir in _dependency_package_dirs(root):
             if not package_dir.is_dir():
                 continue
             for source_root in ("", "src", "contracts"):
