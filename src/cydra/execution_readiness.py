@@ -1533,7 +1533,7 @@ def constructible_state_setup_plan(
                 if constructible_candidates.get((state, writer.name)) is not None:
                     writer_states = tuple(
                         item for item in required_state_names(writer)
-                        if item not in _state_observation_has_default_solution(contract, writer, item)
+                        if not _state_observation_has_default_solution(contract, writer, item)
                     )
                     if not writer_states:
                         selected = (SetupAction(writer.name, caller_role(writer), (*stack, fn.name, state)),)
