@@ -445,6 +445,25 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
         if declaration.search(source):
             return path.relative_to(root).as_posix(), "declaration"
 
+        # A plain import has no named-import symbol list, but the imported
+        # source filename is often the authoritative symbol boundary.
+        # Resolve that exact declared path before walking the broader import
+        # graph. This keeps dependency provenance bounded and avoids relying on
+        # a repository-wide symbol search.
+        for import_path in _imports_for(path):
+            if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
+                continue
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            imported_path = resolved[0].resolve()
+            try:
+                imported_source = _strip_comments(imported_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                continue
+            if declaration.search(imported_source):
+                return imported_path.relative_to(root).as_posix(), "declared_import"
+
         for match in named_import.finditer(source):
             symbols_text, import_path = match.groups()
             symbols = []
