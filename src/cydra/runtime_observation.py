@@ -19,10 +19,38 @@ class StateObservationPlan:
     source: str
 
 
-_MAPPING_RE = re.compile(
-    r"mapping\s*\(\s*(?P<key>[^=]+?)\s*=>\s*(?P<value>[^)]+?)\s*\)\s+"
-    r"(?P<visibility>public)\s+(?P<name>[A-Za-z_]\w*)\s*;"
-)
+def _public_mapping_getters(sources: tuple[str, ...]) -> set[str]:
+    """Return public mapping state names using balanced declaration parsing."""
+    getters: set[str] = set()
+    for source in sources:
+        for marker in re.finditer(r"\\bmapping\\s*\\(", source):
+            index = marker.end() - 1
+            depth = 0
+            while index < len(source):
+                char = source[index]
+                if char == "(":
+                    depth += 1
+                elif char == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                index += 1
+            if depth != 0:
+                continue
+            declaration_end = source.find(";", index + 1)
+            if declaration_end < 0:
+                continue
+            declaration = source[marker.start():declaration_end + 1]
+            if not re.search(r"\\bpublic\\b", declaration):
+                continue
+            after_type = source[index + 1:declaration_end + 1]
+            name_match = re.search(
+                r"\\b([A-Za-z_]\\w*)\\s*(?:=[^;]*)?;\\s*$",
+                after_type,
+            )
+            if name_match:
+                getters.add(name_match.group(1))
+    return getters
 
 
 def _source_graph(contract: ContractModel) -> tuple[Path, ...]:
@@ -54,14 +82,6 @@ def _source_graph(contract: ContractModel) -> tuple[Path, ...]:
                 pending.append(candidate)
 
     return tuple(paths)
-
-
-def _public_mapping_getters(sources: tuple[str, ...]) -> set[str]:
-    return {
-        match.group("name")
-        for source in sources
-        for match in _MAPPING_RE.finditer(source)
-    }
 
 
 def plan_public_mapping_state_observations(
