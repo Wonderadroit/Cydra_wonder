@@ -45,6 +45,7 @@ class ExplorationState:
     evidence_ids: tuple[str, ...] = field(default_factory=tuple)
     unresolved_questions: tuple[ExplorationQuestion, ...] = field(default_factory=tuple)
     explored_hypothesis_ids: tuple[str, ...] = field(default_factory=tuple)
+    explored_question_ids: tuple[str, ...] = field(default_factory=tuple)
     budget_used: float = 0.0
 
     @classmethod
@@ -77,7 +78,8 @@ class ExplorationState:
         eligible = [
             question
             for question in self.unresolved_questions
-            if (question.hypothesis_id is None or question.hypothesis_id not in self.explored_hypothesis_ids)
+            if question.question_id not in self.explored_question_ids
+            and (question.hypothesis_id is None or question.hypothesis_id not in self.explored_hypothesis_ids)
             and question.estimated_cost <= remaining_budget
         ]
         if not eligible:
@@ -180,4 +182,58 @@ def derive_exploration_frontier(result: InvestigationResult) -> tuple[Exploratio
                 question.question_id,
             ),
         )
+    )
+
+
+@dataclass(frozen=True)
+class ExplorationDecision:
+    """One bounded frontier selection made by the exploration controller."""
+    question_id: str
+    hypothesis_id: str | None
+    target_function: str | None
+    estimated_cost: float
+
+
+def select_next_question(state: ExplorationState, remaining_budget: float) -> ExplorationDecision | None:
+    """Select a frontier question without executing or inventing any experiment."""
+    question = state.next_question(remaining_budget)
+    if question is None:
+        return None
+    return ExplorationDecision(question.question_id, question.hypothesis_id, question.target_function, question.estimated_cost)
+
+
+def record_exploration_step(state: ExplorationState, decision: ExplorationDecision, *, evidence_ids: tuple[str, ...] = (), actual_cost: float | None = None) -> ExplorationState:
+    """Record an attempted question; execution remains owned by the existing pipeline."""
+    cost = decision.estimated_cost if actual_cost is None else max(float(actual_cost), 0.0)
+    explored_questions = tuple(dict.fromkeys((*state.explored_question_ids, decision.question_id)))
+    explored_hypotheses = state.explored_hypothesis_ids
+    if decision.hypothesis_id is not None:
+        explored_hypotheses = tuple(dict.fromkeys((*explored_hypotheses, decision.hypothesis_id)))
+    evidence = tuple(dict.fromkeys((*state.evidence_ids, *evidence_ids)))
+    return ExplorationState(
+        target=state.target, contracts=state.contracts, functions=state.functions,
+        state_surfaces=state.state_surfaces, hypotheses=state.hypotheses,
+        experiments=state.experiments, evidence_ids=evidence,
+        unresolved_questions=tuple(q for q in state.unresolved_questions if q.question_id != decision.question_id),
+        explored_hypothesis_ids=explored_hypotheses, explored_question_ids=explored_questions,
+        budget_used=state.budget_used + cost,
+    )
+
+
+def refresh_exploration_frontier(result: InvestigationResult, previous: ExplorationState | None = None) -> ExplorationState:
+    """Rebuild the frontier from the latest model while preserving exploration history."""
+    current = ExplorationState.from_investigation(result)
+    if previous is None:
+        return current
+    return ExplorationState(
+        target=current.target, contracts=current.contracts, functions=current.functions,
+        state_surfaces=current.state_surfaces, hypotheses=current.hypotheses,
+        experiments=current.experiments,
+        evidence_ids=tuple(dict.fromkeys((*previous.evidence_ids, *current.evidence_ids))),
+        unresolved_questions=tuple(q for q in current.unresolved_questions
+            if q.question_id not in previous.explored_question_ids
+            and (q.hypothesis_id is None or q.hypothesis_id not in previous.explored_hypothesis_ids)),
+        explored_hypothesis_ids=previous.explored_hypothesis_ids,
+        explored_question_ids=previous.explored_question_ids,
+        budget_used=previous.budget_used,
     )
