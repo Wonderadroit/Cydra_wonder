@@ -200,6 +200,25 @@ def test_resolves_import_through_bounded_foundry_dependency_path(tmp_path: Path)
     assert resolved.resolution_method == "dependency_path"
 
 
+def test_resolves_scoped_npm_dependency_path(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    source = root / "contracts" / "Target.sol"
+    access = root / "node_modules" / "@openzeppelin" / "contracts" / "access" / "AccessControl.sol"
+    _write(
+        source,
+        'import "@openzeppelin/contracts/access/AccessControl.sol";\ncontract Target is AccessControl {}\n',
+    )
+    _write(
+        access,
+        "abstract contract AccessControl { modifier onlyRole(bytes32 role) { _; } }\n",
+    )
+
+    resolved = resolve_import(root, source, "@openzeppelin/contracts/access/AccessControl.sol")
+
+    assert resolved is not None
+    assert resolved[0] == access
+
+
 def test_ambiguous_dependency_path_fails_closed(tmp_path: Path) -> None:
     root = tmp_path / "target"
     _write(
