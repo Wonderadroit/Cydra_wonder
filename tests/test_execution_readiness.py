@@ -2,7 +2,7 @@ from pathlib import Path
 
 from cydra.compiler_constraints import ConstraintEvidence
 from cydra.execution_readiness import inspect_execution_readiness, constructible_state_setup_plan
-from cydra.models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
+from cydra.models import ConstructorModel, ContractModel, FunctionModel, ModifierModel, ParameterModel
 
 
 def test_readiness_discovers_constructor_roles_and_dependencies():
@@ -936,3 +936,34 @@ def test_state_setup_candidate_fails_closed_on_unresolved_custom_modifier(tmp_pa
     )
     assert candidate.status == "unresolved"
     assert "authorization" in candidate.detail
+
+
+
+def test_readiness_resolves_modifier_body_without_inventing_role_identity():
+    modifier = ModifierModel(
+        "onlyRole",
+        (ParameterModel("role", "bytes32"),),
+        "require(hasRole(role, msg.sender)); _;",
+    )
+    function = FunctionModel(
+        "register",
+        "external",
+        ("onlyRole",),
+        ("registry",),
+        (),
+        10,
+        modifier_invocations=(("onlyRole", ("DEFAULT_ADMIN_ROLE",)),),
+    )
+    model = ContractModel(
+        "Target",
+        "/tmp/Target.sol",
+        (function,),
+        modifiers=(modifier,),
+    )
+
+    readiness = inspect_execution_readiness(model, function)
+    requirement = readiness.caller_requirements[0]
+
+    assert requirement.subject == "onlyRole(DEFAULT_ADMIN_ROLE)"
+    assert "resolved modifier body establishes caller authorization semantics" in requirement.detail
+    assert "legitimate role-establishment transition" in requirement.detail
