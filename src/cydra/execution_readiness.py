@@ -1402,10 +1402,36 @@ def _state_observation_has_default_solution(
             if polarities.get(predicate) != "must_hold":
                 continue
             normalized = re.sub(r"\s+", " ", predicate).strip()
-            if re.fullmatch(rf"!\s*{re.escape(state)}(?:\s*\[[^\]]*\])+", normalized):
+            def indexed_state_is_default(prefix: str) -> bool:
+                if not normalized.startswith(prefix):
+                    return False
+                remainder = normalized[len(prefix):].lstrip()
+                if not remainder.startswith("["):
+                    return False
+                while remainder.startswith("["):
+                    depth = 0
+                    end = None
+                    for index, char in enumerate(remainder):
+                        if char == "[":
+                            depth += 1
+                        elif char == "]":
+                            depth -= 1
+                            if depth == 0:
+                                end = index
+                                break
+                            if depth < 0:
+                                return False
+                    if end is None:
+                        return False
+                    remainder = remainder[end + 1:].lstrip()
+                return not remainder
+
+            if indexed_state_is_default(f"!{state}"):
                 return True
-            if re.fullmatch(rf"{re.escape(state)}(?:\s*\[[^\]]*\])+\s*==\s*false", normalized):
-                return True
+            if normalized.startswith(f"{state}") and normalized.endswith("== false"):
+                left = normalized[:-len("== false")].rstrip()
+                if indexed_state_is_default(left):
+                    return True
         body = _source_function_body(contract, current)
         for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
             callee = functions.get(match.group(1))
