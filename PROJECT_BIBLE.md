@@ -1006,3 +1006,16 @@ The generic rule is:
 A raw tuple can appear superficially valid while Solidity rejects it at the call boundary. Silent fallback therefore converts a renderer capability gap into an opaque compiler failure. The generic renderer must instead fail closed with the unresolved type/source/arity so the missing capability is observable and regressible.
 
 This rule applies to all targets and all custom nested types; it is not a Hinkal-specific workaround.
+
+
+## 50. Nested custom structs may share the defining source unit
+
+A source-defined custom struct does not necessarily live in a separate file. Solidity source units may declare several top-level structs together, with one struct using another declared earlier in the same unit. The prerequisite type resolver must therefore treat the current defining source as authoritative before requiring another import-graph traversal.
+
+The generic rule is:
+- when recursively materializing a custom struct field, first determine whether the field type is declared in the current defining source unit;
+- if it is, preserve that source as the provenance for recursive field resolution and generated imports;
+- otherwise resolve the type through the declared import/dependency graph;
+- never add a target-specific filename or known struct-name exception to bridge this case.
+
+This distinction matters because compiler-visible Solidity types can share a source unit even when the parent struct itself was imported from that unit. A resolver failure at this boundary is an execution-readiness capability gap, not evidence against the security hypothesis.
