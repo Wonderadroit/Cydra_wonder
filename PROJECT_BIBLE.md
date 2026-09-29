@@ -1038,3 +1038,8 @@ This closes a source-resolution boundary exposed by the live dogfood: a parent s
 ## 52. Direct declared import paths remain a bounded fallback for nested type resolution
 
 When recursively materializing a source-defined custom type, an explicitly declared relative import path is authoritative even if the normal import classifier cannot classify that path. The resolver may fall back to the importing source unit's direct relative path, inspect that resolved file for the requested declaration, and preserve that file as provenance. This fallback remains bounded to a declared import edge; it must never become a repository-wide filename or symbol search, and unresolved ambiguity must still fail closed.
+
+
+## 53. Exact filename imports must bypass import-classification ambiguity
+
+For a requested user-defined type, an explicitly declared import whose path names the requested source file is itself sufficient provenance. If normal import classification cannot resolve that edge, the resolver may inspect the importing source unit's direct path for that exact declared file and verify the declaration there. This remains a bounded declared-import fallback, not a repository-wide search or target-specific exception.
