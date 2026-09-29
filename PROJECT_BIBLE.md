@@ -987,3 +987,22 @@ The generic renderer must therefore preserve the experiment's values while recov
 This is a type-materialization capability, not target-specific argument construction. The renderer must not learn Hinkal's `CircomData` fields or nested struct names as special cases. If a nested custom type cannot be resolved or its tuple arity cannot be established, the renderer must fail closed rather than guess.
 
 The rule is: **planned values come from the experiment; types come from the target's source model.** Together they form the compiler-visible prerequisite value without executing the target transition.
+
+
+## 49. Recursive prerequisite struct materialization must fail closed
+
+When a prerequisite observation requires binding a source-defined custom parameter, the renderer may encounter nested user-defined structs inside the planned tuple value.
+
+The generic rule is:
+
+- planned values come from the canonical experiment input;
+- every custom type comes from the target source/import model;
+- nested custom fields must be recursively resolved and rendered as typed struct constructors;
+- source field count must match the planned tuple arity;
+- nested custom values must themselves be tuple expressions when recursive construction is required;
+- the renderer must import every resolved custom type from its source provenance;
+- **never silently fall back to an untyped tuple when a custom struct cannot be resolved or its shape is inconsistent**.
+
+A raw tuple can appear superficially valid while Solidity rejects it at the call boundary. Silent fallback therefore converts a renderer capability gap into an opaque compiler failure. The generic renderer must instead fail closed with the unresolved type/source/arity so the missing capability is observable and regressible.
+
+This rule applies to all targets and all custom nested types; it is not a Hinkal-specific workaround.
