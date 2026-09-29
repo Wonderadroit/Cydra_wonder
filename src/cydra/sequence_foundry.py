@@ -20,6 +20,116 @@ def _solidity_string_literal(value: str) -> str:
     )
 
 
+def _split_top_level_tuple_expression(value: str) -> tuple[str, ...] | None:
+    """Split a parenthesized Solidity tuple expression without parsing its types."""
+    text = value.strip()
+    if len(text) < 2 or text[0] != "(" or text[-1] != ")":
+        return None
+    parts: list[str] = []
+    start = 1
+    stack: list[str] = []
+    quote: str | None = None
+    escaped = False
+    pairs = {")": "(", "]": "[", "}": "{"}
+    for index in range(1, len(text) - 1):
+        char = text[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {'"', "'"}:
+            quote = char
+        elif char in "([{":
+            stack.append(char)
+        elif char in ")]}":
+            if stack and stack[-1] == pairs[char]:
+                stack.pop()
+            else:
+                return None
+        elif char == "," and not stack:
+            part = text[start:index].strip()
+            if not part:
+                return None
+            parts.append(part)
+            start = index + 1
+    part = text[start:-1].strip()
+    if not part:
+        return None
+    parts.append(part)
+    return tuple(parts)
+
+
+def _is_builtin_sequence_type(parameter_type: str) -> bool:
+    """Return whether a parameter type needs no user-defined type binding."""
+    base = parameter_type.strip().split()[0].rstrip("[]")
+    return (
+        base in {"address", "bool", "string", "bytes"}
+        or base.startswith(("uint", "int", "bytes"))
+        or base.startswith(("fixed", "ufixed"))
+    )
+
+
+def _plan_prerequisite_parameter_bindings(
+    project_root: Path,
+    source_path: str,
+    output_path: Path,
+    function,
+    arguments: tuple[str, ...],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Materialize source-derived custom parameter values needed by observations.
+
+    Prerequisite observation deliberately does not call the target function.
+    When an observable predicate refers to a custom parameter (for example a
+    struct member), the generated harness still needs a typed local value.
+    Struct tuple arguments are decoded through the ABI so nested structs and
+    arrays do not require target-specific field knowledge.
+    """
+    if len(arguments) != len(function.parameters):
+        raise ValueError(
+            f"prerequisite parameter binding arity mismatch for {function.name}: "
+            f"expected {len(function.parameters)}, got {len(arguments)}"
+        )
+    declarations: list[str] = []
+    imports: list[str] = []
+    for parameter, argument in zip(function.parameters, arguments):
+        parameter_type = parameter.type.strip()
+        base = parameter_type.split()[0].rstrip("[]")
+        if _is_builtin_sequence_type(parameter_type):
+            continue
+        if not any(re.search(rf"\b{re.escape(parameter.name)}\b", predicate)
+                   for predicate in (*function.state_predicates, *function.execution_predicates)):
+            continue
+
+        if "." in base:
+            namespace, _ = base.split(".", 1)
+            resolved = resolve_interface(project_root, source_path, namespace)
+            resolved_path = Path(project_root / resolved.source_path)
+            relative = Path(os.path.relpath(resolved_path, output_path.parent)).as_posix()
+            imports.append(f'import {{ {namespace} }} from "{relative}";')
+        else:
+            resolved_source, _ = resolve_named_type_source(project_root, source_path, base)
+            resolved_path = Path(project_root / resolved_source)
+            relative = Path(os.path.relpath(resolved_path, output_path.parent)).as_posix()
+            imports.append(f'import {{ {base} }} from "{relative}";')
+
+        tuple_parts = _split_top_level_tuple_expression(argument)
+        if tuple_parts is not None and not parameter_type.endswith("[]"):
+            encoded_arguments = ", ".join(tuple_parts)
+            declarations.append(
+                f"        {parameter_type} memory {parameter.name} = "
+                f"abi.decode(abi.encode({encoded_arguments}), ({parameter_type}));"
+            )
+        else:
+            declarations.append(
+                f"        {parameter_type} memory {parameter.name} = {argument};"
+            )
+    return tuple(declarations), tuple(dict.fromkeys(imports))
+
+
 def generate_sequence_test_from_experiment(
     hypothesis: Hypothesis,
     experiment: Experiment,
@@ -52,9 +162,14 @@ def generate_sequence_test_from_experiment(
         for function in (*contract_model.functions, *contract_model.inherited_functions)
     }
     rendered: list[str] = []
+    prerequisite_imports: list[str] = []
     relation_setups: list[str] = []
     relation_assertions: list[str] = []
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
+    project_root = next(
+        (ancestor for ancestor in (Path(output_path).parent, *Path(output_path).parents) if (ancestor / "foundry.toml").exists()),
+        None,
+    )
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
             raise ValueError(f"sequence step {index} has no function")
@@ -74,6 +189,19 @@ def generate_sequence_test_from_experiment(
                     "state prerequisite has no deterministic public runtime observation; "
                     "security sequence must fail closed"
                 )
+            if project_root is None:
+                raise ValueError(
+                    "prerequisite parameter binding requires a resolvable Foundry project root"
+                )
+            bindings, binding_imports = _plan_prerequisite_parameter_bindings(
+                project_root,
+                contract_model.source,
+                Path(output_path),
+                function,
+                step.arguments,
+            )
+            prerequisite_imports.extend(binding_imports)
+            rendered.extend(bindings)
             rendered.extend(
                 f"        assertTrue({observation.expression}, {_solidity_string_literal(f'unverified prerequisite: {observation.predicate}')});"
                 for observation in observations
@@ -183,10 +311,6 @@ def generate_sequence_test_from_experiment(
     # struct-constructor error before the actual experiment can execute.
     constructor_arguments: list[str] = []
     constructor_imports: list[str] = []
-    project_root = next(
-        (ancestor for ancestor in (path.parent, *path.parents) if (ancestor / "foundry.toml").exists()),
-        None,
-    )
     inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
     direct_interfaces: dict[str, object] = {}
     named_type_sources: dict[str, str] = {}
@@ -279,7 +403,7 @@ def generate_sequence_test_from_experiment(
 
     constructor_args_text = ", ".join(constructor_arguments)
     constructor_call = f"new {target_type}({constructor_args_text})" if constructor_arguments else f"new {target_type}()"
-    import_text = "\n".join(dict.fromkeys(constructor_imports))
+    import_text = "\n".join(dict.fromkeys((*constructor_imports, *prerequisite_imports)))
 
     stub_declaration = (
         'contract CydraERC20ConstructorStub is ERC20 { constructor() ERC20("CYDRA", "CYDRA", 18) {} }\n'

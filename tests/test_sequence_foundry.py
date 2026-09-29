@@ -690,3 +690,73 @@ def test_sequence_renderer_constructs_namespaced_struct_constructor_type(tmp_pat
     rendered = generated.read_text(encoding="utf-8")
     assert 'import { IMerkle } from "../interfaces/IMerkle.sol";' in rendered
     assert "IMerkle.MerkleConstructorArgs({levels: 0, poseidon2: address(0), poseidon4: address(0), poseidon5: address(0)})" in rendered
+
+
+def test_sequence_renderer_binds_custom_struct_parameter_for_prerequisite_observation(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "ActionData.sol").write_text(
+        "struct ActionData { uint256 id; address target; }\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import { ActionData } from "./types/ActionData.sol"; '
+        "contract Target { mapping(uint256 => address) public actions; "
+        "function transact(ActionData calldata data) external { "
+        "require(actions[data.id] == data.target); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "transact",
+                "external",
+                (),
+                (),
+                (),
+                3,
+                parameters=(ParameterModel("data", "ActionData", "calldata"),),
+                execution_predicates=("actions[data.id] == data.target",),
+                execution_predicate_polarities=(("actions[data.id] == data.target", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-CUSTOM-STRUCT-prereq",
+        "candidate",
+        "INV-CUSTOM-STRUCT",
+        "transact",
+        "attacker",
+        "candidate",
+    )
+    experiment = Experiment(
+        "X-CUSTOM-STRUCT-prereq",
+        hypothesis.hypothesis_id,
+        "observe before transact",
+        ("violation",),
+        1.0,
+        steps=(ExperimentStep("transact", ("(7, address(0x1234))",)),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        "../Target.sol",
+        "Target",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+        verify_state_prerequisites=True,
+        stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { ActionData } from "../types/ActionData.sol";' in rendered
+    assert (
+        "ActionData memory data = "
+        "abi.decode(abi.encode(7, address(0x1234)), (ActionData));"
+    ) in rendered
+    assert "assertTrue(target.actions(data.id) == data.target" in rendered
+    assert "target.transact(" not in rendered
