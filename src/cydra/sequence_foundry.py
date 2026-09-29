@@ -129,13 +129,20 @@ def _plan_prerequisite_parameter_bindings(
                 and not field_type.strip().endswith("[]")
             )
             if is_custom_struct:
-                try:
-                    nested_source, _ = resolve_named_type_source(project_root, defining_source, field_base)
-                except (FileNotFoundError, ValueError, OSError, UnicodeError) as exc:
-                    raise ValueError(
-                        f"unable to resolve nested struct type {field_base} "
-                        f"for {base}.{field_name} from {defining_source}: {exc}"
-                    ) from exc
+                # A source unit may declare multiple top-level structs.
+                # Prefer the current defining source when it already contains the
+                # nested declaration; only traverse the import graph when the
+                # declaration is genuinely external.
+                if resolve_struct_fields(project_root, defining_source, field_base):
+                    nested_source = defining_source
+                else:
+                    try:
+                        nested_source, _ = resolve_named_type_source(project_root, defining_source, field_base)
+                    except (FileNotFoundError, ValueError, OSError, UnicodeError) as exc:
+                        raise ValueError(
+                            f"unable to resolve nested struct type {field_base} "
+                            f"for {base}.{field_name} from {defining_source}: {exc}"
+                        ) from exc
                 add_import(field_base)
                 nested_parts = _split_top_level_tuple_expression(part)
                 if nested_parts is None:
