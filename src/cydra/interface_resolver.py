@@ -475,11 +475,28 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
         for import_path in _imports_for(path):
             if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
                 continue
-            resolved = resolve_import(root, path, import_path)
-            if resolved is None and (import_path.startswith(("./", "../")) or Path(import_path).name == f"{name}.sol"):
-                direct_path = (path.parent / import_path).resolve()
+
+            # An exact declared filename is stronger provenance than the
+            # generic import classifier. Check the importer-relative and
+            # repository-relative paths directly first, then fall back to the
+            # normal remapping/dependency resolver. This is bounded to the
+            # explicit import edge; it is never a repository-wide symbol search.
+            declared_candidates: list[tuple[Path, str]] = []
+            if import_path.startswith(("./", "../")):
+                declared_candidates.append(
+                    ((path.parent / import_path).resolve(), "direct_declared_import")
+                )
+            else:
+                declared_candidates.append(
+                    ((root / import_path).resolve(), "direct_declared_import")
+                )
+            resolved = None
+            for direct_path, method in declared_candidates:
                 if direct_path.is_file():
-                    resolved = (direct_path, "direct_declared_import")
+                    resolved = (direct_path, method)
+                    break
+            if resolved is None:
+                resolved = resolve_import(root, path, import_path)
             if resolved is None:
                 continue
             imported_path = resolved[0].resolve()
