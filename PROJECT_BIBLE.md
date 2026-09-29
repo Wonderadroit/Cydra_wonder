@@ -944,3 +944,24 @@ When CYDRA renders source-derived predicates, relations, or other diagnostic tex
 The generic sequence renderer now centralizes diagnostic-string escaping and applies it to prerequisite and state-relation assertion messages. This is a renderer-boundary concern, not a target-specific workaround. Regression coverage must include multiline source predicates and verify that the generated test remains single-line syntactically valid Solidity while preserving the diagnostic content.
 
 The rule is: **model/source text may be arbitrary diagnostic content; generated Solidity must receive a correctly escaped literal.** A rendering failure is an execution-capability gap and must be fixed generically before the security experiment is classified.
+
+
+## 46. Prerequisite observations must bind source-derived custom parameters
+
+A prerequisite observation may depend on a target function parameter even though the target transition itself is intentionally not executed. If that parameter is a user-defined struct or another source-defined custom type, emitting the predicate directly can leave an undeclared symbolic identifier in the generated harness.
+
+The generic sequence renderer must therefore:
+
+1. inspect the target function's modeled parameter list;
+2. determine which custom parameters are actually referenced by the planned observation predicates;
+3. resolve those types through the target's declared import graph;
+4. materialize the planned experiment argument into a typed local value;
+5. use ABI encoding/decoding for tuple-shaped struct arguments so nested structs and arrays do not require target-specific field mappings;
+6. emit the required type import with provenance from the resolved source; and
+7. continue to stop before the target transition when prerequisite-only observation is requested.
+
+This does **not** mean executing the target function or assuming that the supplied argument satisfies the target's guards. The local value exists only so a deterministic source-backed observation can be compiled and evaluated.
+
+The rule is: **stop-before-target does not mean stop-before-binding the target-derived symbols required by the observation.** Symbolic prerequisites must be made compiler-visible through generic parameter modeling, or CYDRA must fail closed.
+
+No target-specific parameter names, struct fields, constants, or Hinkal-specific construction logic belong in this layer.
