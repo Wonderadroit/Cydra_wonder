@@ -804,5 +804,5 @@ def test_sequence_renderer_uses_planned_inputs_when_prerequisite_step_has_no_arg
         verify_state_prerequisites=True, stop_before_target=True,
     )
     rendered = generated.read_text(encoding="utf-8")
-    assert "ActionData memory data = abi.decode(abi.encode(7, address(0x1234)), (ActionData));" in rendered
+    assert "ActionData memory data = ActionData(7, address(0x1234));" in rendered
     assert "target.transact(" not in rendered
