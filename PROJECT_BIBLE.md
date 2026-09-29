@@ -1043,3 +1043,20 @@ When recursively materializing a source-defined custom type, an explicitly decla
 ## 53. Exact filename imports must bypass import-classification ambiguity
 
 For a requested user-defined type, an explicitly declared import whose path names the requested source file is itself sufficient provenance. If normal import classification cannot resolve that edge, the resolver may inspect the importing source unit's direct path for that exact declared file and verify the declaration there. This remains a bounded declared-import fallback, not a repository-wide search or target-specific exception.
+
+
+## 54. Exact declared relative imports are the primary nested-type provenance edge
+
+When a source-defined custom type is referenced through an explicit import whose path identifies the defining source unit, sequence prerequisite resolution must inspect that declared path directly before invoking broader import/remapping classification.
+
+Rules:
+
+1. For importer-relative paths such as `./StealthAddressStructure.sol` or `../types/Foo.sol`, construct the exact importer-relative path and verify that it is a file.
+2. For explicit repository-relative paths, inspect the exact repository-relative path before broader dependency resolution.
+3. Verify that the resolved source actually declares the requested type.
+4. Preserve the declared source path as provenance.
+5. Only if the bounded direct path does not resolve may normal remapping/dependency traversal continue.
+6. This is an import-graph rule, not a target-specific exception and never permits repository-wide filename searching.
+7. If the declared path exists but does not declare the requested type, fail closed rather than substituting an unrelated source.
+
+The purpose is to keep execution-readiness aligned with the target parser's source provenance: an explicit Solidity import edge is authoritative evidence about where a custom type comes from.
