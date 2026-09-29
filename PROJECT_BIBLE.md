@@ -965,3 +965,14 @@ This does **not** mean executing the target function or assuming that the suppli
 The rule is: **stop-before-target does not mean stop-before-binding the target-derived symbols required by the observation.** Symbolic prerequisites must be made compiler-visible through generic parameter modeling, or CYDRA must fail closed.
 
 No target-specific parameter names, struct fields, constants, or Hinkal-specific construction logic belong in this layer.
+
+
+## 47. Prerequisite binding must consume the canonical planned input vector
+
+The live dogfood exposed a transport-layer gap after custom parameter binding was implemented: the experiment carried a complete canonical `planned_inputs` vector, while the structured target step used by prerequisite observation could legitimately carry an empty argument tuple. The binding planner therefore received zero arguments even though the experiment already contained the source-derived ABI inputs.
+
+The generic execution boundary must preserve the canonical input vector when converting an experiment into prerequisite observations. For the target observation step, if the structured step has no explicit argument vector and the experiment has a complete `planned_inputs` vector, the renderer must use that vector for parameter binding. This is transport preservation, not new target reasoning.
+
+The rule is: **one canonical planned input vector must not be silently discarded when execution changes representation.** Structured steps may refine or explicitly override inputs, but an empty step must not erase a complete experiment-level plan. Arity mismatches remain fail-closed when neither representation supplies a complete vector.
+
+Regression coverage must verify that a custom-typed target parameter is successfully materialized from `Experiment.planned_inputs` even when the corresponding prerequisite step contains no arguments, while the target transition remains unexecuted in stop-before-target mode.
