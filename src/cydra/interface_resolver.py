@@ -476,6 +476,10 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
             if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
                 continue
             resolved = resolve_import(root, path, import_path)
+            if resolved is None and (import_path.startswith(("./", "../")) or Path(import_path).name == f"{name}.sol"):
+                direct_path = (path.parent / import_path).resolve()
+                if direct_path.is_file():
+                    resolved = (direct_path, "direct_declared_import")
             if resolved is None:
                 continue
             imported_path = resolved[0].resolve()
