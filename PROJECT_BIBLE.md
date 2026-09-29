@@ -976,3 +976,14 @@ The generic execution boundary must preserve the canonical input vector when con
 The rule is: **one canonical planned input vector must not be silently discarded when execution changes representation.** Structured steps may refine or explicitly override inputs, but an empty step must not erase a complete experiment-level plan. Arity mismatches remain fail-closed when neither representation supplies a complete vector.
 
 Regression coverage must verify that a custom-typed target parameter is successfully materialized from `Experiment.planned_inputs` even when the corresponding prerequisite step contains no arguments, while the target transition remains unexecuted in stop-before-target mode.
+
+
+## 48. Planned custom-struct inputs must preserve source-derived nested types
+
+The canonical live dogfood exposed the next prerequisite-binding boundary after planned-input transport was repaired. A complete experiment input vector may contain nested tuple expressions for a user-defined struct. Passing those raw nested tuples to `abi.encode` is not compiler-safe when the nested components have no inferred Solidity type.
+
+The generic renderer must therefore preserve the experiment's values while recovering source-defined nested struct types from the import graph and struct field model. Nested tuple expressions are recursively rendered through their resolved struct constructors; primitive values and already-typed dynamic-array expressions remain unchanged. Required custom type imports are emitted from the same source-resolution provenance.
+
+This is a type-materialization capability, not target-specific argument construction. The renderer must not learn Hinkal's `CircomData` fields or nested struct names as special cases. If a nested custom type cannot be resolved or its tuple arity cannot be established, the renderer must fail closed rather than guess.
+
+The rule is: **planned values come from the experiment; types come from the target's source model.** Together they form the compiler-visible prerequisite value without executing the target transition.
