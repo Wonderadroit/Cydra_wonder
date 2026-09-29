@@ -110,19 +110,40 @@ def _plan_prerequisite_parameter_bindings(
             return expression
         base = type_name.strip().split()[0]
         fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
+        if not fields:
+            raise ValueError(
+                f"unable to resolve struct fields for prerequisite parameter type {base} "
+                f"from {defining_source}"
+            )
         if len(fields) != len(parts):
-            return expression
+            raise ValueError(
+                f"prerequisite struct tuple arity mismatch for {base}: "
+                f"source defines {len(fields)} fields, planned input provides {len(parts)}"
+            )
         rendered_parts: list[str] = []
         for (field_name, field_type), part in zip(fields, parts):
             field_base = field_type.strip().split()[0].rstrip("[]")
-            if "." not in field_base and not _is_builtin_sequence_type(field_type) and not field_type.strip().endswith("[]"):
+            is_custom_struct = (
+                "." not in field_base
+                and not _is_builtin_sequence_type(field_type)
+                and not field_type.strip().endswith("[]")
+            )
+            if is_custom_struct:
                 try:
                     nested_source, _ = resolve_named_type_source(project_root, defining_source, field_base)
-                except FileNotFoundError:
-                    rendered_parts.append(part)
-                else:
-                    add_import(field_base)
-                    rendered_parts.append(typed_tuple(field_base, part, nested_source))
+                except (FileNotFoundError, ValueError, OSError, UnicodeError) as exc:
+                    raise ValueError(
+                        f"unable to resolve nested struct type {field_base} "
+                        f"for {base}.{field_name} from {defining_source}: {exc}"
+                    ) from exc
+                add_import(field_base)
+                nested_parts = _split_top_level_tuple_expression(part)
+                if nested_parts is None:
+                    raise ValueError(
+                        f"prerequisite nested struct value for {base}.{field_name} "
+                        f"must be a tuple expression"
+                    )
+                rendered_parts.append(typed_tuple(field_base, part, nested_source))
             else:
                 rendered_parts.append(part)
         return f"{base}({', '.join(rendered_parts)})"
