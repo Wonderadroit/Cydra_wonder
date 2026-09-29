@@ -1033,3 +1033,8 @@ The generic rule is:
 - never substitute a repository-wide filename search or a target-specific type/path exception.
 
 This closes a source-resolution boundary exposed by the live dogfood: a parent struct can be defined in one source unit while a nested field type is explicitly imported from another. Failure to resolve that imported declaration is an execution-readiness gap, not evidence against the hypothesis being tested.
+
+
+## 52. Direct declared import paths remain a bounded fallback for nested type resolution
+
+When recursively materializing a source-defined custom type, an explicitly declared relative import path is authoritative even if the normal import classifier cannot classify that path. The resolver may fall back to the importing source unit's direct relative path, inspect that resolved file for the requested declaration, and preserve that file as provenance. This fallback remains bounded to a declared import edge; it must never become a repository-wide filename or symbol search, and unresolved ambiguity must still fail closed.
