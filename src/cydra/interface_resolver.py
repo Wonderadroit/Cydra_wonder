@@ -496,6 +496,14 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
             if name not in symbols:
                 continue
             resolved = resolve_import(root, path, import_path)
+            if resolved is None and import_path.startswith(("./", "../")):
+                # Keep the declared import path authoritative even when the
+                # normal remapping resolver cannot classify it. This is still
+                # bounded to the importing source unit and cannot become a
+                # repository-wide symbol search.
+                direct_path = (path.parent / import_path).resolve()
+                if direct_path.is_file():
+                    resolved = (direct_path, "direct_declared_import")
             if resolved is None:
                 continue
             imported_path = resolved[0].resolve()
