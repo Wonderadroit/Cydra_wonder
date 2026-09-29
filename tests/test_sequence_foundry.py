@@ -819,6 +819,63 @@ def test_sequence_renderer_recursively_types_nested_custom_struct_prerequisite(t
 
 
 
+
+def test_sequence_renderer_resolves_nested_struct_from_imported_source_unit(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "Inner.sol").write_text(
+        "struct Inner { uint256 id; address target; }\\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "types" / "Outer.sol").write_text(
+        'import { Inner } from "./Inner.sol";\\n'
+        "struct Outer { Inner inner; bytes metadata; }\\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import { Outer } from "./types/Outer.sol"; '
+        "contract Target { mapping(uint256 => address) public actions; "
+        "function transact(Outer calldata data) external { "
+        "require(actions[data.inner.id] == data.inner.target); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "transact", "external", (), (), (), 3,
+                parameters=(ParameterModel("data", "Outer", "calldata"),),
+                execution_predicates=("actions[data.inner.id] == data.inner.target",),
+                execution_predicate_polarities=(("actions[data.inner.id] == data.inner.target", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-IMPORTED-NESTED-STRUCT", "candidate",
+        "INV-IMPORTED-NESTED-STRUCT", "transact", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-IMPORTED-NESTED-STRUCT", hypothesis.hypothesis_id,
+        "observe before transact", ("violation",), 1.0,
+        planned_inputs=("((7, address(0x1234)), bytes(\"\"))",),
+        target_function="transact",
+        steps=(ExperimentStep("transact", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol",
+        "Target", tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True, stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { Outer } from "../types/Outer.sol";' in rendered
+    assert 'import { Inner } from "../types/Inner.sol";' in rendered
+    assert "Outer memory data = Outer(Inner(7, address(0x1234)), bytes(\"\"));" in rendered
+    assert "target.transact(" not in rendered
+
+
 def test_sequence_renderer_resolves_nested_struct_declared_in_same_source_unit(tmp_path):
     from cydra.models import FunctionModel, ParameterModel
 
