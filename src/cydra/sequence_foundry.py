@@ -182,6 +182,13 @@ def generate_sequence_test_from_experiment(
         # executed. Its step only identifies the observation surface, so ABI
         # argument materialization/arity must not block observation of setup
         # transitions for targets with complex or custom parameter types.
+        effective_arguments = step.arguments
+        if (
+            not effective_arguments
+            and function.name == hypothesis.target_function
+            and experiment.planned_inputs
+        ):
+            effective_arguments = experiment.planned_inputs
         if verify_state_prerequisites and stop_before_target and function.name == hypothesis.target_function:
             observations = plan_public_state_observations(contract_model, function)
             if not observations:
@@ -198,7 +205,7 @@ def generate_sequence_test_from_experiment(
                 contract_model.source,
                 Path(output_path),
                 function,
-                step.arguments,
+                effective_arguments,
             )
             prerequisite_imports.extend(binding_imports)
             rendered.extend(bindings)
