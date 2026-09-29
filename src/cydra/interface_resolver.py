@@ -498,7 +498,14 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
             resolved = resolve_import(root, path, import_path)
             if resolved is None:
                 continue
-            found = walk(resolved[0])
+            imported_path = resolved[0].resolve()
+            try:
+                imported_source = _strip_comments(imported_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                imported_source = ""
+            if declaration.search(imported_source):
+                return imported_path.relative_to(root).as_posix(), "named_import_declaration"
+            found = walk(imported_path)
             if found is not None:
                 return found
 
