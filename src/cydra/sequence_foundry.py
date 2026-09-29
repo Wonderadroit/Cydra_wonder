@@ -80,14 +80,7 @@ def _plan_prerequisite_parameter_bindings(
     function,
     arguments: tuple[str, ...],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Materialize source-derived custom parameter values needed by observations.
-
-    Prerequisite observation deliberately does not call the target function.
-    When an observable predicate refers to a custom parameter (for example a
-    struct member), the generated harness still needs a typed local value.
-    Struct tuple arguments are decoded through the ABI so nested structs and
-    arrays do not require target-specific field knowledge.
-    """
+    """Materialize source-derived custom parameter values needed by observations."""
     if len(arguments) != len(function.parameters):
         raise ValueError(
             f"prerequisite parameter binding arity mismatch for {function.name}: "
@@ -95,38 +88,60 @@ def _plan_prerequisite_parameter_bindings(
         )
     declarations: list[str] = []
     imports: list[str] = []
-    for parameter, argument in zip(function.parameters, arguments):
-        parameter_type = parameter.type.strip()
-        base = parameter_type.split()[0].rstrip("[]")
-        if _is_builtin_sequence_type(parameter_type):
-            continue
-        if not any(re.search(rf"\b{re.escape(parameter.name)}\b", predicate)
-                   for predicate in (*function.state_predicates, *function.execution_predicates)):
-            continue
 
+    def resolve_custom_type(type_name: str) -> tuple[str, str]:
+        base = type_name.strip().split()[0].rstrip("[]")
         if "." in base:
             namespace, _ = base.split(".", 1)
             resolved = resolve_interface(project_root, source_path, namespace)
-            resolved_path = Path(project_root / resolved.source_path)
-            relative = Path(os.path.relpath(resolved_path, output_path.parent)).as_posix()
-            imports.append(f'import {{ {namespace} }} from "{relative}";')
-        else:
-            resolved_source, _ = resolve_named_type_source(project_root, source_path, base)
-            resolved_path = Path(project_root / resolved_source)
-            relative = Path(os.path.relpath(resolved_path, output_path.parent)).as_posix()
-            imports.append(f'import {{ {base} }} from "{relative}";')
+            return base, resolved.source_path
+        resolved_source, _ = resolve_named_type_source(project_root, source_path, base)
+        return base, resolved_source
 
-        tuple_parts = _split_top_level_tuple_expression(argument)
-        if tuple_parts is not None and not parameter_type.endswith("[]"):
-            encoded_arguments = ", ".join(tuple_parts)
-            declarations.append(
-                f"        {parameter_type} memory {parameter.name} = "
-                f"abi.decode(abi.encode({encoded_arguments}), ({parameter_type}));"
-            )
-        else:
-            declarations.append(
-                f"        {parameter_type} memory {parameter.name} = {argument};"
-            )
+    def add_import(type_name: str) -> None:
+        base, resolved_source = resolve_custom_type(type_name)
+        symbol = base.split(".", 1)[0] if "." in base else base
+        relative = Path(os.path.relpath(Path(project_root / resolved_source), output_path.parent)).as_posix()
+        imports.append(f'import {{ {symbol} }} from "{relative}";')
+
+    def typed_tuple(type_name: str, expression: str, defining_source: str) -> str:
+        parts = _split_top_level_tuple_expression(expression)
+        if parts is None or type_name.strip().endswith("[]"):
+            return expression
+        base = type_name.strip().split()[0]
+        fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
+        if len(fields) != len(parts):
+            return expression
+        rendered_parts: list[str] = []
+        for (field_name, field_type), part in zip(fields, parts):
+            field_base = field_type.strip().split()[0].rstrip("[]")
+            if "." not in field_base and not _is_builtin_sequence_type(field_type) and not field_type.strip().endswith("[]"):
+                try:
+                    nested_source, _ = resolve_named_type_source(project_root, defining_source, field_base)
+                except FileNotFoundError:
+                    rendered_parts.append(part)
+                else:
+                    add_import(field_base)
+                    rendered_parts.append(typed_tuple(field_base, part, nested_source))
+            else:
+                rendered_parts.append(part)
+        return f"{base}({', '.join(rendered_parts)})"
+
+    for parameter, argument in zip(function.parameters, arguments):
+        parameter_type = parameter.type.strip()
+        if _is_builtin_sequence_type(parameter_type):
+            continue
+        if not any(
+            re.search(rf"\b{re.escape(parameter.name)}\b", predicate)
+            for predicate in (*function.state_predicates, *function.execution_predicates)
+        ):
+            continue
+        add_import(parameter_type)
+        _, resolved_source = resolve_custom_type(parameter_type)
+        expression = typed_tuple(parameter_type, argument, resolved_source)
+        declarations.append(
+            f"        {parameter_type} memory {parameter.name} = {expression};"
+        )
     return tuple(declarations), tuple(dict.fromkeys(imports))
 
 
