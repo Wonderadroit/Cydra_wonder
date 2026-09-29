@@ -794,7 +794,7 @@ def test_sequence_renderer_uses_planned_inputs_when_prerequisite_step_has_no_arg
     experiment = Experiment(
         "X-CUSTOM-STRUCT-planned-input", hypothesis.hypothesis_id,
         "observe before transact", ("violation",), 1.0,
-        planned_inputs=(" (7, address(0x1234))",),
+        planned_inputs=("(7, address(0x1234))",),
         target_function="transact",
         steps=(ExperimentStep("transact", ()),),
     )
