@@ -1019,3 +1019,17 @@ The generic rule is:
 - never add a target-specific filename or known struct-name exception to bridge this case.
 
 This distinction matters because compiler-visible Solidity types can share a source unit even when the parent struct itself was imported from that unit. A resolver failure at this boundary is an execution-readiness capability gap, not evidence against the security hypothesis.
+
+
+## 51. Imported nested custom types must resolve the named import declaration directly
+
+Recursive prerequisite struct materialization can encounter a nested custom field whose declaration lives in a separately imported source unit. The type resolver must preserve the source provenance expressed by the import graph and directly inspect the resolved named-import source for the requested declaration before continuing broader traversal.
+
+The generic rule is:
+- resolve the declared import path using the normal Foundry/remapping/relative-import rules;
+- when the import explicitly names the requested custom type, inspect that resolved source unit for the declaration first;
+- retain the resolved source path as provenance for recursive field resolution and generated imports;
+- only then continue transitive traversal if the declaration is not found;
+- never substitute a repository-wide filename search or a target-specific type/path exception.
+
+This closes a source-resolution boundary exposed by the live dogfood: a parent struct can be defined in one source unit while a nested field type is explicitly imported from another. Failure to resolve that imported declaration is an execution-readiness gap, not evidence against the hypothesis being tested.
