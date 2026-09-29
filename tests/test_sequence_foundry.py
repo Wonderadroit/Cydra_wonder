@@ -762,6 +762,62 @@ def test_sequence_renderer_binds_custom_struct_parameter_for_prerequisite_observ
     assert "target.transact(" not in rendered
 
 
+def test_sequence_renderer_recursively_types_nested_custom_struct_prerequisite(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "Nested.sol").write_text(
+        "struct Inner { uint256 id; address target; }\\n"
+        "struct Outer { Inner inner; bytes metadata; }\\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import { Outer } from "./types/Nested.sol"; '
+        "contract Target { mapping(uint256 => address) public actions; "
+        "function transact(Outer calldata data) external { "
+        "require(actions[data.inner.id] == data.inner.target); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "transact", "external", (), (), (), 3,
+                parameters=(ParameterModel("data", "Outer", "calldata"),),
+                execution_predicates=("actions[data.inner.id] == data.inner.target",),
+                execution_predicate_polarities=(("actions[data.inner.id] == data.inner.target", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-NESTED-CUSTOM-STRUCT-prereq", "candidate",
+        "INV-NESTED-CUSTOM-STRUCT", "transact", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-NESTED-CUSTOM-STRUCT-prereq",
+        hypothesis.hypothesis_id,
+        "observe before transact",
+        ("violation",),
+        1.0,
+        planned_inputs=("( (7, address(0x1234)), bytes(\\\"\\\") )",),
+        target_function="transact",
+        steps=(ExperimentStep("transact", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True, stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "import { Outer } from \"../types/Nested.sol\";" in rendered
+    assert "import { Inner } from \"../types/Nested.sol\";" in rendered
+    assert "Outer memory data = Outer(Inner(7, address(0x1234)), bytes(\\"\\"));" in rendered
+    assert "target.transact(" not in rendered
+
+
 def test_sequence_renderer_uses_planned_inputs_when_prerequisite_step_has_no_arguments(tmp_path):
     from cydra.models import FunctionModel, ParameterModel
 
