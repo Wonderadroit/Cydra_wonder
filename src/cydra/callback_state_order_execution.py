@@ -491,8 +491,12 @@ def _legacy_structured_parameter_setup(
                     parameter, expression, target_type, contract_model
                 )
                 imports.update(typed_imports)
-                if re.fullmatch(r"[A-Za-z_]\w*", typed.strip()) and not re.fullmatch(
-                    r"[A-Za-z_]\w*", expression.strip()
+                if (
+                    (
+                        re.fullmatch(r"[A-Za-z_]\w*", typed.strip())
+                        and not re.fullmatch(r"[A-Za-z_]\w*", expression.strip())
+                    )
+                    or expression.strip().startswith("(")
                 ):
                     base = parameter.type.split()[0].rstrip("[]")
                     resolved = _type_source(contract_model, base)
