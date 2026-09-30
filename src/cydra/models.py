@@ -63,10 +63,11 @@ class FunctionModel:
     writes: tuple[str, ...]
     external_calls: tuple[str, ...]
     line: int
+    # Keep parameters immediately after the legacy six positional fields for backwards-compatible construction.
+    parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
     # Modifier invocations preserve arguments instead of collapsing them to names.
     # This is required to trace target-derived role expressions such as onlyRole(X).
     modifier_invocations: tuple[tuple[str, tuple[str, ...]], ...] = field(default_factory=tuple)
-    parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
     authorization_predicates: tuple[str, ...] = field(default_factory=tuple)
     state_predicates: tuple[str, ...] = field(default_factory=tuple)
     # Each entry is (predicate, polarity), where polarity records whether the
