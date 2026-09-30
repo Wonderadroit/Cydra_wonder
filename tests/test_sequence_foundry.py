@@ -1107,3 +1107,58 @@ def test_sequence_renderer_uses_constructor_established_default_admin_role(tmp_p
     rendered = generated.read_text(encoding="utf-8")
     assert "vm.prank(admin);\n        target = new Target();" in rendered
     assert "vm.prank(admin);\n        target.configure();" in rendered
+
+
+def test_sequence_renderer_lowers_complex_struct_argument_into_local(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; "
+        "contract Target { "
+        "struct Data { uint256 a; uint256 b; uint256[] values; } "
+        "function transact(uint256 x, Data calldata data) external {} "
+        "}",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "transact",
+                "external",
+                (),
+                (),
+                (),
+                2,
+                parameters=(
+                    ParameterModel("x", "uint256"),
+                    ParameterModel("data", "Target.Data"),
+                ),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-STACK-safe-args", "candidate", "INV-STACK-safe-args",
+        "transact", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-H-STACK-safe-args", hypothesis.hypothesis_id, "transact",
+        ("violation",), 1.0,
+        steps=(
+            ExperimentStep(
+                "transact",
+                ("0", "(0, 0, new uint256[](0))"),
+            ),
+        ),
+    )
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "Target.Data memory cydra_arg_0_1 = (0, 0, new uint256[](0));" in rendered
+    assert "target.transact(0, cydra_arg_0_1);" in rendered
+    assert "target.transact(0, (0, 0, new uint256[](0)))" not in rendered
