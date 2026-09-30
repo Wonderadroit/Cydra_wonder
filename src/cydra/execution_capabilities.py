@@ -49,6 +49,15 @@ class CapabilityAvailability:
     subcapabilities: tuple[str, ...] = ()
     detail: str = ""
 
+class MaterializationStage(str, Enum):
+    SUBJECT = "subject"
+    PREREQUISITES = "prerequisites"
+    ATTACKER = "attacker"
+    CALL_SEQUENCE = "call_sequence"
+    OBSERVATIONS = "observations"
+    OUTCOME = "outcome"
+
+
 @dataclass(frozen=True)
 class CapabilityGap:
     capability: Capability
@@ -56,6 +65,84 @@ class CapabilityGap:
     subcapability: str | None
     status: CapabilityStatus
     reason: str
+    stage: MaterializationStage = MaterializationStage.PREREQUISITES
+    failure_class: str = "capability"
+    provenance: str | None = None
+
+
+@dataclass(frozen=True)
+class MaterializationFailure:
+    """Structured evidence that an execution realization failed at a generic stage."""
+
+    gap: CapabilityGap
+    error_type: str
+    message: str
+
+
+def classify_materialization_failure(error: BaseException) -> MaterializationFailure:
+    """Translate renderer/readiness failures into reusable capability-gap evidence."""
+    message = str(error)
+    error_type = type(error).__name__
+    lowered = message.lower()
+
+    if "nested struct type" in lowered or "struct fields" in lowered:
+        match = re.search(r"(?:nested struct type|parameter type)\s+([A-Za-z_][\w.]*)", message)
+        subject = match.group(1) if match else "custom struct"
+        provenance_match = re.search(r"\sfrom\s+([^:]+(?:\.sol|/[^:]+))(?::|$)", message)
+        provenance = provenance_match.group(1) if provenance_match else None
+        gap = CapabilityGap(
+            Capability.TYPE_MATERIALIZATION,
+            subject,
+            "nested_custom_struct",
+            CapabilityStatus.BLOCKED,
+            "custom nested struct could not be resolved/materialized",
+            MaterializationStage.PREREQUISITES,
+            "resolver",
+            provenance,
+        )
+    elif "constructor" in lowered and ("unsupported" in lowered or "cannot" in lowered or "failed" in lowered):
+        gap = CapabilityGap(
+            Capability.CONSTRUCTOR_SETUP,
+            "constructor",
+            None,
+            CapabilityStatus.BLOCKED,
+            message,
+            MaterializationStage.PREREQUISITES,
+            "constructor_materialization",
+        )
+    elif "no deterministic public" in lowered or "state observation" in lowered:
+        subcapability = "public_mapping" if "mapping" in lowered else "public_state_observation"
+        gap = CapabilityGap(
+            Capability.STATE_OBSERVATION,
+            "state observation",
+            subcapability,
+            CapabilityStatus.BLOCKED,
+            message,
+            MaterializationStage.OBSERVATIONS,
+            "observation_planner",
+        )
+    elif "arity mismatch" in lowered or "tuple arity" in lowered or "unsupported setup parameter type" in lowered:
+        gap = CapabilityGap(
+            Capability.TYPE_MATERIALIZATION,
+            "parameter materialization",
+            "tuple",
+            CapabilityStatus.BLOCKED,
+            message,
+            MaterializationStage.PREREQUISITES,
+            "type_materializer",
+        )
+    else:
+        gap = CapabilityGap(
+            Capability.CALL_SEQUENCE,
+            "experiment materialization",
+            None,
+            CapabilityStatus.BLOCKED,
+            message,
+            MaterializationStage.CALL_SEQUENCE,
+            "renderer",
+        )
+    return MaterializationFailure(gap, error_type, message)
+
 
 @dataclass(frozen=True)
 class ExperimentContract:
