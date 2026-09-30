@@ -135,6 +135,12 @@ def _plan_prerequisite_parameter_bindings(
             # source unit (Target.Data), not an interface dependency.
             if resolve_struct_fields(project_root, source_path, member):
                 return base, Path(source_path).resolve().relative_to(Path(project_root).resolve()).as_posix()
+            # Plain user-defined structs are often declared directly in the
+            # current source unit. Resolve that before walking the import graph;
+            # this is essential for temporary/generated fixtures with no
+            # Foundry metadata.
+            if resolve_struct_fields(project_root, source_path, base):
+                return base, Path(source_path).resolve().relative_to(Path(project_root).resolve()).as_posix()
             if resolve_namespaced_struct_fields(project_root, source_path, namespace, member):
                 return base, Path(source_path).resolve().relative_to(Path(project_root).resolve()).as_posix()
             # Namespaced Solidity types can be nested in a contract/library as
@@ -562,7 +568,7 @@ def generate_sequence_test_from_experiment(
             # target-derived constructor constraint is available. A zero value
             # is the neutral ABI default; stricter values must come from the
             # target-derived model rather than a renderer heuristic.
-            constructor_arguments.append("1")
+            constructor_arguments.append("0")
         elif base.startswith("int"):
             constructor_arguments.append("0")
         elif base == "string":
@@ -572,7 +578,7 @@ def generate_sequence_test_from_experiment(
         elif base.startswith("bytes") and base[5:].isdigit():
             constructor_arguments.append("0")
         elif base in direct_interfaces:
-            constructor_arguments.append(f"{base}(address(0xCAFE))")
+            constructor_arguments.append(f"{base}(address(0))")
             resolved = direct_interfaces[base]
             constructor_imports.append(
                 f'import {{ {base} }} from "{Path(os.path.relpath(project_root / resolved.source_path, path.parent)).as_posix()}";'
