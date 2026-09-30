@@ -172,7 +172,7 @@ def derive_exploration_frontier(result: InvestigationResult) -> tuple[Exploratio
                     ),
                     uncertainty=0.8,
                     estimated_information_gain=0.6,
-                    estimated_cost=1.0,
+                    estimated_cost=2.0,
                     target_function=function.name,
                 )
             )
