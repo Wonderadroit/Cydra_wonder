@@ -52,6 +52,7 @@ from cydra.structural_aggregation_order import generate_aggregation_order_hypoth
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
 from cydra.guard_parity_execution import generate_guard_parity_test
 from cydra.callback_state_order_execution import generate_callback_state_order_test
+from cydra.capability_campaign import build_capability_campaign
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity", "callback_state_order"}
 
@@ -155,6 +156,9 @@ FREEZE_FILES = (
     "exploration-state.json",
     "manifest.sha256",
     "README.md",
+    "capability_failures.json",
+    "blocked_experiments.json",
+    "dependency_graph.json",
 )
 
 
@@ -1215,7 +1219,34 @@ def _execute_exploration_question(
         raise RuntimeError(f"exploration hypothesis has no experiment: {decision.hypothesis_id}")
 
     scoped = replace(result, hypotheses=(hypothesis,), experiments=(experiment,))
-    statuses, executions, evidence = run_layers(scoped, project, classes, compiler_evidence)
+    try:
+        statuses, executions, evidence = run_layers(scoped, project, classes, compiler_evidence)
+    except Exception as error:
+        # A single experiment must never terminate the campaign. Preserve the
+        # failure as a generic capability record and continue with other work.
+        statuses = [{
+            "hypothesis_id": hypothesis.hypothesis_id,
+            "experiment_id": experiment.experiment_id,
+            "class": "campaign",
+            "target_function": hypothesis.target_function,
+            "extracted": True,
+            "hypothesis_generated": True,
+            "experiment_planned": True,
+            "foundry_generated": False,
+            "blind_executed": False,
+            "classification": "NOT_REACHED",
+            "campaign_status": "CAPABILITY_FAILURE",
+            "capability_failure": True,
+            "failure_stage": "pipeline",
+            "blocked_reason": f"{type(error).__name__}: {error}",
+            "evidence_lifecycle": {
+                "state": "pipeline_failed",
+                "transitions": ["planned", "pipeline_failed"],
+                "causal_allowed": False,
+            },
+        }]
+        executions = ()
+        evidence = ()
     execution_sink.extend(executions)
     evidence_sink.extend(evidence)
     trace.append({
@@ -1303,9 +1334,17 @@ def run_source_investigation(
         exploration_trace: list[dict[str, Any]] = []
         exploration_executions: list[ExecutionResult] = []
         exploration_evidence: list[Any] = []
+        total_frontier_cost = sum(
+            max(float(item.cost), 0.01)
+            for item in result.experiments
+            if item.hypothesis_id in _exploration_executable_hypothesis_ids(result, classes)
+        )
+        # Default live dogfooding covers every currently executable hypothesis
+        # once, while retaining an explicit caller-provided minimum budget.
+        campaign_budget = max(float(exploration_budget), total_frontier_cost)
         exploration = run_bounded_exploration(
             result,
-            budget=exploration_budget,
+            budget=campaign_budget,
             executable_hypothesis_ids=_exploration_executable_hypothesis_ids(result, classes),
             execute_question=lambda current_result, decision: _execute_exploration_question(
                 current_result,
@@ -1369,7 +1408,7 @@ def run_source_investigation(
             "surface": "compiler-backed-planned-execution",
             "hypotheses": statuses,
             "exploration": {
-                "budget": exploration_budget,
+                "budget": campaign_budget,
                 "rounds": exploration.rounds,
                 "stopped_reason": exploration.stopped_reason,
                 "trace": exploration_trace,
@@ -1399,6 +1438,8 @@ def run_source_investigation(
             }
         classification["class_coverage"] = by_class
         classification["unexecuted_reasoning_surfaces"] = unexecuted_reasoning_surfaces
+        campaign = build_capability_campaign(statuses, execution_readiness)
+        classification["campaign"] = campaign["summary"]
         capability_clusters: dict[str, int] = {}
         capability_frontier = {"total": len(execution_readiness), "executable": 0, "partial": 0, "blocked": 0}
         for item in execution_readiness:
@@ -1485,6 +1526,9 @@ def run_source_investigation(
             "execution.json": execution_json,
             "classification.json": classification,
             "exploration-state.json": exploration_state,
+            "capability_failures.json": campaign["capability_failures"],
+            "blocked_experiments.json": campaign["blocked_experiments"],
+            "dependency_graph.json": campaign["dependency_graph"],
         }
         create_freeze(files, text_files, freeze)
 
