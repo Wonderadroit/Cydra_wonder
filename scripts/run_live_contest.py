@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from run_benchmark_blind import SUPPORTED_CLASSES, run_source_investigation
+from cydra.capability_campaign import merge_campaigns
 
 
 REQUIRED_KEYS = {
@@ -205,6 +206,57 @@ def main() -> int:
                 except json.JSONDecodeError:
                     result["classification_parse_error"] = True
             results.append(result)
+
+    campaigns = []
+    for result in results:
+        campaign_path = output / result["artifact"] / "freeze" / "capability_failures.json"
+        blocked_path = output / result["artifact"] / "freeze" / "blocked_experiments.json"
+        graph_path = output / result["artifact"] / "freeze" / "dependency_graph.json"
+        if campaign_path.exists():
+            try:
+                failures = json.loads(campaign_path.read_text(encoding="utf-8"))
+                blocked = json.loads(blocked_path.read_text(encoding="utf-8")) if blocked_path.exists() else []
+                graph = json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {"nodes": [], "edges": []}
+                # Reconstruct the normalized campaign envelope from the immutable
+                # per-source freeze files so the target-level artifact remains
+                # independent of implementation details inside the runner.
+                campaigns.append({
+                    "summary": {
+                        "total_attempts": len(failures) + len(blocked),
+                        "by_status": {},
+                    },
+                    "capability_failures": failures,
+                    "blocked_experiments": blocked,
+                    "capability_clusters": [],
+                    "dependency_graph": graph,
+                })
+            except json.JSONDecodeError:
+                pass
+
+    # Prefer classification.json for complete per-source attempt counts and
+    # cluster metadata when available.
+    normalized_campaigns = []
+    for result in results:
+        classification_path = output / result["artifact"] / "freeze" / "classification.json"
+        failures_path = output / result["artifact"] / "freeze" / "capability_failures.json"
+        blocked_path = output / result["artifact"] / "freeze" / "blocked_experiments.json"
+        graph_path = output / result["artifact"] / "freeze" / "dependency_graph.json"
+        if not (classification_path.exists() and failures_path.exists()):
+            continue
+        try:
+            classification = json.loads(classification_path.read_text(encoding="utf-8"))
+            normalized_campaigns.append({
+                "summary": classification.get("campaign", {}),
+                "capability_failures": json.loads(failures_path.read_text(encoding="utf-8")),
+                "blocked_experiments": json.loads(blocked_path.read_text(encoding="utf-8")) if blocked_path.exists() else [],
+                "capability_clusters": [],
+                "dependency_graph": json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {"edges": []},
+            })
+        except json.JSONDecodeError:
+            continue
+
+    target_campaign = merge_campaigns(normalized_campaigns or campaigns)
+    write_json(output / "capability_campaign.json", target_campaign)
 
     confirmed = []
     for result in results:
