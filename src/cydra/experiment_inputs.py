@@ -306,6 +306,7 @@ def materialize_parameter_with_provenance(
                 return None
             field_path = f"{path}.{field.name}"
             provenance.append(f"{field_path}:field-type:{field.type}")
+            provenance.append(f"{base}.{field.name}:field-type:{field.type}")
             value = materialize(field, field_path, stack + (base,))
             if value is None:
                 return None
