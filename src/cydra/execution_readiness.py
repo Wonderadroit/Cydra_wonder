@@ -957,6 +957,11 @@ def _classify_internal_predicate(
     if identifiers & local_names:
         return "local_execution"
 
+    # msg.value is ambient call context, but retain the historical
+    # descriptive category for this boundary; satisfiability is still handled
+    # by the generic experiment-constraint classifier.
+    if "msg.value" in normalized:
+        return "unknown"
     return "input_construction"
 
 
@@ -1114,7 +1119,7 @@ def _execution_requirements(
         }.get(polarity, "execution predicate polarity is unknown")
         category = _classify_internal_predicate(contract, function, predicate)
         status = "constraint" if _is_experiment_constraint(contract, function, predicate, execution_capabilities) else "required"
-        if category in {"cryptographic_witness", "execution_context", "local_execution", "state_observation"}:
+        if category == "cryptographic_witness":
             status = "required"
         if status == "constraint":
             detail = (
