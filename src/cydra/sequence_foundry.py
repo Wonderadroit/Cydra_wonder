@@ -568,7 +568,7 @@ def generate_sequence_test_from_experiment(
             # target-derived constructor constraint is available. A zero value
             # is the neutral ABI default; stricter values must come from the
             # target-derived model rather than a renderer heuristic.
-            constructor_arguments.append("1")
+            constructor_arguments.append("0")
         elif base.startswith("int"):
             constructor_arguments.append("0")
         elif base == "string":
