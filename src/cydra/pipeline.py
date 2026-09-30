@@ -195,9 +195,16 @@ def _attach_input_plan(
             function_name=function.name,
             contract_model=contract,
         )
+        # The reasoning planner's planned_inputs may be descriptive placeholders
+        # (for example "same signed message"). Once the generic input planner has
+        # produced a concrete ABI vector, that execution vector supersedes those
+        # placeholders. Keep bind_experiment strict for genuinely conflicting
+        # concrete callers; normalize the envelope here at the reasoning/execution
+        # boundary instead of weakening the binding contract.
+        normalized_experiment = replace(experiment, planned_inputs=vector)
         bound = bind_experiment(
             hypothesis,
-            experiment,
+            normalized_experiment,
             target_function=function.name,
             planned_inputs=vector,
         )
