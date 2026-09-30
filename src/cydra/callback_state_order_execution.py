@@ -577,7 +577,18 @@ def _legacy_callback_test(
         callback_input_for_setup = ""
     state_setup, state_setup_functions = _state_setup_source(
         contract_model, function,
-        callback_input_for_setup,
+        next(
+            (
+                f"cydra_{parameter.name}"
+                for parameter in function.parameters
+                if parameter.name in rendered_arguments
+                and re.search(
+                    rf"\\b{re.escape(f'cydra_{parameter.name}')}\\b",
+                    parameter_setup,
+                )
+            ),
+            function.parameters[-1].name if function.parameters else "",
+        ),
     )
     if state_setup:
         parameter_setup = parameter_setup + ("\n        " if parameter_setup else "") + state_setup
