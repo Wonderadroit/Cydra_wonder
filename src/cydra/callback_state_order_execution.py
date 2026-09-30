@@ -241,7 +241,7 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
     typed, imports = _qualify_planned_target_argument(parameter, callback_input, target_type, contract_model)
     callback_input_name = "cydraCallbackInput"
     callback_setup = (
-        f"{parameter.type} memory {callback_input_name} = {typed};\n"
+        f"{_memory_parameter_type(parameter.type)} memory {callback_input_name} = {typed};\n"
         f"        {callback_input_name}.{'.'.join(parameter_path[1:])} = abi.encode(cydraStack);"
     )
     caller_bindings = _caller_bound_parameter_paths(contract_model, function)
@@ -454,6 +454,12 @@ def _state_setup_source(
 
 
 
+def _memory_parameter_type(parameter_type: str) -> str:
+    """Normalize a parameter type for a generated memory declaration."""
+    tokens = parameter_type.strip().split()
+    return tokens[0] if tokens else parameter_type.strip()
+
+
 def _legacy_structured_parameter_setup(
     contract_model: ContractModel,
     function,
@@ -492,7 +498,7 @@ def _legacy_structured_parameter_setup(
                     resolved = _type_source(contract_model, base)
                     if resolved is not None and base not in set(contract_model.declared_types):
                         imports.add((str(resolved[0]), base))
-                    declarations.append(f"{parameter.type} memory {typed} = {expression};")
+                    declarations.append(f"{_memory_parameter_type(parameter.type)} memory {typed} = {expression};")
                     rendered_arguments[parameter.name] = typed
                     continue
             rendered_arguments[parameter.name] = expression
@@ -524,7 +530,7 @@ def _legacy_structured_parameter_setup(
         if resolved is not None and base not in set(contract_model.declared_types):
             imports.add((str(resolved[0]), base))
         local = f"cydra_{parameter.name}"
-        declarations.append(f"{parameter.type} memory {local} = {typed};")
+        declarations.append(f"{_memory_parameter_type(parameter.type)} memory {local} = {typed};")
         for path in caller_bindings:
             if path.startswith(parameter.name + "."):
                 declarations.append(
@@ -617,7 +623,7 @@ def _ensure_callback_argument_vector_bindings(
         resolved = _type_source(contract_model, base)
         if resolved is not None and base not in set(contract_model.declared_types):
             imports.add((str(resolved[0]), base))
-        declarations.append(f"{parameter.type} memory {candidate} = {value};")
+        declarations.append(f"{_memory_parameter_type(parameter.type)} memory {candidate} = {value};")
         declared.add(candidate)
     return tuple(rendered), tuple(declarations), imports
 
