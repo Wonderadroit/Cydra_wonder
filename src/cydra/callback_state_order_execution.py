@@ -506,7 +506,7 @@ def _select_structured_binding_name(function, rendered_arguments, parameter_setu
         if parameter.name not in rendered_arguments:
             continue
         candidate = f"cydra_{parameter.name}"
-        if re.search(rf"\\b{re.escape(candidate)}\\b", parameter_setup):
+        if re.search(rf"\b{re.escape(candidate)}\b", parameter_setup):
             return candidate
     return function.parameters[-1].name if function.parameters else ""
 
