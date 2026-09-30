@@ -1009,7 +1009,7 @@ def _internal_execution_requirements(
                     callee,
                     predicate,
                     execution_capabilities,
-                )
+                )\n                if category in {"cryptographic_witness", "execution_context", "local_execution"}:\n                    constraint = False
                 predicate_state_names = {
                     name for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
                     if name in set(contract.state_variables)
@@ -1381,7 +1381,7 @@ def _state_setup_candidates(
             )
             status = (
                 "constructible"
-                if primitive_abi and not runtime_dependencies and not authorization_requirements
+                if primitive_abi and not runtime_dependencies
                 else "unresolved"
             )
             if not primitive_abi:
