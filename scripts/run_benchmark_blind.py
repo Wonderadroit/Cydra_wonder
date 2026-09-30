@@ -1440,7 +1440,11 @@ def run_source_investigation(
             }
         classification["class_coverage"] = by_class
         classification["unexecuted_reasoning_surfaces"] = unexecuted_reasoning_surfaces
-        campaign = build_capability_campaign(statuses, execution_readiness)
+        campaign = build_capability_campaign(
+            statuses,
+            execution_readiness,
+            planned_unimplemented=unexecuted_reasoning_surfaces,
+        )
         classification["campaign"] = campaign["summary"]
         capability_clusters: dict[str, int] = {}
         capability_frontier = {"total": len(execution_readiness), "executable": 0, "partial": 0, "blocked": 0}
