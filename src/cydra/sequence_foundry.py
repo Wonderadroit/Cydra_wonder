@@ -5,7 +5,7 @@ import os
 import re
 
 from .models import ContractModel, Experiment, Hypothesis
-from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_struct_fields
+from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_struct_fields, resolve_namespaced_struct_fields
 from .execution_readiness import _address_role, _constructor_role_grants, caller_role, role_address_expression, constructible_state_setup_plan
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
@@ -135,11 +135,15 @@ def _plan_prerequisite_parameter_bindings(
             # source unit (Target.Data), not an interface dependency.
             if resolve_struct_fields(project_root, source_path, member):
                 return base, Path(source_path).resolve().relative_to(Path(project_root).resolve()).as_posix()
+            if resolve_namespaced_struct_fields(project_root, source_path, namespace, member):
+                return base, Path(source_path).resolve().relative_to(Path(project_root).resolve()).as_posix()
             # Namespaced Solidity types can be nested in a contract/library as
             # well as an interface (e.g. Outer.Inner). Resolve the namespace as
             # a generic declared type; resolve_interface is intentionally limited
             # to interface ABI provenance.
             namespace_source, _ = resolve_named_type_source(project_root, source_path, namespace)
+            if not resolve_namespaced_struct_fields(project_root, namespace_source, namespace, member):
+                raise FileNotFoundError(f"Unable to resolve nested user-defined type {base} from {source_path}")
             return base, namespace_source
         resolved_source, _ = resolve_named_type_source(project_root, source_path, base)
         return base, resolved_source
