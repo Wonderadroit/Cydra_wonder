@@ -6,7 +6,7 @@ import re
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_struct_fields
-from .execution_readiness import _address_role, _constructor_role_grants, caller_role
+from .execution_readiness import _address_role, _constructor_role_grants, caller_role, role_address_expression
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
 
