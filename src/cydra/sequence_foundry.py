@@ -58,7 +58,7 @@ def _solidity_string_literal(value: str) -> str:
         .replace("\n", "\\n")
         .replace("\t", "\\t")
     )
-    return '"' + encoded.replace(sentinel, "\\\\n") + '"'
+    return '"' + encoded.replace(sentinel, "\\n") + '"'
 
 
 def _split_top_level_tuple_expression(value: str) -> tuple[str, ...] | None:
