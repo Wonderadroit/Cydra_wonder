@@ -249,7 +249,10 @@ def main() -> int:
                 "summary": classification.get("campaign", {}),
                 "capability_failures": json.loads(failures_path.read_text(encoding="utf-8")),
                 "blocked_experiments": json.loads(blocked_path.read_text(encoding="utf-8")) if blocked_path.exists() else [],
-                "capability_clusters": [],
+                "capability_clusters": [
+                    {"capability": key, "count": count, "hypothesis_ids": [], "experiment_ids": [], "stages": [], "reasons": []}
+                    for key, count in (classification.get("capability_clusters") or {}).items()
+                ],
                 "dependency_graph": json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {"edges": []},
             })
         except json.JSONDecodeError:
