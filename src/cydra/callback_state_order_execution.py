@@ -664,6 +664,16 @@ def _legacy_callback_test(
             f"expected {len(function.parameters)}, got {len(arguments)}"
         )
     runtime_bindings = runtime_dependency_constructor_bindings(contract_model, function)
+    # Accept both the historical (constructor_parameter, interface) binding
+    # shape and richer provenance tuples emitted by newer readiness layers.
+    # The callback renderer only needs the constructor parameter and resolved
+    # interface, so normalize at this boundary instead of coupling renderers to
+    # readiness metadata.
+    runtime_bindings = tuple(
+        (binding[0], binding[-1])
+        for binding in runtime_bindings
+        if len(binding) >= 2
+    )
     runtime_stub_source, runtime_stub_variables = _runtime_stub_source(
         runtime_bindings, (), (), False, output_path
     )
