@@ -201,14 +201,17 @@ def plan_public_state_observations(
         states = []
         for match in matches:
             state = match.group("state")
+            if state in states:
+                continue
+            # Replace only source identifiers. A second conjunct mentioning the
+            # same state must not rewrite the getter introduced for the first
+            # conjunct (e.g. target.epoch() -> target.target.epoch()()).
             condition = re.sub(
-                rf"\b{re.escape(state)}\b",
+                rf"(?<![.\w]){re.escape(state)}\b",
                 f"target.{state}()",
                 condition,
-                count=1,
             )
-            if state not in states:
-                states.append(state)
+            states.append(state)
         expression = condition if polarity == "must_hold" else f"!({condition})"
         for state in states:
             plans.append(
