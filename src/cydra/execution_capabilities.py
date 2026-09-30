@@ -3,19 +3,19 @@ from __future__ import annotations
 """Generic experiment capability contracts and feasibility solving."""
 
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 import re
 
 from .execution_readiness import ExecutionReadiness
 from .models import ContractModel, Experiment, Hypothesis
 
-class CapabilityStatus(StrEnum):
+class CapabilityStatus(str, Enum):
     AVAILABLE = "available"
     PARTIAL = "partial"
     MISSING = "missing"
     BLOCKED = "blocked"
 
-class Capability(StrEnum):
+class Capability(str, Enum):
     CALLER_CONSTRUCTION = "CALLER_CONSTRUCTION"
     ROLE_ESTABLISHMENT = "ROLE_ESTABLISHMENT"
     STATE_SETUP = "STATE_SETUP"
