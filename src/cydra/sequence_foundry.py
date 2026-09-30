@@ -208,6 +208,65 @@ def _plan_prerequisite_parameter_bindings(
         )
     return tuple(declarations), tuple(dict.fromkeys(imports))
 
+def _normalize_local_parameter_type(parameter_type: str) -> str:
+    """Normalize a modeled ABI parameter type for a local materialization."""
+    return re.sub(r"\s+(?:memory|calldata|storage)\b", "", parameter_type).strip()
+
+def _plan_stack_safe_argument_bindings(
+    project_root: Path | None,
+    source_path: str,
+    output_path: Path,
+    function,
+    arguments: tuple[str, ...],
+    step_index: int,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Lower complex ABI arguments into typed locals before the target call."""
+    if len(arguments) != len(function.parameters):
+        raise ValueError(
+            f"sequence input arity mismatch for {function.name}: "
+            f"expected {len(function.parameters)}, got {len(arguments)}"
+        )
+    declarations: list[str] = []
+    call_arguments: list[str] = []
+    imports: list[str] = []
+
+    def resolve_custom_type(type_name: str) -> tuple[str, str]:
+        base = _normalize_local_parameter_type(type_name).split()[0].rstrip("[]")
+        if "." in base:
+            namespace, _ = base.split(".", 1)
+            if project_root is None:
+                raise ValueError(f"stack-safe lowering requires a resolvable Foundry project root for {type_name}")
+            resolved = resolve_interface(project_root, source_path, namespace)
+            return base, resolved.source_path
+        if project_root is None:
+            raise ValueError(f"stack-safe lowering requires a resolvable Foundry project root for {type_name}")
+        resolved_source, _ = resolve_named_type_source(project_root, source_path, base)
+        return base, resolved_source
+
+    def add_import(type_name: str) -> None:
+        base, resolved_source = resolve_custom_type(type_name)
+        symbol = base.split(".", 1)[0] if "." in base else base
+        relative = Path(os.path.relpath(Path(project_root / resolved_source), output_path.parent)).as_posix()
+        imports.append(f'import {{ {symbol} }} from "{relative}";')
+
+    for parameter_index, (parameter, argument) in enumerate(zip(function.parameters, arguments)):
+        parameter_type = parameter.type.strip()
+        normalized = _normalize_local_parameter_type(parameter_type)
+        base = normalized.split()[0].rstrip("[]")
+        dynamic = normalized.endswith("[]") or base in {"string", "bytes"}
+        custom = not _is_builtin_sequence_type(parameter_type)
+        tuple_expression = _split_top_level_tuple_expression(argument) is not None
+        if not (dynamic or custom or tuple_expression):
+            call_arguments.append(argument)
+            continue
+        if custom:
+            add_import(parameter_type)
+        local_name = f"cydra_arg_{step_index}_{parameter_index}"
+        local_type = f"{normalized} memory" if (dynamic or custom) else normalized
+        declarations.append(f"        {local_type} {local_name} = {argument};")
+        call_arguments.append(local_name)
+    return tuple(declarations), tuple(call_arguments), tuple(dict.fromkeys(imports))
+
 
 def generate_sequence_test_from_experiment(
     hypothesis: Hypothesis,
@@ -378,7 +437,17 @@ def generate_sequence_test_from_experiment(
         if verify_relation_for_step and relation_setups:
             rendered.extend(relation_setups)
             relation_setups.clear()
-        arguments = ", ".join(step.arguments)
+        argument_bindings, call_arguments, argument_imports = _plan_stack_safe_argument_bindings(
+            project_root,
+            contract_model.source,
+            Path(output_path),
+            function,
+            step.arguments,
+            index,
+        )
+        rendered.extend(argument_bindings)
+        prerequisite_imports.extend(argument_imports)
+        arguments = ", ".join(call_arguments)
         constructor_caller = _constructor_granted_caller(function, contract_model)
         role = caller_role(function)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
