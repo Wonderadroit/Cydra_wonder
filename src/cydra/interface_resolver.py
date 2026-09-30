@@ -419,6 +419,39 @@ def _extract_interface(
     )
 
 
+def resolve_namespaced_struct_fields(root: str | Path, source_path: str | Path, namespace: str, struct_name: str) -> tuple[tuple[str, str], ...]:
+    """Resolve a struct nested inside a contract, library, or interface."""
+    path = _resolve_source_path(root, source_path)
+    try:
+        source = _strip_comments(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        return ()
+    owner = re.search(rf"\b(?:contract|library|interface)\s+{re.escape(namespace)}\b", source)
+    if owner is None:
+        return ()
+    body_start = source.find("{", owner.end())
+    if body_start < 0:
+        return ()
+    depth = 0
+    body_end = len(source)
+    for index in range(body_start, len(source)):
+        if source[index] == "{": depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                body_end = index
+                break
+    body = source[body_start + 1:body_end]
+    match = re.search(rf"\bstruct\s+{re.escape(struct_name)}\s*\{{(?P<body>.*?)\}}", body, re.DOTALL)
+    if match is None:
+        return ()
+    fields: list[tuple[str, str]] = []
+    for statement in match.group("body").split(";"):
+        parts = statement.strip().split()
+        if len(parts) >= 2:
+            fields.append((parts[-1], " ".join(parts[:-1])))
+    return tuple(fields)
+
 def resolve_struct_fields(root: str | Path, source_path: str | Path, struct_name: str) -> tuple[tuple[str, str], ...]:
     """Resolve top-level fields of a source-defined Solidity struct."""
     path = _resolve_source_path(root, source_path)
