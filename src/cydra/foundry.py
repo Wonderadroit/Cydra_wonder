@@ -245,6 +245,13 @@ def _initializer_argument(
     if parameter.name in runtime_arguments:
         return runtime_arguments[parameter.name], None
     parameter_type = parameter.type.strip()
+    # Explicit interface provenance is sufficient even when the target source
+    # is a temporary fixture without Foundry metadata.
+    if contract_model is not None:
+        interface_names = {interface.name for interface in contract_model.inherited_resolved_interfaces}
+        base_type = parameter_type.split()[0].rstrip("[]")
+        if base_type in interface_names:
+            return f"parameter{index}", f"{base_type} parameter{index};"
     if parameter_type.endswith("[]"):
         base = parameter_type[:-2].strip()
         # Preserve the conservative empty boundary for primitive arrays.
