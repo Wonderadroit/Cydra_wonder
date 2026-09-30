@@ -476,6 +476,25 @@ def _legacy_structured_parameter_setup(
                         referenced_roots.add(parameter.name)
     for parameter, expression in zip(function.parameters, arguments):
         if parameter.name not in referenced_roots:
+            # Even when no prerequisite currently references this parameter,
+            # the final callback renderer may select a lowered structured local
+            # (for example cydra_<parameter>) for the target call. Qualify it
+            # here so that any generated local is declared before abi.encodeCall.
+            if parameter.type.split()[0] not in {"address", "bool", "string", "bytes"} and not parameter.type.split()[0].startswith(("uint", "int", "bytes")):
+                typed, typed_imports = _qualify_planned_target_argument(
+                    parameter, expression, target_type, contract_model
+                )
+                imports.update(typed_imports)
+                if re.fullmatch(r"[A-Za-z_]\w*", typed.strip()) and not re.fullmatch(
+                    r"[A-Za-z_]\w*", expression.strip()
+                ):
+                    base = parameter.type.split()[0].rstrip("[]")
+                    resolved = _type_source(contract_model, base)
+                    if resolved is not None and base not in set(contract_model.declared_types):
+                        imports.add((str(resolved[0]), base))
+                    declarations.append(f"{parameter.type} memory {typed} = {expression};")
+                    rendered_arguments[parameter.name] = typed
+                    continue
             rendered_arguments[parameter.name] = expression
             continue
         typed, typed_imports = _qualify_planned_target_argument(
