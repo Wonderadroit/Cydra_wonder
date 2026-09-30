@@ -194,3 +194,69 @@ def build_capability_campaign(
             "edges": unique_edges,
         },
     }
+
+
+def merge_campaigns(campaigns: list[dict[str, Any]]) -> dict[str, Any]:
+    """Merge per-source ledgers into one target-level campaign without deduping evidence away."""
+    failures = []
+    blocked = []
+    clusters: dict[str, dict[str, Any]] = {}
+    edges = []
+    by_status = defaultdict(int)
+    total_attempts = 0
+
+    for campaign in campaigns:
+        summary = campaign.get("summary", {})
+        total_attempts += int(summary.get("total_attempts", 0))
+        for key, value in (summary.get("by_status") or {}).items():
+            by_status[key] += int(value)
+        failures.extend(campaign.get("capability_failures", []))
+        blocked.extend(campaign.get("blocked_experiments", []))
+        edges.extend(campaign.get("dependency_graph", {}).get("edges", []))
+        for item in campaign.get("capability_clusters", []):
+            key = item["capability"]
+            target = clusters.setdefault(key, {
+                "capability": key,
+                "count": 0,
+                "hypothesis_ids": [],
+                "experiment_ids": [],
+                "stages": [],
+                "reasons": [],
+            })
+            target["count"] += int(item.get("count", 0))
+            for field in ("hypothesis_ids", "experiment_ids", "stages", "reasons"):
+                for value in item.get(field, []):
+                    if value not in target[field]:
+                        target[field].append(value)
+
+    unique_edges = []
+    seen = set()
+    for edge in edges:
+        marker = (edge.get("from"), edge.get("to"), edge.get("type"))
+        if marker not in seen:
+            seen.add(marker)
+            unique_edges.append(edge)
+
+    return {
+        "schema_version": 1,
+        "mode": "batch_capability_campaign",
+        "summary": {
+            "sources": len(campaigns),
+            "total_attempts": total_attempts,
+            "by_status": dict(sorted(by_status.items())),
+            "capability_clusters": len(clusters),
+            "blocked_experiments": len(blocked),
+        },
+        "capability_failures": failures,
+        "blocked_experiments": blocked,
+        "capability_clusters": sorted(
+            clusters.values(), key=lambda item: (-item["count"], item["capability"])
+        ),
+        "dependency_graph": {
+            "nodes": sorted(
+                {item["capability"] for item in clusters.values()}
+                | {edge["to"] for edge in unique_edges if edge.get("to")}
+            ),
+            "edges": unique_edges,
+        },
+    }
