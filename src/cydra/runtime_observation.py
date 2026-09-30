@@ -175,10 +175,14 @@ def plan_public_state_observations(
         polarity = polarities.get(predicate, "unknown")
         if polarity not in {"must_hold", "must_not_hold"}:
             continue
+        # Predicate provenance may contain formatting/newlines from source
+        # extraction. Normalize only for structural matching; retain the original
+        # predicate for the emitted diagnostic.
+        normalized = re.sub(r"\s+", " ", predicate).strip()
         match = re.fullmatch(
-            r"\s*(?P<state>[A-Za-z_]\w*)\s*(?P<op>==|!=|>=|<=|>|<)\s*"
-            r"(?P<literal>(?:0x[0-9A-Fa-f]+|\d+|true|false))\s*",
-            predicate,
+            r"(?P<state>[A-Za-z_]\w*)\s*(?P<op>==|!=|>=|<=|>|<)\s*"
+            r"(?P<literal>(?:0x[0-9A-Fa-f]+|\d+|true|false))",
+            normalized,
         )
         if not match or match.group("state") not in getters:
             continue
