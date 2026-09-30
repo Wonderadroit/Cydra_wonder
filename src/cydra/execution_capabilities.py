@@ -8,6 +8,7 @@ import re
 
 from .execution_readiness import ExecutionReadiness
 from .models import ContractModel, Experiment, Hypothesis
+from .experiment_inputs import prove_parameter_materialization
 
 class CapabilityStatus(str, Enum):
     AVAILABLE = "available"
@@ -40,6 +41,7 @@ class CapabilityRequirement:
     source: str
     detail: str = ""
     subcapability: str | None = None
+    provenance: str | None = None
 
 @dataclass(frozen=True)
 class CapabilityAvailability:
@@ -231,7 +233,25 @@ def build_experiment_contract(hypothesis: Hypothesis, experiment: Experiment, co
     if function:
         for parameter in function.parameters:
             if _custom_type(parameter.type):
-                add(Capability.TYPE_MATERIALIZATION, parameter.name or parameter.type, 'target parameter model', f'custom parameter type {parameter.type}', _type_subcapability(parameter.type))
+                proof = prove_parameter_materialization((parameter,), contract)
+                if proof:
+                    evidence = proof[0]
+                    provenance = "type-materialization:" + "|".join(evidence.provenance)
+                    detail = (
+                        f"source-backed recursive materialization succeeded for {parameter.name or parameter.type}; "
+                        f"expression={evidence.expression}"
+                    )
+                else:
+                    provenance = None
+                    detail = f"custom parameter type {parameter.type} still requires source-backed materialization"
+                add(
+                    Capability.TYPE_MATERIALIZATION,
+                    parameter.name or parameter.type,
+                    'target parameter model',
+                    detail,
+                    _type_subcapability(parameter.type),
+                    provenance,
+                )
     attacker = hypothesis.attacker_capability.lower()
     if re.search(r'callback|reentr', attacker):
         add(Capability.CALLBACK_HARNESS, 'attacker capability', 'hypothesis')
@@ -256,6 +276,8 @@ def solve_capabilities(contract: ExperimentContract, availability: tuple[Capabil
             gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, CapabilityStatus.MISSING, 'capability is not registered'))
             continue
         if item.status == CapabilityStatus.AVAILABLE:
+            continue
+        if requirement.capability == Capability.TYPE_MATERIALIZATION and requirement.provenance:
             continue
         if item.status == CapabilityStatus.PARTIAL:
             if requirement.subcapability and requirement.subcapability not in item.subcapabilities:
