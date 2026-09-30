@@ -35,9 +35,14 @@ def _json(value: Any) -> Any:
 
 
 def _gap_key(gap: Any) -> str:
-    capability = getattr(getattr(gap, "capability", None), "value", None) or str(getattr(gap, "capability", "UNKNOWN"))
-    sub = getattr(gap, "subcapability", None)
-    return capability if not sub else f"{capability}:{sub}"
+    if isinstance(gap, dict):
+        capability = gap.get("capability", "UNKNOWN")
+        sub = gap.get("subcapability")
+    else:
+        capability = getattr(gap, "capability", "UNKNOWN")
+        sub = getattr(gap, "subcapability", None)
+    capability = getattr(capability, "value", capability)
+    return str(capability) if not sub else f"{capability}:{sub}"
 
 
 def _status_kind(status: dict[str, Any]) -> str:
