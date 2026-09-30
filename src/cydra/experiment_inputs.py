@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
-from .interface_resolver import resolve_named_type_source
+from .interface_resolver import resolve_named_type_source, resolve_import, _imports_for
 from .models import ContractModel
 
 from .compiler_constraints import ConstraintEvidence
@@ -106,8 +106,36 @@ def _type_source(contract_model: ContractModel, type_name: str) -> tuple[Path, s
     try:
         resolved, _ = resolve_named_type_source(root, source_path, short_name)
     except (FileNotFoundError, ValueError):
-        return None
-    resolved_path = (root / resolved).resolve()
+        # Bounded explicit-import fallback for temporary/source-unit layouts.
+        # This remains target-graph scoped and does not perform repository-wide
+        # symbol discovery.
+        queue = [source_path.resolve()]
+        visited: set[Path] = set()
+        resolved_path = None
+        while queue and resolved_path is None:
+            current = queue.pop(0)
+            if current in visited or not current.is_file():
+                continue
+            visited.add(current)
+            try:
+                current_source = current.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            if _definition(current_source, short_name) is not None:
+                resolved_path = current
+                break
+            for import_path in _imports_for(current):
+                imported = resolve_import(root, current, import_path)
+                if imported is None and import_path.startswith(("./", "../")):
+                    candidate = (current.parent / import_path).resolve()
+                    if candidate.is_file():
+                        imported = (candidate, "declared_import")
+                if imported is not None:
+                    queue.append(imported[0].resolve())
+        if resolved_path is None:
+            return None
+    else:
+        resolved_path = (root / resolved).resolve()
     try:
         resolved_source = resolved_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
