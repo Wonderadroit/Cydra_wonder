@@ -1062,16 +1062,16 @@ def _internal_execution_requirements(
                             "callback execution-context adapter can satisfy this guarded "
                             "ambient-time prerequisite without changing target semantics"
                         )
+                    elif default_state:
+                        detail = (
+                            "fresh target state satisfies this persistent prerequisite by its "
+                            "modeled default value; the experiment must preserve that state"
+                        )
                     elif state_setup:
                         detail = (
                             "target-derived state setup planner found a constructible writer "
                             "for this persistent prerequisite; the experiment must apply and "
                             "verify that transition before the security assertion"
-                        )
-                    elif default_state:
-                        detail = (
-                            "fresh target state satisfies this persistent prerequisite by its "
-                            "modeled default value; the experiment must preserve that state"
                         )
                     elif state_observation:
                         detail = (
