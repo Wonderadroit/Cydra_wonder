@@ -529,6 +529,22 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
             if resolved is not None:
                 imported_path, method = resolved
                 imported_path = imported_path.resolve()
+                if path == start:
+                    # Preserve the resolver's historical provenance contract:
+                    # a direct import declaration is reported as declared_import
+                    # for ordinary imports and direct_declared_import for named
+                    # imports. The lower-level resolver may still call the edge
+                    # relative_import/project_relative internally.
+                    try:
+                        source = _strip_comments(path.read_text(encoding="utf-8"))
+                    except (OSError, UnicodeError):
+                        source = ""
+                    named = bool(re.search(
+                        rf'import\s*\{{[^}}]*\b{re.escape(name)}\b[^}}]*\}}\s*from\s*["\']{re.escape(import_path)}["\']',
+                        source,
+                    ))
+                    method = "direct_declared_import" if named else "declared_import"
+                imported_path = imported_path.resolve()
                 if imported_path not in visited:
                     pending.append((imported_path, method))
 
