@@ -317,6 +317,48 @@ def conservative_defaults(parameters: Iterable[ParameterModel], contract_model: 
     return defaults
 
 
+def _parameter_accepts_expression(parameter: ParameterModel, expression: str) -> bool:
+    """Best-effort type compatibility for preserving partial planner vectors."""
+    value = expression.strip()
+    if not value:
+        return False
+    base = parameter.type.strip().split()[0].rstrip("[]")
+    if base == "address":
+        return value.startswith(("address(", "payable(address(")) or value in {"attacker", "owner", "admin", "guardian", "riskManager", "liquidator", "factory"}
+    if base == "bool":
+        return value in {"true", "false"}
+    if base.startswith(("uint", "int")):
+        return bool(re.fullmatch(r"-?\d+", value)) or value.startswith("type(uint")
+    if base == "string":
+        return value.startswith('"')
+    if base == "bytes" or base.startswith("bytes"):
+        return value.startswith(("bytes(", "hex\"")) or value == "0"
+    return value.startswith((base + "(", "abi.decode(")) or value.startswith("(")
+
+
+def _planned_defaults(parameters: tuple[ParameterModel, ...], planned: tuple[str, ...]) -> dict[str, str]:
+    """Bind a possibly partial vector to compatible parameter slots."""
+    if not planned:
+        return {}
+    if len(planned) >= len(parameters):
+        return {parameter.name: value for parameter, value in zip(parameters, planned) if value.strip()}
+    result: dict[str, str] = {}
+    used: set[int] = set()
+    for value in planned:
+        if not value.strip():
+            continue
+        compatible = next(
+            (index for index, parameter in enumerate(parameters)
+             if index not in used and _parameter_accepts_expression(parameter, value)),
+            None,
+        )
+        if compatible is None:
+            continue
+        used.add(compatible)
+        result[parameters[compatible].name] = value
+    return result
+
+
 def plan_parameter_inputs(
     parameters: Iterable[ParameterModel],
     constraints: Iterable[ConstraintEvidence],
