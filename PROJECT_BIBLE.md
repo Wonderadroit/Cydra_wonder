@@ -1060,3 +1060,70 @@ Rules:
 7. If the declared path exists but does not declare the requested type, fail closed rather than substituting an unrelated source.
 
 The purpose is to keep execution-readiness aligned with the target parser's source provenance: an explicit Solidity import edge is authoritative evidence about where a custom type comes from.
+## 55. Security experiments require an explicit capability contract
+
+The execution layer must not treat a security hypothesis as directly executable merely because an experiment object exists. Reasoning and execution are separated by a normalized capability contract.
+
+The canonical handoff is:
+
+**hypothesis → experiment intent → capability requirements → capability solver → materialization plan → executor → evidence**
+
+The capability contract records the concrete execution capabilities required by one experiment without deciding whether the hypothesis is true. Capability names are mechanism-level and reusable across targets, including:
+
+- CALLER_CONSTRUCTION
+- ROLE_ESTABLISHMENT
+- STATE_SETUP
+- CONSTRUCTOR_SETUP
+- CALLBACK_HARNESS
+- REENTRANCY_HARNESS
+- VALUE_PROVISION
+- TOKEN_PROVISION
+- BALANCE_PROVISION
+- ADDRESS_PROVISION
+- PROXY_DEPLOYMENT
+- EVENT_OBSERVATION
+- STATE_OBSERVATION
+- CALL_SEQUENCE
+- INTERNAL_CALL_PROPAGATION
+- TYPE_MATERIALIZATION
+
+A capability may also expose bounded sub-capabilities, such as primitive, array, tuple, custom-struct, nested-custom-struct, and namespaced-custom-struct materialization.
+
+The solver must distinguish:
+
+1. **available** — the generic execution surface exists;
+2. **partial** — the surface exists but target-specific materialization/readiness still has to be proven;
+3. **missing** — no generic implementation exists;
+4. **blocked** — the requested sub-capability cannot currently be realized.
+
+Partial is not executable success. The canonical runner must still require target-derived readiness and runtime evidence before executing or classifying the security experiment.
+
+The capability layer must never contain a target name, target function name, vulnerability-class branch, historical answer, or hard-coded target input. A live-target failure may justify a generic capability repair, but it must never become a target-specific capability.
+
+## 56. Capability gaps must be clustered and resumed, not rediscovered
+
+A materialization failure is an execution-capability observation. It must be recorded using the most specific generic capability and sub-capability that the current model can establish. Multiple hypotheses blocked by the same capability represent one engineering gap, not independent target failures.
+
+The canonical campaign should therefore preserve three distinct states:
+
+- **understood + executable** — the target model produced a testable experiment and readiness permits execution;
+- **understood + blocked** — the target model and hypothesis exist, but a named capability or target-derived readiness prerequisite prevents execution;
+- **not understood / unexplored** — no sufficient model or hypothesis exists yet.
+
+Blocked must never be interpreted as safe, rejected, or disproven.
+
+Capability fixes must be resumable. Once a generic capability is repaired, previously blocked experiments should be eligible for rematerialization without regenerating or changing the underlying security hypothesis. The experiment intent and canonical planned inputs remain the source of truth; the materializer is replaceable.
+
+The campaign should report capability clusters such as TYPE_MATERIALIZATION:nested_custom_struct or STATE_OBSERVATION:public_mapping so one generic repair can unlock every affected frontier experiment. This is an engineering prioritization signal, not a vulnerability ranking.
+
+## 57. Progressive experiment materialization
+
+Experiment realization must be staged so a late compiler/materialization failure does not discard earlier successful work. The preferred generic stages are:
+
+**subject → prerequisites → attacker capability → call sequence → observations → outcome distinction**
+
+Each completed stage is durable evidence of execution preparation. A later missing capability blocks only the dependent stage and records the exact capability gap. After repair, materialization resumes from the earliest incomplete stage.
+
+The materializer must not jump directly from a semantic hypothesis to a large generated Solidity file when an intermediate capability contract can identify the missing surface first. This keeps compiler failures attributable to the correct execution boundary and makes generic fixes reusable across targets.
+
+The controller remains responsible for selecting the next information-gain experiment. The capability solver is not a security ranking mechanism and must never decide whether a hypothesis is interesting, valid, or vulnerable.
