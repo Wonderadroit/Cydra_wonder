@@ -16,6 +16,26 @@ def _model() -> ContractModel:
     )
 
 
+def _single_step_experiment(function_name: str) -> tuple[Hypothesis, Experiment]:
+    hypothesis = Hypothesis(
+        f"H-TEST-{function_name}",
+        "candidate",
+        f"INV-TEST-{function_name}",
+        function_name,
+        "attacker",
+        "candidate",
+    )
+    experiment = Experiment(
+        f"X-TEST-{function_name}",
+        hypothesis.hypothesis_id,
+        function_name,
+        ("violation",),
+        1.0,
+        steps=(ExperimentStep(function_name, ()),),
+    )
+    return hypothesis, experiment
+
+
 def _experiment() -> tuple[Hypothesis, Experiment]:
     hypothesis = Hypothesis(
         "H-STATE-counter-decrease",
@@ -682,7 +702,7 @@ def test_sequence_renderer_constructs_namespaced_struct_constructor_type(tmp_pat
             (ParameterModel("args", "IMerkle.MerkleConstructorArgs", "memory"),), 2
         ),
     )
-    hypothesis, experiment = _experiment()
+    hypothesis, experiment = _single_step_experiment("seed")
     generated = generate_sequence_test_from_experiment(
         hypothesis, experiment, "../Target.sol", "Target",
         tmp_path / "test" / "generated.t.sol", model,
@@ -706,7 +726,7 @@ def test_sequence_renderer_imports_constructor_role_address_resolver(tmp_path):
         (FunctionModel("seed", "external", (), (), (), 3),),
         constructor=ConstructorModel((), 2),
     )
-    hypothesis, experiment = _experiment()
+    hypothesis, experiment = _single_step_experiment("seed")
     generated = generate_sequence_test_from_experiment(
         hypothesis, experiment, "../Target.sol", "Target",
         tmp_path / "test" / "generated.t.sol", model,
@@ -730,7 +750,7 @@ def test_sequence_renderer_uses_nonzero_unsigned_constructor_defaults(tmp_path):
         (FunctionModel("seed", "external", (), (), (), 3),),
         constructor=ConstructorModel((ParameterModel("levels", "uint256", "memory"),), 2),
     )
-    hypothesis, experiment = _experiment()
+    hypothesis, experiment = _single_step_experiment("seed")
     generated = generate_sequence_test_from_experiment(
         hypothesis, experiment, "../Target.sol", "Target",
         tmp_path / "test" / "generated.t.sol", model,
