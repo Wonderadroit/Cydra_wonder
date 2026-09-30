@@ -628,7 +628,7 @@ def _ensure_callback_argument_vector_bindings(
             imports.add((str(resolved[0]), base))
         declarations.append(f"{_memory_parameter_type(parameter.type)} memory {candidate} = {value};")
         declared.add(candidate)
-    return tuple(rendered), tuple(declarations), imports
+    return rendered, declarations, imports
 
 
 def _select_structured_binding_name(function, rendered_arguments, parameter_setup: str) -> str:
