@@ -115,6 +115,8 @@ def _plan_prerequisite_parameter_bindings(
     output_path: Path,
     function,
     arguments: tuple[str, ...],
+    *,
+    materialize_via_abi: bool = False,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Materialize source-derived custom parameter values needed by observations."""
     if len(arguments) != len(function.parameters):
@@ -197,7 +199,10 @@ def _plan_prerequisite_parameter_bindings(
         # direct struct construction. This works uniformly for calldata/memory
         # structs and nested user-defined members while preserving the planned
         # tuple values exactly.
-        return f"abi.decode(abi.encode({', '.join(rendered_parts)}), ({base}))"
+        tuple_value = f"{base}({', '.join(rendered_parts)})"
+        if materialize_via_abi:
+            return f"abi.decode(abi.encode({', '.join(rendered_parts)}), ({base}))"
+        return tuple_value
 
     for parameter, argument in zip(function.parameters, arguments):
         parameter_type = parameter.type.strip()
@@ -373,6 +378,7 @@ def generate_sequence_test_from_experiment(
                 Path(output_path),
                 function,
                 effective_arguments,
+                materialize_via_abi=bool(step.arguments),
             )
             prerequisite_imports.extend(binding_imports)
             rendered.extend(bindings)
