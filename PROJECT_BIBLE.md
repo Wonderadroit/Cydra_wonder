@@ -123,6 +123,24 @@ The execution planner must distinguish three states: prerequisites already satis
 
 This layer is generic and must not contain target-specific exceptions. Adapter work should progressively turn constructible prerequisites into deterministic fixtures/configuration; reasoning remains responsible for choosing security hypotheses; deterministic execution remains responsible for evidence.
 
+
+### 7.2 Provenance-backed recursive type materialization
+
+Custom Solidity types are execution-readiness objects, not names that may be marked available by recognition alone.
+
+When an experiment requires a custom parameter, CYDRA must establish:
+
+declared type → defining source → field/type resolution → recursive materialization strategy → compiler-valid expression → provenance
+
+The materializer must recursively handle primitives, arrays, structs, enums, user-defined value types, and namespaced definitions where the source graph permits resolution. Each resolved field retains a path and defining-source provenance.
+
+A custom type is execution-ready only when the complete required resolution chain has been demonstrated. Otherwise readiness remains unresolved/partial and the failure must expose the deepest unresolved generic capability rather than silently inventing a target-specific value.
+
+This rule applies equally to live targets and regression fixtures. In particular, a target-specific type such as CircomData must never receive a hardcoded special case merely because a current dogfood target uses it.
+
+The capability layer may consume a successful materialization proof to remove the corresponding TYPE_MATERIALIZATION gap. That proof does not establish semantic correctness of the values; Foundry execution remains responsible for compiler/runtime verification and causal evidence.
+
+
 ## 8. Invariants
 
 CYDRA asks what must remain true for the system to behave as intended.
