@@ -193,7 +193,11 @@ def _plan_prerequisite_parameter_bindings(
                 rendered_parts.append(typed_tuple(field_base, part, nested_source))
             else:
                 rendered_parts.append(part)
-        return f"{base}({', '.join(rendered_parts)})"
+        # Materialize custom ABI structs through encode/decode rather than
+        # direct struct construction. This works uniformly for calldata/memory
+        # structs and nested user-defined members while preserving the planned
+        # tuple values exactly.
+        return f"abi.decode(abi.encode({', '.join(rendered_parts)}), ({base}))"
 
     for parameter, argument in zip(function.parameters, arguments):
         parameter_type = parameter.type.strip()
@@ -623,8 +627,17 @@ def generate_sequence_test_from_experiment(
                 None,
             )
 
-    deployment_address = role_address_expression(constructor_role_caller) if constructor_role_caller else None
-    deployment_prefix = f"        vm.prank({deployment_address});\n" if deployment_address else ""
+    deployment_role_bindings = {
+        "owner": "owner",
+        "admin": "admin",
+        "guardian": "guardian",
+        "risk_manager": "riskManager",
+        "liquidator": "liquidator",
+        "factory": "factory",
+        "tranche": "tranche",
+    }
+    deployment_caller = deployment_role_bindings.get(constructor_role_caller)
+    deployment_prefix = f"        vm.prank({deployment_caller});\n" if deployment_caller else ""
 
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
