@@ -80,9 +80,9 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
 
 
 def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
-    caller_variable = "cydraAttacker"
+    caller_variable = "attacker"
     start, end, argument_text = _find_initializer_call(source, initializer_name)
-    caller_variable = "cydraAttacker"
+    caller_variable = "attacker"
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
         raise ValueError(
@@ -134,7 +134,7 @@ def _caller_bound_initializer_arguments(
     prerequisite replaces that lifecycle body afterwards, so rewriting the
     renderer call itself is unnecessary and can corrupt surrounding syntax.
     """
-    caller_variable = "cydraAttacker"
+    caller_variable = "attacker"
     _, _, argument_text = _find_initializer_call(source, initializer_name)
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
@@ -214,7 +214,7 @@ def _bind_constructor_caller_arguments(
             continue
         parameter_type = parameter.type.strip()
         if parameter_type.endswith("[]") and parameter_type.split()[0].rstrip("[]") == "address":
-            arguments[index] = "CydraCallerSet.one(cydraAttacker)"
+            arguments[index] = "CydraCallerSet.one(attacker)"
             changed = True
         elif parameter_type == "address":
             arguments[index] = "cydraAttacker"
