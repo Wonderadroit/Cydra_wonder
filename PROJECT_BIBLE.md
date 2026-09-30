@@ -1127,3 +1127,25 @@ Each completed stage is durable evidence of execution preparation. A later missi
 The materializer must not jump directly from a semantic hypothesis to a large generated Solidity file when an intermediate capability contract can identify the missing surface first. This keeps compiler failures attributable to the correct execution boundary and makes generic fixes reusable across targets.
 
 The controller remains responsible for selecting the next information-gain experiment. The capability solver is not a security ranking mechanism and must never decide whether a hypothesis is interesting, valid, or vulnerable.
+
+
+## 58. Materialization failures must become structured capability evidence
+
+A planned security experiment is not allowed to collapse into an opaque renderer exception. When execution realization fails, the pipeline must preserve the original experiment intent and convert the failure into generic capability evidence.
+
+Rules:
+
+1. A materialization failure records the execution stage: subject, prerequisites, attacker, call sequence, observations, or outcome.
+2. It records the generic capability and sub-capability that failed, such as TYPE_MATERIALIZATION:nested_custom_struct or STATE_OBSERVATION:public_mapping.
+3. It records a failure class (for example resolver, type materializer, observation planner, or constructor materialization) and source provenance when the failing evidence identifies one.
+4. The structured gap augments the experiment's capability resolution; it does not replace the original hypothesis, experiment contract, planned inputs, or readiness model.
+5. BLOCKED means the experiment could not be realized at the current capability boundary. It never means rejected, disproven, safe, or uninteresting.
+6. Failure classification must be derived from generic execution/materialization semantics. It must not contain a target name, target-specific filename exception, vulnerability-specific branch, or hardcoded target input.
+7. The same structured gap must be clusterable across experiments so one generic repair can resume every affected experiment.
+8. A materialization failure is execution evidence about CYDRA's capability boundary, not security evidence about the target.
+
+This preserves the separation:
+
+reasoning intent -> experiment contract -> capability resolution -> materialization -> tool evidence -> security conclusion
+
+A renderer error is therefore no longer merely a debugging message; it is a reusable, resumable capability signal.
