@@ -9,6 +9,7 @@ from .interface_resolver import resolve_interface, resolve_named_type_source, re
 from .execution_readiness import _address_role, _constructor_role_grants, caller_role, role_address_expression, constructible_state_setup_plan
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
+from .experiment_inputs import _type_source
 
 
 def _constructor_granted_caller(function, contract_model: ContractModel) -> str | None:
@@ -156,8 +157,11 @@ def _plan_prerequisite_parameter_bindings(
             if not resolve_namespaced_struct_fields(project_root, namespace_source, namespace, member):
                 raise FileNotFoundError(f"Unable to resolve nested user-defined type {base} from {source_path}")
             return base, namespace_source
-        resolved_source, _ = resolve_named_type_source(project_root, source_path, base)
-        return base, resolved_source
+        resolved = _type_source(contract_model, base)
+        if resolved is None:
+            raise FileNotFoundError(f"Unable to resolve user-defined type {base} from {source_path}")
+        resolved_path, _resolved_source = resolved
+        return base, str(resolved_path)
 
     def add_import(type_name: str) -> None:
         base, resolved_source = resolve_custom_type(type_name)
