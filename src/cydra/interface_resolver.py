@@ -501,9 +501,12 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
             return ()
         return tuple(dict.fromkeys(import_pattern.findall(source)))
 
-    pending = [start]
+    # Carry the resolution method on each graph edge so callers can
+    # distinguish a direct declared import from a transitive declaration.
+    pending: list[tuple[Path, str]] = [(start, "declaration")]
     while pending:
-        path = pending.pop(0).resolve()
+        path, edge_method = pending.pop(0)
+        path = path.resolve()
         if path in visited or not path.is_file():
             continue
         visited.add(path)
@@ -513,7 +516,7 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
             continue
 
         if declaration.search(source):
-            return path.relative_to(root).as_posix(), "declaration" if path == start else "declared_import"
+            return path.relative_to(root).as_posix(), edge_method
 
         for import_path in imports_for(path):
             resolved = resolve_import(root, path, import_path)
@@ -524,9 +527,10 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
                 if direct.is_file():
                     resolved = (direct, "direct_declared_import")
             if resolved is not None:
-                imported_path = resolved[0].resolve()
+                imported_path, method = resolved
+                imported_path = imported_path.resolve()
                 if imported_path not in visited:
-                    pending.append(imported_path)
+                    pending.append((imported_path, method))
 
     raise FileNotFoundError(
         f"Unable to resolve user-defined type {name} through imports from {start}"
