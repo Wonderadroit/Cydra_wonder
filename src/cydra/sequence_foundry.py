@@ -564,11 +564,9 @@ def generate_sequence_test_from_experiment(
         elif base == "bool":
             constructor_arguments.append("false")
         elif base.startswith("uint"):
-            # Keep constructor materialization conservative when no
-            # target-derived constructor constraint is available. A zero value
-            # is the neutral ABI default; stricter values must come from the
-            # target-derived model rather than a renderer heuristic.
-            constructor_arguments.append("0")
+            # Use a non-zero neutral constructor seed for unsigned arithmetic
+            # preconditions; zero is frequently an invalid deployment boundary.
+            constructor_arguments.append("1")
         elif base.startswith("int"):
             constructor_arguments.append("0")
         elif base == "string":
