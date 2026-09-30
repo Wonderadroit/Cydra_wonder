@@ -1179,3 +1179,25 @@ Rules:
 5. Regression tests must cover unsigned constructor values used in subtraction so this class of harness underflow cannot silently recur.
 
 The purpose is generic execution robustness: valid constructor domains must be respected before prerequisite or security experiments can begin.
+
+
+## §61 — Constructor-Established Role Binding Is Generic Execution Capability
+
+When target-derived evidence shows that a constructor establishes an authorization role for its deployment caller (msg.sender / _msgSender()), the execution materializer must reuse that provenance rather than inventing a target-specific role grant.
+
+The generic sequence renderer therefore:
+
+1. resolves modifier invocation arguments for the experiment step;
+2. matches the required role expression against constructor role-grant evidence across the modeled inheritance graph;
+3. when the constructor grant is to its deployment caller, selects a deterministic CYDRA runtime identity for that role (including DEFAULT_ADMIN_ROLE);
+4. deploys the target under that identity when required;
+5. executes the authorized experiment step under the same identity.
+
+This is execution materialization, not authorization bypass evidence. It exists to reproduce a legitimate target state established by the target's own construction semantics.
+
+Development rule remains:
+
+**observed runtime blocker → identify reusable target-derived capability → generic implementation → regression → rerun the exact same experiment.**
+
+Never encode a target-name-specific role grant or force privileged state merely to make a hypothesis execute. Evidence that a role is established must come from the target model/provenance.
+
