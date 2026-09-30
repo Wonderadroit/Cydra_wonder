@@ -1,0 +1,189 @@
+from __future__ import annotations
+
+"""Generic experiment capability contracts and feasibility solving."""
+
+from dataclasses import dataclass, field
+from enum import StrEnum
+import re
+
+from .execution_readiness import ExecutionReadiness
+from .models import ContractModel, Experiment, Hypothesis
+
+class CapabilityStatus(StrEnum):
+    AVAILABLE = "available"
+    PARTIAL = "partial"
+    MISSING = "missing"
+    BLOCKED = "blocked"
+
+class Capability(StrEnum):
+    CALLER_CONSTRUCTION = "CALLER_CONSTRUCTION"
+    ROLE_ESTABLISHMENT = "ROLE_ESTABLISHMENT"
+    STATE_SETUP = "STATE_SETUP"
+    CONSTRUCTOR_SETUP = "CONSTRUCTOR_SETUP"
+    CALLBACK_HARNESS = "CALLBACK_HARNESS"
+    REENTRANCY_HARNESS = "REENTRANCY_HARNESS"
+    VALUE_PROVISION = "VALUE_PROVISION"
+    TOKEN_PROVISION = "TOKEN_PROVISION"
+    BALANCE_PROVISION = "BALANCE_PROVISION"
+    ADDRESS_PROVISION = "ADDRESS_PROVISION"
+    PROXY_DEPLOYMENT = "PROXY_DEPLOYMENT"
+    EVENT_OBSERVATION = "EVENT_OBSERVATION"
+    STATE_OBSERVATION = "STATE_OBSERVATION"
+    CALL_SEQUENCE = "CALL_SEQUENCE"
+    INTERNAL_CALL_PROPAGATION = "INTERNAL_CALL_PROPAGATION"
+    TYPE_MATERIALIZATION = "TYPE_MATERIALIZATION"
+
+@dataclass(frozen=True)
+class CapabilityRequirement:
+    capability: Capability
+    subject: str
+    source: str
+    detail: str = ""
+    subcapability: str | None = None
+
+@dataclass(frozen=True)
+class CapabilityAvailability:
+    capability: Capability
+    status: CapabilityStatus
+    source: str
+    subcapabilities: tuple[str, ...] = ()
+    detail: str = ""
+
+@dataclass(frozen=True)
+class CapabilityGap:
+    capability: Capability
+    subject: str
+    subcapability: str | None
+    status: CapabilityStatus
+    reason: str
+
+@dataclass(frozen=True)
+class ExperimentContract:
+    """Normalized handoff from reasoning to execution realization."""
+    experiment_id: str
+    hypothesis_id: str
+    target_function: str
+    requirements: tuple[CapabilityRequirement, ...] = field(default_factory=tuple)
+
+@dataclass(frozen=True)
+class CapabilityResolution:
+    contract: ExperimentContract
+    availability: tuple[CapabilityAvailability, ...]
+    gaps: tuple[CapabilityGap, ...] = field(default_factory=tuple)
+
+    @property
+    def executable(self) -> bool:
+        return not any(g.status in {CapabilityStatus.MISSING, CapabilityStatus.BLOCKED} for g in self.gaps)
+
+    def by_capability(self) -> dict[str, dict[str, object]]:
+        grouped: dict[str, dict[str, object]] = {}
+        for requirement in self.contract.requirements:
+            key = requirement.capability.value
+            grouped.setdefault(key, {"required": [], "status": CapabilityStatus.AVAILABLE.value, "gaps": []})["required"].append(requirement.subject)
+        for gap in self.gaps:
+            item = grouped.setdefault(gap.capability.value, {"required": [], "status": gap.status.value, "gaps": []})
+            item["status"] = gap.status.value
+            item["gaps"].append({"subject": gap.subject, "subcapability": gap.subcapability, "reason": gap.reason})
+        return grouped
+
+def default_capability_availability() -> tuple[CapabilityAvailability, ...]:
+    """Describe current generic execution surfaces; target readiness remains separate."""
+    return (
+        CapabilityAvailability(Capability.CALLER_CONSTRUCTION, CapabilityStatus.AVAILABLE, "execution_readiness"),
+        CapabilityAvailability(Capability.ROLE_ESTABLISHMENT, CapabilityStatus.AVAILABLE, "execution_readiness"),
+        CapabilityAvailability(Capability.STATE_SETUP, CapabilityStatus.PARTIAL, "execution_readiness"),
+        CapabilityAvailability(Capability.CONSTRUCTOR_SETUP, CapabilityStatus.AVAILABLE, "sequence_foundry"),
+        CapabilityAvailability(Capability.CALLBACK_HARNESS, CapabilityStatus.PARTIAL, "callback_state_order_execution"),
+        CapabilityAvailability(Capability.REENTRANCY_HARNESS, CapabilityStatus.PARTIAL, "callback_state_order_execution"),
+        CapabilityAvailability(Capability.VALUE_PROVISION, CapabilityStatus.PARTIAL, "execution_readiness"),
+        CapabilityAvailability(Capability.TOKEN_PROVISION, CapabilityStatus.PARTIAL, "execution_readiness"),
+        CapabilityAvailability(Capability.BALANCE_PROVISION, CapabilityStatus.PARTIAL, "execution_readiness"),
+        CapabilityAvailability(Capability.ADDRESS_PROVISION, CapabilityStatus.AVAILABLE, "sequence_foundry"),
+        CapabilityAvailability(Capability.PROXY_DEPLOYMENT, CapabilityStatus.PARTIAL, "initialization_execution"),
+        CapabilityAvailability(Capability.EVENT_OBSERVATION, CapabilityStatus.AVAILABLE, "foundry"),
+        CapabilityAvailability(Capability.STATE_OBSERVATION, CapabilityStatus.PARTIAL, "runtime_observation", ("public_scalar", "public_mapping", "state_relation")),
+        CapabilityAvailability(Capability.CALL_SEQUENCE, CapabilityStatus.AVAILABLE, "sequence_foundry"),
+        CapabilityAvailability(Capability.INTERNAL_CALL_PROPAGATION, CapabilityStatus.AVAILABLE, "execution_readiness"),
+        CapabilityAvailability(Capability.TYPE_MATERIALIZATION, CapabilityStatus.PARTIAL, "sequence_foundry", ("primitive", "array", "tuple", "custom_struct", "nested_custom_struct", "namespaced_custom_struct")),
+    )
+
+def _custom_type(parameter_type: str) -> bool:
+    base = parameter_type.strip().split()[0].rstrip('[]')
+    return not (base in {'address', 'bool', 'string', 'bytes'} or base.startswith(('uint', 'int', 'bytes', 'fixed', 'ufixed')))
+
+def _type_subcapability(parameter_type: str) -> str:
+    base = parameter_type.strip().split()[0]
+    if base.endswith('[]'):
+        return 'array'
+    if '.' in base:
+        return 'namespaced_custom_struct'
+    return 'custom_struct'
+
+def build_experiment_contract(hypothesis: Hypothesis, experiment: Experiment, contract: ContractModel, readiness: ExecutionReadiness) -> ExperimentContract:
+    if experiment.hypothesis_id != hypothesis.hypothesis_id:
+        raise ValueError('experiment contract hypothesis mismatch')
+    target_function = experiment.target_function or hypothesis.target_function
+    if target_function != hypothesis.target_function:
+        raise ValueError('experiment contract target function mismatch')
+    requirements: list[CapabilityRequirement] = []
+    def add(capability: Capability, subject: str, source: str, detail: str = '', subcapability: str | None = None) -> None:
+        requirements.append(CapabilityRequirement(capability, subject, source, detail, subcapability))
+    if readiness.caller_requirements:
+        add(Capability.CALLER_CONSTRUCTION, 'caller requirements', 'execution_readiness')
+    if readiness.constructor_requirements:
+        add(Capability.CONSTRUCTOR_SETUP, 'constructor requirements', 'execution_readiness')
+    if readiness.state_setup_candidates or readiness.state_requirements:
+        add(Capability.STATE_SETUP, 'persistent state prerequisites', 'execution_readiness')
+    if readiness.state_requirements or readiness.execution_requirements:
+        add(Capability.STATE_OBSERVATION, 'state/execution prerequisites', 'runtime_observation')
+    if readiness.runtime_requirements:
+        add(Capability.INTERNAL_CALL_PROPAGATION, 'internal call prerequisites', 'execution_readiness')
+    if experiment.steps:
+        add(Capability.CALL_SEQUENCE, 'ordered experiment steps', 'experiment')
+    function = next((item for item in contract.functions if item.name == target_function), None)
+    if function:
+        for parameter in function.parameters:
+            if _custom_type(parameter.type):
+                add(Capability.TYPE_MATERIALIZATION, parameter.name or parameter.type, 'target parameter model', f'custom parameter type {parameter.type}', _type_subcapability(parameter.type))
+    attacker = hypothesis.attacker_capability.lower()
+    if re.search(r'callback|reentr', attacker):
+        add(Capability.CALLBACK_HARNESS, 'attacker capability', 'hypothesis')
+    if 'reentr' in attacker:
+        add(Capability.REENTRANCY_HARNESS, 'attacker capability', 'hypothesis')
+    if re.search(r'\bvalue\b|ether|native', attacker):
+        add(Capability.VALUE_PROVISION, 'attacker capability', 'hypothesis')
+    if re.search(r'token|erc20', attacker):
+        add(Capability.TOKEN_PROVISION, 'attacker capability', 'hypothesis')
+    unique = {}
+    for item in requirements:
+        unique[(item.capability, item.subject, item.source, item.subcapability)] = item
+    return ExperimentContract(experiment.experiment_id, hypothesis.hypothesis_id, target_function, tuple(unique.values()))
+
+def solve_capabilities(contract: ExperimentContract, availability: tuple[CapabilityAvailability, ...] | None = None) -> CapabilityResolution:
+    available = availability or default_capability_availability()
+    by_capability = {item.capability: item for item in available}
+    gaps: list[CapabilityGap] = []
+    for requirement in contract.requirements:
+        item = by_capability.get(requirement.capability)
+        if item is None:
+            gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, CapabilityStatus.MISSING, 'capability is not registered'))
+            continue
+        if item.status == CapabilityStatus.AVAILABLE:
+            continue
+        if item.status == CapabilityStatus.PARTIAL:
+            if requirement.subcapability and requirement.subcapability not in item.subcapabilities:
+                gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, CapabilityStatus.BLOCKED, f'partial capability lacks sub-capability {requirement.subcapability}'))
+            else:
+                gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, CapabilityStatus.PARTIAL, item.detail or 'target-specific materialization/readiness evidence is required'))
+            continue
+        gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, item.status, item.detail or f'capability registry reports {item.status.value}'))
+    return CapabilityResolution(contract, available, tuple(gaps))
+
+def capability_clusters(resolutions: tuple[CapabilityResolution, ...]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for resolution in resolutions:
+        for gap in resolution.gaps:
+            if gap.status in {CapabilityStatus.MISSING, CapabilityStatus.BLOCKED, CapabilityStatus.PARTIAL}:
+                key = gap.capability.value if gap.subcapability is None else f'{gap.capability.value}:{gap.subcapability}'
+                counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
