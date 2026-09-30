@@ -525,7 +525,7 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
                 imported_path = imported_path.resolve()
                 if path == start:
                     # Stable public provenance for a direct declared import.
-                    method = "declared_import"
+                    method = "direct_declared_import"
                 imported_path = imported_path.resolve()
                 if imported_path not in visited:
                     pending.append((imported_path, method))
