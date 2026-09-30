@@ -80,7 +80,7 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
 
 
 def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
-    caller_variable = "attacker"
+    caller_variable = "cydraAttacker"
     start, end, argument_text = _find_initializer_call(source, initializer_name)
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
@@ -133,7 +133,7 @@ def _caller_bound_initializer_arguments(
     prerequisite replaces that lifecycle body afterwards, so rewriting the
     renderer call itself is unnecessary and can corrupt surrounding syntax.
     """
-    caller_variable = "attacker"
+    caller_variable = "cydraAttacker"
     _, _, argument_text = _find_initializer_call(source, initializer_name)
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
