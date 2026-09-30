@@ -431,6 +431,10 @@ def runtime_dependency_constructor_bindings(
             continue
         for import_path in imports:
             resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                direct = (path.parent / import_path).resolve()
+                if direct.is_file():
+                    resolved = (direct, "declared_import")
             if resolved is not None:
                 queue.append(resolved[0])
     runtime_receivers: set[str] = set()
