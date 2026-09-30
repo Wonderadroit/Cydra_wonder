@@ -525,7 +525,7 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
                 # target fixtures even when Foundry metadata is absent.
                 direct = (path.parent / import_path).resolve()
                 if direct.is_file():
-                    resolved = (direct, "direct_declared_import")
+                    resolved = (direct, "declared_import")
             if resolved is not None:
                 imported_path, method = resolved
                 imported_path = imported_path.resolve()
