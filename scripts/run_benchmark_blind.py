@@ -35,6 +35,7 @@ from cydra.target_adapter import inspect_target
 from cydra.execution_readiness import constructible_state_setup_plan, inspect_execution_readiness, role_address_expression
 from cydra.exploration import ExplorationState, run_bounded_exploration
 from cydra.prerequisite_graph import apply_observations, build_prerequisite_graph, can_enter_security_experiment
+from cydra.execution_capabilities import build_experiment_contract, solve_capabilities
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
 from cydra.state_relation_observation import plan_state_relation_observations
@@ -826,6 +827,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             compiler_evidence.evidence,
             execution_capabilities=execution_capabilities,
         )
+        experiment_contract = build_experiment_contract(hypothesis, experiment, contract, readiness)
+        capability_resolution = solve_capabilities(experiment_contract)
         prerequisite_graph = build_prerequisite_graph(readiness)
         prerequisite_observation_evidence = ()
         status_prerequisite = {}
@@ -864,6 +867,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                 status_prerequisite = {"prerequisite_observation_failure": "no deterministic public state observation plan"}
         status: dict[str, Any] = {
             "hypothesis_id": hypothesis.hypothesis_id,
+            "capability_contract": _json(experiment_contract),
+            "capability_resolution": _json(capability_resolution),
             "class": class_name,
             "extracted": capability["extract"],
             "hypothesis_generated": capability["generate_hypothesis"],
@@ -1284,6 +1289,16 @@ def run_source_investigation(
             }
         classification["class_coverage"] = by_class
         classification["unexecuted_reasoning_surfaces"] = unexecuted_reasoning_surfaces
+        capability_clusters: dict[str, int] = {}
+        for status in statuses:
+            resolution = status.get("capability_resolution", {})
+            for gap in resolution.get("gaps", []):
+                if gap.get("status") in {"missing", "blocked", "partial"}:
+                    capability = gap.get("capability", "EXECUTION_READINESS")
+                    subcapability = gap.get("subcapability")
+                    key = capability if not subcapability else f"{capability}:{subcapability}"
+                    capability_clusters[key] = capability_clusters.get(key, 0) + 1
+        classification["capability_clusters"] = dict(sorted(capability_clusters.items(), key=lambda item: (-item[1], item[0])))
         # A target can fail the default forge build while compiler-backed
         # evidence succeeds through the generic fallback (for example via-IR).
         # Keep both facts, but expose the effective compiler state so downstream
