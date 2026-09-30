@@ -86,7 +86,7 @@ def _execution_context_warp(contract_model: ContractModel, function) -> str | No
         if len(candidates) == 1:
             for pred, polarity in candidates[0].execution_predicate_polarities:
                 if polarity == "must_not_hold":
-                    match = re.search(r"\\bblock\\.timestamp\\s*(>=|>|<=|<)", pred)
+                    match = re.search(r"\bblock\.timestamp\s*(>=|>|<=|<)", pred)
                     if match:
                         modes.add("low" if match.group(1) in {">", ">="} else "high")
 
