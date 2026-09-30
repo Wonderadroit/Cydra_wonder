@@ -65,10 +65,12 @@ def _status_kind(status: dict[str, Any]) -> str:
 def build_capability_campaign(
     statuses: list[dict[str, Any]],
     execution_readiness: list[dict[str, Any]],
+    planned_unimplemented: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a durable campaign ledger from all independently attempted work."""
     failures: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
+    planned_unimplemented = list(planned_unimplemented or [])
     clusters: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, str]] = []
     readiness_by_hypothesis = {
@@ -185,6 +187,7 @@ def build_capability_campaign(
         },
         "capability_failures": failures,
         "blocked_experiments": blocked,
+        "planned_unimplemented": planned_unimplemented,
         "capability_clusters": sorted(
             clusters.values(), key=lambda item: (-item["count"], item["capability"])
         ),
@@ -205,6 +208,7 @@ def merge_campaigns(campaigns: list[dict[str, Any]]) -> dict[str, Any]:
     """Merge per-source ledgers into one target-level campaign without deduping evidence away."""
     failures = []
     blocked = []
+    planned_unimplemented = []
     clusters: dict[str, dict[str, Any]] = {}
     edges = []
     by_status = defaultdict(int)
@@ -217,6 +221,7 @@ def merge_campaigns(campaigns: list[dict[str, Any]]) -> dict[str, Any]:
             by_status[key] += int(value)
         failures.extend(campaign.get("capability_failures", []))
         blocked.extend(campaign.get("blocked_experiments", []))
+        planned_unimplemented.extend(campaign.get("planned_unimplemented", []))
         edges.extend(campaign.get("dependency_graph", {}).get("edges", []))
         for item in campaign.get("capability_clusters", []):
             key = item["capability"]
@@ -254,6 +259,7 @@ def merge_campaigns(campaigns: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "capability_failures": failures,
         "blocked_experiments": blocked,
+        "planned_unimplemented": planned_unimplemented,
         "capability_clusters": sorted(
             clusters.values(), key=lambda item: (-item["count"], item["capability"])
         ),
