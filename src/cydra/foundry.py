@@ -702,7 +702,18 @@ def _model_initialization_source(
         # vector was planned. Special runtime declarations are only the fallback
         # for experiments whose planner could not safely represent the ABI inputs.
         arguments = list(experiment.planned_inputs)
+        # Planned inputs replace fallback values, not declarations required for
+        # reference/interface-typed locals at the Solidity call boundary.
         declarations = []
+        for index, (parameter, argument) in enumerate(zip(function.parameters, arguments)):
+            if re.fullmatch(r"[A-Za-z_]\w*", argument.strip()):
+                base = parameter.type.strip().split()[0].rstrip("[]")
+                if not _builtin_type(base):
+                    _rendered, declaration = _initializer_argument(
+                        parameter, target_type, index, contract_model=contract_model
+                    )
+                    if declaration:
+                        declarations.append(declaration)
 
     initialize_args_str = ", ".join(arguments)
     test_body = render_initialization_test_body(
