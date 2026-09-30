@@ -143,3 +143,36 @@ def test_internal_mapping_observation_traverses_nested_same_contract_calls(tmp_p
         and plan.getter == "target.externalActionMap(msg.sender)"
         for plan in plans
     )
+
+def test_adapter_owned_runtime_dependency_does_not_block_experiment():
+    graph = PrerequisiteGraph((
+        PrerequisiteNode(
+            subject="helper.performSideEffects",
+            kind="runtime_dependency",
+            status="constructible",
+            source="Target.transact",
+            capability="INTERNAL_CALL_PROPAGATION",
+        ),
+        PrerequisiteNode(
+            subject="state predicate",
+            kind="state",
+            status="verified",
+            source="runtime_observation",
+            capability="STATE_OBSERVATION",
+        ),
+    ))
+    assert can_enter_security_experiment(graph)
+
+
+def test_constructible_state_setup_still_blocks_experiment():
+    graph = PrerequisiteGraph((
+        PrerequisiteNode(
+            subject="registerExternalAction",
+            kind="setup_transition",
+            status="constructible",
+            source="execution_readiness",
+            capability="STATE_SETUP",
+        ),
+    ))
+    assert not can_enter_security_experiment(graph)
+\n
