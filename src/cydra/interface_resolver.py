@@ -29,7 +29,7 @@ _FUNCTION_RE = re.compile(
     r"\bfunction\s+(\w+)\s*\(([^)]*)\)\s*([^;{]*)\breturns\s*\(([^)]*)\)\s*;",
     re.MULTILINE,
 )
-_IMPORT_RE = re.compile(r"\bimport\s+(?:[^\"]*from\s+)?\"([^\"]+)\"\s*;", re.MULTILINE)
+_IMPORT_RE = re.compile(r'\bimport\s+(?:[^"\']*from\s+)?["\']([^"\']+)["\']\s*;', re.MULTILINE)
 _REMAP_RE = re.compile(r"^\s*([^=\s]+)\s*=\s*(\S+)\s*$")
 _DECLARED_TYPE_RE = re.compile(
     r"^\s*(?:struct\s+(?P<struct>[A-Za-z_]\w*)\s*\{|"
@@ -494,6 +494,16 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
             return _imports_for(path)
         except (OSError, UnicodeError):
             return ()
+
+    # Check the importer itself first. This covers source units that declare
+    # free structs/types directly and avoids making local declarations depend on
+    # Foundry metadata or import traversal.
+    try:
+        start_source = _strip_comments(start.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        start_source = ""
+    if declaration.search(start_source):
+        return start.relative_to(root).as_posix(), "declaration"
 
     # Carry the resolution method on each graph edge so callers can
     # distinguish a direct declared import from a transitive declaration.
