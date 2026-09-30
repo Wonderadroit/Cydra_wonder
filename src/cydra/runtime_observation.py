@@ -179,26 +179,48 @@ def plan_public_state_observations(
         # extraction. Normalize only for structural matching; retain the original
         # predicate for the emitted diagnostic.
         normalized = re.sub(r"\s+", " ", predicate).strip()
-        match = re.fullmatch(
-            r"(?P<state>[A-Za-z_]\w*)\s*(?P<op>==|!=|>=|<=|>|<)\s*"
-            r"(?P<literal>(?:0x[0-9A-Fa-f]+|\d+|true|false))",
-            normalized,
-        )
-        if not match or match.group("state") not in getters:
-            continue
-        state = match.group("state")
-        condition = f"target.{state}() {match.group('op')} {match.group('literal')}"
-        expression = condition if polarity == "must_hold" else f"!({condition})"
-        plans.append(
-            StateObservationPlan(
-                state=state,
-                getter=f"target.{state}()",
-                expression=expression,
-                predicate=predicate,
-                polarity=polarity,
-                source=f"{contract.source}:{function.line}",
+        # Support compound scalar predicates such as epoch > 0 && epoch < 10.
+        # Each conjunct must remain directly observable through a public getter.
+        conjuncts = [item.strip() for item in normalized.split("&&") if item.strip()]
+        matches = []
+        for conjunct in conjuncts:
+            match = re.fullmatch(
+                r"(?P<state>[A-Za-z_]\w*)\s*(?P<op>==|!=|>=|<=|>|<)\s*"
+                r"(?P<literal>(?:0x[0-9A-Fa-f]+|\d+|true|false))",
+                conjunct,
             )
-        )
+            if match is None or match.group("state") not in getters:
+                matches = []
+                break
+            matches.append(match)
+
+        if not matches:
+            continue
+
+        condition = normalized
+        states = []
+        for match in matches:
+            state = match.group("state")
+            condition = re.sub(
+                rf"\b{re.escape(state)}\b",
+                f"target.{state}()",
+                condition,
+                count=1,
+            )
+            if state not in states:
+                states.append(state)
+        expression = condition if polarity == "must_hold" else f"!({condition})"
+        for state in states:
+            plans.append(
+                StateObservationPlan(
+                    state=state,
+                    getter=f"target.{state}()",
+                    expression=expression,
+                    predicate=predicate,
+                    polarity=polarity,
+                    source=f"{contract.source}:{function.line}",
+                )
+            )        )
 
     # Internal execution predicates are part of the target-derived state model.
     # Reuse the generic public-mapping observer for predicates reached through
