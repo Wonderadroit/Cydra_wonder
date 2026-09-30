@@ -487,10 +487,10 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
     start = _resolve_source_path(root, importer)
     visited: set[Path] = set()
     declaration = re.compile(
-        rf"\\b(?:contract|interface|library|struct|enum|type)\\s+{re.escape(name)}\\b"
+        rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(name)}\b"
     )
     import_pattern = re.compile(
-        r"""import\\s+(?:[^"'\\]+\\s+from\\s+)?["']([^"']+)["']\\s*;""",
+        r"""import\s+(?:[^"\']+\s+from\s+)?["\']([^"\']+)["\']\s*;"""
         re.MULTILINE,
     )
 
