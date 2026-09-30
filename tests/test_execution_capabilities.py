@@ -85,3 +85,54 @@ def test_materialization_failure_records_observation_stage():
 def test_execution_capabilities_module_imports_cleanly():
     import cydra.execution_capabilities as execution_capabilities
     assert execution_capabilities.Capability.TYPE_MATERIALIZATION.value == "TYPE_MATERIALIZATION"
+
+
+def test_source_backed_nested_struct_materialization_resolves_capability(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            struct Inner { address endpoint; uint256 amount; }
+            struct Outer { Inner inner; bool enabled; address[] recipients; }
+            function transact(Outer calldata data) external {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "transact")
+    hypothesis = Hypothesis(
+        "H-STRUCT", "nested struct callback hypothesis", "INV-CALLBACK-1",
+        "transact", "reentrant callback caller", "UNKNOWN",
+    )
+    experiment = Experiment("X-STRUCT", "H-STRUCT", "transact", ("before", "after"), 1.0, (), "transact")
+    contract_envelope = build_experiment_contract(
+        hypothesis, experiment, contract, ExecutionReadiness(contract="Target")
+    )
+    requirement = next(
+        item for item in contract_envelope.requirements
+        if item.capability == Capability.TYPE_MATERIALIZATION
+    )
+    assert requirement.provenance is not None
+    assert "Outer" in requirement.provenance
+    assert "Outer.inner" in requirement.provenance
+    resolution = solve_capabilities(contract_envelope)
+    assert not any(
+        gap.capability == Capability.TYPE_MATERIALIZATION
+        for gap in resolution.gaps
+    )
+
+
+def test_unresolvable_custom_struct_keeps_materialization_gap():
+    readiness = ExecutionReadiness(contract="Target")
+    experiment = Experiment("X-1", "H-1", "transact", ("before", "after"), 2.0, (), "transact")
+    resolution = solve_capabilities(
+        build_experiment_contract(_hypothesis(), experiment, _model(), readiness)
+    )
+    assert any(
+        gap.capability == Capability.TYPE_MATERIALIZATION
+        and gap.status == CapabilityStatus.PARTIAL
+        for gap in resolution.gaps
+    )
