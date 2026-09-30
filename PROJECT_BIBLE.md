@@ -1149,3 +1149,18 @@ This preserves the separation:
 reasoning intent -> experiment contract -> capability resolution -> materialization -> tool evidence -> security conclusion
 
 A renderer error is therefore no longer merely a debugging message; it is a reusable, resumable capability signal.
+
+
+## 59. Relative source paths must resolve from the declared project root
+
+Execution-readiness resolvers receive source paths from the target model, and those paths may be relative to the target project root. A resolver must not interpret a relative importer path against the process working directory because the working directory is an execution detail, not source provenance.
+
+Rules:
+
+1. Normalize every relative source/importer path against the declared project root before reading it or traversing its imports.
+2. Preserve absolute paths unchanged after normalization.
+3. Apply the same normalization consistently to interface resolution, user-defined type resolution, struct-field resolution, and import resolution.
+4. Keep the existing bounded import-graph rules: root anchoring fixes path context; it does not authorize repository-wide symbol searches.
+5. Add regressions using a relative source path whose project root differs from the process working directory.
+
+This is a generic source-provenance rule. It prevents valid target import edges from becoming false capability gaps merely because the runner's current working directory differs from the target project root.
