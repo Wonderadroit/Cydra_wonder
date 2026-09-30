@@ -35,7 +35,7 @@ from cydra.target_adapter import inspect_target
 from cydra.execution_readiness import constructible_state_setup_plan, inspect_execution_readiness, role_address_expression
 from cydra.exploration import ExplorationState, run_bounded_exploration
 from cydra.prerequisite_graph import apply_observations, build_prerequisite_graph, can_enter_security_experiment
-from cydra.execution_capabilities import build_experiment_contract, solve_capabilities
+from cydra.execution_capabilities import (\n    build_experiment_contract,\n    classify_materialization_failure,\n    solve_capabilities,\n)
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
 from cydra.state_relation_observation import plan_state_relation_observations
@@ -843,8 +843,14 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                     "caller_prerequisite_observations": [o.evidence_id for o in observations],
                 }
             except Exception as error:
+                failure = classify_materialization_failure(error)
+                capability_resolution = replace(
+                    capability_resolution,
+                    gaps=(*capability_resolution.gaps, failure.gap),
+                )
                 status_prerequisite = {
-                    "caller_prerequisite_failure": f"{type(error).__name__}: {error}"
+                    "caller_prerequisite_failure": f"{type(error).__name__}: {error}",
+                    "materialization_failure": _json(failure),
                 }
         if class_name in {"state", "callback_state_order"} and (readiness.state_requirements or readiness.state_setup_candidates):
             setup_actions = constructible_state_setup_plan(
@@ -862,9 +868,28 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                     prerequisite_graph = apply_observations(prerequisite_graph, observations)
                     status_prerequisite = {"prerequisite_setup_actions": [a.function for a in setup_actions], "prerequisite_observations": [o.evidence_id for o in observations], "prerequisite_execution": _json(prerequisite_execution)}
                 except Exception as error:
-                    status_prerequisite = {"prerequisite_setup_actions": [a.function for a in setup_actions], "prerequisite_observation_failure": f"{type(error).__name__}: {error}"}
+                    failure = classify_materialization_failure(error)
+                    capability_resolution = replace(
+                        capability_resolution,
+                        gaps=(*capability_resolution.gaps, failure.gap),
+                    )
+                    status_prerequisite = {
+                        "prerequisite_setup_actions": [a.function for a in setup_actions],
+                        "prerequisite_observation_failure": f"{type(error).__name__}: {error}",
+                        "materialization_failure": _json(failure),
+                    }
             else:
-                status_prerequisite = {"prerequisite_observation_failure": "no deterministic public state observation plan"}
+                failure = classify_materialization_failure(
+                    ValueError("no deterministic public state observation plan")
+                )
+                capability_resolution = replace(
+                    capability_resolution,
+                    gaps=(*capability_resolution.gaps, failure.gap),
+                )
+                status_prerequisite = {
+                    "prerequisite_observation_failure": "no deterministic public state observation plan",
+                    "materialization_failure": _json(failure),
+                }
         status: dict[str, Any] = {
             "hypothesis_id": hypothesis.hypothesis_id,
             "capability_contract": _json(experiment_contract),
