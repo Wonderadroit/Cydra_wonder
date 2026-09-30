@@ -861,7 +861,7 @@ def test_sequence_renderer_recursively_types_nested_custom_struct_prerequisite(t
     rendered = generated.read_text(encoding="utf-8")
     assert "import { Outer } from \"../types/Nested.sol\";" in rendered
     assert "import { Inner } from \"../types/Nested.sol\";" in rendered
-    assert "Outer memory data = Outer(Inner(7, address(0x1234)), bytes(\\"\\"));" in rendered
+    assert 'Outer memory data = Outer(Inner(7, address(0x1234)), bytes(""));' in rendered
     assert "target.transact(" not in rendered
 
 
