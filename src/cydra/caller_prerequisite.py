@@ -82,7 +82,7 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
 def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
     caller_variable = "cydraAttacker"
     start, end, argument_text = _find_initializer_call(source, initializer_name)
-    caller_variable = "attacker"
+    caller_variable = "cydraAttacker"
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
         raise ValueError(
@@ -214,7 +214,7 @@ def _bind_constructor_caller_arguments(
             continue
         parameter_type = parameter.type.strip()
         if parameter_type.endswith("[]") and parameter_type.split()[0].rstrip("[]") == "address":
-            arguments[index] = "CydraCallerSet.one(attacker)"
+            arguments[index] = "CydraCallerSet.one(cydraAttacker)"
             changed = True
         elif parameter_type == "address":
             arguments[index] = "cydraAttacker"
@@ -431,7 +431,17 @@ def _qualify_planned_target_argument(
 
         short_base = base.split(".")[-1]
         source_is_target = resolved_path.resolve() == Path(contract_model.source).resolve()
-        if source_is_target or short_base in set(contract_model.declared_types):
+        target_source_text = ""
+        if source_is_target:
+            try:
+                target_source_text = Path(contract_model.source).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                target_source_text = ""
+        if (
+            source_is_target
+            or short_base in set(contract_model.declared_types)
+            or re.search(rf"\bstruct\s+{re.escape(short_base)}\b", target_source_text)
+        ):
             qualified = f"{target_type}.{name}"
         else:
             qualified = name
