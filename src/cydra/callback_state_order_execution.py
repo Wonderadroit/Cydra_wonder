@@ -539,6 +539,7 @@ def _ensure_structured_argument_bindings(
     function,
     arguments: tuple[str, ...],
     rendered_arguments: dict[str, str],
+    target_type: str,
     existing_declarations: tuple[str, ...],
     existing_imports: set[tuple[str, str]],
 ) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
@@ -562,7 +563,7 @@ def _ensure_structured_argument_bindings(
         if local in declared:
             continue
         _typed, typed_imports = _qualify_planned_target_argument(
-            parameter, expression, function.name, contract_model
+            parameter, expression, target_type, contract_model
         )
         imports.update(typed_imports)
         value = expression
@@ -658,6 +659,7 @@ def _legacy_callback_test(
         function,
         tuple(arguments),
         rendered_arguments,
+        target_type,
         existing_declarations,
         set(parameter_imports),
     )
