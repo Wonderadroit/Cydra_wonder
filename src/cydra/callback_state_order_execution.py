@@ -651,7 +651,11 @@ def _ensure_callback_argument_vector_bindings(
         resolved = _type_source(contract_model, base)
         if resolved is not None and base not in set(contract_model.declared_types):
             imports.add((str(resolved[0]), base))
-        declarations.append(f"{_memory_parameter_type(parameter.type)} memory {candidate} = {value};")
+        interface_names = {item.name for item in contract_model.inherited_resolved_interfaces}
+        source_text = _source_text(contract_model)
+        is_reference_interface = base in interface_names or bool(re.search(rf"\binterface\s+{re.escape(base)}\b", source_text))
+        location = "" if is_reference_interface else " memory"
+        declarations.append(f"{_memory_parameter_type(parameter.type)}{location} {candidate} = {value};")
         declared.add(candidate)
     return rendered, declarations, imports
 
