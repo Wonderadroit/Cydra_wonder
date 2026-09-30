@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 import re
 
@@ -201,6 +202,105 @@ def _structured_default(
         values.append(value)
     return f"({', '.join(values)})"
 
+
+
+@dataclass(frozen=True)
+class MaterializationProof:
+    """Evidence that one Solidity parameter can be recursively materialized."""
+    parameter: str
+    declared_type: str
+    expression: str
+    provenance: tuple[str, ...]
+
+
+def materialize_parameter_with_provenance(
+    parameter: ParameterModel,
+    contract_model: ContractModel,
+) -> MaterializationProof | None:
+    """Recursively materialize one parameter and retain its source/type chain."""
+    provenance: list[str] = []
+
+    def materialize(item: ParameterModel, path: str, stack: tuple[str, ...]) -> str | None:
+        parameter_type = item.type.strip()
+        if not parameter_type:
+            return None
+        if parameter_type.endswith("[]"):
+            element_type = parameter_type[:-2].strip()
+            primitive = _default_for(ParameterModel(item.name, element_type))
+            if primitive is not None:
+                provenance.append(f"{path}:array-element:{element_type}:builtin")
+                return f"new {element_type}[](0)"
+            base = element_type.split()[0] if element_type else ""
+            if not base or base in stack:
+                return None
+            source = _type_source(contract_model, base)
+            if source is None:
+                return None
+            resolved_path, resolved_source = source
+            provenance.append(f"{path}:type:{base}:{resolved_path}")
+            if _definition(resolved_source, base) is None:
+                return None
+            return f"new {base}[](0)"
+
+        primitive = _default_for(item)
+        if primitive is not None:
+            provenance.append(f"{path}:builtin:{parameter_type}")
+            return primitive
+
+        base = parameter_type.split()[0].rstrip("[]")
+        if base in stack:
+            return None
+        source = _type_source(contract_model, base)
+        if source is None:
+            return None
+        resolved_path, resolved_source = source
+        provenance.append(f"{path}:type:{base}:{resolved_path}")
+        definition = _definition(resolved_source, base)
+        if definition is None:
+            return None
+        kind, _, body = definition
+        if kind == "enum":
+            if not any(part.strip() for part in body.split(",")):
+                return None
+            provenance.append(f"{path}:enum-default:0")
+            return "0"
+        if kind == "value":
+            underlying = body.split()[0]
+            provenance.append(f"{path}:value-type:{underlying}")
+            return materialize(ParameterModel(item.name, underlying), path, stack + (base,))
+        if kind != "struct":
+            return None
+
+        values: list[str] = []
+        for field_text in _split_fields(body):
+            field = _parameter_from_field(field_text)
+            if field is None:
+                return None
+            value = materialize(field, f"{path}.{field.name}", stack + (base,))
+            if value is None:
+                return None
+            values.append(value)
+        provenance.append(f"{path}:struct-expression:{base}")
+        return f"({', '.join(values)})"
+
+    expression = materialize(parameter, parameter.name or "<unnamed>", ())
+    if expression is None:
+        return None
+    return MaterializationProof(parameter.name, parameter.type, expression, tuple(provenance))
+
+
+def prove_parameter_materialization(
+    parameters: Iterable[ParameterModel],
+    contract_model: ContractModel,
+) -> tuple[MaterializationProof, ...] | None:
+    """Return complete source-backed materialization evidence for all parameters."""
+    proofs: list[MaterializationProof] = []
+    for parameter in parameters:
+        proof = materialize_parameter_with_provenance(parameter, contract_model)
+        if proof is None:
+            return None
+        proofs.append(proof)
+    return tuple(proofs)
 
 def conservative_defaults(parameters: Iterable[ParameterModel], contract_model: ContractModel | None = None) -> dict[str, str] | None:
     """Return a complete ABI-safe default map for directly supported parameter types.
