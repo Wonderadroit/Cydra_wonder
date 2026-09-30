@@ -558,12 +558,11 @@ def generate_sequence_test_from_experiment(
         elif base == "bool":
             constructor_arguments.append("false")
         elif base.startswith("uint"):
-            # Zero is not a universally safe constructor default: unsigned
-            # parameters are commonly used as lower bounds in expressions such
-            # as `value - 1`. Use the smallest non-zero value as the generic
-            # materialization default; target-derived constraints remain the
-            # authority for any stricter constructor requirement.
-            constructor_arguments.append("1")
+            # Keep constructor materialization conservative when no
+            # target-derived constructor constraint is available. A zero value
+            # is the neutral ABI default; stricter values must come from the
+            # target-derived model rather than a renderer heuristic.
+            constructor_arguments.append("0")
         elif base.startswith("int"):
             constructor_arguments.append("0")
         elif base == "string":
