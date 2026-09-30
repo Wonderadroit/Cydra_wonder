@@ -6,7 +6,7 @@ import re
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_struct_fields
-from .execution_readiness import _address_role, _constructor_role_grants, caller_role, role_address_expression
+from .execution_readiness import _address_role, _constructor_role_grants, caller_role, role_address_expression, constructible_state_setup_plan
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
 
@@ -233,9 +233,15 @@ def _plan_stack_safe_argument_bindings(
     def resolve_custom_type(type_name: str) -> tuple[str, str]:
         base = _normalize_local_parameter_type(type_name).split()[0].rstrip("[]")
         if "." in base:
-            namespace, _ = base.split(".", 1)
+            namespace, member = base.split(".", 1)
             if project_root is None:
                 raise ValueError(f"stack-safe lowering requires a resolvable Foundry project root for {type_name}")
+            # Namespaced user-defined types can be structs declared in the
+            # current source unit (for example Target.Data), not interfaces.
+            # Prefer the actual member declaration before treating the namespace
+            # as an imported interface.
+            if resolve_struct_fields(project_root, source_path, member):
+                return base, Path(source_path).resolve().relative_to(Path(project_root).resolve()).as_posix()
             resolved = resolve_interface(project_root, source_path, namespace)
             return base, resolved.source_path
         if project_root is None:
