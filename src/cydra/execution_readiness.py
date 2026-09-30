@@ -951,7 +951,12 @@ def _classify_internal_predicate(
         return "execution_context"
 
     state_names = set(contract.state_variables)
-    identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
+    try:
+        source_text = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        source_text = ""
+    state_names.update(re.findall(r"(?m)(?:mapping\\s*\\([^;{}]+\\)|(?:uint|int|address|bool|bytes(?:\\d+)?))\\s+([A-Za-z_]\\w*)\\s*;", source_text))
+    identifiers = set(re.findall(r"\\b[A-Za-z_]\\w*\\b", predicate))
     if identifiers & state_names or "$." in predicate:
         return "state_observation"
 
