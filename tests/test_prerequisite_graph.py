@@ -145,3 +145,22 @@ def test_verified_prerequisite_still_blocks_until_verified():
     graph = build_prerequisite_graph(readiness)
     assert graph.unresolved
     assert not can_enter_security_experiment(graph)
+
+
+def test_prerequisite_nodes_expose_generic_capability_clusters():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        caller_requirements=(
+            ExecutionRequirement("caller_role", "admin", "model", "required"),
+        ),
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "balance > 0", "model", "required"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.nodes[0].capability == "CALLER_CONSTRUCTION"
+    assert graph.nodes[1].capability == "STATE_OBSERVATION"
+    assert graph.capability_clusters == {
+        "CALLER_CONSTRUCTION": 1,
+        "STATE_OBSERVATION": 1,
+    }
