@@ -135,8 +135,12 @@ def _plan_prerequisite_parameter_bindings(
             # source unit (Target.Data), not an interface dependency.
             if resolve_struct_fields(project_root, source_path, member):
                 return base, Path(source_path).resolve().relative_to(Path(project_root).resolve()).as_posix()
-            resolved = resolve_interface(project_root, source_path, namespace)
-            return base, resolved.source_path
+            # Namespaced Solidity types can be nested in a contract/library as
+            # well as an interface (e.g. Outer.Inner). Resolve the namespace as
+            # a generic declared type; resolve_interface is intentionally limited
+            # to interface ABI provenance.
+            namespace_source, _ = resolve_named_type_source(project_root, source_path, namespace)
+            return base, namespace_source
         resolved_source, _ = resolve_named_type_source(project_root, source_path, base)
         return base, resolved_source
 
@@ -582,12 +586,12 @@ def generate_sequence_test_from_experiment(
         elif "." in base:
             namespace, type_name = base.split(".", 1)
             try:
-                resolved_namespace = resolve_interface(project_root, contract_model.source, namespace)
-                fields = resolve_struct_fields(project_root, resolved_namespace.source_path, type_name)
+                namespace_source, _ = resolve_named_type_source(project_root, contract_model.source, namespace)
+                fields = resolve_struct_fields(project_root, namespace_source, type_name)
             except (FileNotFoundError, ValueError, OSError, UnicodeError):
                 fields = ()
-                resolved_namespace = None
-            if not fields or resolved_namespace is None:
+                namespace_source = None
+            if not fields or namespace_source is None:
                 raise ValueError(f"unsupported sequence constructor namespaced type: {parameter.type}")
             field_values: list[str] = []
             for field_name, field_type in fields:
@@ -612,7 +616,7 @@ def generate_sequence_test_from_experiment(
                     raise ValueError(f"unsupported namespaced struct field type: {field_type}")
                 field_values.append(f"{field_name}: {value}")
             constructor_arguments.append(f"{namespace}.{type_name}({{{', '.join(field_values)}}})")
-            relative = Path(os.path.relpath(project_root / resolved_namespace.source_path, path.parent)).as_posix()
+            relative = Path(os.path.relpath(project_root / namespace_source, path.parent)).as_posix()
             constructor_imports.append(f'import {{ {namespace} }} from "{relative}";')
         else:
             raise ValueError(f"unsupported sequence constructor type: {parameter.type}")
