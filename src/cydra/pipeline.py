@@ -368,11 +368,23 @@ def investigate(
             )
         all_evidence.extend(build_evidence(contract, hypotheses))
 
+    hypotheses_by_id = {}
+    for hypothesis in all_hypotheses:
+        hypotheses_by_id.setdefault(hypothesis.hypothesis_id, hypothesis)
+    dedup_hypotheses = tuple(hypotheses_by_id.values())
+    experiment_by_hypothesis = {}
+    for experiment in all_experiments:
+        experiment_by_hypothesis.setdefault(experiment.hypothesis_id, experiment)
+    dedup_experiments = tuple(
+        experiment_by_hypothesis[hypothesis.hypothesis_id]
+        for hypothesis in dedup_hypotheses
+        if hypothesis.hypothesis_id in experiment_by_hypothesis
+    )
     return InvestigationResult(
         target=target or str(path),
         contracts=tuple(contracts),
         invariants=tuple(all_invariants),
-        hypotheses=tuple(all_hypotheses),
-        experiments=tuple(all_experiments),
+        hypotheses=dedup_hypotheses,
+        experiments=dedup_experiments,
         evidence=tuple(all_evidence),
     )
