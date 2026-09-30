@@ -333,16 +333,24 @@ def plan_parameter_inputs(
     tuple and leaves the existing generator fallback authoritative.
     """
     parameter_list = tuple(parameters)
-    if defaults is None:
-        defaults = conservative_defaults(parameter_list, contract_model)
-    if defaults is None:
-        return ()
+    # Merge caller-supplied values with generic safe defaults. A partial
+    # sequence vector is common: the planner may know only the causal amount,
+    # while the remaining ABI slots still need deterministic materialization.
+    # Missing entries must not become empty strings merely because a partial
+    # defaults mapping was supplied.
+    safe_defaults = conservative_defaults(parameter_list, contract_model)
+    if safe_defaults is None:
+        if defaults is None:
+            return ()
+        safe_defaults = dict(defaults)
+    else:
+        safe_defaults = {**safe_defaults, **(defaults or {})}
 
     selected: tuple[ParameterCandidate, ...] = select_parameter_candidates(
         parameter_list, constraints, function_name=function_name
     )
     by_index = {candidate.parameter_index: candidate.value for candidate in selected}
     return tuple(
-        by_index.get(index, defaults.get(parameter.name, ""))
+        by_index.get(index, safe_defaults.get(parameter.name, ""))
         for index, parameter in enumerate(parameter_list)
     )
