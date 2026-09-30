@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cydra.interface_resolver import resolve_interface, resolve_struct_fields
+from cydra.interface_resolver import resolve_import, resolve_interface, resolve_struct_fields
 
 
 def _write(path: Path, content: str) -> None:
