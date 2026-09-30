@@ -128,7 +128,11 @@ def _plan_prerequisite_parameter_bindings(
     def resolve_custom_type(type_name: str) -> tuple[str, str]:
         base = type_name.strip().split()[0].rstrip("[]")
         if "." in base:
-            namespace, _ = base.split(".", 1)
+            namespace, member = base.split(".", 1)
+            # A namespaced type may be a struct declared inside the current
+            # source unit (Target.Data), not an interface dependency.
+            if resolve_struct_fields(project_root, source_path, member):
+                return base, Path(source_path).resolve().relative_to(Path(project_root).resolve()).as_posix()
             resolved = resolve_interface(project_root, source_path, namespace)
             return base, resolved.source_path
         resolved_source, _ = resolve_named_type_source(project_root, source_path, base)
@@ -310,10 +314,25 @@ def generate_sequence_test_from_experiment(
     relation_setups: list[str] = []
     relation_assertions: list[str] = []
     role_addresses = {"owner": "address(0x1001)", "admin": "address(0x1002)", "guardian": "address(0x1003)", "risk_manager": "address(0x1004)", "liquidator": "address(0x1005)", "factory": "address(0x1006)"}
+    # Prefer the output tree's Foundry root, but fall back to the target
+    # source tree. Generated tests are often emitted below a temporary test
+    # directory while the model source sits at the project root.
+    source_path = Path(contract_model.source).resolve()
     project_root = next(
-        (ancestor for ancestor in (Path(output_path).parent, *Path(output_path).parents) if (ancestor / "foundry.toml").exists()),
+        (
+            ancestor for ancestor in (Path(output_path).parent, *Path(output_path).parents)
+            if (ancestor / "foundry.toml").exists()
+        ),
         None,
     )
+    if project_root is None:
+        project_root = next(
+            (
+                ancestor for ancestor in (source_path.parent, *source_path.parents)
+                if (ancestor / "foundry.toml").exists()
+            ),
+            None,
+        )
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
             raise ValueError(f"sequence step {index} has no function")
@@ -333,7 +352,7 @@ def generate_sequence_test_from_experiment(
             and experiment.planned_inputs
         ):
             effective_arguments = experiment.planned_inputs
-        if verify_state_prerequisites and stop_before_target and function.name == hypothesis.target_function:
+        if verify_state_prerequisites and function.name == hypothesis.target_function:
             observations = plan_public_state_observations(contract_model, function)
             if not observations:
                 raise ValueError(
@@ -357,7 +376,8 @@ def generate_sequence_test_from_experiment(
                 f"        assertTrue({observation.expression}, {_solidity_string_literal(f'unverified prerequisite: {observation.predicate}')});"
                 for observation in observations
             )
-            break
+            if stop_before_target:
+                break
         if len(step.arguments) != len(function.parameters):
             raise ValueError(
                 f"sequence input arity mismatch for {step.function}: "
