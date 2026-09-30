@@ -517,7 +517,19 @@ def generate_sequence_test_from_experiment(
         if first_function is not None:
             constructor_role_caller = _constructor_granted_caller(first_function, contract_model)
 
-    deployment_prefix = f"        vm.prank({constructor_role_caller});\n" if constructor_role_caller else ""
+        # State-setup planning can establish the deployment caller more
+        # reliably than re-deriving the role from the writer's modifier alone.
+        # Preserve the target-derived provenance chain:
+        # prerequisite state -> writer -> caller role -> constructor caller.
+        if constructor_role_caller is None:
+            setup_actions = constructible_state_setup_plan(contract_model, first_function) if first_function is not None else ()
+            constructor_role_caller = next(
+                (action.caller_role for action in setup_actions if action.caller_role),
+                None,
+            )
+
+    deployment_address = role_address_expression(constructor_role_caller) if constructor_role_caller else None
+    deployment_prefix = f"        vm.prank({deployment_address});\n" if deployment_address else ""
 
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
@@ -532,7 +544,7 @@ import {{ {target_type} }} from "{target_import}";
     {target_type} internal target;
     address internal attacker = address(0xBEEF);\n    address internal owner = address(0x1001);\n    address internal admin = address(0x1002);\n    address internal guardian = address(0x1003);\n    address internal riskManager = address(0x1004);\n    address internal liquidator = address(0x1005);\n    address internal factory = address(0x1006);
 {asset_declaration}    function setUp() public {{
-{asset_setup}        target = {constructor_call};
+{asset_setup}{deployment_prefix}        target = {constructor_call};
     }}
 
     function testOrderedExperimentSequence() public {{
