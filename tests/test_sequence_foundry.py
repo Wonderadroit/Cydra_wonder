@@ -692,6 +692,29 @@ def test_sequence_renderer_constructs_namespaced_struct_constructor_type(tmp_pat
     assert "IMerkle.MerkleConstructorArgs({levels: 1, poseidon2: address(0), poseidon4: address(0), poseidon5: address(0)})" in rendered
 
 
+def test_sequence_renderer_imports_constructor_role_address_resolver(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "constructor() {} function seed() external {} }\n", encoding="utf-8"
+    )
+    model = ContractModel(
+        "Target", str(target),
+        (FunctionModel("seed", "external", (), (), (), 3),),
+        constructor=ConstructorModel((), 2),
+    )
+    hypothesis, experiment = _experiment()
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "new Target()" in rendered
+
+
 def test_sequence_renderer_uses_nonzero_unsigned_constructor_defaults(tmp_path):
     from cydra.models import ConstructorModel, FunctionModel, ParameterModel
 
