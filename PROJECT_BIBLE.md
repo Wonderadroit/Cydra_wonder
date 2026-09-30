@@ -1219,3 +1219,15 @@ Development rule remains:
 
 Never encode a target-name-specific role grant or force privileged state merely to make a hypothesis execute. Evidence that a role is established must come from the target model/provenance.
 
+
+
+## 61. Renderer dependencies must be explicit and regression-covered
+
+Execution materialization code must explicitly import every helper it invokes. A missing renderer dependency is a capability implementation failure, not target evidence.
+
+Rules:
+
+1. Renderer helpers used for deployment, caller construction, sequence rendering, or observation materialization must be imported from their defining module.
+2. New helper calls must have a focused regression that exercises the affected rendering path rather than relying only on import-time coverage.
+3. A renderer `NameError` is classified as a generic call-sequence/materialization failure and must not alter the security hypothesis.
+4. The same experiment intent must be rerun after the dependency fix.
