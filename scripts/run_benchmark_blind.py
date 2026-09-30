@@ -384,6 +384,11 @@ def _failure_status(hypothesis, class_name: str, stage: str, error: Exception) -
         "classification": "NOT_REACHED",
         "failure_stage": stage,
         "blocked_reason": f"{type(error).__name__}: {error}",
+        "evidence_lifecycle": {
+            "state": f"{stage}_failed",
+            "transitions": ["planned", "generated", f"{stage}_failed"] if stage != "generation" else ["planned", "generation_failed"],
+            "causal_allowed": False,
+        },
     }
     if stage == "generation":
         status["foundry_generated"] = False
