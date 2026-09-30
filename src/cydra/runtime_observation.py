@@ -197,7 +197,9 @@ def plan_public_state_observations(
         if not matches:
             continue
 
-        condition = normalized
+        # Preserve source formatting in the rendered assertion while using the
+        # normalized form only for structural matching above.
+        condition = predicate.strip()
         states = []
         for match in matches:
             state = match.group("state")
