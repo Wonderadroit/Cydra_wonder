@@ -170,7 +170,7 @@ class CapabilityResolution:
         for gap in self.gaps:
             item = grouped.setdefault(gap.capability.value, {"required": [], "status": gap.status.value, "gaps": []})
             item["status"] = gap.status.value
-            item["gaps"].append({"subject": gap.subject, "subcapability": gap.subcapability, "reason": gap.reason})
+            item["gaps"].append({"subject": gap.subject, "subcapability": gap.subcapability, "reason": gap.reason, "stage": gap.stage.value, "failure_class": gap.failure_class, "provenance": gap.provenance})
         return grouped
 
 def default_capability_availability() -> tuple[CapabilityAvailability, ...]:
