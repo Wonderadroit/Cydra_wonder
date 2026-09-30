@@ -73,7 +73,7 @@ class CapabilityResolution:
 
     @property
     def executable(self) -> bool:
-        return not any(g.status in {CapabilityStatus.MISSING, CapabilityStatus.BLOCKED} for g in self.gaps)
+        return not self.gaps
 
     def by_capability(self) -> dict[str, dict[str, object]]:
         grouped: dict[str, dict[str, object]] = {}
