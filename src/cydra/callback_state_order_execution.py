@@ -66,7 +66,11 @@ def _execution_context_warp(contract_model: ContractModel, function) -> str | No
                 continue
             modes.add("low" if match.group(1) in {">", ">="} else "high")
 
-        body = _function_body(Path(contract_model.source).read_text(encoding="utf-8"), current.name)
+        try:
+            source = Path(contract_model.source).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            source = ""
+        body = _function_body(source, current.name) if source else ""
         for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
             callee = functions.get(match.group(1))
             if callee is not None:
@@ -502,8 +506,16 @@ def _legacy_structured_parameter_setup(
                     resolved = _type_source(contract_model, base)
                     if resolved is not None and base not in set(contract_model.declared_types):
                         imports.add((str(resolved[0]), base))
-                    declarations.append(f"{_memory_parameter_type(parameter.type)} memory {typed} = {expression};")
-                    rendered_arguments[parameter.name] = typed
+                    # Tuple-shaped structured inputs must be lowered to a stable
+                    # local identifier. A qualified constructor expression is a
+                    # value, not a valid declaration name.
+                    local = f"cydra_{parameter.name}"
+                    value = typed if re.fullmatch(r"[A-Za-z_]\w*", typed.strip()) else expression
+                    declarations.append(f"{_memory_parameter_type(parameter.type)} memory {local} = {value};")
+                    for path in caller_bindings:
+                        if path.startswith(parameter.name + "."):
+                            declarations.append(f"{local}.{path.split('.', 1)[1]} = {attacker_expression};")
+                    rendered_arguments[parameter.name] = local
                     continue
             rendered_arguments[parameter.name] = expression
             continue
