@@ -763,3 +763,20 @@ def test_modifier_definitions_and_invocation_arguments_are_preserved(tmp_path: P
     assert contract.modifiers[0].name == "onlyRole"
     assert [(p.name, p.type) for p in contract.modifiers[0].parameters] == [("role", "bytes32")]
     assert "hasRole(role, msg.sender)" in contract.modifiers[0].body
+
+
+def test_solidity_builtin_namespace_calls_are_not_runtime_external_calls(tmp_path: Path) -> None:
+    path = tmp_path / "BuiltinNamespaces.sol"
+    path.write_text(
+        """
+        contract BuiltinNamespaces {
+            function target(bytes memory left, bytes memory right) external pure returns (bytes memory) {
+                return bytes.concat(left, right);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    function = parse_solidity(path)[0].functions[0]
+    assert function.external_calls == ()
