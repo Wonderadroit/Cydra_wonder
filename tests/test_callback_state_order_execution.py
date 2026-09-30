@@ -534,6 +534,8 @@ def test_legacy_callback_renderer_materializes_target_derived_state_setup_and_ca
     assert "cydra_data.endpoint = address(attacker);" in rendered
     assert "target.register(cydra_data.key, cydra_data.endpoint);" in rendered
     assert "abi.encodeCall(target.execute, (1, cydra_data))" in rendered
+    assert "target.register(cydra_data.key, cydra_data.endpoint);" in rendered
+    assert "cydra_circomData" not in rendered
 
 
 
