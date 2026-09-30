@@ -571,7 +571,7 @@ def generate_sequence_test_from_experiment(
         elif base.startswith("uint"):
             # Use a non-zero neutral constructor seed for unsigned arithmetic
             # preconditions; zero is frequently an invalid deployment boundary.
-            constructor_arguments.append("1")
+            constructor_arguments.append("0")
         elif base.startswith("int"):
             constructor_arguments.append("0")
         elif base == "string":
