@@ -196,13 +196,40 @@ def _command_capture(cwd: Path, *command: str) -> dict[str, Any]:
     completed = subprocess.run(
         command, cwd=cwd, text=True, capture_output=True, check=False
     )
-    return {
-        "command": list(command),
+    effective_command = command
+    fallback = None
+
+    # Treat compiler strategy as an execution capability, not a target-specific
+    # workaround. If the target itself hits Solidity's stack-depth limit during
+    # a normal build, retry the same build through IR. Preserve the original
+    # failure in provenance so the run still distinguishes target compiler
+    # constraints from CYDRA evidence.
+    combined = f"{completed.stdout}\n{completed.stderr}"
+    if (
+        command[:2] == ("forge", "build")
+        and completed.returncode != 0
+        and "Stack too deep" in combined
+    ):
+        effective_command = ("forge", "build", "--via-ir")
+        fallback = {
+            "trigger": "stack-too-deep",
+            "initial_command": list(command),
+            "initial_exit_code": completed.returncode,
+        }
+        completed = subprocess.run(
+            effective_command, cwd=cwd, text=True, capture_output=True, check=False
+        )
+
+    result = {
+        "command": list(effective_command),
         "exit_code": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
         "ok": completed.returncode == 0,
     }
+    if fallback is not None:
+        result["fallback"] = fallback
+    return result
 
 
 def require_frozen_source() -> None:
