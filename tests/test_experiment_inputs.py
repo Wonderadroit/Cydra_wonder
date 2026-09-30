@@ -260,3 +260,29 @@ def test_structured_defaults_resolve_imported_structs(tmp_path):
         contract_model=model,
     )
     assert result == ('(address(0), 0, bytes(""))',)
+
+
+def test_recursive_materialization_returns_source_provenance(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            struct Inner { address endpoint; uint256 amount; }
+            struct Outer { Inner inner; bool enabled; }
+            function transact(Outer calldata data) external {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.models import ContractModel, FunctionModel, ParameterModel
+    from cydra.solidity_model import parse_solidity
+    from cydra.experiment_inputs import materialize_parameter_with_provenance
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "transact")
+    proof = materialize_parameter_with_provenance(function.parameters[0], contract)
+    assert proof is not None
+    assert proof.expression.startswith("(")
+    assert any(":type:Outer:" in item for item in proof.provenance)
+    assert any(":type:Inner:" in item for item in proof.provenance)
+    assert any("Outer.inner" in item for item in proof.provenance)
