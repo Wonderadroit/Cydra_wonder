@@ -490,6 +490,42 @@ def test_callback_caller_binding_can_target_non_first_parameter():
     assert _caller_bound_parameter_paths(contract, function) == ("data.endpoint",)
 
 
+def test_legacy_callback_renderer_materializes_unreferenced_structured_planned_identifier(tmp_path: Path):
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Callback {
+            struct Data { uint256 key; address endpoint; }
+            function execute(Data calldata data) external {
+                (bool ok,) = msg.sender.call("");
+                require(ok);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Callback")
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute", "claim",
+        "INV-CALLBACK-STATE-ORDER-execute", "execute", "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute", hypothesis.hypothesis_id,
+        "reenter", (), 2.0,
+        planned_inputs=(" (0, address(0)) ",),
+        target_function="execute",
+    )
+    output = tmp_path / "test" / "generated.t.sol"
+    generate_callback_state_order_test(
+        hypothesis, experiment, str(source), "Callback", output, contract,
+    )
+    rendered = output.read_text(encoding="utf-8")
+    assert "Data memory cydra_data = (0, address(0));" in rendered
+    assert "abi.encodeCall(target.execute, (cydra_data))" in rendered
+
+
 def test_legacy_callback_renderer_materializes_target_derived_state_setup_and_caller_binding(tmp_path: Path):
     source = tmp_path / "Callback.sol"
     source.write_text(
