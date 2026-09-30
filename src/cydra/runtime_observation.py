@@ -212,6 +212,7 @@ def plan_public_state_observations(
                 rf"(?<![.\w]){re.escape(state)}\b",
                 f"target.{state}()",
                 condition,
+                count=1,
             )
             states.append(state)
         expression = condition if polarity == "must_hold" else f"!({condition})"
