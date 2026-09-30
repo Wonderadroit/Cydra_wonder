@@ -215,8 +215,8 @@ def build_experiment_contract(hypothesis: Hypothesis, experiment: Experiment, co
     if target_function != hypothesis.target_function:
         raise ValueError('experiment contract target function mismatch')
     requirements: list[CapabilityRequirement] = []
-    def add(capability: Capability, subject: str, source: str, detail: str = '', subcapability: str | None = None) -> None:
-        requirements.append(CapabilityRequirement(capability, subject, source, detail, subcapability))
+    def add(capability: Capability, subject: str, source: str, detail: str = '', subcapability: str | None = None, provenance: str | None = None) -> None:
+        requirements.append(CapabilityRequirement(capability, subject, source, detail, subcapability, provenance))
     if readiness.caller_requirements:
         add(Capability.CALLER_CONSTRUCTION, 'caller requirements', 'execution_readiness')
     if readiness.constructor_requirements:
@@ -283,7 +283,7 @@ def solve_capabilities(contract: ExperimentContract, availability: tuple[Capabil
             if requirement.subcapability and requirement.subcapability not in item.subcapabilities:
                 gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, CapabilityStatus.BLOCKED, f'partial capability lacks sub-capability {requirement.subcapability}'))
             else:
-                gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, CapabilityStatus.PARTIAL, item.detail or 'target-specific materialization/readiness evidence is required'))
+                gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, CapabilityStatus.PARTIAL, item.detail or 'target-specific materialization/readiness evidence is required', MaterializationStage.PREREQUISITES, 'capability', requirement.provenance))
             continue
         gaps.append(CapabilityGap(requirement.capability, requirement.subject, requirement.subcapability, item.status, item.detail or f'capability registry reports {item.status.value}'))
     return CapabilityResolution(contract, available, tuple(gaps))
