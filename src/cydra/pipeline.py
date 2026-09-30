@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
-from .experiment_inputs import plan_parameter_inputs
+from .experiment_inputs import plan_parameter_inputs, _planned_defaults
 from .experiment_planning import bind_experiment
 from .models import ContractModel, Experiment, ExperimentStep, Hypothesis, InvestigationResult, Invariant
 from .reasoning import (
@@ -187,9 +187,11 @@ def _attach_input_plan(
     function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
     bound = experiment
     if function is not None:
-        vector = experiment.planned_inputs or plan_parameter_inputs(
+        planned_defaults = _planned_defaults(tuple(function.parameters), experiment.planned_inputs)
+        vector = plan_parameter_inputs(
             function.parameters,
             constraints,
+            defaults=planned_defaults,
             function_name=function.name,
             contract_model=contract,
         )
@@ -214,7 +216,7 @@ def _attach_input_plan(
         # no function-specific constraint. Constraint evidence may override only
         # the parameter it actually binds; it must not replace the whole vector
         # with conservative defaults.
-        existing = dict(zip((parameter.name for parameter in step_function.parameters), step.arguments))
+        existing = _planned_defaults(tuple(step_function.parameters), step.arguments)
         vector = plan_parameter_inputs(
             step_function.parameters,
             constraints,
