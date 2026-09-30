@@ -475,119 +475,59 @@ def resolve_struct_fields(root: str | Path, source_path: str | Path, struct_name
 
 
 def resolve_named_type_source(root: str | Path, importer: str | Path, name: str) -> tuple[str, str]:
-    """Resolve a user-defined Solidity type through the import graph.
+    """Resolve a user-defined Solidity type through the target's bounded import graph.
 
-    Constructor parameters may use a contract/library/interface type that is
-    imported indirectly (for example LendingPool imports ERC20 from DebtToken,
-    while DebtToken imports ERC20 from Solmate). The generated harness only
-    needs the defining source path so it can emit an explicit Type(address)
-    constructor value. This resolver follows declared imports recursively and
-    records the first source unit that actually declares the requested type.
+    The resolver deliberately separates graph discovery from symbol matching:
+    every reachable source unit is discovered from declared imports, then the
+    requested declaration is checked in each unit. This handles plain imports,
+    named imports, aliases, transitive imports, and files whose names do not
+    match the Solidity symbol (for example Nested.sol declaring Outer).
     """
     root = Path(root).resolve()
     start = _resolve_source_path(root, importer)
     visited: set[Path] = set()
-
     declaration = re.compile(
-        rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(name)}\b"
+        rf"\\b(?:contract|interface|library|struct|enum|type)\\s+{re.escape(name)}\\b"
     )
-    named_import = re.compile(
-        r'import\s*\{([^}]+)\}\s*from\s*"([^"]+)"\s*;',
+    import_pattern = re.compile(
+        r"""import\\s+(?:[^"'\\]+\\s+from\\s+)?["']([^"']+)["']\\s*;""",
         re.MULTILINE,
     )
 
-    def walk(path: Path) -> tuple[str, str] | None:
-        path = path.resolve()
+    def imports_for(path: Path) -> tuple[str, ...]:
+        try:
+            source = _strip_comments(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            return ()
+        return tuple(dict.fromkeys(import_pattern.findall(source)))
+
+    pending = [start]
+    while pending:
+        path = pending.pop(0).resolve()
         if path in visited or not path.is_file():
-            return None
+            continue
         visited.add(path)
         try:
             source = _strip_comments(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError):
-            return None
+            continue
 
         if declaration.search(source):
-            return path.relative_to(root).as_posix(), "declaration"
+            return path.relative_to(root).as_posix(), "declaration" if path == start else "declared_import"
 
-        # Inspect every explicit import edge before recursive traversal.
-        # A symbol does not have to live in a file named after the symbol
-        # (Nested.sol may declare Outer), so filename heuristics cannot be the
-        # primary resolver. This remains bounded to the target's declared
-        # dependency graph and never performs a repository-wide symbol scan.
-        # Resolve the literal import edges directly as a fallback to the
-        # Foundry remapping resolver. This is important for small/temporary
-        # projects where a perfectly valid relative import exists but the
-        # project root has no dependency metadata.
-        import_paths = tuple(dict.fromkeys((
-            *_imports_for(path),
-            *(match.group(1) for match in re.finditer(
-                r'import\s+(?:[^"\']+\s+from\s+)?["\']([^"\']+)["\']\s*;',
-                source,
-            )),
-        )))
-        for import_path in import_paths:
+        for import_path in imports_for(path):
             resolved = resolve_import(root, path, import_path)
             if resolved is None:
-                direct_path = (path.parent / import_path).resolve()
-                if direct_path.is_file():
-                    resolved = (direct_path, "direct_declared_import")
-            if resolved is None:
-                continue
-            imported_path = resolved[0].resolve()
-            try:
-                imported_source = _strip_comments(imported_path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeError):
-                continue
-            if declaration.search(imported_source):
-                return imported_path.relative_to(root).as_posix(), "declared_import"
+                # Explicit relative imports are authoritative for temporary
+                # target fixtures even when Foundry metadata is absent.
+                direct = (path.parent / import_path).resolve()
+                if direct.is_file():
+                    resolved = (direct, "direct_declared_import")
+            if resolved is not None:
+                imported_path = resolved[0].resolve()
+                if imported_path not in visited:
+                    pending.append(imported_path)
 
-        for match in named_import.finditer(source):
-            symbols_text, import_path = match.groups()
-            symbols = []
-            for symbol in _split_parameters(symbols_text):
-                token = re.split(r"\s+as\s+", symbol.strip(), maxsplit=1)[-1].strip()
-                if token:
-                    symbols.append(token)
-            if name not in symbols:
-                continue
-            resolved = resolve_import(root, path, import_path)
-            if resolved is None and import_path.startswith(("./", "../")):
-                # Keep the declared import path authoritative even when the
-                # normal remapping resolver cannot classify it. This is still
-                # bounded to the importing source unit and cannot become a
-                # repository-wide symbol search.
-                direct_path = (path.parent / import_path).resolve()
-                if direct_path.is_file():
-                    resolved = (direct_path, "direct_declared_import")
-            if resolved is None:
-                continue
-            imported_path = resolved[0].resolve()
-            try:
-                imported_source = _strip_comments(imported_path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeError):
-                imported_source = ""
-            if declaration.search(imported_source):
-                return imported_path.relative_to(root).as_posix(), "named_import_declaration"
-            found = walk(imported_path)
-            if found is not None:
-                return found
-
-        for import_path in import_paths:
-            resolved = resolve_import(root, path, import_path)
-            if resolved is None:
-                direct_path = (path.parent / import_path).resolve()
-                if direct_path.is_file():
-                    resolved = (direct_path, "direct_declared_import")
-            if resolved is None:
-                continue
-            found = walk(resolved[0])
-            if found is not None:
-                return found
-        return None
-
-    found = walk(start)
-    if found is None:
-        raise FileNotFoundError(
-            f"Unable to resolve user-defined type {name} through imports from {start}"
-        )
-    return found
+    raise FileNotFoundError(
+        f"Unable to resolve user-defined type {name} through imports from {start}"
+    )
