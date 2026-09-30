@@ -80,7 +80,7 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
 
 
 def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
-    caller_variable = "cydraAttacker"
+    caller_variable = "attacker"
     start, end, argument_text = _find_initializer_call(source, initializer_name)
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
@@ -133,7 +133,7 @@ def _caller_bound_initializer_arguments(
     prerequisite replaces that lifecycle body afterwards, so rewriting the
     renderer call itself is unnecessary and can corrupt surrounding syntax.
     """
-    caller_variable = "cydraAttacker"
+    caller_variable = "attacker"
     _, _, argument_text = _find_initializer_call(source, initializer_name)
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
@@ -407,6 +407,17 @@ def _qualify_planned_target_argument(
         if not base:
             return value
 
+        # Model-declared target structs remain qualifiable even when the
+        # source file is unavailable (generated/temporary model fixtures).
+        if base in set(contract_model.declared_types):
+            resolved = None
+            if value.lstrip().startswith("("):
+                values = _split_arguments(value.strip()[1:-1])
+                # Without source-backed fields we can only safely qualify the
+                # outer target type; nested provenance is handled when source is
+                # available.
+                if values:
+                    return f"{target_type}.{base}({', '.join(values)})"
         resolved = _type_source(contract_model, base)
         if resolved is None:
             return value
