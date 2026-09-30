@@ -968,6 +968,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                 }
         status: dict[str, Any] = {
             "hypothesis_id": hypothesis.hypothesis_id,
+            "experiment_id": experiment.experiment_id,
+            "target_function": hypothesis.target_function,
             "capability_contract": _json(experiment_contract),
             "capability_resolution": _json(capability_resolution),
             "class": class_name,
