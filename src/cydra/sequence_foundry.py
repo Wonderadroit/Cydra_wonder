@@ -49,11 +49,16 @@ def _constructor_granted_caller(function, contract_model: ContractModel) -> str 
 
 def _solidity_string_literal(value: str) -> str:
     """Encode arbitrary diagnostic text as a valid Solidity string literal."""
-    return (
-        '"'
-        + value.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
-        + '"'
+    sentinel = "__CYDRA_ESCAPED_NEWLINE__"
+    value = value.replace("\\n", sentinel)
+    encoded = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
     )
+    return '"' + encoded.replace(sentinel, "\\\\n") + '"'
 
 
 def _split_top_level_tuple_expression(value: str) -> tuple[str, ...] | None:
