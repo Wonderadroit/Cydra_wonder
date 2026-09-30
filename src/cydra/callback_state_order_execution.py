@@ -579,6 +579,49 @@ def _ensure_structured_argument_bindings(
     return tuple(declarations), tuple(sorted(imports))
 
 
+def _ensure_callback_argument_vector_bindings(
+    contract_model: ContractModel,
+    function,
+    arguments: tuple[str, ...],
+    argument_vector: tuple[str, ...],
+    parameter_setup: str,
+    imports: set[tuple[str, str]],
+) -> tuple[tuple[str, ...], tuple[str, ...], set[tuple[str, str]]]:
+    """Ensure final callback arguments are declared before abi.encodeCall use."""
+    declarations = [item for item in parameter_setup.split("\\n        ") if item.strip()]
+    declared = set(re.findall(
+        r"\\b(?:[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*)\\s+(?:memory|calldata|storage)\\s+([A-Za-z_]\\w*)\\s*=",
+        "\\n".join(declarations),
+    ))
+    rendered = list(argument_vector)
+    builtin_prefixes = ("uint", "int", "bytes", "fixed", "ufixed")
+    for index, (parameter, expression) in enumerate(zip(function.parameters, arguments)):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if base in {"address", "bool", "string", "bytes"} or base.startswith(builtin_prefixes):
+            continue
+        candidate = rendered[index].strip()
+        if not re.fullmatch(r"[A-Za-z_]\\w*", candidate) or candidate in declared:
+            continue
+        _typed, typed_imports = _qualify_planned_target_argument(
+            parameter, expression, "", contract_model
+        )
+        imports.update(typed_imports)
+        value = expression.strip()
+        if value == candidate:
+            value = _structured_default(parameter, contract_model)
+            if value is None:
+                raise ValueError(
+                    f"callback structured argument {parameter.name} resolved to undeclared "
+                    f"identifier {candidate} and has no source-backed fallback"
+                )
+        resolved = _type_source(contract_model, base)
+        if resolved is not None and base not in set(contract_model.declared_types):
+            imports.add((str(resolved[0]), base))
+        declarations.append(f"{parameter.type} memory {candidate} = {value};")
+        declared.add(candidate)
+    return tuple(rendered), tuple(declarations), imports
+
+
 def _select_structured_binding_name(function, rendered_arguments, parameter_setup: str) -> str:
     """Select a generated local by exact identifier, never by substring prefix."""
     for parameter in function.parameters:
@@ -669,6 +712,16 @@ def _legacy_callback_test(
         rendered_arguments.get(parameter.name, argument)
         for parameter, argument in zip(function.parameters, arguments)
     )
+    argument_vector, final_declarations, parameter_imports_set = _ensure_callback_argument_vector_bindings(
+        contract_model,
+        function,
+        tuple(arguments),
+        argument_vector,
+        parameter_setup,
+        set(parameter_imports),
+    )
+    parameter_setup = "\n        ".join(final_declarations)
+    parameter_imports = tuple(sorted(parameter_imports_set))
     argument_text = ", ".join(argument_vector)
     call_data = f"abi.encodeCall(target.{function.name}, ({argument_text}))"
     pragma = contract_model.pragma or "^0.8.20"
