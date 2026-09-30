@@ -81,9 +81,13 @@ class ExplorationState:
             for question in self.unresolved_questions
             if question.question_id not in self.explored_question_ids
             and question.estimated_cost <= remaining_budget
-            and question.hypothesis_id is not None
-            and question.hypothesis_id not in self.explored_hypothesis_ids
-            and (executable_hypothesis_ids is None or question.hypothesis_id in executable_hypothesis_ids)
+            and (
+                question.hypothesis_id is None
+                or (
+                    question.hypothesis_id not in self.explored_hypothesis_ids
+                    and (executable_hypothesis_ids is None or question.hypothesis_id in executable_hypothesis_ids)
+                )
+            )
         ]
         if not eligible:
             return None
