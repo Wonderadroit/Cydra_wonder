@@ -1,6 +1,6 @@
 from cydra.execution_capabilities import (
     Capability, CapabilityStatus,
-    build_experiment_contract, capability_clusters, solve_capabilities,
+    build_experiment_contract, capability_clusters, classify_materialization_failure, solve_capabilities,
 )
 from cydra.execution_readiness import ExecutionReadiness, ExecutionRequirement
 from cydra.models import ContractModel, Experiment, FunctionModel, Hypothesis, ParameterModel
@@ -55,3 +55,28 @@ def test_missing_registry_capability_is_fail_closed():
     availability = tuple(item for item in solve_capabilities(contract).availability if item.capability != Capability.TYPE_MATERIALIZATION)
     resolution = solve_capabilities(contract, availability)
     assert any(g.status == CapabilityStatus.MISSING and g.capability == Capability.TYPE_MATERIALIZATION for g in resolution.gaps)
+
+def test_materialization_failure_records_nested_type_stage_and_provenance():
+    failure = classify_materialization_failure(
+        ValueError(
+            "unable to resolve nested struct type StealthAddressStructure "
+            "for CircomData.stealthAddressStructure from contracts/types/CircomData.sol: "
+            "Unable to resolve user-defined type"
+        )
+    )
+    assert failure.gap.capability == Capability.TYPE_MATERIALIZATION
+    assert failure.gap.subcapability == "nested_custom_struct"
+    assert failure.gap.status == CapabilityStatus.BLOCKED
+    assert failure.gap.stage.value == "prerequisites"
+    assert failure.gap.failure_class == "resolver"
+    assert failure.gap.provenance == "contracts/types/CircomData.sol"
+
+
+def test_materialization_failure_records_observation_stage():
+    failure = classify_materialization_failure(
+        ValueError("state transition has no deterministic public mapping observation")
+    )
+    assert failure.gap.capability == Capability.STATE_OBSERVATION
+    assert failure.gap.subcapability == "public_mapping"
+    assert failure.gap.stage.value == "observations"
+    assert failure.gap.failure_class == "observation_planner"
