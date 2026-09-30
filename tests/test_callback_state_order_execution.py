@@ -707,3 +707,39 @@ def test_callback_compile_failure_emits_no_causal_evidence(tmp_path: Path, monke
     assert result["classification"] == "UNMEASURABLE"
     assert result["execution"]["executed"] is False
     assert result["evidence"] is None
+
+
+def test_callback_final_argument_binding_recognizes_existing_nested_struct_declaration(tmp_path: Path):
+    """A pre-materialized custom argument must not be re-emitted or left undeclared."""
+    from cydra.callback_state_order_execution import _ensure_callback_argument_vector_bindings
+
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Callback {
+            struct Inner { uint256 value; address[] accounts; }
+            struct Data { Inner inner; bytes[][] payloads; }
+            function execute(Data calldata data) external {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Callback")
+    function = next(item for item in contract.functions if item.name == "execute")
+
+    parameter_setup = "        Data memory cydra_data = (Inner(0, new address[](0)), new bytes[][](0));"
+    arguments = ("(Inner(0, new address[](0)), new bytes[][](0))",)
+    rendered, declarations, _imports = _ensure_callback_argument_vector_bindings(
+        contract,
+        function,
+        arguments,
+        ("cydra_data",),
+        parameter_setup,
+        set(),
+    )
+
+    assert rendered == ["cydra_data"]
+    assert len(declarations) == 1
+    assert declarations[0].strip().startswith("Data memory cydra_data =")
