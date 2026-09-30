@@ -44,7 +44,7 @@ _STATE_DECLARATION_KEYWORDS = {
 
 # Solidity built-in namespaces are deterministic language operations, not runtime targets.
 _SOLIDITY_BUILTIN_RECEIVERS = {
-    "abi", "block", "msg", "tx", "type", "super",
+    "abi", "block", "msg", "tx", "type", "super", "bytes", "string",
 }
 
 _INTERNAL_CALL_KEYWORDS = {
