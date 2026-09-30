@@ -407,7 +407,7 @@ def generate_sequence_test_from_experiment(
             prerequisite_imports.extend(binding_imports)
             rendered.extend(bindings)
             rendered.extend(
-                f"        assertTrue({observation.expression}, {_solidity_string_literal(f'unverified prerequisite: {observation.predicate}')});"
+                f"        assertTrue({observation.expression.replace(chr(13), "").replace(chr(10), "\\n")}, {_solidity_string_literal(f'unverified prerequisite: {observation.predicate}')});"
                 for observation in observations
             )
             if stop_before_target:
