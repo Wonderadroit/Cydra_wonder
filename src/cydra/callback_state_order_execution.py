@@ -500,6 +500,17 @@ def _legacy_structured_parameter_setup(
     return "\n        ".join(declarations), tuple(sorted(imports)), rendered_arguments
 
 
+def _select_structured_binding_name(function, rendered_arguments, parameter_setup: str) -> str:
+    """Select a generated local by exact identifier, never by substring prefix."""
+    for parameter in function.parameters:
+        if parameter.name not in rendered_arguments:
+            continue
+        candidate = f"cydra_{parameter.name}"
+        if re.search(rf"\\b{re.escape(candidate)}\\b", parameter_setup):
+            return candidate
+    return function.parameters[-1].name if function.parameters else ""
+
+
 def _legacy_callback_test(
     hypothesis: Hypothesis,
     experiment: Experiment,
@@ -577,18 +588,7 @@ def _legacy_callback_test(
         callback_input_for_setup = ""
     state_setup, state_setup_functions = _state_setup_source(
         contract_model, function,
-        next(
-            (
-                f"cydra_{parameter.name}"
-                for parameter in function.parameters
-                if parameter.name in rendered_arguments
-                and re.search(
-                    rf"\\b{re.escape(f'cydra_{parameter.name}')}\\b",
-                    parameter_setup,
-                )
-            ),
-            function.parameters[-1].name if function.parameters else "",
-        ),
+        _select_structured_binding_name(function, rendered_arguments, parameter_setup),
     )
     if state_setup:
         parameter_setup = parameter_setup + ("\n        " if parameter_setup else "") + state_setup
