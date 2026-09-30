@@ -1015,7 +1015,9 @@ def _internal_execution_requirements(
                     callee,
                     predicate,
                     execution_capabilities,
-                )\n                if category in {"cryptographic_witness", "execution_context", "local_execution"}:\n                    constraint = False
+                )
+                if category in {"cryptographic_witness", "execution_context", "local_execution"}:
+                    constraint = False
                 predicate_state_names = {
                     name for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
                     if name in set(contract.state_variables)
@@ -1110,7 +1112,10 @@ def _execution_requirements(
             "must_not_hold": "execution predicate is a guarded revert condition and must not hold",
             "unknown": "execution predicate polarity could not be established statically",
         }.get(polarity, "execution predicate polarity is unknown")
+        category = _classify_internal_predicate(contract, function, predicate)
         status = "constraint" if _is_experiment_constraint(contract, function, predicate, execution_capabilities) else "required"
+        if category in {"cryptographic_witness", "execution_context", "local_execution", "state_observation"}:
+            status = "required"
         if status == "constraint":
             detail = (
                 "pure input/local execution constraint; the generated experiment "
