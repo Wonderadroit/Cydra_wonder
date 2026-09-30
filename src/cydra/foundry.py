@@ -250,7 +250,8 @@ def _initializer_argument(
     if contract_model is not None:
         interface_names = {interface.name for interface in contract_model.inherited_resolved_interfaces}
         base_type = parameter_type.split()[0].rstrip("[]")
-        if base_type in interface_names:
+        source_text = _source_text(contract_model)
+        if base_type in interface_names or re.search(rf"\binterface\s+{re.escape(base_type)}\b", source_text):
             return f"parameter{index}", f"{base_type} parameter{index};"
     if parameter_type.endswith("[]"):
         base = parameter_type[:-2].strip()
