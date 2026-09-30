@@ -485,6 +485,21 @@ def _legacy_structured_parameter_setup(
         if parameter.type.split()[0] in {"address", "bool", "string", "bytes"} or parameter.type.split()[0].startswith(("uint", "int", "bytes")):
             rendered_arguments[parameter.name] = typed
             continue
+        if re.fullmatch(r"[A-Za-z_]\w*", typed.strip()) and not re.fullmatch(
+            r"[A-Za-z_]\w*", expression.strip()
+        ):
+            # Some target-derived structured expressions are lowered to a
+            # generated local by the planner. If the parameter is not needed
+            # for a prerequisite binding, the legacy renderer must still
+            # materialize that local; otherwise the final abi.encodeCall can
+            # reference an undeclared identifier.
+            base = parameter.type.split()[0].rstrip("[]")
+            resolved = _type_source(contract_model, base)
+            if resolved is not None and base not in set(contract_model.declared_types):
+                imports.add((str(resolved[0]), base))
+            declarations.append(f"{parameter.type} memory {typed} = {expression};")
+            rendered_arguments[parameter.name] = typed
+            continue
         base = parameter.type.split()[0].rstrip("[]")
         resolved = _type_source(contract_model, base)
         if resolved is not None and base not in set(contract_model.declared_types):
