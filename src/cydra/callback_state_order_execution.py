@@ -568,13 +568,16 @@ def _legacy_callback_test(
     pragma = contract_model.pragma or "^0.8.20"
     path = Path(output_path)
     target_import = _layout_aware_import_path(target_import, path)
+    # State setup must consume the exact materialized callback argument used
+    # by the final target call. The previous fallback re-derived a parameter
+    # name and could produce a different identifier (for example cydra_c vs
+    # cydra_circomData), yielding compiler errors before the experiment ran.
+    callback_input_for_setup = argument_vector[0] if argument_vector else ""
+    if not re.fullmatch(r"[A-Za-z_]\\w*", callback_input_for_setup.strip()):
+        callback_input_for_setup = ""
     state_setup, state_setup_functions = _state_setup_source(
         contract_model, function,
-        next(
-            (f"cydra_{parameter.name}" for parameter in function.parameters
-             if parameter.name in rendered_arguments and f"cydra_{parameter.name}" in parameter_setup),
-            function.parameters[-1].name if function.parameters else "",
-        ),
+        callback_input_for_setup,
     )
     if state_setup:
         parameter_setup = parameter_setup + ("\n        " if parameter_setup else "") + state_setup
