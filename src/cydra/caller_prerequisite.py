@@ -80,9 +80,8 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
 
 
 def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
-    caller_variable = "cydraAttacker"
+    caller_variable = "attacker"
     start, end, argument_text = _find_initializer_call(source, initializer_name)
-    caller_variable = "cydraAttacker"
     arguments = _split_arguments(argument_text)
     if len(arguments) != len(parameter_names):
         raise ValueError(
