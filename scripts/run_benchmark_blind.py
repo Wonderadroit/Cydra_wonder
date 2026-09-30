@@ -1245,11 +1245,16 @@ def run_source_investigation(
                 compiler_evidence.evidence,
                 execution_capabilities=execution_capabilities,
             )
+            experiment = experiments[hypothesis.hypothesis_id]
+            experiment_contract = build_experiment_contract(hypothesis, experiment, contract, readiness)
+            capability_resolution = solve_capabilities(experiment_contract)
             execution_readiness.append({
                 "hypothesis_id": hypothesis.hypothesis_id,
                 "class": class_name,
                 "target_function": hypothesis.target_function,
                 "readiness": readiness,
+                "capability_contract": experiment_contract,
+                "capability_resolution": capability_resolution,
             })
         exploration_state = exploration.state
         build_capture = _command_capture(project, "forge", "build")
@@ -1290,14 +1295,19 @@ def run_source_investigation(
         classification["class_coverage"] = by_class
         classification["unexecuted_reasoning_surfaces"] = unexecuted_reasoning_surfaces
         capability_clusters: dict[str, int] = {}
-        for status in statuses:
-            resolution = status.get("capability_resolution", {})
-            for gap in resolution.get("gaps", []):
-                if gap.get("status") in {"missing", "blocked", "partial"}:
-                    capability = gap.get("capability", "EXECUTION_READINESS")
-                    subcapability = gap.get("subcapability")
-                    key = capability if not subcapability else f"{capability}:{subcapability}"
-                    capability_clusters[key] = capability_clusters.get(key, 0) + 1
+        capability_frontier = {"total": len(execution_readiness), "executable": 0, "partial": 0, "blocked": 0}
+        for item in execution_readiness:
+            resolution = item["capability_resolution"]
+            if resolution.executable:
+                capability_frontier["executable"] += 1
+            elif resolution.gaps and all(gap.status.value == "partial" for gap in resolution.gaps):
+                capability_frontier["partial"] += 1
+            else:
+                capability_frontier["blocked"] += 1
+            for gap in resolution.gaps:
+                key = gap.capability.value if gap.subcapability is None else f"{gap.capability.value}:{gap.subcapability}"
+                capability_clusters[key] = capability_clusters.get(key, 0) + 1
+        classification["capability_frontier"] = capability_frontier
         classification["capability_clusters"] = dict(sorted(capability_clusters.items(), key=lambda item: (-item[1], item[0])))
         # A target can fail the default forge build while compiler-backed
         # evidence succeeds through the generic fallback (for example via-IR).
