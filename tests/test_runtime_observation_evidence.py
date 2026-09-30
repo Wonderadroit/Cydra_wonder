@@ -175,4 +175,3 @@ def test_constructible_state_setup_still_blocks_experiment():
         ),
     ))
     assert not can_enter_security_experiment(graph)
-\n
