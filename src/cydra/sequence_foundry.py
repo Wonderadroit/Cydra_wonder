@@ -6,9 +6,45 @@ import re
 
 from .models import ContractModel, Experiment, Hypothesis
 from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_struct_fields
-from .execution_readiness import _address_role, caller_role
+from .execution_readiness import _address_role, _constructor_role_grants, caller_role
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
+
+
+def _constructor_granted_caller(function, contract_model: ContractModel) -> str | None:
+    """Return the runtime identity whose constructor call established a required role.
+
+    This is target-derived provenance: when a constructor grants a role to msg.sender,
+    the deployment caller owns that role. Reuse that fact instead of inventing a
+    target-specific grant in the generated experiment.
+    """
+    modifier_invocations = dict(function.modifier_invocations)
+    grants = _constructor_role_grants(contract_model)
+    for modifier in function.modifiers:
+        invocation = modifier_invocations.get(modifier, ())
+        if not invocation:
+            continue
+        required_role = invocation[0].strip()
+        if not any(
+            role == required_role and account in {"msg.sender", "_msgSender()"}
+            for role, account in grants
+        ):
+            continue
+        normalized = re.sub(r"[^a-z0-9]", "", required_role.lower())
+        if "defaultadminrole" in normalized or normalized == "admin":
+            return "admin"
+        role = _address_role(required_role)
+        if role is not None:
+            return {
+                "owner": "owner",
+                "admin": "admin",
+                "guardian": "guardian",
+                "risk_manager": "riskManager",
+                "liquidator": "liquidator",
+                "factory": "factory",
+                "tranche": "tranche",
+            }.get(role)
+    return None
 
 
 def _solidity_string_literal(value: str) -> str:
@@ -343,9 +379,10 @@ def generate_sequence_test_from_experiment(
             rendered.extend(relation_setups)
             relation_setups.clear()
         arguments = ", ".join(step.arguments)
+        constructor_caller = _constructor_granted_caller(function, contract_model)
         role = caller_role(function)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
-        caller = caller_bindings.get(role, "attacker") if role else "attacker"
+        caller = constructor_caller or (caller_bindings.get(role, "attacker") if role else "attacker")
         rendered.append(f"        vm.prank({caller});\n        target.{step.function}({arguments});")
         if verify_relation_for_step and relation_assertions:
             rendered.extend(relation_assertions)
@@ -470,6 +507,18 @@ def generate_sequence_test_from_experiment(
     )
     asset_declaration = "    ERC20 internal constructorAsset;\n" if erc20_stub_needed else ""
     asset_setup = "        constructorAsset = new CydraERC20ConstructorStub();\n" if erc20_stub_needed else ""
+    constructor_role_caller = None
+    if experiment.steps:
+        first_function = next(
+            (item for item in (*contract_model.functions, *contract_model.inherited_functions)
+             if item.name == experiment.steps[0].function),
+            None,
+        )
+        if first_function is not None:
+            constructor_role_caller = _constructor_granted_caller(first_function, contract_model)
+
+    deployment_prefix = f"        vm.prank({constructor_role_caller});\n" if constructor_role_caller else ""
+
     source = f'''// SPDX-License-Identifier: UNLICENSED
 pragma solidity {pragma};
 // Hypothesis: {hypothesis.hypothesis_id}
