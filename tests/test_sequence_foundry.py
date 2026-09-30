@@ -1043,3 +1043,67 @@ def test_sequence_renderer_uses_planned_inputs_when_prerequisite_step_has_no_arg
     rendered = generated.read_text(encoding="utf-8")
     assert "ActionData memory data = ActionData(7, address(0x1234));" in rendered
     assert "target.transact(" not in rendered
+
+
+def test_sequence_renderer_uses_constructor_established_default_admin_role(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        "pragma solidity ^0.8.20; "
+        "contract Target { "
+        "bytes32 internal constant DEFAULT_ADMIN_ROLE = bytes32(0); "
+        "constructor() { } "
+        "function configure() external onlyRole(DEFAULT_ADMIN_ROLE) {} "
+        "modifier onlyRole(bytes32 role) { require(role == DEFAULT_ADMIN_ROLE && msg.sender == address(0x1002)); _; } "
+        "}\n",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(target),
+        (
+            FunctionModel(
+                "configure",
+                "external",
+                ("onlyRole",),
+                (),
+                (),
+                6,
+                modifier_invocations=(("onlyRole", ("DEFAULT_ADMIN_ROLE",)),),
+            ),
+        ),
+        constructor=ConstructorModel(
+            (),
+            4,
+            role_grants=(("DEFAULT_ADMIN_ROLE", "msg.sender"),),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-ROLE-default-admin",
+        "candidate",
+        "INV-ROLE-001",
+        "configure",
+        "arbitrary caller",
+        "candidate",
+    )
+    experiment = Experiment(
+        "X-ROLE-default-admin",
+        hypothesis.hypothesis_id,
+        "configure",
+        ("violation",),
+        1.0,
+        steps=(ExperimentStep("configure", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        "../Target.sol",
+        "Target",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "vm.prank(admin);\n        target = new Target();" in rendered
+    assert "vm.prank(admin);\n        target.configure();" in rendered
