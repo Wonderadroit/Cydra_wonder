@@ -594,10 +594,13 @@ def _ensure_callback_argument_vector_bindings(
     imports: set[tuple[str, str]],
 ) -> tuple[tuple[str, ...], tuple[str, ...], set[tuple[str, str]]]:
     """Ensure final callback arguments are declared before abi.encodeCall use."""
-    declarations = [item for item in parameter_setup.split("\\n        ") if item.strip()]
+    # parameter_setup is emitted as real newlines. Split on the actual
+    # separator and use normal regex boundaries so existing declarations are
+    # recognized before we add a fallback materialization.
+    declarations = [item for item in parameter_setup.split("\n        ") if item.strip()]
     declared = set(re.findall(
-        r"\\b(?:[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*)\\s+(?:memory|calldata|storage)\\s+([A-Za-z_]\\w*)\\s*=",
-        "\\n".join(declarations),
+        r"\b(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+(?:memory|calldata|storage)\s+([A-Za-z_]\w*)\s*=",
+        "\n".join(declarations),
     ))
     rendered = list(argument_vector)
     builtin_prefixes = ("uint", "int", "bytes", "fixed", "ufixed")
