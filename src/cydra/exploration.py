@@ -82,19 +82,32 @@ class ExplorationState:
             if question.question_id not in self.explored_question_ids
             and question.estimated_cost <= remaining_budget
             and (
-                question.hypothesis_id is None
+                (
+                    executable_hypothesis_ids is None
+                    and (
+                        question.hypothesis_id is None
+                        or question.hypothesis_id not in self.explored_hypothesis_ids
+                    )
+                )
                 or (
-                    question.hypothesis_id not in self.explored_hypothesis_ids
-                    and (executable_hypothesis_ids is None or question.hypothesis_id in executable_hypothesis_ids)
+                    executable_hypothesis_ids is not None
+                    and question.hypothesis_id is not None
+                    and question.hypothesis_id not in self.explored_hypothesis_ids
+                    and question.hypothesis_id in executable_hypothesis_ids
                 )
             )
         ]
         if not eligible:
             return None
         candidates = eligible
+        # Hypothesis questions already have a discriminating experiment and
+        # therefore take precedence over uncovered model-surface questions.
+        # Capability/frontier questions are still retained, but are consumed
+        # only after the executable hypothesis frontier is exhausted.
         return max(
             candidates,
             key=lambda question: (
+                1 if question.hypothesis_id is not None else 0,
                 question.estimated_information_gain / max(question.estimated_cost, 0.01),
                 question.estimated_information_gain,
                 question.uncertainty,
