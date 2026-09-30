@@ -22,7 +22,8 @@ from .caller_prerequisite import (
 )
 from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, _structured_default, conservative_defaults
 from .namespaced_state_observation import plan_namespaced_state_observation
-from .execution_readiness import constructible_state_setup_plan, role_address_expression, runtime_dependency_constructor_bindings
+from . import execution_readiness
+from .execution_readiness import constructible_state_setup_plan, runtime_dependency_constructor_bindings
 from .interface_resolver import resolve_import, resolve_interface, _imports_for
 
 
@@ -441,7 +442,7 @@ def _state_setup_source(
             if active_role is not None:
                 rendered.append("vm.stopPrank();")
             if role is not None:
-                address_expr = role_address_expression(role)
+                address_expr = execution_readiness.role_address_expression(role)
                 if address_expr is None:
                     return "", ()
                 rendered.append(f"vm.startPrank({address_expr});")
