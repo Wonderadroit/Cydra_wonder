@@ -210,9 +210,15 @@ def _attach_input_plan(
         if step_function is None:
             planned_steps.append(step)
             continue
+        # Preserve planner-supplied causal arguments for parameters that have
+        # no function-specific constraint. Constraint evidence may override only
+        # the parameter it actually binds; it must not replace the whole vector
+        # with conservative defaults.
+        existing = dict(zip((parameter.name for parameter in step_function.parameters), step.arguments))
         vector = plan_parameter_inputs(
             step_function.parameters,
             constraints,
+            defaults=existing,
             function_name=step_function.name,
             contract_model=contract,
         )
