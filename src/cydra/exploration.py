@@ -107,7 +107,8 @@ class ExplorationState:
         return max(
             candidates,
             key=lambda question: (
-                1 if question.hypothesis_id is not None else 0,
+                2 if question.hypothesis_id is not None else
+                1 if question.kind == "function_surface" else 0,
                 question.estimated_information_gain / max(question.estimated_cost, 0.01),
                 question.estimated_information_gain,
                 question.uncertainty,
