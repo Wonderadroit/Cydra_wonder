@@ -4,7 +4,7 @@ from pathlib import Path
 import os
 import re
 
-from .foundry import generate_initialization_test
+from .foundry import _constructor_argument, generate_initialization_test
 from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source
 from .initialization_topology import adapt_generated_initialization_for_proxy, requires_proxy_initialization
 from .models import ContractModel, Experiment, Hypothesis
@@ -165,6 +165,207 @@ def _initializer_arguments_from_source(source: str, initializer_name: str) -> li
     return _split_arguments(argument_text)
 
 
+def _bind_constructor_caller_arguments(
+    source: str,
+    contract_model: ContractModel,
+    target_type: str,
+) -> tuple[str, bool]:
+    """Bind target-derived caller identity into constructor caller/recipient inputs.
+
+    Some live contracts establish caller authorization entirely in the
+    constructor rather than through an initializer. Reuse the shared
+    constructor argument materialization, then replace only semantically named
+    caller/recipient parameters. This is a generic prerequisite probe, not a
+    target-specific workaround.
+    """
+    constructor = contract_model.constructor
+    if constructor is None or not constructor.parameters:
+        raise ValueError("constructor caller prerequisite requires a modeled constructor")
+
+    marker = f"target = new {target_type}("
+    start = source.find(marker)
+    if start < 0:
+        raise ValueError("generated initialization test has no target constructor call")
+    args_start = start + len(marker)
+    depth = 1
+    end = None
+    for index in range(args_start, len(source)):
+        char = source[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth == 0:
+                end = index
+                break
+    if end is None:
+        raise ValueError("generated target constructor call is unterminated")
+
+    arguments = _split_arguments(source[args_start:end])
+    if len(arguments) != len(constructor.parameters):
+        raise ValueError(
+            f"constructor argument arity mismatch: expected {len(constructor.parameters)}, got {len(arguments)}"
+        )
+
+    changed = False
+    for index, parameter in enumerate(constructor.parameters):
+        normalized = re.sub(r"[^a-z0-9]", "", parameter.name.lower())
+        if not any(hint in normalized for hint in _CALLER_PARAMETER_HINTS):
+            continue
+        parameter_type = parameter.type.strip()
+        if parameter_type.endswith("[]") and parameter_type.split()[0].rstrip("[]") == "address":
+            arguments[index] = "CydraCallerSet.one(cydraAttacker)"
+            changed = True
+        elif parameter_type == "address":
+            arguments[index] = "cydraAttacker"
+            changed = True
+        elif parameter_type == "address payable":
+            arguments[index] = "payable(cydraAttacker)"
+            changed = True
+
+    if not changed:
+        raise ValueError("constructor has no semantically identified caller-identity parameter")
+    return source[:args_start] + ", ".join(arguments) + source[end:], True
+
+
+def _constructor_caller_prerequisite_source(
+    hypothesis: Hypothesis,
+    experiment: Experiment,
+    target_import: str,
+    target_type: str,
+    output_path: str | Path,
+    contract_model: ContractModel,
+) -> Path:
+    """Generate a caller prerequisite when authorization is constructor-established."""
+    if initializer is None:
+        return _constructor_caller_prerequisite_source(
+            hypothesis,
+            experiment,
+            target_import,
+            target_type,
+            output_path,
+            contract_model,
+        )
+
+    synthetic = Hypothesis(
+        f"{hypothesis.hypothesis_id}-CALLER-PREREQ",
+        hypothesis.claim,
+        "INV-INIT-001",
+        hypothesis.target_function,
+        hypothesis.attacker_capability,
+        hypothesis.expected_impact,
+    )
+    initializer_experiment = Experiment(
+        synthetic.hypothesis_id,
+        synthetic.hypothesis_id,
+        hypothesis.target_function,
+        experiment.planned_inputs,
+        1.0,
+    )
+    generated = generate_initialization_test(
+        synthetic,
+        target_import,
+        target_type,
+        output_path,
+        contract_model=contract_model,
+        experiment=initializer_experiment,
+    )
+    source = generated.read_text(encoding="utf-8")
+    source, _ = _bind_constructor_caller_arguments(source, contract_model, target_type)
+
+    marker = "function testInitializationInterfaceIsCallable() public"
+    start = source.find(marker)
+    if start < 0:
+        raise ValueError("generated initialization test lifecycle function is missing")
+    brace = source.find("{", start)
+    if brace < 0:
+        raise ValueError("generated initialization test lifecycle function has no body")
+    depth = 1
+    end = None
+    for index in range(brace + 1, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                end = index
+                break
+    if end is None:
+        raise ValueError("generated initialization test lifecycle function is unterminated")
+
+    target_function = next(
+        (function for function in (*contract_model.functions, *contract_model.inherited_functions)
+         if function.name == hypothesis.target_function),
+        None,
+    )
+    if target_function is None:
+        raise ValueError(f"model has no target function: {hypothesis.target_function}")
+    if len(experiment.planned_inputs) != len(target_function.parameters):
+        raise ValueError(
+            f"target argument arity mismatch: expected {len(target_function.parameters)}, got {len(experiment.planned_inputs)}"
+        )
+
+    typed_target_args: list[str] = []
+    structured_type_imports: set[tuple[str, str]] = set()
+    for parameter, expression in zip(target_function.parameters, experiment.planned_inputs):
+        rendered, imports = _qualify_planned_target_argument(
+            parameter, expression, target_type, contract_model
+        )
+        typed_target_args.append(rendered)
+        structured_type_imports.update(imports)
+    target_call_data = f"abi.encodeCall(target.{hypothesis.target_function}, ({', '.join(typed_target_args)}))"
+    body = (
+        f"function testCallerPrerequisite() public {{\n"
+        f"        vm.prank(cydraUnauthorized);\n"
+        f"        (bool unauthorizedOk, bytes memory unauthorizedData) = address(target).call({target_call_data});\n"
+        f'        assertFalse(unauthorizedOk, "caller-role prerequisite was not enforced for an unauthorized caller");\n'
+        f"        vm.prank(cydraAttacker);\n"
+        f"        (bool authorizedOk, bytes memory authorizedData) = address(target).call({target_call_data});\n"
+        f"        bool callerRoleReached = authorizedOk || keccak256(authorizedData) != keccak256(unauthorizedData);\n"
+        f'        assertTrue(callerRoleReached, "caller-role prerequisite was not reached after constructor-established authorization");\n'
+        f"    }}"
+    )
+    source = source[:start] + body + source[end + 1:]
+
+    if structured_type_imports:
+        output_file = Path(generated)
+        import_lines = []
+        for import_source, type_name in sorted(structured_type_imports):
+            relative = Path(os.path.relpath(
+                Path(import_source).resolve(),
+                output_file.parent.resolve(),
+            )).as_posix()
+            import_lines.append(f'import {{ {type_name} }} from "{relative}";')
+        source = source.replace(
+            f'import {{ {target_type} }} from "',
+            "\n".join(import_lines) + "\n" + f'import {{ {target_type} }} from "',
+            1,
+        )
+
+    source = source.replace(
+        f"contract CydraInitializationInvariantTest is Test {{",
+        f"contract CydraInitializationInvariantTest is Test {{\n"
+        f"    address internal cydraAttacker = address(0xBEEF);\n"
+        f"    address internal cydraUnauthorized = address(0xA11CE);",
+        1,
+    )
+    helper = """
+library CydraCallerSet {
+    function one(address caller) internal pure returns (address[] memory callers) {
+        callers = new address[](1);
+        callers[0] = caller;
+    }
+}
+"""
+    if "library CydraCallerSet" not in source:
+        source = source.replace(
+            f"contract CydraInitializationInvariantTest is Test {{",
+            helper + "\ncontract CydraInitializationInvariantTest is Test {",
+            1,
+        )
+    generated.write_text(source, encoding="utf-8")
+    return generated
+
 def _caller_role_reached(
     unauthorized_ok: bool,
     unauthorized_data: bytes,
@@ -289,8 +490,6 @@ def generate_caller_prerequisite_test(
     contract_model: ContractModel,
 ) -> Path:
     initializer = _initializer_function(contract_model)
-    if initializer is None:
-        raise ValueError("no generic initializer/reinitializer candidate is available")
 
     if not experiment.planned_inputs:
         raise ValueError("caller prerequisite probe requires the canonical target input vector")
