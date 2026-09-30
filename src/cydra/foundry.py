@@ -30,6 +30,15 @@ class ExecutionResult:
     stdout: str
     stderr: str
 
+    def __getitem__(self, key: str):
+        """Preserve mapping-style compatibility for legacy execution consumers."""
+        if not isinstance(key, str):
+            raise TypeError("ExecutionResult keys must be strings")
+        try:
+            return getattr(self, key)
+        except AttributeError as exc:
+            raise KeyError(key) from exc
+
 
 @dataclass(frozen=True)
 class ExperimentOutcome:
