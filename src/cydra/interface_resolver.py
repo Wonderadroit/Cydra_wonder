@@ -481,9 +481,20 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
         # (Nested.sol may declare Outer), so filename heuristics cannot be the
         # primary resolver. This remains bounded to the target's declared
         # dependency graph and never performs a repository-wide symbol scan.
-        for import_path in _imports_for(path):
+        # Resolve the literal import edges directly as a fallback to the
+        # Foundry remapping resolver. This is important for small/temporary
+        # projects where a perfectly valid relative import exists but the
+        # project root has no dependency metadata.
+        import_paths = tuple(dict.fromkeys((
+            *_imports_for(path),
+            *(match.group(1) for match in re.finditer(
+                r'import\s+(?:[^"\']+\s+from\s+)?["\']([^"\']+)["\']\s*;',
+                source,
+            )),
+        )))
+        for import_path in import_paths:
             resolved = resolve_import(root, path, import_path)
-            if resolved is None and import_path.startswith(("./", "../")):
+            if resolved is None:
                 direct_path = (path.parent / import_path).resolve()
                 if direct_path.is_file():
                     resolved = (direct_path, "direct_declared_import")
@@ -528,8 +539,12 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
             if found is not None:
                 return found
 
-        for import_path in _imports_for(path):
+        for import_path in import_paths:
             resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                direct_path = (path.parent / import_path).resolve()
+                if direct_path.is_file():
+                    resolved = (direct_path, "direct_declared_import")
             if resolved is None:
                 continue
             found = walk(resolved[0])
