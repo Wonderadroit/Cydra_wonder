@@ -489,17 +489,11 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
     declaration = re.compile(
         rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(name)}\b"
     )
-    import_pattern = re.compile(
-        r"import\s+(?:[^\"']+\s+from\s+)?[\"']([^\"']+)[\"']\s*;",
-        re.MULTILINE,
-    )
-
     def imports_for(path: Path) -> tuple[str, ...]:
         try:
-            source = _strip_comments(path.read_text(encoding="utf-8"))
+            return _imports_for(path)
         except (OSError, UnicodeError):
             return ()
-        return tuple(dict.fromkeys(import_pattern.findall(source)))
 
     # Carry the resolution method on each graph edge so callers can
     # distinguish a direct declared import from a transitive declaration.
