@@ -609,7 +609,7 @@ def _ensure_callback_argument_vector_bindings(
         if base in {"address", "bool", "string", "bytes"} or base.startswith(builtin_prefixes):
             continue
         candidate = rendered[index].strip()
-        if not re.fullmatch(r"[A-Za-z_]\\w*", candidate) or candidate in declared:
+        if not re.fullmatch(r"[A-Za-z_]\w*", candidate) or candidate in declared:
             continue
         _typed, typed_imports = _qualify_planned_target_argument(
             parameter, expression, "", contract_model
@@ -639,7 +639,7 @@ def _select_structured_binding_name(function, rendered_arguments, parameter_setu
         candidate = f"cydra_{parameter.name}"
         if re.search(rf"\b{re.escape(candidate)}\b", parameter_setup):
             return candidate
-    return function.parameters[-1].name if function.parameters else ""
+    return ""
 
 
 def _legacy_callback_test(
