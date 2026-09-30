@@ -342,6 +342,11 @@ def generate_sequence_test_from_experiment(
             ),
             None,
         )
+    # A minimal target fixture may be a valid Solidity project without a
+    # foundry.toml. Once the target source is known, its directory is the
+    # bounded fallback root for relative imports and type resolution.
+    if project_root is None and source_path.parent.exists():
+        project_root = source_path.parent
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
             raise ValueError(f"sequence step {index} has no function")
