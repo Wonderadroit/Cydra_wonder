@@ -1164,3 +1164,18 @@ Rules:
 5. Add regressions using a relative source path whose project root differs from the process working directory.
 
 This is a generic source-provenance rule. It prevents valid target import edges from becoming false capability gaps merely because the runner's current working directory differs from the target project root.
+
+
+## 60. Generic constructor defaults must avoid known unsigned lower-bound underflow
+
+Constructor materialization must not assume that zero is universally safe for unsigned integer inputs. A source-level constructor may immediately use an unsigned value as a lower-bounded operand, such as value - 1, making zero an invalid harness default even though the Solidity type itself accepts it.
+
+Rules:
+
+1. The generic constructor materializer uses the smallest non-zero unsigned integer default (1) rather than zero when no stronger target-derived constructor value is available.
+2. Signed integers may retain zero as their neutral default unless source-derived constraints require another value.
+3. This default is only a materialization fallback; target-derived constructor requirements remain authoritative and must be modeled when known.
+4. A constructor runtime failure is not security evidence against the target; it is execution-capability evidence until the generated setup is valid.
+5. Regression tests must cover unsigned constructor values used in subtraction so this class of harness underflow cannot silently recur.
+
+The purpose is generic execution robustness: valid constructor domains must be respected before prerequisite or security experiments can begin.
