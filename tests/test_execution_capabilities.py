@@ -80,3 +80,8 @@ def test_materialization_failure_records_observation_stage():
     assert failure.gap.subcapability == "public_mapping"
     assert failure.gap.stage.value == "observations"
     assert failure.gap.failure_class == "observation_planner"
+
+
+def test_execution_capabilities_module_imports_cleanly():
+    import cydra.execution_capabilities as execution_capabilities
+    assert execution_capabilities.Capability.TYPE_MATERIALIZATION.value == "TYPE_MATERIALIZATION"
