@@ -512,11 +512,21 @@ def generate_sequence_test_from_experiment(
     direct_interfaces: dict[str, object] = {}
     named_type_sources: dict[str, str] = {}
     erc20_stub_needed = False
-    if project_root is not None and contract_model.constructor is not None:
+
+    # Model-provided interface provenance is authoritative and does not require
+    # filesystem resolution. This keeps constructor materialization usable for
+    # generated/temporary targets where the source file itself is not present.
+    if contract_model.constructor is not None:
         for parameter in contract_model.constructor.parameters:
             base = parameter.type.strip().split()[0].rstrip("[]")
             if base in inherited_interfaces:
                 direct_interfaces[base] = inherited_interfaces[base]
+
+    if project_root is not None and contract_model.constructor is not None:
+        for parameter in contract_model.constructor.parameters:
+            base = parameter.type.strip().split()[0].rstrip("[]")
+            if base in direct_interfaces:
+                continue
             elif "." not in base and base not in {"address", "bool", "string", "bytes"} and not base.startswith(("uint", "int", "bytes")):
                 try:
                     direct_interfaces[base] = resolve_interface(project_root, contract_model.source, base)
