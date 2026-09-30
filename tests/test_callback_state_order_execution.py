@@ -658,3 +658,52 @@ def test_legacy_callback_renderer_recovers_missing_structured_identifier_with_ne
     assert "new bytes[][](0)" in rendered
     assert "abi.encodeCall(target.execute, (cydra_data))" in rendered
     assert rendered.count("Data memory cydra_data") == 1
+
+
+def test_callback_compile_failure_emits_no_causal_evidence(tmp_path: Path, monkeypatch):
+    from cydra.foundry import ExecutionResult
+
+    source = tmp_path / "Callback.sol"
+    source.write_text("pragma solidity ^0.8.20; contract Callback { function execute(uint256 amount) external {} }", encoding="utf-8")
+    function = FunctionModel(
+        name="execute", visibility="external", modifiers=(), writes=(),
+        external_calls=(), line=1,
+        parameters=(ParameterModel(name="amount", type="uint256"),),
+    )
+    contract = ContractModel("Callback", str(source), (function,), pragma="^0.8.20")
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute", "claim", "INV-CALLBACK-STATE-ORDER-execute",
+        "execute", "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute", hypothesis.hypothesis_id,
+        "reenter", (), 2.0, planned_inputs=("1",), target_function="execute",
+    )
+
+    monkeypatch.setattr(
+        "scripts.run_benchmark_blind.generate_callback_state_order_test",
+        lambda *args, **kwargs: args[4],
+    )
+    monkeypatch.setattr(
+        "scripts.run_benchmark_blind.run_foundry_test",
+        lambda *args, **kwargs: ExecutionResult(
+            experiment_id=experiment.experiment_id,
+            target="blind",
+            command=("forge", "test"),
+            exit_code=1,
+            executed=False,
+            tests_run=0,
+            tests_failed=0,
+            status="UNMEASURABLE",
+            stdout="",
+            stderr="Error: Compiler run failed: undeclared identifier",
+        ),
+    )
+
+    from scripts.run_benchmark_blind import _run_callback_state_order
+    result = _run_callback_state_order(
+        tmp_path, hypothesis, experiment, contract
+    )
+    assert result["classification"] == "UNMEASURABLE"
+    assert result["execution"]["executed"] is False
+    assert result["evidence"] is None
