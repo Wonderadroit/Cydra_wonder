@@ -124,14 +124,29 @@ def build_prerequisite_graph(
 
 
 def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
-    """Require every prerequisite to be explicitly verified.
+    """Require every security-critical prerequisite to be verified.
 
-    A constructible setup action is not enough. This is deliberately fail-closed
-    so execution success cannot be mistaken for state satisfaction.
+    Constructible state/setup prerequisites remain fail-closed: merely knowing
+    that a fixture *can* be built must never be treated as proof that target
+    state is established. Runtime dependencies owned by the execution adapter
+    are different: their construction is part of the target call itself and
+    does not need a separate pre-experiment observation. The capability label
+    makes that distinction explicit without introducing target-specific logic.
     """
 
-    return not graph.unresolved and all(
-        node.status in {"verified", "constraint"} for node in graph.nodes
+    if graph.unresolved:
+        return False
+
+    allowed_constructible_capabilities = {
+        "INTERNAL_CALL_PROPAGATION",
+    }
+    return all(
+        node.status in {"verified", "constraint"}
+        or (
+            node.status == "constructible"
+            and node.capability in allowed_constructible_capabilities
+        )
+        for node in graph.nodes
     )
 
 
