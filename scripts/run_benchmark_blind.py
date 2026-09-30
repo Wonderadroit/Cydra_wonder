@@ -723,18 +723,20 @@ def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
     classification, reason = _classify_callback_state_order_execution(execution)
-    from cydra.models import Evidence
-    causal_evidence = Evidence(
-        f"E-CAUSAL-{experiment.experiment_id}",
-        "causal_verification",
-        (
-            "Callback causal oracle executed: the generated attacker callback observed "
-            "the target's reentrant invocation outcome; classification="
-            f"{classification}."
-        ),
-        " ".join(execution.command),
-        execution.target + ".t.sol",
-    )
+    causal_evidence = None
+    if execution.executed and classification in {"rejected", "candidate"}:
+        from cydra.models import Evidence
+        causal_evidence = Evidence(
+            f"E-CAUSAL-{experiment.experiment_id}",
+            "causal_verification",
+            (
+                "Callback causal oracle executed: the generated attacker callback observed "
+                "the target's reentrant invocation outcome; classification="
+                f"{classification}."
+            ),
+            " ".join(execution.command),
+            execution.target + ".t.sol",
+        )
     return {
         "generated_path": str(generated),
         "execution": execution,
