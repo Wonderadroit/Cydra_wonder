@@ -310,7 +310,12 @@ def conservative_defaults(parameters: Iterable[ParameterModel], contract_model: 
     """
     defaults: dict[str, str] = {}
     for parameter in parameters:
-        value = _structured_default(parameter, contract_model) if contract_model is not None else _default_for(parameter)
+        # Preserve established ABI-safe primitive defaults. Structured
+        # materialization is only the fallback for user-defined types; it must
+        # not silently replace address(0xCAFE) / 1 with neutral zeroes.
+        value = _default_for(parameter)
+        if value is None and contract_model is not None:
+            value = _structured_default(parameter, contract_model)
         if value is None:
             return None
         defaults[parameter.name] = value
