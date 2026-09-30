@@ -384,6 +384,11 @@ def _failure_status(hypothesis, class_name: str, stage: str, error: Exception) -
         "classification": "NOT_REACHED",
         "failure_stage": stage,
         "blocked_reason": f"{type(error).__name__}: {error}",
+        "evidence_lifecycle": {
+            "state": f"{stage}_failed",
+            "transitions": ["planned", "generated", f"{stage}_failed"] if stage != "generation" else ["planned", "generation_failed"],
+            "causal_allowed": False,
+        },
     }
     if stage == "generation":
         status["foundry_generated"] = False
@@ -723,18 +728,20 @@ def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -
     )
     execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
     classification, reason = _classify_callback_state_order_execution(execution)
-    from cydra.models import Evidence
-    causal_evidence = Evidence(
-        f"E-CAUSAL-{experiment.experiment_id}",
-        "causal_verification",
-        (
-            "Callback causal oracle executed: the generated attacker callback observed "
-            "the target's reentrant invocation outcome; classification="
-            f"{classification}."
-        ),
-        " ".join(execution.command),
-        execution.target + ".t.sol",
-    )
+    causal_evidence = None
+    if execution.executed and classification in {"rejected", "candidate"}:
+        from cydra.models import Evidence
+        causal_evidence = Evidence(
+            f"E-CAUSAL-{experiment.experiment_id}",
+            "causal_verification",
+            (
+                "Callback causal oracle executed: the generated attacker callback observed "
+                "the target's reentrant invocation outcome; classification="
+                f"{classification}."
+            ),
+            " ".join(execution.command),
+            execution.target + ".t.sol",
+        )
     return {
         "generated_path": str(generated),
         "execution": execution,
@@ -754,6 +761,40 @@ def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -
         },
         "evidence": causal_evidence,
     }
+
+def _exploration_executable_hypothesis_ids(result, classes: tuple[str, ...]) -> frozenset[str]:
+    """Return hypotheses that have a concrete generic runtime adapter."""
+    executable: set[str] = set()
+    for hypothesis in result.hypotheses:
+        class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
+        if class_name is None and hypothesis.invariant_id.startswith("INV-STATE-"):
+            class_name = "state"
+        if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
+            class_name = "guard_parity"
+        if class_name is None and hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
+            class_name = "callback_state_order"
+        if class_name in classes and _execution_adapter(class_name) is not None:
+            executable.add(hypothesis.hypothesis_id)
+    return frozenset(executable)
+
+
+def _execution_lifecycle(execution: ExecutionResult, evidence: tuple[Any, ...] = ()) -> dict[str, Any]:
+    """Map a runtime attempt onto the evidence lifecycle without promoting compiler failure."""
+    if not execution.executed:
+        stderr = (execution.stderr or "").lower()
+        failed_stage = "compile_failed" if "compiler run failed" in stderr or "compiler error" in stderr else "execution_failed"
+        return {
+            "state": failed_stage,
+            "transitions": ["planned", "generated", failed_stage],
+            "causal_allowed": False,
+        }
+    state = "executed"
+    transitions = ["planned", "generated", "compiled", "executed"]
+    if evidence:
+        state = "causal" if any(getattr(item, "kind", None) == "causal_verification" for item in evidence) else "observed"
+        transitions.extend(["observed"] if state == "observed" else ["observed", "causal"])
+    return {"state": state, "transitions": transitions, "causal_allowed": state == "causal"}
+
 
 def _execution_capabilities_for_class(class_name: str) -> frozenset[str]:
     """Return runtime capabilities owned by the selected experiment adapter."""
@@ -1011,20 +1052,27 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
 
         status.update(status_prerequisite)
         evidence.extend(prerequisite_observation_evidence)
+        execution = run["execution"]
+        run_evidence = tuple(
+            item for item in ((run.get("evidence"),) if run.get("evidence") is not None else ())
+            if item is not None
+        )
+        lifecycle = _execution_lifecycle(execution, run_evidence)
         status.update(
             {
                 "foundry_generated": True,
-                "blind_executed": True,
+                "blind_executed": execution.executed,
                 "generated_path": run["generated_path"],
                 "classification": run["classification"],
+                "evidence_lifecycle": lifecycle,
             }
         )
         for key in ("classification_blocked_reason", "classification_path", "internal_status"):
             if key in run:
                 status[key] = run[key]
-        executions.append(run["execution"])
-        if "evidence" in run:
-            evidence.append(run["evidence"])
+        executions.append(execution)
+        if run_evidence:
+            evidence.extend(run_evidence)
         statuses.append(status)
 
     return statuses, executions, evidence
@@ -1231,6 +1279,7 @@ def run_source_investigation(
         exploration = run_bounded_exploration(
             result,
             budget=exploration_budget,
+            executable_hypothesis_ids=_exploration_executable_hypothesis_ids(result, classes),
             execute_question=lambda current_result, decision: _execute_exploration_question(
                 current_result,
                 decision,

@@ -534,6 +534,51 @@ def _legacy_structured_parameter_setup(
     return "\n        ".join(declarations), tuple(sorted(imports)), rendered_arguments
 
 
+def _ensure_structured_argument_bindings(
+    contract_model: ContractModel,
+    function,
+    arguments: tuple[str, ...],
+    rendered_arguments: dict[str, str],
+    target_type: str,
+    existing_declarations: tuple[str, ...],
+    existing_imports: set[tuple[str, str]],
+) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """Guarantee that every generated custom argument identifier is declared before use."""
+    declarations = list(existing_declarations)
+    imports = set(existing_imports)
+    declared = set(
+        re.findall(
+            r"\b(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+memory\s+([A-Za-z_]\w*)\s*=",
+            "\n".join(declarations),
+        )
+    )
+    builtin_prefixes = ("uint", "int", "bytes", "fixed", "ufixed")
+    for parameter, expression in zip(function.parameters, arguments):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if base in {"address", "bool", "string", "bytes"} or base.startswith(builtin_prefixes):
+            continue
+        local = rendered_arguments.get(parameter.name)
+        if not local or not re.fullmatch(r"[A-Za-z_]\w*", local.strip()):
+            continue
+        if local in declared:
+            continue
+        _typed, typed_imports = _qualify_planned_target_argument(
+            parameter, expression, target_type, contract_model
+        )
+        imports.update(typed_imports)
+        value = expression
+        if expression.strip() == local:
+            value = _structured_default(parameter, contract_model)
+            if value is None:
+                raise ValueError(
+                    f"structured argument {parameter.name} resolved to undeclared "
+                    f"identifier {local} and has no source-backed fallback"
+                )
+        declarations.append(f"{parameter.type} memory {local} = {value};")
+        declared.add(local)
+    return tuple(declarations), tuple(sorted(imports))
+
+
 def _select_structured_binding_name(function, rendered_arguments, parameter_setup: str) -> str:
     """Select a generated local by exact identifier, never by substring prefix."""
     for parameter in function.parameters:
@@ -604,6 +649,22 @@ def _legacy_callback_test(
         target_type,
         "address(attacker)",
     )
+    existing_declarations = tuple(
+        item.strip()
+        for item in parameter_setup.split("\n        ")
+        if item.strip()
+    )
+    declarations_tuple, imports_tuple = _ensure_structured_argument_bindings(
+        contract_model,
+        function,
+        tuple(arguments),
+        rendered_arguments,
+        target_type,
+        existing_declarations,
+        set(parameter_imports),
+    )
+    parameter_setup = "\n        ".join(declarations_tuple)
+    parameter_imports = imports_tuple
     argument_vector = tuple(
         rendered_arguments.get(parameter.name, argument)
         for parameter, argument in zip(function.parameters, arguments)

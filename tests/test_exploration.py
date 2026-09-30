@@ -191,3 +191,43 @@ def test_canonical_execution_bridge_scopes_one_question_and_preserves_full_resul
     assert [item.evidence_id for item in returned_evidence] == ["E-BRIDGE"]
     assert trace[0]["question_id"] == "Q-HYP-H-1"
     assert evidence[0].evidence_id == "E-BRIDGE"
+
+
+def test_controller_does_not_charge_non_executable_questions_to_experiment_budget():
+    from cydra.exploration import run_bounded_exploration
+
+    run = run_bounded_exploration(
+        _result(),
+        budget=2.0,
+        executable_hypothesis_ids=frozenset(),
+        execute_question=lambda *_: (_result(), ()),
+    )
+
+    assert run.rounds == 0
+    assert run.state.budget_used == 0.0
+    assert run.stopped_reason == "no_executable_hypotheses"
+    assert "Q-HYP-H-1" in run.state.capability_work_items
+    assert "Q-FN-Target.observe" in run.state.capability_work_items
+    assert "Q-STATE-Target.value" in run.state.capability_work_items
+
+
+def test_controller_charges_only_adapter_backed_hypotheses():
+    from cydra.exploration import run_bounded_exploration
+
+    calls = []
+
+    def execute(result, decision):
+        calls.append(decision.question_id)
+        evidence = Evidence(f"E-{len(calls)}", "execution", "attempted", "test")
+        return result, (evidence,)
+
+    run = run_bounded_exploration(
+        _result(),
+        budget=2.0,
+        executable_hypothesis_ids=frozenset({"H-1"}),
+        execute_question=execute,
+    )
+
+    assert calls == ["Q-HYP-H-1"]
+    assert run.rounds == 1
+    assert run.state.budget_used == 2.0

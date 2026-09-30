@@ -12,7 +12,7 @@ vulnerability class.
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Callable, Literal
 
 from .models import Experiment, Hypothesis, InvestigationResult
 
@@ -47,6 +47,7 @@ class ExplorationState:
     explored_hypothesis_ids: tuple[str, ...] = field(default_factory=tuple)
     explored_question_ids: tuple[str, ...] = field(default_factory=tuple)
     budget_used: float = 0.0
+    capability_work_items: tuple[str, ...] = field(default_factory=tuple)
 
     @classmethod
     def from_investigation(cls, result: InvestigationResult) -> "ExplorationState":
@@ -73,24 +74,20 @@ class ExplorationState:
             unresolved_questions=questions,
         )
 
-    def next_question(self, remaining_budget: float) -> ExplorationQuestion | None:
-        """Select the highest information-gain-per-cost question within budget."""
+    def next_question(self, remaining_budget: float, executable_hypothesis_ids: frozenset[str] | None = None) -> ExplorationQuestion | None:
+        """Select an executable hypothesis question without charging capability work to experiment budget."""
         eligible = [
             question
             for question in self.unresolved_questions
             if question.question_id not in self.explored_question_ids
-            and (question.hypothesis_id is None or question.hypothesis_id not in self.explored_hypothesis_ids)
             and question.estimated_cost <= remaining_budget
+            and question.hypothesis_id is not None
+            and question.hypothesis_id not in self.explored_hypothesis_ids
+            and (executable_hypothesis_ids is None or question.hypothesis_id in executable_hypothesis_ids)
         ]
         if not eligible:
             return None
-        # A frontier question is only executable today when it is backed by a
-        # target-derived hypothesis with an existing experiment. Do not spend the
-        # bounded execution budget on descriptive function/state questions that the
-        # canonical callback cannot yet execute; those remain model-understanding
-        # work for a later generic reasoning adapter.
-        executable = [question for question in eligible if question.hypothesis_id is not None]
-        candidates = executable or eligible
+        candidates = eligible
         return max(
             candidates,
             key=lambda question: (
@@ -201,9 +198,9 @@ class ExplorationDecision:
     estimated_cost: float
 
 
-def select_next_question(state: ExplorationState, remaining_budget: float) -> ExplorationDecision | None:
-    """Select a frontier question without executing or inventing any experiment."""
-    question = state.next_question(remaining_budget)
+def select_next_question(state: ExplorationState, remaining_budget: float, executable_hypothesis_ids: frozenset[str] | None = None) -> ExplorationDecision | None:
+    """Select an executable frontier question without executing or inventing any experiment."""
+    question = state.next_question(remaining_budget, executable_hypothesis_ids)
     if question is None:
         return None
     return ExplorationDecision(question.question_id, question.hypothesis_id, question.target_function, question.estimated_cost)
@@ -224,6 +221,7 @@ def record_exploration_step(state: ExplorationState, decision: ExplorationDecisi
         unresolved_questions=tuple(q for q in state.unresolved_questions if q.question_id != decision.question_id),
         explored_hypothesis_ids=explored_hypotheses, explored_question_ids=explored_questions,
         budget_used=state.budget_used + cost,
+        capability_work_items=state.capability_work_items,
     )
 
 
@@ -243,6 +241,7 @@ def refresh_exploration_frontier(result: InvestigationResult, previous: Explorat
         explored_hypothesis_ids=previous.explored_hypothesis_ids,
         explored_question_ids=previous.explored_question_ids,
         budget_used=previous.budget_used,
+        capability_work_items=previous.capability_work_items,
     )
 
 
@@ -295,6 +294,7 @@ def run_bounded_exploration(
     *,
     budget: float,
     execute_question: Callable[[InvestigationResult, ExplorationDecision], tuple[InvestigationResult, tuple["Evidence", ...]]],
+    executable_hypothesis_ids: frozenset[str] | None = None,
 ) -> ExplorationRun:
     """Drive bounded frontier feedback through the existing execution boundary.
 
@@ -303,12 +303,34 @@ def run_bounded_exploration(
     causal verification. No second executor is introduced.
     """
     state = ExplorationState.from_investigation(result)
+    if executable_hypothesis_ids is not None:
+        capability_items = tuple(
+            question.question_id
+            for question in state.unresolved_questions
+            if question.hypothesis_id is None
+            or question.hypothesis_id not in executable_hypothesis_ids
+        )
+        state = ExplorationState(
+            target=state.target,
+            contracts=state.contracts,
+            functions=state.functions,
+            state_surfaces=state.state_surfaces,
+            hypotheses=state.hypotheses,
+            experiments=state.experiments,
+            evidence_ids=state.evidence_ids,
+            unresolved_questions=state.unresolved_questions,
+            explored_hypothesis_ids=state.explored_hypothesis_ids,
+            explored_question_ids=state.explored_question_ids,
+            budget_used=state.budget_used,
+            capability_work_items=capability_items,
+        )
     rounds = 0
     while state.budget_used < budget:
         remaining = budget - state.budget_used
-        decision = select_next_question(state, remaining)
+        decision = select_next_question(state, remaining, executable_hypothesis_ids)
         if decision is None:
-            return ExplorationRun(state, result, rounds, "frontier_exhausted_or_budget_insufficient")
+            reason = "no_executable_hypotheses" if executable_hypothesis_ids is not None else "frontier_exhausted_or_budget_insufficient"
+            return ExplorationRun(state, result, rounds, reason)
         updated_result, evidence = execute_question(result, decision)
         result = apply_exploration_evidence(updated_result, decision, evidence)
         state = record_exploration_step(

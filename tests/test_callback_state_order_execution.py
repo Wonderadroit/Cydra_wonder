@@ -617,3 +617,93 @@ def test_callback_state_setup_resolves_role_address_through_readiness_module(tmp
     assert "vm.startPrank(address(0x1002));" in rendered
     assert "target.register(cydraCallbackInput.key, cydraCallbackInput.endpoint);" in rendered
     assert "vm.stopPrank();" in rendered
+
+
+def test_legacy_callback_renderer_recovers_missing_structured_identifier_with_nested_arrays(tmp_path: Path):
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Callback {
+            struct Inner { uint256 value; address[] accounts; }
+            struct Data { Inner inner; bytes[][] payloads; }
+            function execute(Data calldata data) external {
+                (bool ok,) = msg.sender.call("");
+                require(ok);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Callback")
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute-nested", "claim",
+        "INV-CALLBACK-STATE-ORDER-execute", "execute", "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute-nested", hypothesis.hypothesis_id,
+        "reenter", (), 2.0,
+        planned_inputs=("cydra_data",),
+        target_function="execute",
+    )
+    output = tmp_path / "test" / "generated.t.sol"
+    generate_callback_state_order_test(
+        hypothesis, experiment, str(source), "Callback", output, contract,
+    )
+    rendered = output.read_text(encoding="utf-8")
+    assert "Data memory cydra_data =" in rendered
+    assert "Inner" in rendered
+    assert "new address[](0)" in rendered
+    assert "new bytes[][](0)" in rendered
+    assert "abi.encodeCall(target.execute, (cydra_data))" in rendered
+    assert rendered.count("Data memory cydra_data") == 1
+
+
+def test_callback_compile_failure_emits_no_causal_evidence(tmp_path: Path, monkeypatch):
+    from cydra.foundry import ExecutionResult
+
+    source = tmp_path / "Callback.sol"
+    source.write_text("pragma solidity ^0.8.20; contract Callback { function execute(uint256 amount) external {} }", encoding="utf-8")
+    function = FunctionModel(
+        name="execute", visibility="external", modifiers=(), writes=(),
+        external_calls=(), line=1,
+        parameters=(ParameterModel(name="amount", type="uint256"),),
+    )
+    contract = ContractModel("Callback", str(source), (function,), pragma="^0.8.20")
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute", "claim", "INV-CALLBACK-STATE-ORDER-execute",
+        "execute", "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute", hypothesis.hypothesis_id,
+        "reenter", (), 2.0, planned_inputs=("1",), target_function="execute",
+    )
+
+    monkeypatch.setattr(
+        "scripts.run_benchmark_blind.generate_callback_state_order_test",
+        lambda *args, **kwargs: args[4],
+    )
+    monkeypatch.setattr(
+        "scripts.run_benchmark_blind.run_foundry_test",
+        lambda *args, **kwargs: ExecutionResult(
+            experiment_id=experiment.experiment_id,
+            target="blind",
+            command=("forge", "test"),
+            exit_code=1,
+            executed=False,
+            tests_run=0,
+            tests_failed=0,
+            status="UNMEASURABLE",
+            stdout="",
+            stderr="Error: Compiler run failed: undeclared identifier",
+        ),
+    )
+
+    from scripts.run_benchmark_blind import _run_callback_state_order
+    result = _run_callback_state_order(
+        tmp_path, hypothesis, experiment, contract
+    )
+    assert result["classification"] == "UNMEASURABLE"
+    assert result["execution"]["executed"] is False
+    assert result["evidence"] is None
