@@ -260,6 +260,30 @@ def test_resolves_source_defined_struct_fields(tmp_path: Path) -> None:
     )
 
 
+def test_resolves_relative_importer_against_project_root(tmp_path):
+    root = tmp_path / "project"
+    types = root / "contracts" / "types"
+    types.mkdir(parents=True)
+    (types / "CircomData.sol").write_text(
+        'import {StealthAddressStructure} from "./StealthAddressStructure.sol";\\n'
+        "struct CircomData { StealthAddressStructure stealthAddressStructure; }\\n",
+        encoding="utf-8",
+    )
+    (types / "StealthAddressStructure.sol").write_text(
+        "struct StealthAddressStructure { uint256 H0x; uint256 H0y; }\\n",
+        encoding="utf-8",
+    )
+    from cydra.interface_resolver import resolve_named_type_source
+
+    resolved = resolve_named_type_source(
+        root, "contracts/types/CircomData.sol", "StealthAddressStructure"
+    )
+    assert resolved == (
+        "contracts/types/StealthAddressStructure.sol",
+        "declared_import",
+    )
+
+
 def test_resolves_exact_declared_nested_type_import(tmp_path: Path) -> None:
     root = tmp_path / "target"
     source = root / "contracts" / "types" / "CircomData.sol"
