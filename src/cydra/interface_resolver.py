@@ -184,9 +184,18 @@ def parse_remappings(root: str | Path) -> tuple[tuple[str, str], ...]:
     return tuple(result)
 
 
+def _resolve_source_path(root: str | Path, source_path: str | Path) -> Path:
+    """Resolve a source path relative to the declared project root when needed."""
+    root = Path(root).resolve()
+    path = Path(source_path)
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve()
+
+
 def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> tuple[Path, str] | None:
     root = Path(root).resolve()
-    importer = Path(importer).resolve()
+    importer = _resolve_source_path(root, importer)
     remappings = (*parse_remappings(root), *_foundry_remappings(root))
 
     for prefix, destination in sorted(dict.fromkeys(remappings), key=lambda item: len(item[0]), reverse=True):
@@ -263,7 +272,7 @@ def resolve_interface(root: str | Path, importer: str | Path, name: str) -> Reso
     search, so provenance remains bounded to the target's dependency graph.
     """
     root = Path(root).resolve()
-    importer = Path(importer).resolve()
+    importer = _resolve_source_path(root, importer)
     visited: set[Path] = set()
 
     def walk(path: Path) -> ResolvedInterface | None:
@@ -412,7 +421,7 @@ def _extract_interface(
 
 def resolve_struct_fields(root: str | Path, source_path: str | Path, struct_name: str) -> tuple[tuple[str, str], ...]:
     """Resolve top-level fields of a source-defined Solidity struct."""
-    path = (Path(root) / source_path).resolve()
+    path = _resolve_source_path(root, source_path)
     try:
         source = _strip_comments(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError):
@@ -443,7 +452,7 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
     records the first source unit that actually declares the requested type.
     """
     root = Path(root).resolve()
-    start = Path(importer).resolve()
+    start = _resolve_source_path(root, importer)
     visited: set[Path] = set()
 
     declaration = re.compile(
