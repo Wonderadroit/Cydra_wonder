@@ -80,7 +80,7 @@ def _find_initializer_call(source: str, initializer_name: str) -> tuple[int, int
 
 
 def _replace_initializer_call(source: str, initializer_name: str, parameter_names: tuple[str, ...]) -> tuple[str, bool]:
-    caller_variable = "attacker"
+    caller_variable = "cydraAttacker"
     start, end, argument_text = _find_initializer_call(source, initializer_name)
     caller_variable = "attacker"
     arguments = _split_arguments(argument_text)
@@ -429,7 +429,9 @@ def _qualify_planned_target_argument(
                 return value
             rendered_values.append(render(field.type, field_value, seen + (base,)))
 
-        if base in set(contract_model.declared_types):
+        short_base = base.split(".")[-1]
+        source_is_target = resolved_path.resolve() == Path(contract_model.source).resolve()
+        if source_is_target or short_base in set(contract_model.declared_types):
             qualified = f"{target_type}.{name}"
         else:
             qualified = name
