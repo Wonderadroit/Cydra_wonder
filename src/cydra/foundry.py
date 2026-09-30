@@ -306,7 +306,14 @@ def _initializer_argument(
                         )
                     )
                 except (FileNotFoundError, OSError, UnicodeError):
-                    pass
+                    # The parameter may be an interface whose source is reachable
+                    # through the target's import graph even when it is not part
+                    # of inherited_resolved_interfaces.
+                    try:
+                        if resolve_interface(project_root, contract_model.source, base_type):
+                            is_contract_type = True
+                    except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                        pass
         location = "" if is_contract_type else " memory"
         declaration = f"{qualified_type}{location} {variable};"
     return variable, declaration
