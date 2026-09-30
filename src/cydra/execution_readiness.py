@@ -1128,6 +1128,7 @@ def _execution_requirements(
                 f"{function.name}:body",
                 status,
                 detail,
+                category=category,
             )
         )
     requirements.extend(
