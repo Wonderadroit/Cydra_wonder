@@ -220,7 +220,7 @@ def plan_public_state_observations(
                     polarity=polarity,
                     source=f"{contract.source}:{function.line}",
                 )
-            )        )
+            )
 
     # Internal execution predicates are part of the target-derived state model.
     # Reuse the generic public-mapping observer for predicates reached through
