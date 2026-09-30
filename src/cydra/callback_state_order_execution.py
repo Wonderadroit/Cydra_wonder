@@ -81,6 +81,15 @@ def _execution_context_warp(contract_model: ContractModel, function) -> str | No
     except (OSError, UnicodeError):
         return None
 
+    if not modes:
+        candidates = [item for item in functions.values() if item is not function and any(p == "must_not_hold" and "block.timestamp" in pred for pred, p in item.execution_predicate_polarities)]
+        if len(candidates) == 1:
+            for pred, polarity in candidates[0].execution_predicate_polarities:
+                if polarity == "must_not_hold":
+                    match = re.search(r"\\bblock\\.timestamp\\s*(>=|>|<=|<)", pred)
+                    if match:
+                        modes.add("low" if match.group(1) in {">", ">="} else "high")
+
     if modes == {"low"}:
         return "vm.warp(0);"
     if modes == {"high"}:
