@@ -32,6 +32,10 @@ class ParameterModel:
     data_location: str | None = None
 
 
+# Backwards-compatible alias for older readiness/test integrations.
+Parameter = ParameterModel
+
+
 @dataclass(frozen=True)
 class ConstructorModel:
     parameters: tuple[ParameterModel, ...]
