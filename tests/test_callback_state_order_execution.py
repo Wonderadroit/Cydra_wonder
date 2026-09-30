@@ -534,3 +534,49 @@ def test_legacy_callback_renderer_materializes_target_derived_state_setup_and_ca
     assert "cydra_data.endpoint = address(attacker);" in rendered
     assert "target.register(cydra_data.key, cydra_data.endpoint);" in rendered
     assert "abi.encodeCall(target.execute, (1, cydra_data))" in rendered
+
+
+
+def test_callback_state_setup_resolves_role_address_through_readiness_module(tmp_path, monkeypatch):
+    from cydra.callback_state_order_execution import _state_setup_source
+    from cydra.models import FunctionModel
+    from cydra.execution_readiness import SetupAction
+
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Callback { "
+        "mapping(uint256 => address) registry; "
+        "function execute(Data calldata data) external {} "
+        "function register(uint256 key, address endpoint) external { registry[key] = endpoint; } "
+        "struct Data { uint256 key; address endpoint; } }",
+        encoding="utf-8",
+    )
+    execute = FunctionModel(
+        "execute", "external", (), (), (), 1,
+        parameters=(ParameterModel("data", "Data", "calldata"),),
+    )
+    register = FunctionModel(
+        "register", "external", (), ("registry",), (), 1,
+        parameters=(ParameterModel("key", "uint256"), ParameterModel("endpoint", "address")),
+    )
+    contract = ContractModel(
+        "Callback", str(source), (execute, register), pragma="^0.8.20",
+        state_variables=("registry",),
+    )
+    monkeypatch.setattr(
+        "cydra.callback_state_order_execution.constructible_state_setup_plan",
+        lambda *args, **kwargs: (SetupAction("register", "admin", ("execute", "registry")),),
+    )
+    monkeypatch.setattr(
+        "cydra.callback_state_order_execution.execution_readiness.role_address_expression",
+        lambda role: "address(0x1002)" if role == "admin" else None,
+    )
+    monkeypatch.setattr(
+        "cydra.callback_state_order_execution._state_setup_argument_vector",
+        lambda *args, **kwargs: ("cydraCallbackInput.key", "cydraCallbackInput.endpoint"),
+    )
+    rendered, functions = _state_setup_source(contract, execute, "cydraCallbackInput")
+    assert functions == ("register",)
+    assert "vm.startPrank(address(0x1002));" in rendered
+    assert "target.register(cydraCallbackInput.key, cydraCallbackInput.endpoint);" in rendered
+    assert "vm.stopPrank();" in rendered
