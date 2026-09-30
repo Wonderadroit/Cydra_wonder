@@ -492,7 +492,18 @@ def _runtime_requirements(contract: ContractModel, function: FunctionModel) -> t
     }
     local_value_names = bound_local_names | parameter_names | returned_local_names
 
-    for receiver, method in function.external_calls:
+    for call in function.external_calls:
+        # FunctionModel stores external calls as receiver strings. Older readiness
+        # adapters represented them as (receiver, method) pairs; normalize both
+        # shapes at this boundary.
+        if isinstance(call, (tuple, list)):
+            receiver = str(call[0]) if call else ""
+            method = str(call[1]) if len(call) > 1 else "*"
+        else:
+            raw_call = str(call)
+            receiver, method = (
+                raw_call.rsplit(".", 1) if "." in raw_call else (raw_call, "*")
+            )
         # Solidity array mutations are represented by the parser as calls on
         # synthetic receivers, but push/pop are local state operations, not
         # runtime dependencies that need a stubbed external target.
