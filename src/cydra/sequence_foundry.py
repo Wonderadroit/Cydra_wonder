@@ -392,7 +392,14 @@ def generate_sequence_test_from_experiment(
             constructor_arguments.append("payable(address(0))")
         elif base == "bool":
             constructor_arguments.append("false")
-        elif base.startswith(("uint", "int")):
+        elif base.startswith("uint"):
+            # Zero is not a universally safe constructor default: unsigned
+            # parameters are commonly used as lower bounds in expressions such
+            # as `value - 1`. Use the smallest non-zero value as the generic
+            # materialization default; target-derived constraints remain the
+            # authority for any stricter constructor requirement.
+            constructor_arguments.append("1")
+        elif base.startswith("int"):
             constructor_arguments.append("0")
         elif base == "string":
             constructor_arguments.append('""')
@@ -440,7 +447,9 @@ def generate_sequence_test_from_experiment(
                     value = "payable(address(0))"
                 elif field_base == "bool":
                     value = "false"
-                elif field_base.startswith(("uint", "int", "bytes")):
+                elif field_base.startswith("uint"):
+                    value = "1"
+                elif field_base.startswith(("int", "bytes")):
                     value = "0"
                 else:
                     raise ValueError(f"unsupported namespaced struct field type: {field_type}")
