@@ -433,11 +433,17 @@ def runtime_dependency_constructor_bindings(
             resolved = resolve_import(root, path, import_path)
             if resolved is not None:
                 queue.append(resolved[0])
-    runtime_receivers = {
-        receiver for receiver, _method in function.external_calls
-        if receiver not in {"abi", "block", "msg", "tx", "type", "super"}
-        and (receiver_name is None or receiver == receiver_name)
-    }
+    runtime_receivers: set[str] = set()
+    for call in function.external_calls:
+        if isinstance(call, (tuple, list)):
+            receiver = str(call[0]) if call else ""
+        else:
+            raw_call = str(call)
+            receiver = raw_call.rsplit(".", 1)[0] if "." in raw_call else raw_call
+        if receiver not in {"abi", "block", "msg", "tx", "type", "super"} and (
+            receiver_name is None or receiver == receiver_name
+        ):
+            runtime_receivers.add(receiver)
     bindings: list[tuple[str, object]] = []
     for receiver in sorted(runtime_receivers):
         declaration = re.compile(
