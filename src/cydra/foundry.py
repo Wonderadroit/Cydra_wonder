@@ -526,7 +526,8 @@ def _runtime_stub_source(
 
     variables: dict[str, str] = {}
     for interface_name in sorted(interfaces):
-        variables[interface_name] = f"{interface_name[1:]}Stub"
+        stem = interface_name[1:] if interface_name.startswith("I") and len(interface_name) > 1 else interface_name
+        variables[interface_name] = f"{stem[:1].lower()}{stem[1:]}Stub"
 
     declarations: list[str] = []
     imported_interfaces: dict[str, object] = {}
