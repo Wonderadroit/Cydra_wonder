@@ -105,6 +105,17 @@ def _split_top_level_tuple_expression(value: str) -> tuple[str, ...] | None:
     return tuple(parts)
 
 
+def _coerce_struct_constructor_to_tuple(expression: str) -> str:
+    """Normalize a typed struct constructor into the tuple form used by the renderer."""
+    text = expression.strip()
+    if _split_top_level_tuple_expression(text) is not None:
+        return text
+    match = re.fullmatch(r"(?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*\((.*)\)", text, re.DOTALL)
+    if match is None:
+        return text
+    return "(" + match.group(1).strip() + ")"
+
+
 def _is_builtin_sequence_type(parameter_type: str) -> bool:
     """Return whether a parameter type needs no user-defined type binding."""
     base = parameter_type.strip().split()[0].rstrip("[]")
@@ -368,13 +379,14 @@ def _plan_prerequisite_parameter_bindings(
                             ) from exc
                         nested_source = resolved_nested[0]
                 add_import(field_base)
-                nested_parts = _split_top_level_tuple_expression(part)
+                normalized_part = _coerce_struct_constructor_to_tuple(part)
+                nested_parts = _split_top_level_tuple_expression(normalized_part)
                 if nested_parts is None:
                     raise ValueError(
                         f"prerequisite nested struct value for {base}.{field_name} "
                         f"must be a tuple expression"
                     )
-                rendered_parts.append(typed_tuple(field_base, part, nested_source))
+                rendered_parts.append(typed_tuple(field_base, normalized_part, nested_source))
             else:
                 rendered_parts.append(part)
         # Materialize custom ABI structs through encode/decode rather than
