@@ -358,7 +358,7 @@ def _plan_prerequisite_parameter_bindings(
         # direct struct construction. This works uniformly for calldata/memory
         # structs and nested user-defined members while preserving the planned
         # tuple values exactly.
-        tuple_value = f"{base}({', '.join(rendered_parts)})"
+        tuple_value = f"{base.split('.', 1)[-1]}({', '.join(rendered_parts)})"
         if materialize_via_abi:
             return f"abi.decode(abi.encode({', '.join(rendered_parts)}), ({base}))"
         return tuple_value
