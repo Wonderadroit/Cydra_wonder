@@ -297,6 +297,17 @@ def _plan_prerequisite_parameter_bindings(
             return expression
         base = type_name.strip().split()[0]
         fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
+        # The callee source is not necessarily the defining source of a
+        # user-defined parameter. Inherited/internal-call models commonly carry
+        # the parameter on a base contract while the struct is imported from a
+        # separate source unit. Reuse the canonical source-graph resolver before
+        # failing closed so prerequisite materialization and top-level
+        # materialization share the same provenance rules.
+        if not fields:
+            resolved_parameter = _type_source(contract_model, base.split(".", 1)[-1])
+            if resolved_parameter is not None:
+                defining_source = str(resolved_parameter[0])
+                fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
         if not fields:
             try:
                 defining_text = Path(defining_source).read_text(encoding="utf-8")
