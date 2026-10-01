@@ -1089,6 +1089,20 @@ def _internal_execution_requirements(
             for predicate in (*callee.execution_predicates, *callee.state_predicates):
                 kind = "internal_execution_predicate" if predicate in callee.execution_predicates else "internal_state_predicate"
                 category = _classify_internal_predicate(contract, callee, predicate)
+                try:
+                    direct_source = Path(contract.source).read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    direct_source = ""
+                unary_state = re.findall(r"\b!\s*([A-Za-z_]\w*)\b", predicate)
+                if unary_state and any(
+                    re.search(
+                        rf"\b(?:bool|address|uint(?:\d+)?|int(?:\d+)?|bytes(?:\d+)?)\s+"
+                        rf"(?:public|private|internal|external|immutable|constant\s+)*{re.escape(name)}\s*;",
+                        direct_source,
+                    )
+                    for name in unary_state
+                ):
+                    category = "state_observation"
                 constraint = _is_experiment_constraint(
                     contract,
                     callee,
