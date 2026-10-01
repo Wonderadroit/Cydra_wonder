@@ -716,6 +716,44 @@ def _legacy_callback_test(
         for binding in runtime_bindings
         if len(binding) >= 2
     )
+    # Some lightweight models omit constructor/interface dependency metadata.
+    # Recover only target-declared state-backed constructor bindings from the
+    # source/import graph; never scan unrelated repository files.
+    if not runtime_bindings and contract_model.constructor is not None:
+        try:
+            source_text = Path(contract_model.source).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            source_text = ""
+        constructor_parameters = {p.name for p in contract_model.constructor.parameters}
+        recovered = []
+        for match in re.finditer(
+            r"\b(?P<type>[A-Za-z_]\w*)\s+(?:public|private|internal|external|immutable|constant\s+)*"
+            r"(?P<receiver>[A-Za-z_]\w*)\s*;",
+            source_text,
+        ):
+            receiver = match.group("receiver")
+            if not any(
+                (isinstance(call, (tuple, list)) and call and str(call[0]) == receiver)
+                or (not isinstance(call, (tuple, list)) and str(call).rsplit(".", 1)[0] == receiver)
+                for call in function.external_calls
+            ):
+                continue
+            assignment = re.search(
+                rf"\b{re.escape(receiver)}\s*=\s*(?P<type>[A-Za-z_]\w*)\s*\(\s*(?P<parameter>[A-Za-z_]\w*)\s*\)",
+                source_text,
+            )
+            if assignment is None or assignment.group("parameter") not in constructor_parameters:
+                continue
+            try:
+                resolved = resolve_interface(
+                    Path(contract_model.source).resolve().parent,
+                    contract_model.source,
+                    assignment.group("type"),
+                )
+            except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                continue
+            recovered.append((assignment.group("parameter"), resolved))
+        runtime_bindings = tuple(recovered)
     runtime_stub_source, runtime_stub_variables = _runtime_stub_source(
         runtime_bindings, (), (), False, output_path
     )
