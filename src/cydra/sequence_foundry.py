@@ -105,12 +105,14 @@ def _split_top_level_tuple_expression(value: str) -> tuple[str, ...] | None:
     return tuple(parts)
 
 
-def _coerce_struct_constructor_to_tuple(expression: str) -> str:
-    """Normalize a typed struct constructor into the tuple form used by the renderer."""
+def _coerce_struct_constructor_to_tuple(expression: str, expected_type: str) -> str:
+    """Normalize a typed constructor matching the expected struct type into a tuple."""
     text = expression.strip()
     if _split_top_level_tuple_expression(text) is not None:
         return text
-    match = re.fullmatch(r"(?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*\((.*)\)", text, re.DOTALL)
+    expected = expected_type.strip().split()[0].rstrip("[]")
+    qualified = re.escape(expected)
+    match = re.fullmatch(rf"(?:[A-Za-z_]\w*\.)?{qualified}\((.*)\)", text, re.DOTALL)
     if match is None:
         return text
     return "(" + match.group(1).strip() + ")"
@@ -379,7 +381,7 @@ def _plan_prerequisite_parameter_bindings(
                             ) from exc
                         nested_source = resolved_nested[0]
                 add_import(field_base)
-                normalized_part = _coerce_struct_constructor_to_tuple(part)
+                normalized_part = _coerce_struct_constructor_to_tuple(part, field_base)
                 nested_parts = _split_top_level_tuple_expression(normalized_part)
                 if nested_parts is None:
                     raise ValueError(
