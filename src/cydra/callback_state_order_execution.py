@@ -753,19 +753,27 @@ def _legacy_callback_test(
             )
             if assignment is None:
                 # Direct constructor parameter assignment is the common form
-                # for interface-backed state. The receiver declaration below
-                # provides the interface type; no cast is required.
-                assignment = re.search(
+                # for interface-backed state. The receiver declaration already
+                # supplies the interface type, so recover the parameter without
+                # requiring an explicit cast.
+                direct = re.search(
                     rf"\b{re.escape(receiver)}\s*=\s*(?P<parameter>[A-Za-z_]\w*)\s*;",
                     source_text,
                 )
+                if direct is not None:
+                    assignment = direct
+                    assignment_type = match.group("type")
+                else:
+                    assignment_type = ""
+            else:
+                assignment_type = assignment.group("type")
             if assignment is None or assignment.group("parameter") not in constructor_parameters:
                 continue
             try:
                 resolved = resolve_interface(
                     Path(contract_model.source).resolve().parent,
                     contract_model.source,
-                    assignment.group("type"),
+                    assignment_type,
                 )
             except (FileNotFoundError, ValueError, OSError, UnicodeError):
                 continue
