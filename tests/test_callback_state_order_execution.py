@@ -779,3 +779,36 @@ def test_callback_final_argument_binding_materializes_preexisting_identifier_wit
     assert rendered == ["cydra_data"]
     assert len(declarations) == 1
     assert declarations[0].strip() == "Data memory cydra_data = (Inner(0, new address[](0)), new bytes[][](0));"
+
+
+def test_callback_runtime_generator_qualifies_struct_nested_in_inherited_contract(tmp_path: Path):
+    base = tmp_path / "Base.sol"
+    base.write_text(
+        "pragma solidity ^0.8.20; contract Base { struct Dimensions { uint256 width; uint256 height; } }",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import "./Base.sol"; contract Callback is Base { '
+        'function execute(Dimensions calldata data) external { (bool ok,) = msg.sender.call(""); require(ok); } }',
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Callback")
+    function = next(item for item in contract.functions if item.name == "execute")
+    hypothesis = Hypothesis(
+        "H-CALLBACK-STATE-ORDER-execute-nested", "claim",
+        "INV-CALLBACK-STATE-ORDER-execute", "execute", "callback", "impact",
+    )
+    experiment = Experiment(
+        "X-H-CALLBACK-STATE-ORDER-execute-nested", hypothesis.hypothesis_id,
+        "reenter", (), 2.0, planned_inputs=("cydra_data",), target_function="execute",
+    )
+    output = tmp_path / "test" / "generated.t.sol"
+    generate_callback_state_order_test(
+        hypothesis, experiment, str(source), "Callback", output, contract,
+    )
+    rendered = output.read_text(encoding="utf-8")
+    assert "Base.Dimensions(" in rendered
+    assert "import { Base }" in rendered
+    assert "Dimensions(" not in rendered.replace("Base.Dimensions(", "")
