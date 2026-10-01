@@ -158,6 +158,28 @@ def _plan_prerequisite_parameter_bindings(
             if not resolve_namespaced_struct_fields(project_root, namespace_source, namespace, member):
                 raise FileNotFoundError(f"Unable to resolve nested user-defined type {base} from {source_path}")
             return base, namespace_source
+        # A plain user-defined struct may be declared directly in the current
+        # source unit. Resolve that before consulting model metadata/imports.
+        if resolve_struct_fields(project_root, source_path, base):
+            return base, str(Path(source_path).resolve())
+        # For imported types, resolve the explicit source edge directly before
+        # relying on richer project metadata. This keeps temporary/generated
+        # fixtures deterministic while remaining bounded to declared imports.
+        try:
+            from .interface_resolver import _imports_for, resolve_import
+            for import_path in _imports_for(Path(source_path).resolve()):
+                resolved_import = resolve_import(project_root, source_path, import_path)
+                if resolved_import is None:
+                    direct = (Path(source_path).resolve().parent / import_path).resolve()
+                    if direct.is_file():
+                        resolved_import = (direct, "declared_import")
+                if resolved_import is None:
+                    continue
+                imported_path, _method = resolved_import
+                if resolve_struct_fields(project_root, imported_path, base):
+                    return base, str(imported_path)
+        except (OSError, UnicodeError):
+            pass
         resolved = _type_source(contract_model, base)
         if resolved is not None:
             resolved_path, _resolved_source = resolved
