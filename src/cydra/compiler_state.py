@@ -142,7 +142,12 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
         # compiler-evidence acquisition gap, not a reason to declare the unit
         # unobservable. Retry once with the complete project build so the same
         # compiler output can be consumed from a project-wide build-info graph.
-        if not evidence and not constraints:
+        # Keep the compiler retry bounded: when the source-scoped build
+        # itself required via-IR, do not immediately launch a third compile.
+        # A successful via-IR compile with no source AST remains an evidence
+        # acquisition gap and is reported as such; the next generic acquisition
+        # layer can handle it without defeating the bounded compiler retry.
+        if not evidence and not constraints and "--via-ir" not in command:
             full_command = (
                 "forge", "build", "--build-info", "--build-info-path", str(info_path),
                 *profile, "--skip", "test", "--skip", "script", "--threads", "1",
