@@ -1519,8 +1519,9 @@ def _state_setup_candidates(
 
     semantic_effects = build_state_effect_index(semantic_evidence)
     candidates: list[ExecutionRequirement] = []
+    all_functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
     for state in state_names:
-        for writer in contract.functions:
+        for writer in all_functions:
             if writer.name == function.name or writer.visibility not in {"public", "external"}:
                 continue
             semantic_writes = state_writes_for_function(semantic_effects, writer.name)
