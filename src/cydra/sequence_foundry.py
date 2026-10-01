@@ -193,7 +193,7 @@ def _plan_prerequisite_parameter_bindings(
                     nested_imports = list(_imports_for(candidate))
                     nested_text = candidate.read_text(encoding="utf-8")
                     for match in re.finditer(
-                        r'\\bimport\\s+(?:\\{[^}]*\\}\\s+from\\s+|\\*\\s+as\\s+[A-Za-z_]\\w*\\s+from\\s+)?["\\']([^"\\']+)["\\']\\s*;',
+                    r"\\bimport\\s+(?:\\{[^}]*\\}\\s+from\\s+|\\*\\s+as\\s+[A-Za-z_]\\w*\\s+from\\s+)?['\\\"]([^'\\\"]+)['\\\"]\\s*;",
                         nested_text,
                     ):
                         if match.group(1) not in nested_imports:
