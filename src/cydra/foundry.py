@@ -641,15 +641,21 @@ def _model_initialization_source(
     for parameter in function.parameters:
         base = parameter.type.strip().split()[0].rstrip("[]")
         interface = parameter_interfaces.get(base)
+        source_declares_interface = bool(
+            re.search(rf"\binterface\s+{re.escape(base)}\b", _source_text(contract_model))
+        )
         if (
-            (interface is not None and any(
-                method.name in {"symbol", "decimals"} for method in interface.methods
-            ))
-            or "ERC20" in base
+            not source_declares_interface
+            and (
+                (interface is not None and any(
+                    method.name in {"symbol", "decimals"} for method in interface.methods
+                ))
+                or "ERC20" in base
+            )
         ):
-            # ERC20-shaped interface parameters can be backed by the canonical
-            # CYDRA token stub even when the resolver cannot traverse an unusual
-            # remapping in the target checkout.
+            # Use the canonical token stub only for imported/runtime interfaces.
+            # A target source-declared interface is a value-like ABI reference
+            # and must remain a declared local in the initializer harness.
             token_parameters.add(parameter.name)
 
     stub_source, stub_variables = _runtime_stub_source(
