@@ -167,6 +167,25 @@ def _plan_prerequisite_parameter_bindings(
             resolved_source, _method = resolve_named_type_source(project, source_path, base)
             return base, str(resolved_source)
         except (FileNotFoundError, ValueError, OSError, UnicodeError):
+            # Bounded fallback for minimal fixtures and unusual import formatting:
+            # walk only explicitly declared imports from this source unit.
+            try:
+                source_text = Path(source_path).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                source_text = ""
+            for import_match in re.finditer(
+                r'\bimport\s+(?:[^"\']*from\s+)?["\']([^"\']+)["\']\s*;',
+                source_text,
+            ):
+                imported = (Path(source_path).parent / import_match.group(1)).resolve()
+                if not imported.is_file():
+                    continue
+                try:
+                    imported_text = imported.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    continue
+                if re.search(rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(base)}\b", imported_text):
+                    return base, str(imported)
             raise FileNotFoundError(f"Unable to resolve user-defined type {base} from {source_path}")
 
     def add_import(type_name: str) -> None:
