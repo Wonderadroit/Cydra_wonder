@@ -842,7 +842,7 @@ def _legacy_callback_test(
         constructor_parameters = {p.name for p in contract_model.constructor.parameters}
         recovered_fallback = []
         for match in re.finditer(
-                    r"\\bimport\\s+(?:\\{[^}]*\\}\\s+from\\s+|\\*\\s+as\\s+[A-Za-z_]\\w*\\s+from\\s+)?['\\\"]([^'\\\"]+)['\\\"]\\s*;",
+                    r"import\s+(?:\{[^}]*\}\s+from\s+|\*\s+as\s+[A-Za-z_]\w*\s+from\s+)?[\'\"]([^\'\"]+)[\'\"]\s*;",
             source_text,
         ):
             import_path = match.group(1)
@@ -853,7 +853,7 @@ def _legacy_callback_test(
                 imported_text = direct.read_text(encoding="utf-8")
             except (OSError, UnicodeError):
                 continue
-            interface_names = re.findall(r"\\binterface\\s+([A-Za-z_]\\w*)\\b", imported_text)
+            interface_names = re.findall(r"\binterface\s+([A-Za-z_]\w*)\b", imported_text)
             for interface_name in interface_names:
                 try:
                     resolved = _extract_interface(
@@ -865,7 +865,7 @@ def _legacy_callback_test(
                     if parameter.name not in constructor_parameters:
                         continue
                     if re.search(
-                        rf"\\b{re.escape(interface_name)}\\s*\\(\\s*{re.escape(parameter.name)}\\s*\\)",
+                        rf"\b{re.escape(interface_name)}\s*\(\s*{re.escape(parameter.name)}\s*\)"
                         source_text,
                     ):
                         recovered_fallback.append((parameter.name, resolved))
