@@ -173,11 +173,12 @@ def _plan_prerequisite_parameter_bindings(
                 source_text = Path(source_path).read_text(encoding="utf-8")
             except (OSError, UnicodeError):
                 source_text = ""
-            for import_match in re.finditer(
-                r'\bimport\s+(?:[^"\']*from\s+)?["\']([^"\']+)["\']\s*;',
-                source_text,
-            ):
-                imported = (Path(source_path).parent / import_match.group(1)).resolve()
+            import_pattern = re.compile(
+                r'\bimport\s+(?:\{[^}]*\}\s+from\s+|\*\s+as\s+[A-Za-z_]\w*\s+from\s+|[^"\']*?\s+from\s+)?["\']([^"\']+)["\']\s*;'
+            )
+            for import_match in import_pattern.finditer(source_text):
+                import_path = import_match.group(1)
+                imported = (Path(source_path).parent / import_path).resolve()
                 if not imported.is_file():
                     continue
                 try:
