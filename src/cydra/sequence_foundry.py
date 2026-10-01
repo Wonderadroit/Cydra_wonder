@@ -293,6 +293,23 @@ def _plan_prerequisite_parameter_bindings(
         base = type_name.strip().split()[0]
         fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
         if not fields:
+            try:
+                defining_text = Path(defining_source).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                defining_text = ""
+            match = re.search(
+                rf"\bstruct\s+{re.escape(base.split('.', 1)[-1])}\s*\{{(?P<body>.*?)\}}",
+                defining_text,
+                re.DOTALL,
+            )
+            if match:
+                parsed: list[tuple[str, str]] = []
+                for statement in match.group("body").split(";"):
+                    parts = statement.strip().split()
+                    if len(parts) >= 2:
+                        parsed.append((parts[-1], " ".join(parts[:-1])))
+                fields = tuple(parsed)
+        if not fields:
             raise ValueError(
                 f"unable to resolve struct fields for prerequisite parameter type {base} "
                 f"from {defining_source}"
