@@ -166,18 +166,44 @@ def _plan_prerequisite_parameter_bindings(
         # relying on richer project metadata. This keeps temporary/generated
         # fixtures deterministic while remaining bounded to declared imports.
         try:
-            from .interface_resolver import _imports_for, resolve_import
-            for import_path in _imports_for(Path(source_path).resolve()):
-                resolved_import = resolve_import(project_root, source_path, import_path)
-                if resolved_import is None:
-                    direct = (Path(source_path).resolve().parent / import_path).resolve()
-                    if direct.is_file():
-                        resolved_import = (direct, "declared_import")
-                if resolved_import is None:
+            from .interface_resolver import _imports_for
+            importer_path = Path(source_path).resolve()
+            declared_imports = list(_imports_for(importer_path))
+            # Keep a direct source-regex fallback for compact/generated fixtures.
+            try:
+                source_text = importer_path.read_text(encoding="utf-8")
+                for match in re.finditer(
+                    r'\\bimport\\s+(?:\\{[^}]*\\}\\s+from\\s+|\\*\\s+as\\s+[A-Za-z_]\\w*\\s+from\\s+)?["\\']([^"\\']+)["\\']\\s*;',
+                    source_text,
+                ):
+                    if match.group(1) not in declared_imports:
+                        declared_imports.append(match.group(1))
+            except (OSError, UnicodeError):
+                pass
+            pending = [(importer_path.parent / item).resolve() for item in declared_imports]
+            visited: set[Path] = set()
+            while pending:
+                candidate = pending.pop(0)
+                if candidate in visited or not candidate.is_file():
                     continue
-                imported_path, _method = resolved_import
-                if resolve_struct_fields(project_root, imported_path, base):
-                    return base, str(imported_path)
+                visited.add(candidate)
+                if resolve_struct_fields(project_root, candidate, base):
+                    return base, str(candidate)
+                try:
+                    nested_imports = list(_imports_for(candidate))
+                    nested_text = candidate.read_text(encoding="utf-8")
+                    for match in re.finditer(
+                        r'\\bimport\\s+(?:\\{[^}]*\\}\\s+from\\s+|\\*\\s+as\\s+[A-Za-z_]\\w*\\s+from\\s+)?["\\']([^"\\']+)["\\']\\s*;',
+                        nested_text,
+                    ):
+                        if match.group(1) not in nested_imports:
+                            nested_imports.append(match.group(1))
+                except (OSError, UnicodeError):
+                    nested_imports = ()
+                for import_path in nested_imports:
+                    direct = (candidate.parent / import_path).resolve()
+                    if direct.is_file() and direct not in visited:
+                        pending.append(direct)
         except (OSError, UnicodeError):
             pass
         resolved = _type_source(contract_model, base)
