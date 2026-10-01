@@ -1096,7 +1096,15 @@ def _internal_execution_requirements(
                 unary_state = re.findall(r"\b!\s*([A-Za-z_]\w*)\b", predicate)
                 parameter_names = {parameter.name for parameter in callee.parameters if parameter.name}
                 local_names = set(dict(callee.execution_value_bindings))
+                simple_boolean_state = re.fullmatch(r"!?[A-Za-z_]\w*", predicate.strip())
                 if unary_state and any(
+                    name not in parameter_names and name not in local_names
+                    for name in unary_state
+                ):
+                    category = "state_observation"
+                elif simple_boolean_state and simple_boolean_state.group(0).lstrip("!").strip() not in parameter_names and simple_boolean_state.group(0).lstrip("!").strip() not in local_names:
+                    category = "state_observation"
+                if False and unary_state and any(
                     name not in parameter_names and name not in local_names
                     and (
                         re.search(
