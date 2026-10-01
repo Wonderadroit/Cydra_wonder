@@ -719,7 +719,7 @@ def _legacy_callback_test(
     # Some lightweight models omit constructor/interface dependency metadata.
     # Recover only target-declared state-backed constructor bindings from the
     # source/import graph; never scan unrelated repository files.
-    if not runtime_bindings and contract_model.constructor is not None:
+    if contract_model.constructor is not None:
         try:
             source_text = Path(contract_model.source).read_text(encoding="utf-8")
         except (OSError, UnicodeError):
@@ -796,6 +796,31 @@ def _legacy_callback_test(
         for item in parameter_setup.split("\n        ")
         if item.strip()
     )
+    # Final ABI boundary: every custom structured argument represented by a
+    # tuple or a generated identifier gets one source-backed local.
+    final_declarations = list(existing_declarations)
+    final_declared = set(re.findall(
+        r"\\b[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*\\s+memory\\s+([A-Za-z_]\\w*)\\s*=",
+        "\\n".join(final_declarations),
+    ))
+    for parameter, expression in zip(function.parameters, arguments):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if base in {"address", "bool", "string", "bytes"} or base.startswith(("uint", "int", "bytes", "fixed", "ufixed")):
+            continue
+        candidate = rendered_arguments.get(parameter.name, f"cydra_{parameter.name}")
+        if not re.fullmatch(r"[A-Za-z_]\\w*", candidate.strip()) or candidate in final_declared:
+            continue
+        value = expression.strip()
+        if re.fullmatch(r"[A-Za-z_]\\w*", value):
+            value = _structured_default(parameter, contract_model)
+        if value is None:
+            continue
+        resolved = _type_source(contract_model, base)
+        if resolved is not None and base not in set(contract_model.declared_types):
+            parameter_imports = tuple(sorted(set(parameter_imports) | {(str(resolved[0]), base)}))
+        final_declarations.append(f"{_memory_parameter_type(parameter.type)} memory {candidate} = {value};")
+        final_declared.add(candidate)
+    parameter_setup = "\n        ".join(final_declarations)
     declarations_tuple, imports_tuple = _ensure_structured_argument_bindings(
         contract_model,
         function,
