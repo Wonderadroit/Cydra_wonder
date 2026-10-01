@@ -955,7 +955,14 @@ def _classify_internal_predicate(
         source_text = Path(contract.source).read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         source_text = ""
-    state_names.update(re.findall(r"(?m)(?:mapping\s*\([^;{}]+\)|(?:uint|int|address|bool|bytes(?:\d+)?))\s+(?:(?:public|private|internal|external|immutable|constant)\s+)*([A-Za-z_]\w*)\s*;", source_text))
+    state_decl = re.compile(
+        r"(?m)^\s*(?:mapping\s*\([^;{}]+\)|(?:uint|int|address|bool|bytes(?:\d+)?))\s+"
+        r"(?:(?:public|private|internal|external|immutable|constant)\s+)*([A-Za-z_]\w*)\s*;"
+    )
+    for match in state_decl.finditer(source_text):
+        prefix = source_text[:match.start()]
+        if prefix.count("{") - prefix.count("}") == 1:
+            state_names.add(match.group(1))
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     if identifiers & state_names or "$." in predicate:
         return "state_observation"
