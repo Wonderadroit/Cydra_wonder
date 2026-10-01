@@ -1403,8 +1403,15 @@ def _state_names_from_internal_predicates(
         if depth > max_depth or (current.name, depth) in visited:
             return
         visited.add((current.name, depth))
-        for predicate in current.execution_predicates:
-            for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate):
+        # State dependencies may be hidden behind a local producer rather than
+        # appearing directly in the guard. For example, a verifier guard can be
+        # \"address(verifier) != address(0)\" while verifier is produced from
+        # verifierMap[verifierId]. Follow modeled value/return provenance so the
+        # recursive setup solver sees the real persistent state surface.
+        expressions = list(current.execution_predicates) + list(current.return_expressions)
+        expressions.extend(expression for _local, expression in current.execution_value_bindings)
+        for expression in expressions:
+            for name in re.findall(r"\b[A-Za-z_]\w*\b", expression):
                 if name in state_names and name not in discovered:
                     discovered.append(name)
         body = _source_function_body(contract, current)
