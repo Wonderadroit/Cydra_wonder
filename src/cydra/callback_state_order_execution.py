@@ -751,6 +751,14 @@ def _legacy_callback_test(
                 rf"\b{re.escape(receiver)}\s*=\s*(?P<type>[A-Za-z_]\w*)\s*\(\s*(?P<parameter>[A-Za-z_]\w*)\s*\)",
                 source_text,
             )
+            if assignment is None:
+                # Direct constructor parameter assignment is the common form
+                # for interface-backed state. The receiver declaration below
+                # provides the interface type; no cast is required.
+                assignment = re.search(
+                    rf"\b{re.escape(receiver)}\s*=\s*(?P<parameter>[A-Za-z_]\w*)\s*;",
+                    source_text,
+                )
             if assignment is None or assignment.group("parameter") not in constructor_parameters:
                 continue
             try:
@@ -869,8 +877,11 @@ def _legacy_callback_test(
     if not re.fullmatch(r"[A-Za-z_]\w*", callback_input_for_setup.strip()):
         callback_input_for_setup = ""
     state_setup, state_setup_functions = _state_setup_source(
-        contract_model, function,
-        _select_structured_binding_name(function, rendered_arguments, parameter_setup),
+        contract_model,
+        function,
+        callback_input_for_setup or _select_structured_binding_name(
+            function, rendered_arguments, parameter_setup
+        ),
     )
     if state_setup:
         parameter_setup = parameter_setup + ("\n        " if parameter_setup else "") + state_setup
