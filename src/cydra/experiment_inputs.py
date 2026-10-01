@@ -145,6 +145,43 @@ def _type_source(contract_model: ContractModel, type_name: str) -> tuple[Path, s
     return resolved_path, resolved_source
 
 
+
+
+def _type_owner(source: str, type_name: str) -> str | None:
+    """Return the enclosing contract/library/interface for a nested user type."""
+    short_name = type_name.split(".")[-1].strip()
+    match = re.search(rf"\b(?:struct|enum|type)\s+{re.escape(short_name)}\b", source)
+    if match is None:
+        return None
+    position = match.start()
+    owners: list[tuple[int, str]] = []
+    for owner in re.finditer(r"\b(?:contract|library|interface)\s+(?P<name>[A-Za-z_]\w*)\b", source):
+        opening = source.find("{", owner.end())
+        if opening < 0 or opening >= position:
+            continue
+        depth = 0
+        for index in range(opening, min(position, len(source))):
+            if source[index] == "{":
+                depth += 1
+            elif source[index] == "}":
+                depth = max(0, depth - 1)
+        if depth > 0:
+            owners.append((opening, owner.group("name")))
+    return max(owners, default=(0, None))[1]
+
+
+def qualified_user_type(contract_model: ContractModel, type_name: str) -> str:
+    """Return compiler-valid spelling for a source-defined user type."""
+    if "." in type_name:
+        return type_name
+    resolved = _type_source(contract_model, type_name)
+    if resolved is None:
+        return type_name
+    _path, source = resolved
+    owner = _type_owner(source, type_name)
+    return f"{owner}.{type_name}" if owner else type_name
+
+
 def _parameter_from_field(field: str) -> ParameterModel | None:
     tokens = [token for token in field.split() if token not in {"memory", "calldata", "storage"}]
     if len(tokens) < 2:
