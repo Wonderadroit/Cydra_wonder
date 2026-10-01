@@ -33,6 +33,13 @@ _IMPORT_RE = re.compile(
     r'\bimport\s+(?:(?:\{[^}]*\}|\*\s+as\s+[A-Za-z_]\w*|[^;]*?)\s+from\s+)?["\']([^"\']+)["\']\s*;',
     re.MULTILINE,
 )
+# Minimal import grammar used as a bounded fallback for compact/generated
+# Solidity fixtures. It intentionally captures only the source path; symbol
+# resolution remains bounded to that explicitly declared import edge.
+_SIMPLE_IMPORT_RE = re.compile(
+    r'\bimport\s+(?:\{[^}]*\}\s+from\s+|\*\s+as\s+[A-Za-z_]\w*\s+from\s+)?["\']([^"\']+)["\']\s*;',
+    re.MULTILINE,
+)
 _REMAP_RE = re.compile(r"^\s*([^=\s]+)\s*=\s*(\S+)\s*$")
 _DECLARED_TYPE_RE = re.compile(
     r"^\s*(?:struct\s+(?P<struct>[A-Za-z_]\w*)\s*\{|"
@@ -263,7 +270,14 @@ def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> 
 
 def _imports_for(path: Path) -> tuple[str, ...]:
     source = _strip_comments(path.read_text(encoding="utf-8"))
-    return tuple(match.group(1) for match in _IMPORT_RE.finditer(source))
+    imports = [match.group(1) for match in _IMPORT_RE.finditer(source)]
+    # Keep a simpler grammar as a bounded fallback. This is still strictly
+    # source-declared import traversal; it only protects compact/generated
+    # fixtures whose import formatting defeats the richer parser.
+    for match in _SIMPLE_IMPORT_RE.finditer(source):
+        if match.group(1) not in imports:
+            imports.append(match.group(1))
+    return tuple(imports)
 
 
 def resolve_interface(root: str | Path, importer: str | Path, name: str) -> ResolvedInterface:
