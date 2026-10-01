@@ -1402,7 +1402,14 @@ def _internal_state_setup_candidates(
             if writer.name == function.name or writer.visibility not in {"public", "external"}:
                 continue
             semantic_writes = state_writes_for_function(effects, writer.name)
-            touched = state in writer.writes or (semantic_writes is not None and state in semantic_writes) or any(
+            writer_body = _source_function_body(contract, writer)
+            source_write = bool(
+                re.search(
+                    rf"\b{re.escape(state)}\s*(?:\[[^\]]+\])?\s*(?:\+=|-=|=)",
+                    writer_body,
+                )
+            )
+            touched = state in writer.writes or (semantic_writes is not None and state in semantic_writes) or source_write or any(
                 (
                     (str(call[0]) if isinstance(call, (tuple, list)) and call else str(call).rsplit(".", 1)[0])
                     == state
