@@ -20,7 +20,7 @@ from .caller_prerequisite import (
     _initializer_setup_declarations,
     _qualify_planned_target_argument,
 )
-from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, _structured_default, conservative_defaults
+from .experiment_inputs import _definition, _parameter_from_field, _split_fields, _type_source, _structured_default, conservative_defaults, qualified_user_type
 from .namespaced_state_observation import plan_namespaced_state_observation
 from . import execution_readiness
 from .execution_readiness import constructible_state_setup_plan, runtime_dependency_constructor_bindings
@@ -201,7 +201,8 @@ def _named_struct_literal(contract_model: ContractModel, type_name: str, overrid
         if value is None:
             return None
         values.append(f"{field.name}: {value}")
-    return f"{type_name}({{ {', '.join(values)} }})", path
+    qualified = qualified_user_type(contract_model, type_name)
+    return f"{qualified}({{ {', '.join(values)} }})", path
 
 
 def _caller_bound_parameter_paths(contract_model: ContractModel, function) -> tuple[str, ...]:
