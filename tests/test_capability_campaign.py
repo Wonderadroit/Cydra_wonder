@@ -76,3 +76,26 @@ def test_merge_campaigns_preserves_cluster_counts():
     assert merged["summary"]["total_attempts"] == 2
     assert merged["capability_clusters"][0]["capability"] == "CALLER_CONSTRUCTION"
     assert merged["capability_clusters"][0]["count"] == 2
+
+
+from cydra.execution_capabilities import (Capability, CapabilityAvailability, CapabilityGap, CapabilityResolution, CapabilityStatus, ExperimentContract)
+
+
+def test_batch_campaign_accepts_capability_resolution_dataclass():
+    resolution = CapabilityResolution(
+        contract=ExperimentContract("X4", "H4", "target"),
+        availability=(CapabilityAvailability(Capability.STATE_SETUP, CapabilityStatus.AVAILABLE, "test"),),
+        gaps=(CapabilityGap(Capability.STATE_SETUP, "target", "mapping", CapabilityStatus.BLOCKED, "mapping setup unavailable"),),
+    )
+    statuses = [{
+        "hypothesis_id": "H4",
+        "experiment_id": "X4",
+        "class": "state",
+        "target_function": "target",
+        "blind_executed": False,
+        "classification_blocked_reason": "mapping setup unavailable",
+        "capability_resolution": resolution,
+    }]
+    campaign = build_capability_campaign(statuses, [])
+    assert campaign["summary"]["blocked_experiments"] == 1
+    assert campaign["capability_clusters"][0]["capability"] == "STATE_SETUP:mapping"
