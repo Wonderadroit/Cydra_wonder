@@ -151,6 +151,18 @@ def _public_scalar_getters(source: str) -> set[str]:
     return {match.group("name") for match in _PUBLIC_SCALAR_RE.finditer(source)}
 
 
+def _public_scalar_getters_from_sources(sources: tuple[Path, ...]) -> set[str]:
+    """Collect public scalar getters across the bounded target source graph."""
+    getters: set[str] = set()
+    for path in sources:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        getters.update(_public_scalar_getters(source))
+    return getters
+
+
 def plan_public_state_observations(
     contract: ContractModel,
     function: FunctionModel,
@@ -165,17 +177,18 @@ def plan_public_state_observations(
     if not sources:
         return ()
 
-    # State may be declared in an imported/inherited base rather than the
-    # concrete target source unit. Public ABI getters are generated from the
-    # whole reachable source graph, so observation remains source-backed and
-    # deterministic without guessing storage slots.
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sources
-    )
-    getters = _public_scalar_getters(source)
+    # State may be inherited from a base contract or declared in an imported
+    # source unit. The observation surface is the bounded target source graph,
+    # not just the concrete contract file.
+    getters = _public_scalar_getters_from_sources(sources)
     polarities = dict(function.state_predicate_polarities)
     plans: list[StateObservationPlan] = []
+
+    # Public mappings are a deterministic observation surface too. State
+    # prerequisites can refer to mapping-backed state just like execution
+    # predicates; do not force the caller through the scalar-getter path.
+    for predicate in function.state_predicates:
+        plans.extend(plan_public_mapping_state_observations(contract, predicate))
 
     # Direct scalar predicates remain the first observation surface.
     for predicate in function.state_predicates:
