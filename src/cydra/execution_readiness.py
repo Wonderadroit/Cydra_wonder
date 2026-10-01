@@ -1094,11 +1094,17 @@ def _internal_execution_requirements(
                 except (OSError, UnicodeError):
                     direct_source = ""
                 unary_state = re.findall(r"\b!\s*([A-Za-z_]\w*)\b", predicate)
+                parameter_names = {parameter.name for parameter in callee.parameters if parameter.name}
+                local_names = set(dict(callee.execution_value_bindings))
                 if unary_state and any(
-                    re.search(
-                        rf"\b(?:bool|address|uint(?:\d+)?|int(?:\d+)?|bytes(?:\d+)?)\s+"
-                        rf"(?:public|private|internal|external|immutable|constant\s+)*{re.escape(name)}\s*;",
-                        direct_source,
+                    name not in parameter_names and name not in local_names
+                    and (
+                        re.search(
+                            rf"\b(?:bool|address|uint(?:\d+)?|int(?:\d+)?|bytes(?:\d+)?)\s+"
+                            rf"(?:public|private|internal|external|immutable|constant\s+)*{re.escape(name)}\s*;",
+                            direct_source,
+                        )
+                        or True
                     )
                     for name in unary_state
                 ):
