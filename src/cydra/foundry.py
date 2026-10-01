@@ -716,6 +716,22 @@ def _model_initialization_source(
                     if declaration:
                         declarations.append(declaration)
 
+    # Final boundary check: every identifier-shaped reference/contract
+    # initializer argument must have a value-like local declaration. This is
+    # derived from the modeled ABI/source type, never from a target name.
+    existing_declarations = "\n".join(declarations)
+    for index, (parameter, argument) in enumerate(zip(function.parameters, arguments)):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if not re.fullmatch(r"[A-Za-z_]\w*", argument.strip()) or _builtin_type(base):
+            continue
+        source = _source_text(contract_model)
+        is_reference_type = base in {
+            interface.name for interface in contract_model.inherited_resolved_interfaces
+        } or bool(re.search(rf"\b(?:interface|contract|library)\s+{re.escape(base)}\b", source))
+        if is_reference_type and not re.search(rf"\b{re.escape(base)}\s+{re.escape(argument.strip())}\s*;", existing_declarations):
+            declarations.append(f"{base} {argument.strip()};")
+            existing_declarations = "\n".join(declarations)
+
     initialize_args_str = ", ".join(arguments)
     test_body = render_initialization_test_body(
         function,
