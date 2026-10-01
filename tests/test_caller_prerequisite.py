@@ -1,5 +1,5 @@
 from cydra.caller_prerequisite import _caller_bound_initializer_arguments, _caller_role_reached, _initializer_function, _initializer_setup_declarations, _replace_initializer_call
-from cydra.models import ContractModel, FunctionModel, ParameterModel
+from cydra.models import ContractModel, ConstructorModel, Experiment, FunctionModel, Hypothesis, ParameterModel
 
 
 def _function(name, modifiers=(), parameters=()):
@@ -17,14 +17,9 @@ def _function(name, modifiers=(), parameters=()):
 def test_caller_prerequisite_routes_constructor_authorization_when_no_initializer(tmp_path, monkeypatch):
     from cydra.caller_prerequisite import generate_caller_prerequisite_test
 
-    constructor = FunctionModel(
-        name="constructor",
-        visibility="internal",
-        modifiers=(),
-        writes=(),
-        external_calls=(),
+    constructor = ConstructorModel(
+        parameters=(ParameterModel("owner", "address"),),
         line=1,
-        parameters=(ParameterModel("owner", "address", "memory"),),
     )
     target = _function("transact", parameters=(ParameterModel("amount", "uint256", "calldata"),))
     contract = ContractModel("Target", str(tmp_path / "Target.sol"), (target,), constructor=constructor)
@@ -35,18 +30,13 @@ def test_caller_prerequisite_routes_constructor_authorization_when_no_initialize
         return tmp_path / "generated.sol"
 
     monkeypatch.setattr("cydra.caller_prerequisite._constructor_caller_prerequisite_source", fake_constructor)
-    experiment = __import__("cydra.models", fromlist=["Experiment"]).Experiment(
-        "X", "H", "transact", ("1",), 1.0
-    )
-    hypothesis = __import__("cydra.models", fromlist=["Hypothesis"]).Hypothesis(
-        "H", "claim", "INV", "transact", "caller", "impact"
-    )
+    experiment = Experiment("X", "H", "transact", ("before",), 1.0, ("1",), "transact")
+    hypothesis = Hypothesis("H", "claim", "INV", "transact", "caller", "impact")
     result = generate_caller_prerequisite_test(
         hypothesis, experiment, "./Target.sol", "Target", tmp_path / "generated.sol", contract
     )
     assert called["yes"] is True
     assert result == tmp_path / "generated.sol"
-
 
 def test_initializer_candidate_is_semantic_not_name_only():
     initializer = _function(
