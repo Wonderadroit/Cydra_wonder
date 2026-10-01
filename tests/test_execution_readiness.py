@@ -988,3 +988,45 @@ def test_internal_state_prerequisite_uses_constructible_writer_or_default_state(
     assert "constructible writer" in registry.detail
     assert used.status == "constraint"
     assert "default value" in used.detail
+
+
+def test_internal_state_discovery_follows_value_binding_and_return_expression(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => address) public verifierMap;
+            mapping(uint256 => uint256) public roots;
+
+            function run(uint256 id, uint256 root) external {
+                verify(id);
+                rootHashExists(root, id);
+            }
+
+            function verify(uint256 id) internal {
+                address verifier = verifierMap[id];
+                require(address(verifier) != address(0));
+            }
+
+            function rootHashExists(uint256 root, uint256 index) public view returns (bool) {
+                return root == 0 || roots[index] == root;
+            }
+
+            function registerVerifier(uint256 id, address verifier) external {
+                verifierMap[id] = verifier;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+
+    states = {item.subject for item in readiness.state_setup_candidates}
+    assert "registerVerifier" in {item.subject for item in readiness.state_setup_candidates}
+    assert any("verifierMap" in item.detail for item in readiness.state_setup_candidates)
+    assert any("roots" in item.detail or item.subject == "rootHashExists" for item in readiness.state_setup_candidates)
