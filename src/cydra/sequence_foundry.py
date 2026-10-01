@@ -590,7 +590,7 @@ def generate_sequence_test_from_experiment(
             parameter_name = parameter.name or ""
             needs_nonzero = bool(
                 parameter_name
-                and re.search(rf"\\b{re.escape(parameter_name)}\\s*-\\s*1\\b", constructor_source)
+                and re.search(rf"\b{re.escape(parameter_name)}\s*-\s*1\b", constructor_source)
             )
             constructor_arguments.append("1" if needs_nonzero else "0")
         elif base.startswith("int"):
