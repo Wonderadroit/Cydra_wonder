@@ -568,7 +568,7 @@ def _legacy_structured_parameter_setup(
                 imports.add((str(resolved[0]), base))
             local = f"cydra_{parameter.name}"
             declarations.append(
-                f"{_memory_parameter_type(parameter.type)} memory {local} = {typed};"
+                f"{_memory_parameter_type(parameter.type)} memory {local} = {expression.strip()};"
             )
             for path in caller_bindings:
                 if path.startswith(parameter.name + "."):
