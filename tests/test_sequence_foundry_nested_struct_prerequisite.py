@@ -12,4 +12,4 @@ def test_existing_tuple_is_preserved():
 
 def test_non_struct_expression_is_unchanged():
     value = "abi.decode(blob, (FeeStructure))"
-    assert _coerce_struct_constructor_to_tuple(value) == value
+    assert _coerce_struct_constructor_to_tuple(value, "FeeStructure") == value
