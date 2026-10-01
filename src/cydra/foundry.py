@@ -732,6 +732,21 @@ def _model_initialization_source(
             declarations.append(f"{base} {argument.strip()};")
             existing_declarations = "\n".join(declarations)
 
+    # Interface/contract ABI references are value-like local types. Ensure
+    # identifier-shaped fallbacks always have an explicit declaration.
+    declared_text = "\n".join(declarations)
+    for index, (parameter, argument) in enumerate(zip(function.parameters, arguments)):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if not re.fullmatch(r"[A-Za-z_]\w*", argument.strip()) or _builtin_type(base):
+            continue
+        is_reference = base in {item.name for item in contract_model.inherited_resolved_interfaces}
+        if not is_reference:
+            is_reference = bool(re.search(rf"\b(?:interface|contract|library)\s+{re.escape(base)}\b", _source_text(contract_model)))
+        declaration = f"{base} {argument.strip()};"
+        if is_reference and declaration not in declared_text:
+            declarations.append(declaration)
+            declared_text = "\n".join(declarations)
+
     initialize_args_str = ", ".join(arguments)
     test_body = render_initialization_test_body(
         function,
