@@ -454,7 +454,8 @@ def _run_authorization(project: Path, hypothesis, experiment, contract) -> dict[
     }
 
 
-def _setup_argument(function, index: int, role: str | None) -> str:
+def _setup_argument(function, index: int, role: str | None, contract=None) -> str:
+    """Materialize one generic state-writer argument without losing struct shape."""
     parameter = function.parameters[index]
     parameter_type = parameter.type.strip()
     base = parameter_type.split()[0].rstrip("[]")
@@ -465,9 +466,6 @@ def _setup_argument(function, index: int, role: str | None) -> str:
             expression = role_address_expression(role)
             if expression:
                 return expression
-        name = parameter.name.lower()
-        if "recipient" in name or "user" in name or "account" in name:
-            return "attacker"
         return "attacker"
     if parameter_type == "address payable":
         return "payable(attacker)"
@@ -481,7 +479,52 @@ def _setup_argument(function, index: int, role: str | None) -> str:
         return 'bytes("")'
     if base.startswith("bytes") and base[5:].isdigit():
         return "0"
-    raise ValueError(f"unsupported setup parameter type: {parameter.type}")
+
+    if contract is None:
+        raise ValueError(f"unsupported setup parameter type: {parameter.type}")
+
+    from cydra.experiment_inputs import (
+        _definition,
+        _parameter_from_field,
+        _split_fields,
+        _type_source,
+        materialize_parameter_with_provenance,
+    )
+    from cydra.sequence_foundry import _split_top_level_tuple_expression
+
+    proof = materialize_parameter_with_provenance(parameter, contract)
+    if proof is None:
+        raise ValueError(
+            f"unable to source-materialize setup parameter type: {parameter.type}"
+        )
+
+    definition_source = _type_source(contract, base)
+    if definition_source is None:
+        return proof.expression
+
+    _resolved_path, resolved_source = definition_source
+    definition = _definition(resolved_source, base)
+    if definition is None or definition[0] != "struct":
+        return proof.expression
+
+    fields = []
+    for field_text in _split_fields(definition[2]):
+        field = _parameter_from_field(field_text)
+        if field is None:
+            raise ValueError(
+                f"unable to resolve setup struct field for {base}: {field_text}"
+            )
+        fields.append(field)
+
+    parts = _split_top_level_tuple_expression(proof.expression)
+    if parts is None or len(parts) != len(fields):
+        raise ValueError(
+            f"prerequisite struct materialization arity mismatch for {base}: "
+            f"source defines {len(fields)} fields, materializer provides "
+            f"{len(parts) if parts is not None else 0}"
+        )
+
+    return f"{base}({{ {', '.join(f'{field.name}: {part}' for field, part in zip(fields, parts))} }})"
 
 
 def _setup_steps(contract, setup_actions):
@@ -492,7 +535,7 @@ def _setup_steps(contract, setup_actions):
         if function is None:
             raise ValueError(f"setup action is not modeled: {action.function}")
         arguments = tuple(
-            _setup_argument(function, index, action.caller_role)
+            _setup_argument(function, index, action.caller_role, contract)
             for index in range(len(function.parameters))
         )
         from cydra.models import ExperimentStep
