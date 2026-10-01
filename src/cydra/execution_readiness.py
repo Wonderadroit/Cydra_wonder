@@ -468,6 +468,15 @@ def runtime_dependency_constructor_bindings(
                 rf"\b{re.escape(receiver)}\s*=\s*{re.escape(interface_name)}\s*\(\s*(?P<parameter>[A-Za-z_]\w*)\s*\)",
                 source,
             )
+            if assignment is None:
+                # Constructor parameters are frequently assigned directly to
+                # interface-typed state without an explicit interface cast.
+                # The declared receiver type already supplies the interface
+                # provenance, so recover this form without guessing a target.
+                assignment = re.search(
+                    rf"\b{re.escape(receiver)}\s*=\s*(?P<parameter>[A-Za-z_]\w*)\s*;",
+                    source,
+                )
             if assignment is None or assignment.group("parameter") not in constructor_parameters:
                 continue
             try:
