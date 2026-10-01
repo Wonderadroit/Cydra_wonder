@@ -453,6 +453,37 @@ def _planned_defaults(parameters: tuple[ParameterModel, ...], planned: tuple[str
     return result
 
 
+
+def complete_planned_inputs(
+    parameters: Iterable[ParameterModel],
+    planned: Iterable[str],
+    contract_model: ContractModel,
+) -> tuple[str, ...] | None:
+    """Complete a partial planner vector with canonical source-backed materialization.
+
+    Known planned values are preserved by ABI-compatible parameter identity; every
+    missing slot is filled only from the same recursive materializer used by the
+    normal parameter planner. An incomplete or unmaterializable vector therefore
+    remains a capability gap rather than becoming an empty/guessed argument.
+    """
+    parameter_list = tuple(parameters)
+    planned_values = tuple(planned)
+    if len(planned_values) > len(parameter_list):
+        return None
+    bindings = _planned_defaults(parameter_list, planned_values)
+    defaults = conservative_defaults(parameter_list, contract_model)
+    if defaults is None:
+        return None
+    completed: list[str] = []
+    for parameter in parameter_list:
+        value = bindings.get(parameter.name)
+        if value is None or not value.strip():
+            value = defaults.get(parameter.name)
+        if value is None or not value.strip():
+            return None
+        completed.append(value)
+    return tuple(completed)
+
 def plan_parameter_inputs(
     parameters: Iterable[ParameterModel],
     constraints: Iterable[ConstraintEvidence],
