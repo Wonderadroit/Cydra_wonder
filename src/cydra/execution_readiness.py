@@ -1181,7 +1181,11 @@ def _internal_execution_requirements(
                     "cryptographic_witness": "internal callee prerequisite requires generic cryptographic witness construction",
                     "execution_context": "internal callee prerequisite requires generic blockchain execution context",
                     "local_execution": "internal callee prerequisite depends on a callee-local value whose provenance is not yet constructible",
-                }[category]
+                }.get(
+                    category,
+                    "internal callee prerequisite could not be classified by the generic readiness model; "
+                    "the prerequisite remains unresolved until its provenance/category is established",
+                )
                 capability_constraint = (
                     category == "execution_context"
                     and "callback_state_order_reachability" in execution_capabilities
