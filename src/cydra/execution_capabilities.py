@@ -224,7 +224,15 @@ def build_experiment_contract(hypothesis: Hypothesis, experiment: Experiment, co
     if readiness.state_setup_candidates or readiness.state_requirements:
         add(Capability.STATE_SETUP, 'persistent state prerequisites', 'execution_readiness')
     if readiness.state_requirements or readiness.execution_requirements:
-        add(Capability.STATE_OBSERVATION, 'state/execution prerequisites', 'runtime_observation')
+        # Callback/reentrancy experiments have a direct causal runtime oracle:
+        # the harness records callback entry and re-entry outcome. Do not make
+        # an unrelated public-state getter a prerequisite for executing that
+        # experiment. Explicit state-observation requirements for non-callback
+        # experiments remain fail-closed and continue through the observation
+        # planners.
+        callback_oracle = bool(re.search(r'callback|reentr', hypothesis.attacker_capability.lower()))
+        if not callback_oracle:
+            add(Capability.STATE_OBSERVATION, 'state/execution prerequisites', 'runtime_observation')
     if readiness.runtime_requirements:
         add(Capability.INTERNAL_CALL_PROPAGATION, 'internal call prerequisites', 'execution_readiness')
     if experiment.steps:
