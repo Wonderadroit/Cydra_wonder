@@ -169,6 +169,13 @@ def _plan_prerequisite_parameter_bindings(
             from .interface_resolver import _imports_for
             importer_path = Path(source_path).resolve()
             declared_imports = list(_imports_for(importer_path))
+            try:
+                source_text = importer_path.read_text(encoding="utf-8")
+                for match in re.finditer(r"[\'\"]([^\'\"]+\\.sol)[\'\"]", source_text):
+                    if match.group(1) not in declared_imports:
+                        declared_imports.append(match.group(1))
+            except (OSError, UnicodeError):
+                pass
             # Keep a direct source-regex fallback for compact/generated fixtures.
             try:
                 source_text = importer_path.read_text(encoding="utf-8")
@@ -199,6 +206,9 @@ def _plan_prerequisite_parameter_bindings(
                 try:
                     nested_imports = list(_imports_for(candidate))
                     nested_text = candidate.read_text(encoding="utf-8")
+                    for match in re.finditer(r"[\'\"]([^\'\"]+\\.sol)[\'\"]", nested_text):
+                        if match.group(1) not in nested_imports:
+                            nested_imports.append(match.group(1))
                     for match in re.finditer(
                     r"import\s+(?:\{[^}]*\}\s+from\s+|\*\s+as\s+[A-Za-z_]\w*\s+from\s+)?[\'\"]([^\'\"]+)[\'\"]\s*;",
                         nested_text,
