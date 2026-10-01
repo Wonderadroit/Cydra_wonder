@@ -1092,7 +1092,11 @@ def _internal_execution_requirements(
                     if predicate in (*callee.execution_predicates, *callee.state_predicates)
                     else "internal_state_predicate"
                 )
-                category = _classify_internal_predicate(contract, callee, predicate)
+                category = (
+                    "state_observation"
+                    if predicate in callee.state_predicates
+                    else _classify_internal_predicate(contract, callee, predicate)
+                )
                 try:
                     direct_source = Path(contract.source).read_text(encoding="utf-8")
                 except (OSError, UnicodeError):
