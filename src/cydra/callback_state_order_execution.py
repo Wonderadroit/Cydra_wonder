@@ -253,8 +253,18 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
     callback_input = target_arguments[0]
     typed, imports = _qualify_planned_target_argument(parameter, callback_input, target_type, contract_model)
     callback_input_name = "cydraCallbackInput"
+    interface_names = {item.name for item in contract_model.inherited_resolved_interfaces}
+    try:
+        callback_source_text = Path(contract_model.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        callback_source_text = ""
+    base_parameter_type = parameter.type.strip().split()[0]
+    is_reference_interface = base_parameter_type in interface_names or bool(
+        re.search(rf"\binterface\s+{re.escape(base_parameter_type)}\b", callback_source_text)
+    )
+    location = "" if is_reference_interface else " memory"
     callback_setup = (
-        f"{_memory_parameter_type(parameter.type)}{" " if not (parameter.type.strip().split()[0] in {item.name for item in contract_model.inherited_resolved_interfaces} or re.search(rf"\\binterface\\s+{re.escape(parameter.type.strip().split()[0])}\\b", Path(contract_model.source).read_text(encoding="utf-8") if Path(contract_model.source).is_file() else "")) else ""}{callback_input_name} = {typed};\n"
+        f"{_memory_parameter_type(parameter.type)}{location} {callback_input_name} = {typed};\n"
         f"        {callback_input_name}.{'.'.join(parameter_path[1:])} = abi.encode(cydraStack);"
     )
     caller_bindings = _caller_bound_parameter_paths(contract_model, function)
