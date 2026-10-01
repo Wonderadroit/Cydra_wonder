@@ -168,24 +168,25 @@ def _plan_prerequisite_parameter_bindings(
             return base, str(resolved_source)
         except (FileNotFoundError, ValueError, OSError, UnicodeError):
             # Bounded fallback for minimal fixtures and unusual import formatting:
-            # walk only explicitly declared imports from this source unit.
+            # traverse only source-declared imports through the shared resolver.
             try:
-                source_text = Path(source_path).read_text(encoding="utf-8")
+                from .interface_resolver import _imports_for
+                declared_imports = _imports_for(Path(source_path).resolve())
             except (OSError, UnicodeError):
-                source_text = ""
-            import_pattern = re.compile(
-                r'\bimport\s+(?:\{[^}]*\}\s+from\s+|\*\s+as\s+[A-Za-z_]\w*\s+from\s+|[^"\']*?\s+from\s+)?["\']([^"\']+)["\']\s*;'
-            )
-            for import_match in import_pattern.finditer(source_text):
-                import_path = import_match.group(1)
-                imported = (Path(source_path).parent / import_path).resolve()
-                if not imported.is_file():
+                declared_imports = ()
+            for import_path in declared_imports:
+                imported_result = resolve_import(project_root, source_path, import_path)
+                if imported_result is None:
                     continue
+                imported, _method = imported_result
                 try:
                     imported_text = imported.read_text(encoding="utf-8")
                 except (OSError, UnicodeError):
                     continue
-                if re.search(rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(base)}\b", imported_text):
+                if re.search(
+                    rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(base)}\b",
+                    imported_text,
+                ):
                     return base, str(imported)
             raise FileNotFoundError(f"Unable to resolve user-defined type {base} from {source_path}")
 
