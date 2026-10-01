@@ -236,16 +236,6 @@ def _constructor_caller_prerequisite_source(
     contract_model: ContractModel,
 ) -> Path:
     """Generate a caller prerequisite when authorization is constructor-established."""
-    if initializer is None:
-        return _constructor_caller_prerequisite_source(
-            hypothesis,
-            experiment,
-            target_import,
-            target_type,
-            output_path,
-            contract_model,
-        )
-
     synthetic = Hypothesis(
         f"{hypothesis.hypothesis_id}-CALLER-PREREQ",
         hypothesis.claim,
@@ -512,6 +502,15 @@ def generate_caller_prerequisite_test(
     contract_model: ContractModel,
 ) -> Path:
     initializer = _initializer_function(contract_model)
+    if initializer is None:
+        return _constructor_caller_prerequisite_source(
+            hypothesis,
+            experiment,
+            target_import,
+            target_type,
+            output_path,
+            contract_model,
+        )
 
     if not experiment.planned_inputs:
         raise ValueError("caller prerequisite probe requires the canonical target input vector")
