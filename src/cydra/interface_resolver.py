@@ -29,7 +29,7 @@ _FUNCTION_RE = re.compile(
     r"\bfunction\s+(\w+)\s*\(([^)]*)\)\s*([^;{]*)\breturns\s*\(([^)]*)\)\s*;",
     re.MULTILINE,
 )
-_IMPORT_RE = re.compile(r'\bimport\s+(?:[^"\']*from\s+)?["\']([^"\']+)["\']\s*;', re.MULTILINE)
+_IMPORT_RE = re.compile(r'\bimport\s+(?:\{[^}]*\}|\*\s+as\s+[A-Za-z_]\w*|[^"\']*?\s+from\s+)?["\']([^"\']+)["\']\s*;', re.MULTILINE)
 _REMAP_RE = re.compile(r"^\s*([^=\s]+)\s*=\s*(\S+)\s*$")
 _DECLARED_TYPE_RE = re.compile(
     r"^\s*(?:struct\s+(?P<struct>[A-Za-z_]\w*)\s*\{|"
