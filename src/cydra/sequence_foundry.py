@@ -9,7 +9,7 @@ from .interface_resolver import resolve_interface, resolve_named_type_source, re
 from .execution_readiness import _address_role, _constructor_role_grants, caller_role, role_address_expression, constructible_state_setup_plan
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
-from .experiment_inputs import _type_source
+from .experiment_inputs import _type_source, complete_planned_inputs
 
 
 def _constructor_granted_caller(function, contract_model: ContractModel) -> str | None:
@@ -480,7 +480,21 @@ def generate_sequence_test_from_experiment(
     functions = {
         function.name: function
         for function in (*contract_model.functions, *contract_model.inherited_functions)
+        if function is not None and getattr(function, "name", None)
     }
+    for step_index, step in enumerate(experiment.steps):
+        if step is None:
+            raise ValueError(
+                f"CALL_SEQUENCE: prerequisite step {step_index} is unavailable"
+            )
+        if not getattr(step, "function", None):
+            raise ValueError(
+                f"CALL_SEQUENCE: prerequisite step {step_index} has no modeled function"
+            )
+        if step.function not in functions:
+            raise ValueError(
+                f"CALL_SEQUENCE: modeled prerequisite function unavailable: {step.function}"
+            )
     rendered: list[str] = []
     prerequisite_imports: list[str] = []
     relation_setups: list[str] = []
@@ -524,11 +538,21 @@ def generate_sequence_test_from_experiment(
         # transitions for targets with complex or custom parameter types.
         effective_arguments = step.arguments
         if (
-            not effective_arguments
-            and function.name == hypothesis.target_function
-            and experiment.planned_inputs
+            function.name == hypothesis.target_function
+            and (experiment.planned_inputs or step.arguments)
         ):
-            effective_arguments = experiment.planned_inputs
+            planned_vector = experiment.planned_inputs or step.arguments
+            completed = complete_planned_inputs(
+                function.parameters,
+                planned_vector,
+                contract_model,
+            )
+            if completed is None:
+                raise ValueError(
+                    f"CALL_SEQUENCE: unable to canonically materialize prerequisite "
+                    f"inputs for {function.name}"
+                )
+            effective_arguments = completed
         if verify_state_prerequisites and function.name == hypothesis.target_function:
             observations = plan_public_state_observations(contract_model, function)
             if not observations:
