@@ -167,18 +167,24 @@ def _plan_prerequisite_parameter_bindings(
             resolved_source, _method = resolve_named_type_source(project, source_path, base)
             return base, str(resolved_source)
         except (FileNotFoundError, ValueError, OSError, UnicodeError):
-            # Bounded fallback for minimal fixtures and unusual import formatting:
-            # traverse only source-declared imports through the shared resolver.
+            # Bounded fallback for minimal/generated fixtures. Traverse only
+            # explicit source-declared import edges, including transitive edges;
+            # never perform a repository-wide symbol search.
             try:
                 from .interface_resolver import _imports_for
-                declared_imports = _imports_for(Path(source_path).resolve())
+                initial_imports = _imports_for(Path(source_path).resolve())
             except (OSError, UnicodeError):
-                declared_imports = ()
-            for import_path in declared_imports:
-                imported_result = resolve_import(project_root, source_path, import_path)
-                if imported_result is None:
+                initial_imports = ()
+            pending = [
+                (Path(source_path).parent / import_path).resolve()
+                for import_path in initial_imports
+            ]
+            visited_imports: set[Path] = set()
+            while pending:
+                imported = pending.pop(0)
+                if imported in visited_imports or not imported.is_file():
                     continue
-                imported, _method = imported_result
+                visited_imports.add(imported)
                 try:
                     imported_text = imported.read_text(encoding="utf-8")
                 except (OSError, UnicodeError):
@@ -188,6 +194,12 @@ def _plan_prerequisite_parameter_bindings(
                     imported_text,
                 ):
                     return base, str(imported)
+                try:
+                    nested_imports = _imports_for(imported)
+                except (OSError, UnicodeError):
+                    nested_imports = ()
+                for import_path in nested_imports:
+                    pending.append((imported.parent / import_path).resolve())
             raise FileNotFoundError(f"Unable to resolve user-defined type {base} from {source_path}")
 
     def add_import(type_name: str) -> None:
