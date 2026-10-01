@@ -24,7 +24,7 @@ from .experiment_inputs import _definition, _parameter_from_field, _split_fields
 from .namespaced_state_observation import plan_namespaced_state_observation
 from . import execution_readiness
 from .execution_readiness import constructible_state_setup_plan, runtime_dependency_constructor_bindings
-from .interface_resolver import resolve_import, resolve_interface, _imports_for
+from .interface_resolver import resolve_import, resolve_interface, _imports_for, _extract_interface
 
 
 
@@ -549,6 +549,35 @@ def _legacy_structured_parameter_setup(
                     if re.search(rf"\b{re.escape(parameter.name)}\b", predicate):
                         referenced_roots.add(parameter.name)
     for parameter, expression in zip(function.parameters, arguments):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        custom = not (
+            base in {"address", "bool", "string", "bytes"}
+            or base.startswith(("uint", "int", "bytes", "fixed", "ufixed"))
+        )
+        tuple_expression = _split_top_level_tuple_expression(expression) is not None
+        # A structured tuple is itself a concrete experiment input. Materialize
+        # it unconditionally before any prerequisite-specific filtering so the
+        # final ABI call can never reference a dropped local identifier.
+        if custom and tuple_expression:
+            typed, typed_imports = _qualify_planned_target_argument(
+                parameter, expression, target_type, contract_model
+            )
+            imports.update(typed_imports)
+            resolved = _type_source(contract_model, base)
+            if resolved is not None and base not in set(contract_model.declared_types):
+                imports.add((str(resolved[0]), base))
+            local = f"cydra_{parameter.name}"
+            declarations.append(
+                f"{_memory_parameter_type(parameter.type)} memory {local} = {typed};"
+            )
+            for path in caller_bindings:
+                if path.startswith(parameter.name + "."):
+                    declarations.append(
+                        f"{local}.{path.split('.', 1)[1]} = {attacker_expression};"
+                    )
+            rendered_arguments[parameter.name] = local
+            referenced_roots.add(parameter.name)
+            continue
         if parameter.name not in referenced_roots:
             # Even when no prerequisite currently references this parameter,
             # the final callback renderer may select a lowered structured local
@@ -801,6 +830,46 @@ def _legacy_callback_test(
         for binding in runtime_bindings
         if len(binding) >= 2
     )
+    # Last bounded fallback for minimal fixtures: recover a constructor-backed
+    # interface directly from the target's declared import graph. This keeps
+    # runtime stub materialization independent of richer model metadata.
+    if contract_model.constructor is not None:
+        source_path = Path(contract_model.source).resolve()
+        try:
+            source_text = source_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            source_text = ""
+        constructor_parameters = {p.name for p in contract_model.constructor.parameters}
+        recovered_fallback = []
+        for match in re.finditer(
+            r'\\bimport\\s+(?:\\{[^}]*\\}\\s+from\\s+|\\*\\s+as\\s+[A-Za-z_]\\w*\\s+from\\s+)?["\\']([^"\\']+)["\\']\\s*;',
+            source_text,
+        ):
+            import_path = match.group(1)
+            direct = (source_path.parent / import_path).resolve()
+            if not direct.is_file():
+                continue
+            try:
+                imported_text = direct.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            interface_names = re.findall(r"\\binterface\\s+([A-Za-z_]\\w*)\\b", imported_text)
+            for interface_name in interface_names:
+                try:
+                    resolved = _extract_interface(
+                        interface_name, direct, "declared_import", source_path.parent
+                    )
+                except (OSError, UnicodeError, ValueError):
+                    continue
+                for parameter in contract_model.constructor.parameters:
+                    if parameter.name not in constructor_parameters:
+                        continue
+                    if re.search(
+                        rf"\\b{re.escape(interface_name)}\\s*\\(\\s*{re.escape(parameter.name)}\\s*\\)",
+                        source_text,
+                    ):
+                        recovered_fallback.append((parameter.name, resolved))
+        runtime_bindings = tuple(dict.fromkeys((*runtime_bindings, *recovered_fallback)))
     # Some lightweight models omit constructor/interface dependency metadata.
     # Recover only target-declared state-backed constructor bindings from the
     # source/import graph; never scan unrelated repository files.
