@@ -1,7 +1,7 @@
 from cydra.compiler_constraints import ConstraintEvidence
 from cydra.constraint_candidates import select_parameter_candidates
-from cydra.experiment_inputs import plan_parameter_inputs
-from cydra.models import ParameterModel
+from cydra.experiment_inputs import complete_planned_inputs, plan_parameter_inputs
+from cydra.models import ContractModel, ParameterModel
 
 
 def evidence(parameter, index, predicate, function="withdraw"):
