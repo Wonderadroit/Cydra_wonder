@@ -5,7 +5,7 @@ import os
 import re
 
 from .models import ContractModel, Experiment, Hypothesis
-from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_struct_fields, resolve_namespaced_struct_fields
+from .interface_resolver import resolve_interface, resolve_named_type_source, resolve_struct_fields, resolve_namespaced_struct_fields, resolve_import
 from .execution_readiness import _address_role, _constructor_role_grants, caller_role, role_address_expression, constructible_state_setup_plan
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
