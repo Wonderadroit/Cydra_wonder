@@ -310,11 +310,16 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
             for path in caller_bindings
             if path.startswith(parameter.name + ".")
         )
+    stack_import_type = qualified_user_type(contract_model, discovered["decoded_type"]).split(".", 1)[0]
+    operation_import_type = qualified_user_type(contract_model, discovered["operation_type"]).split(".", 1)[0]
+    import_provenance = {(str(stack_path_name), stack_import_type)}
+    if operation_path:
+        import_provenance.add((str(operation_path), operation_import_type))
     return {
         "parameter": parameter,
         "input_name": callback_input_name,
         "setup": declaration + "\n        " + callback_setup,
-        "imports": set(imports) | {(str(stack_path_name), discovered["decoded_type"]), (str(operation_path), discovered["operation_type"])} if operation_path else set(imports) | {(str(stack_path_name), discovered["decoded_type"])},
+        "imports": set(imports) | import_provenance,
         "typed_call_args": (callback_input_name,) + tuple(target_arguments[1:]),
     }
 
