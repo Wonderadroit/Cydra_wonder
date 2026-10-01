@@ -1087,7 +1087,11 @@ def _internal_execution_requirements(
                 continue
             seen_names.add(name)
             for predicate in (*callee.execution_predicates, *callee.state_predicates):
-                kind = "internal_execution_predicate" if predicate in callee.execution_predicates else "internal_state_predicate"
+                kind = (
+                    "internal_execution_predicate"
+                    if predicate in (*callee.execution_predicates, *callee.state_predicates)
+                    else "internal_state_predicate"
+                )
                 category = _classify_internal_predicate(contract, callee, predicate)
                 try:
                     direct_source = Path(contract.source).read_text(encoding="utf-8")
