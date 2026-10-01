@@ -70,7 +70,7 @@ function testInitializationInterfaceIsCallable() public {
         ("_helper", "allowedRecipients", "_payloads"),
     )
     assert changed is True
-    assert "CydraCallerSet.one(attacker)" in rewritten
+    assert "CydraCallerSet.one(cydraAttacker)" in rewritten
     assert "new bytes[](0)" in rewritten
 
 
@@ -88,7 +88,7 @@ function testInitializationInterfaceIsCallable() public {
         "initialize",
         ("_helper", "allowedRecipients"),
     )
-    assert arguments == ["address(0xA11CE)", "CydraCallerSet.one(attacker)"]
+    assert arguments == ["address(0xA11CE)", "CydraCallerSet.one(cydraAttacker)"]
 
 
 def test_initializer_call_parser_handles_try_call_body():
@@ -106,8 +106,8 @@ function testInitializationInterfaceIsCallable() public {
         ("_helper", "allowedRecipients"),
     )
     assert changed is True
-    assert "CydraCallerSet.one(attacker)" in rewritten
-    assert "try target.initialize(address(0xA11CE), CydraCallerSet.one(attacker)) { }" in rewritten
+    assert "CydraCallerSet.one(cydraAttacker)" in rewritten
+    assert "try target.initialize(address(0xA11CE), CydraCallerSet.one(cydraAttacker)) { }" in rewritten
     assert "try;" not in rewritten
 
 
@@ -150,7 +150,7 @@ function testInitializationInterfaceIsCallable() public {
         ("_helper", "allowedRecipients"),
     )
     assert changed is True
-    assert "CydraCallerSet.one(attacker)" in rewritten
+    assert "CydraCallerSet.one(cydraAttacker)" in rewritten
 
 
 def test_caller_boundary_observation_accepts_authorized_success():
@@ -235,7 +235,7 @@ def test_imported_struct_planned_argument_keeps_type_provenance(tmp_path):
         contract,
     )
     assert rendered == "CircomData(1)"
-    assert imports == {(str(type_file.resolve()), "CircomData")}
+    assert import_source == {(str(type_file.resolve()), "CircomData")}
 
 
 def test_nested_struct_planned_argument_is_qualified_recursively(tmp_path):
