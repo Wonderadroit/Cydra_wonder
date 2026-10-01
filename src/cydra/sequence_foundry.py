@@ -120,6 +120,7 @@ def _plan_prerequisite_parameter_bindings(
     source_path: str,
     output_path: Path,
     function,
+    contract_model: ContractModel,
     arguments: tuple[str, ...],
     *,
     materialize_via_abi: bool = False,
@@ -405,6 +406,7 @@ def generate_sequence_test_from_experiment(
                 contract_model.source,
                 Path(output_path),
                 function,
+                contract_model,
                 effective_arguments,
                 materialize_via_abi=bool(step.arguments),
             )
@@ -575,7 +577,7 @@ def generate_sequence_test_from_experiment(
         elif base.startswith("uint"):
             # Use a non-zero neutral constructor seed for unsigned arithmetic
             # preconditions; zero is frequently an invalid deployment boundary.
-            constructor_arguments.append("0")
+            constructor_arguments.append("1")
         elif base.startswith("int"):
             constructor_arguments.append("0")
         elif base == "string":
