@@ -307,9 +307,9 @@ def _plan_prerequisite_parameter_bindings(
                 if open_brace >= 0 and close_brace > open_brace:
                     parsed: list[tuple[str, str]] = []
                     for statement in defining_text[open_brace + 1:close_brace].split(";"):
-                        parts = statement.strip().split()
-                        if len(parts) >= 2:
-                            parsed.append((parts[-1], " ".join(parts[:-1])))
+                        tokens = statement.strip().split()
+                        if len(tokens) >= 2:
+                            parsed.append((tokens[-1], " ".join(tokens[:-1])))
                     fields = tuple(parsed)
         if not fields:
             raise ValueError(
