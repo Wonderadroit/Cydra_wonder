@@ -286,3 +286,30 @@ def test_recursive_materialization_returns_source_provenance(tmp_path):
     assert any(":type:Outer:" in item for item in proof.provenance)
     assert any(":type:Inner:" in item for item in proof.provenance)
     assert any("Outer.inner" in item for item in proof.provenance)
+
+
+def test_complete_planned_inputs_fills_missing_slots_from_canonical_materializer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { "
+        "struct FeeStructure { uint256 flatFee; uint256 gasFee; uint256 maxFee; } "
+        "function use(address recipient, FeeStructure calldata fee, uint256 deadline) external {} "
+        "}",
+        encoding="utf-8",
+    )
+    contract = ContractModel("Target", str(source), ())
+    parameters = (
+        ParameterModel(name="recipient", type="address"),
+        ParameterModel(name="fee", type="FeeStructure"),
+        ParameterModel(name="deadline", type="uint256"),
+    )
+    result = complete_planned_inputs(
+        parameters,
+        ("address(0xBEEF)",),
+        contract,
+    )
+    assert result == (
+        "address(0xBEEF)",
+        "(0, 0, 0)",
+        "1",
+    )
