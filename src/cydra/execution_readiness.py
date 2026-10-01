@@ -969,6 +969,25 @@ def _classify_internal_predicate(
         r"(?:(?:public|private|internal|external|immutable|constant)\s+)*([A-Za-z_]\w*)\s*;"
     )
     state_names.update(match.group(1) for match in broad_state_decl.finditer(source_text))
+    # Final bounded top-level declaration pass. Some generated/minified target
+    # sources place declarations on the same line as braces or modifiers, so
+    # line-anchored grammars can miss them. Track brace depth and accept only
+    # declarations at source-unit depth zero; this avoids mistaking function
+    # locals for persistent state.
+    primitive_state_decl = re.compile(
+        r"\b(?:mapping\s*\([^;{}]+\)|(?:uint|int|address|bool|bytes(?:\d+)?))\s+"
+        r"(?:(?:public|private|internal|external|immutable|constant)\s+)*([A-Za-z_]\w*)\s*;"
+    )
+    depth = 0
+    for token in re.finditer(r"\{|\}|"+primitive_state_decl.pattern, source_text):
+        if token.group(0) == "{":
+            depth += 1
+            continue
+        if token.group(0) == "}":
+            depth = max(0, depth - 1)
+            continue
+        if depth == 0:
+            state_names.add(token.group(1))
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     if identifiers & state_names or "$." in predicate:
         return "state_observation"
