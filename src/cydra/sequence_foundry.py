@@ -187,7 +187,14 @@ def _plan_prerequisite_parameter_bindings(
                 if candidate in visited or not candidate.is_file():
                     continue
                 visited.add(candidate)
-                if resolve_struct_fields(project_root, candidate, base):
+                try:
+                    candidate_text = candidate.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    candidate_text = ""
+                if resolve_struct_fields(project_root, candidate, base) or re.search(
+                    rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(base)}\b",
+                    candidate_text,
+                ):
                     return base, str(candidate)
                 try:
                     nested_imports = list(_imports_for(candidate))
