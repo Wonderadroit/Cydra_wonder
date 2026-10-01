@@ -1016,11 +1016,11 @@ def _classify_internal_predicate(
     # Unary state guards such as !verified are common in compact target
     # sources. Preserve their state provenance even when the parser/model did
     # not populate contract.state_variables.
-    for state_candidate in re.findall(r"\\b!\\s*([A-Za-z_]\\w*)\\b", predicate):
+    for state_candidate in re.findall(r"\b!\s*([A-Za-z_]\w*)\b", predicate):
         if re.search(
-            rf"\\b(?:bool|address|uint(?:\\d+)?|int(?:\\d+)?|bytes(?:\\d+)?)\\s+"
-            rf"(?:public|private|internal|external|immutable|constant\\s+)*"
-            rf"{re.escape(state_candidate)}\\s*;",
+            rf"\b(?:bool|address|uint(?:\d+)?|int(?:\d+)?|bytes(?:\d+)?)\s+"
+            rf"(?:public|private|internal|external|immutable|constant\s+)*"
+            rf"{re.escape(state_candidate)}\s*;",
             source_text,
         ):
             return "state_observation"
