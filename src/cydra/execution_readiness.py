@@ -1000,6 +1000,21 @@ def _classify_internal_predicate(
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     if identifiers & state_names or "$." in predicate:
         return "state_observation"
+    # Last source-backed declaration check for compact/generated fixtures.
+    # This intentionally checks only declarations whose type is a Solidity
+    # persistent-value primitive and never treats an arbitrary identifier as
+    # state merely because it appears in the predicate.
+    declared_state_names = {
+        match.group(1)
+        for match in re.finditer(
+            r"\b(?:bool|address|uint(?:\d+)?|int(?:\d+)?|bytes(?:\d+)?)\s+"
+            r"(?:(?:public|private|internal|external|immutable|constant)\s+)*"
+            r"([A-Za-z_]\w*)\s*;",
+            source_text,
+        )
+    }
+    if identifiers.intersection(declared_state_names):
+        return "state_observation"
 
     # Callee-local values are not automatically caller inputs. Keep their
     # provenance conservative unless a deterministic input binding proves so.
