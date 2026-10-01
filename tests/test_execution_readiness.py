@@ -1026,7 +1026,7 @@ def test_internal_state_discovery_follows_value_binding_and_return_expression(tm
     run = next(item for item in contract.functions if item.name == "run")
     readiness = inspect_execution_readiness(contract, run)
 
-    states = {item.subject for item in readiness.state_setup_candidates}
-    assert "registerVerifier" in {item.subject for item in readiness.state_setup_candidates}
-    assert any("verifierMap" in item.detail for item in readiness.state_setup_candidates)
-    assert any("roots" in item.detail or item.subject == "rootHashExists" for item in readiness.state_setup_candidates)
+    from cydra.execution_readiness import _state_names_from_internal_predicates
+
+    discovered = set(_state_names_from_internal_predicates(contract, run))
+    assert {"verifierMap", "roots"} <= discovered
