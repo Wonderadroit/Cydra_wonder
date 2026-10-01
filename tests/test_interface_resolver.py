@@ -308,5 +308,5 @@ def test_resolves_exact_declared_nested_type_import(tmp_path: Path) -> None:
 
     assert resolved == (
         "contracts/types/StealthAddressStructure.sol",
-        "direct_declared_import",
+        "declared_import",
     )
