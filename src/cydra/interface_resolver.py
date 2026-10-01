@@ -302,7 +302,7 @@ def resolve_interface(root: str | Path, importer: str | Path, name: str) -> Reso
             except (OSError, UnicodeError):
                 continue
             if re.search(rf"\binterface\s+{re.escape(name)}\b", source):
-                return _extract_interface(name, resolved_path, "direct_declared_import" if method in {"relative_import","project_relative","remapping"} else method, root)
+                return _extract_interface(name, resolved_path, method, root)
 
         # A source unit may aggregate or alias the interface without a
         # filename/name match. Inspect the unit itself before descending.
@@ -535,7 +535,7 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
                 imported_path = imported_path.resolve()
                 if path == start:
                     # Stable public provenance for a direct declared import.
-                    method = "declared_import"
+                    method = "direct_declared_import" if method == "declared_import" else method
                 imported_path = imported_path.resolve()
                 if imported_path not in visited:
                     pending.append((imported_path, method))
