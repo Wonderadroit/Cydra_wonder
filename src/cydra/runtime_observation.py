@@ -184,6 +184,12 @@ def plan_public_state_observations(
     polarities = dict(function.state_predicate_polarities)
     plans: list[StateObservationPlan] = []
 
+    # Public mappings are a deterministic observation surface too. State
+    # prerequisites can refer to mapping-backed state just like execution
+    # predicates; do not force the caller through the scalar-getter path.
+    for predicate in function.state_predicates:
+        plans.extend(plan_public_mapping_state_observations(contract, predicate))
+
     # Direct scalar predicates remain the first observation surface.
     for predicate in function.state_predicates:
         polarity = polarities.get(predicate, "unknown")
