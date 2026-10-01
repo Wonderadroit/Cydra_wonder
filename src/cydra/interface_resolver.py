@@ -534,8 +534,10 @@ def resolve_named_type_source(root: str | Path, importer: str | Path, name: str)
                 imported_path, method = resolved
                 imported_path = imported_path.resolve()
                 if path == start:
-                    # Stable public provenance for a direct declared import.
-                    method = "direct_declared_import" if method == "declared_import" else method
+                    # A direct declared import has one stable provenance label,
+                    # independent of whether its filesystem edge was relative,
+                    # project-relative, or resolved through an explicit remapping.
+                    method = "declared_import"
                 imported_path = imported_path.resolve()
                 if imported_path not in visited:
                     pending.append((imported_path, method))
