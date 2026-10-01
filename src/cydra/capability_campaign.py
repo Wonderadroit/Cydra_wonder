@@ -34,6 +34,17 @@ def _json(value: Any) -> Any:
     return value
 
 
+def _resolution_mapping(resolution: Any) -> dict[str, Any]:
+    """Normalize capability-resolution dataclasses and persisted mappings."""
+    if resolution is None:
+        return {}
+    if isinstance(resolution, dict):
+        return resolution
+    if hasattr(resolution, "gaps"):
+        return {"gaps": getattr(resolution, "gaps", ())}
+    return {}
+
+
 def _gap_key(gap: Any) -> str:
     if isinstance(gap, dict):
         capability = gap.get("capability", "UNKNOWN")
@@ -85,7 +96,7 @@ def build_capability_campaign(
         kind = _status_kind(status)
         status["campaign_status"] = kind
 
-        resolution = status.get("capability_resolution") or {}
+        resolution = _resolution_mapping(status.get("capability_resolution"))
         gaps = list(resolution.get("gaps") or [])
         materialization = status.get("materialization_failure")
         if materialization:
@@ -154,7 +165,7 @@ def build_capability_campaign(
                 edges.append({"from": key, "to": hypothesis_id, "type": "blocks"})
 
     for item in readiness_by_hypothesis.values():
-        resolution = item.get("capability_resolution")
+        resolution = _resolution_mapping(item.get("capability_resolution"))
         if not resolution:
             continue
         for gap in resolution.get("gaps", ()):
