@@ -199,9 +199,10 @@ def _plan_prerequisite_parameter_bindings(
                 # unambiguous. Both cases remain strictly inside the target's
                 # explicit import graph.
                 import_source = importer_path.read_text(encoding="utf-8")
+                candidate_suffix = candidate.relative_to(importer_path.parent).as_posix()
                 if (
                     re.search(
-                        rf"import\s*\{{[^}}]*\b{re.escape(base)}\b[^}}]*\}}\s+from\s+[\'\"]{re.escape(str(candidate.relative_to(importer_path.parent)))}[\'\"]",
+                        rf"import\s*\{{[^}}]*\b{re.escape(base)}\b[^}}]*\}}\s+from\s+[\'\"](?:\./)?{re.escape(candidate_suffix)}[\'\"]",
                         import_source,
                     )
                     or candidate.stem == base
