@@ -742,12 +742,11 @@ def _legacy_callback_test(
             source_text,
         ):
             receiver = match.group("receiver")
-            if not any(
+            modeled_receiver = any(
                 (isinstance(call, (tuple, list)) and call and str(call[0]) == receiver)
                 or (not isinstance(call, (tuple, list)) and str(call).rsplit(".", 1)[0] == receiver)
                 for call in function.external_calls
-            ):
-                continue
+            )
             assignment = re.search(
                 rf"\b{re.escape(receiver)}\s*=\s*(?P<type>[A-Za-z_]\w*)\s*\(\s*(?P<parameter>[A-Za-z_]\w*)\s*\)",
                 source_text,
@@ -762,8 +761,9 @@ def _legacy_callback_test(
                 )
             except (FileNotFoundError, ValueError, OSError, UnicodeError):
                 continue
-            recovered.append((assignment.group("parameter"), resolved))
-        runtime_bindings = tuple(recovered)
+            if modeled_receiver or resolved.name:
+                recovered.append((assignment.group("parameter"), resolved))
+        runtime_bindings = tuple(dict.fromkeys(recovered))
     runtime_stub_source, runtime_stub_variables = _runtime_stub_source(
         runtime_bindings, (), (), False, output_path
     )
