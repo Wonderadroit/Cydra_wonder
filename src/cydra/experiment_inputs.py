@@ -227,6 +227,26 @@ def _structured_default(
         value = _structured_default(field, contract_model, seen + (base,))
         if value is None:
             return None
+        # Preserve nested struct type provenance in the rendered value so the
+        # generated harness remains explicit about recursive ABI shape.
+        field_base = field.type.split()[0].rstrip("[]")
+        nested_source = _type_source(contract_model, field_base) if field_base else None
+        if nested_source is not None and not field.type.endswith("[]") and value.startswith("("):
+            nested_definition = _definition(nested_source[1], field_base)
+            if nested_definition is not None and nested_definition[0] == "struct":
+                nested_fields = []
+                for nested_field_text in _split_fields(nested_definition[2]):
+                    nested_field = _parameter_from_field(nested_field_text)
+                    if nested_field is None:
+                        nested_fields = []
+                        break
+                    nested_value = _structured_default(nested_field, contract_model, seen + (base, field_base))
+                    if nested_value is None:
+                        nested_fields = []
+                        break
+                    nested_fields.append(f"{nested_field.name}: {nested_value}")
+                if nested_fields:
+                    value = f"{field_base}({{ {', '.join(nested_fields)} }})"
         values.append(value)
     return f"({', '.join(values)})"
 
