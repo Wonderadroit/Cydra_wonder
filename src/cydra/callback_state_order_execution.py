@@ -254,7 +254,7 @@ def _callback_metadata_setup(contract_model: ContractModel, function, target_arg
     typed, imports = _qualify_planned_target_argument(parameter, callback_input, target_type, contract_model)
     callback_input_name = "cydraCallbackInput"
     callback_setup = (
-        f"{_memory_parameter_type(parameter.type)} memory {callback_input_name} = {typed};\n"
+        f"{_memory_parameter_type(parameter.type)}{" " if not (parameter.type.strip().split()[0] in {item.name for item in contract_model.inherited_resolved_interfaces} or re.search(rf"\\binterface\\s+{re.escape(parameter.type.strip().split()[0])}\\b", Path(contract_model.source).read_text(encoding="utf-8") if Path(contract_model.source).is_file() else "")) else ""}{callback_input_name} = {typed};\n"
         f"        {callback_input_name}.{'.'.join(parameter_path[1:])} = abi.encode(cydraStack);"
     )
     caller_bindings = _caller_bound_parameter_paths(contract_model, function)
@@ -709,11 +709,11 @@ def _legacy_callback_test(
     runtime_stub_source, runtime_stub_variables = _runtime_stub_source(
         runtime_bindings, (), (), False, output_path
     )
-    runtime_stub_declarations = "\\n".join(
+    runtime_stub_declarations = "\n".join(
         f"    Cydra{interface.name}Stub internal {runtime_stub_variables[interface.name]};"
         for _parameter, interface in runtime_bindings
     )
-    runtime_stub_setup = "\\n        ".join(
+    runtime_stub_setup = "\n        ".join(
         f"{runtime_stub_variables[interface.name]} = new Cydra{interface.name}Stub();"
         for _parameter, interface in runtime_bindings
     )
