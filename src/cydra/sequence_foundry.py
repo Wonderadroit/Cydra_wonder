@@ -580,9 +580,19 @@ def generate_sequence_test_from_experiment(
         elif base == "bool":
             constructor_arguments.append("false")
         elif base.startswith("uint"):
-            # Use a non-zero neutral constructor seed for unsigned arithmetic
-            # preconditions; zero is frequently an invalid deployment boundary.
-            constructor_arguments.append("1")
+            # Preserve zero unless the constructor source proves zero would
+            # immediately underflow.
+            constructor_source = ""
+            try:
+                constructor_source = Path(contract_model.source).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                pass
+            parameter_name = parameter.name or ""
+            needs_nonzero = bool(
+                parameter_name
+                and re.search(rf"\\b{re.escape(parameter_name)}\\s*-\\s*1\\b", constructor_source)
+            )
+            constructor_arguments.append("1" if needs_nonzero else "0")
         elif base.startswith("int"):
             constructor_arguments.append("0")
         elif base == "string":
