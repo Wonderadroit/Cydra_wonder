@@ -475,8 +475,38 @@ def _return_declaration_with_name(return_declaration: str, index: int, interface
     return f"{type_declaration} {name}", name
 
 
+def _stub_default_return(type_declaration: str) -> str | None:
+    tokens = type_declaration.strip().split()
+    if not tokens:
+        return None
+    base = tokens[0]
+    if base.endswith("[]"):
+        return f"new {base}[](0)"
+    if base == "address":
+        return "address(0)"
+    if base == "bool":
+        return "false"
+    if base == "string":
+        return '""'
+    if base == "bytes":
+        return 'bytes("")'
+    if base.startswith(("uint", "int", "bytes")):
+        return "0"
+    return None
+
+
 def _stub_method_source(interface_name: str, method, derived_returns: dict[str, str], known_interfaces: set[str]) -> str:
     parameters = ", ".join(method.parameters)
+    simple_defaults = [_stub_default_return(item) for item in method.returns]
+    can_use_unnamed_returns = bool(method.returns) and all(value is not None for value in simple_defaults)
+    if can_use_unnamed_returns and method.name not in derived_returns:
+        returns = ", ".join(item.strip() for item in method.returns)
+        signature = f"function {method.name}({parameters}) external view"
+        signature += f" returns ({returns})"
+        signature += " {"
+        if len(simple_defaults) == 1:
+            return f"    {signature} return {simple_defaults[0]}; }}"
+        return f"    {signature} return ({', '.join(simple_defaults)}); }}"
     named_returns = [_return_declaration_with_name(item, index, interface_name, known_interfaces) for index, item in enumerate(method.returns)]
     returns = ", ".join(declaration for declaration, _ in named_returns)
     signature = f"function {method.name}({parameters}) external view"
