@@ -841,10 +841,7 @@ def _legacy_callback_test(
             source_text = ""
         constructor_parameters = {p.name for p in contract_model.constructor.parameters}
         recovered_fallback = []
-        for match in re.finditer(
-                    r"import\s+(?:\{[^}]*\}\s+from\s+|\*\s+as\s+[A-Za-z_]\w*\s+from\s+)?[\'\"]([^\'\"]+)[\'\"]\s*;",
-            source_text,
-        ):
+        for match in re.finditer(r"[\'\"]([^\'\"]+\\.sol)[\'\"]", source_text):
             import_path = match.group(1)
             direct = (source_path.parent / import_path).resolve()
             if not direct.is_file():
