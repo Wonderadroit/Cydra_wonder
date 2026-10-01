@@ -995,7 +995,7 @@ def _classify_internal_predicate(
         if token.group(0) == "}":
             depth = max(0, depth - 1)
             continue
-        if depth == 0:
+        if depth == 1:
             state_names.add(token.group(1))
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     if identifiers & state_names or "$." in predicate:
