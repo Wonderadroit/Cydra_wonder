@@ -159,10 +159,15 @@ def _plan_prerequisite_parameter_bindings(
                 raise FileNotFoundError(f"Unable to resolve nested user-defined type {base} from {source_path}")
             return base, namespace_source
         resolved = _type_source(contract_model, base)
-        if resolved is None:
+        if resolved is not None:
+            resolved_path, _resolved_source = resolved
+            return base, str(resolved_path)
+        try:
+            project = Path(project_root).resolve()
+            resolved_source, _method = resolve_named_type_source(project, source_path, base)
+            return base, str(resolved_source)
+        except (FileNotFoundError, ValueError, OSError, UnicodeError):
             raise FileNotFoundError(f"Unable to resolve user-defined type {base} from {source_path}")
-        resolved_path, _resolved_source = resolved
-        return base, str(resolved_path)
 
     def add_import(type_name: str) -> None:
         base, resolved_source = resolve_custom_type(type_name)
