@@ -7,6 +7,7 @@ import os
 import subprocess
 import tempfile
 import re
+import traceback
 import contextlib
 import io
 from pathlib import Path
@@ -187,7 +188,14 @@ def main() -> int:
                     )
             except Exception as error:
                 exit_code = 1
-                stderr.write(f"{type(error).__name__}: {error}\n")
+                # Preserve the full generic pipeline traceback so a live-target
+                # capability failure can be diagnosed from the artifact without
+                # reproducing the target locally. The source itself remains
+                # isolated; one failing source must not stop the campaign.
+                stderr.write(
+                    f"{type(error).__name__}: {error}\n"
+                    f"{traceback.format_exc()}"
+                )
             finally:
                 os.environ.clear()
                 os.environ.update(previous_env)
