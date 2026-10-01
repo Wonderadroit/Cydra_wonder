@@ -853,7 +853,7 @@ def _legacy_callback_test(
         tuple(arguments),
         rendered_arguments,
         target_type,
-        existing_declarations,
+        tuple(final_declarations),
         set(parameter_imports),
     )
     parameter_setup = "\n        ".join(declarations_tuple)
