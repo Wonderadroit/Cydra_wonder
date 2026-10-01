@@ -727,7 +727,7 @@ def _legacy_callback_test(
         constructor_parameters = {p.name for p in contract_model.constructor.parameters}
         recovered = []
         for match in re.finditer(
-            r"\b(?P<type>[A-Za-z_]\w*)\s+(?:public|private|internal|external|immutable|constant\s+)*"
+            r"\b(?P<type>[A-Za-z_]\w*)\s+(?:(?:public|private|internal|external|immutable|constant)\s+)*"
             r"(?P<receiver>[A-Za-z_]\w*)\s*;",
             source_text,
         ):
