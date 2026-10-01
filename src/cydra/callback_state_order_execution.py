@@ -763,7 +763,7 @@ def _legacy_callback_test(
                 continue
             if modeled_receiver or resolved.name:
                 recovered.append((assignment.group("parameter"), resolved))
-        runtime_bindings = tuple(dict.fromkeys(recovered))
+        runtime_bindings = tuple(dict.fromkeys((*runtime_bindings, *recovered)))
     runtime_stub_source, runtime_stub_variables = _runtime_stub_source(
         runtime_bindings, (), (), False, output_path
     )
@@ -818,7 +818,7 @@ def _legacy_callback_test(
         if base in {"address", "bool", "string", "bytes"} or base.startswith(("uint", "int", "bytes", "fixed", "ufixed")):
             continue
         candidate = rendered_arguments.get(parameter.name, f"cydra_{parameter.name}")
-        if not re.fullmatch(r"[A-Za-z_]\\w*", candidate.strip()) or candidate in final_declared:
+        if not re.fullmatch(r"[A-Za-z_]\w*", candidate.strip()) or candidate in final_declared:
             continue
         value = expression.strip()
         if re.fullmatch(r"[A-Za-z_]\\w*", value):
