@@ -851,7 +851,23 @@ def _legacy_callback_test(
     parameter_setup = "\n        ".join(declarations_tuple)
     parameter_imports = imports_tuple
     argument_vector = tuple(
-        rendered_arguments.get(parameter.name, argument)
+        rendered_arguments.get(
+            parameter.name,
+            (
+                f"cydra_{parameter.name}"
+                if (
+                    not (
+                        parameter.type.strip().split()[0].rstrip("[]")
+                        in {"address", "bool", "string", "bytes"}
+                        or parameter.type.strip().split()[0].startswith(
+                            ("uint", "int", "bytes", "fixed", "ufixed")
+                        )
+                    )
+                    and _split_top_level_tuple_expression(argument) is not None
+                )
+                else argument
+            ),
+        )
         for parameter, argument in zip(function.parameters, arguments)
     )
     argument_vector, final_declarations, parameter_imports_set = _ensure_callback_argument_vector_bindings(
