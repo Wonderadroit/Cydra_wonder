@@ -344,10 +344,18 @@ def _plan_prerequisite_parameter_bindings(
                     try:
                         nested_source, _ = resolve_named_type_source(project_root, defining_source, field_base)
                     except (FileNotFoundError, ValueError, OSError, UnicodeError) as exc:
-                        raise ValueError(
-                            f"unable to resolve nested struct type {field_base} "
-                            f"for {base}.{field_name} from {defining_source}: {exc}"
-                        ) from exc
+                        # Reuse the generic source-backed type resolver before
+                        # declaring a nested struct unmaterializable. This keeps
+                        # prerequisite rendering consistent with the canonical
+                        # parameter materializer and remains bounded to the
+                        # target's resolved import/type graph.
+                        resolved_nested = _type_source(contract_model, field_base)
+                        if resolved_nested is None:
+                            raise ValueError(
+                                f"unable to resolve nested struct type {field_base} "
+                                f"for {base}.{field_name} from {defining_source}: {exc}"
+                            ) from exc
+                        nested_source = resolved_nested[0]
                 add_import(field_base)
                 nested_parts = _split_top_level_tuple_expression(part)
                 if nested_parts is None:
