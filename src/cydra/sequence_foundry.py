@@ -298,6 +298,17 @@ def _plan_prerequisite_parameter_bindings(
         base = type_name.strip().split()[0]
         fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
         if not fields:
+            # The parameter model may have already resolved a plain custom type
+            # to its defining source (for example Dimensions.sol), while the
+            # prerequisite function itself lives in an inheriting source
+            # (HinkalBase.sol). Reuse that generic provenance before parsing the
+            # wrong file locally.
+            resolved_type = _type_source(contract_model, base.split(".", 1)[-1])
+            if resolved_type is not None:
+                resolved_path, _ = resolved_type
+                defining_source = str(resolved_path)
+                fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
+        if not fields:
             try:
                 defining_text = Path(defining_source).read_text(encoding="utf-8")
             except (OSError, UnicodeError):
