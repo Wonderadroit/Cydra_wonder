@@ -31,11 +31,22 @@ def test_experiment_contract_names_generic_requirements():
     names = {item.capability for item in contract.requirements}
     assert Capability.CALLER_CONSTRUCTION in names
     assert Capability.STATE_SETUP in names
-    assert Capability.STATE_OBSERVATION in names
+    assert Capability.STATE_OBSERVATION not in names
     assert Capability.INTERNAL_CALL_PROPAGATION in names
     assert Capability.TYPE_MATERIALIZATION in names
     assert Capability.CALLBACK_HARNESS in names
     assert any(item.subcapability == 'custom_struct' for item in contract.requirements)
+
+def test_non_callback_experiments_still_require_state_observation():
+    readiness = ExecutionReadiness(
+        contract='Target',
+        state_requirements=(ExecutionRequirement('state','externalActionMap','model'),),
+    )
+    experiment = Experiment('X-STATE','H-STATE','transact',('before','after'),1.0,(), 'transact')
+    hypothesis = Hypothesis('H-STATE','state hypothesis','INV-STATE','transact','ordinary caller','UNKNOWN')
+    contract = build_experiment_contract(hypothesis, experiment, _model(), readiness)
+    assert any(item.capability == Capability.STATE_OBSERVATION for item in contract.requirements)
+
 
 def test_solver_keeps_partial_capability_explicit_and_clusters_it():
     readiness = ExecutionReadiness(
