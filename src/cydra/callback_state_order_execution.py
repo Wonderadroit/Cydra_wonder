@@ -821,7 +821,7 @@ def _legacy_callback_test(
         if not re.fullmatch(r"[A-Za-z_]\w*", candidate.strip()) or candidate in final_declared:
             continue
         value = expression.strip()
-        if re.fullmatch(r"[A-Za-z_]\\w*", value):
+        if re.fullmatch(r"[A-Za-z_]\w*", value):
             value = _structured_default(parameter, contract_model)
         if value is None:
             continue
@@ -866,7 +866,7 @@ def _legacy_callback_test(
     # name and could produce a different identifier (for example cydra_c vs
     # cydra_circomData), yielding compiler errors before the experiment ran.
     callback_input_for_setup = argument_vector[0] if argument_vector else ""
-    if not re.fullmatch(r"[A-Za-z_]\\w*", callback_input_for_setup.strip()):
+    if not re.fullmatch(r"[A-Za-z_]\w*", callback_input_for_setup.strip()):
         callback_input_for_setup = ""
     state_setup, state_setup_functions = _state_setup_source(
         contract_model, function,
