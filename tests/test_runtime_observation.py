@@ -100,6 +100,29 @@ def test_public_mapping_state_predicate_finds_inherited_source(tmp_path):
     assert plans[0].getter == "target.externalActionMap(id)"
 
 
+def test_public_mapping_state_predicate_finds_source_backed_observation(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { mapping(bytes32 => bool) public usedMessages; }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "use", "external", (), (), (), 1,
+                state_predicates=("usedMessages[key] == false",),
+                state_predicate_polarities=(("usedMessages[key] == false", "must_hold"),),
+            ),
+        ),
+    )
+    plans = plan_public_state_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].getter == "target.usedMessages(key)"
+    assert plans[0].expression == "target.usedMessages(key) == false"
+
+
 def test_public_mapping_state_observation_accepts_override_modifier(tmp_path):
     base = tmp_path / "Base.sol"
     base.write_text(
