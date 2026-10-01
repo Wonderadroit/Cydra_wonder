@@ -173,7 +173,7 @@ def _plan_prerequisite_parameter_bindings(
             try:
                 source_text = importer_path.read_text(encoding="utf-8")
                 for match in re.finditer(
-                    r'\\bimport\\s+(?:\\{[^}]*\\}\\s+from\\s+|\\*\\s+as\\s+[A-Za-z_]\\w*\\s+from\\s+)?["\\']([^"\\']+)["\\']\\s*;',
+                    r"\\bimport\\s+(?:\\{[^}]*\\}\\s+from\\s+|\\*\\s+as\\s+[A-Za-z_]\\w*\\s+from\\s+)?['\\\"]([^'\\\"]+)['\\\"]\\s*;",
                     source_text,
                 ):
                     if match.group(1) not in declared_imports:
