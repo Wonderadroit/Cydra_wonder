@@ -1340,6 +1340,18 @@ def _state_names_from_internal_predicates(
 ) -> tuple[str, ...]:
     """Discover persistent state referenced by internal execution predicates."""
     state_names = set(contract.state_variables)
+    try:
+        source_text = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        source_text = ""
+    state_names.update(
+        match.group(1)
+        for match in re.finditer(
+            r"\b(?:mapping\s*\([^;{}]+\)|(?:bool|address|uint(?:\d+)?|int(?:\d+)?|bytes(?:\d+)?))\s+"
+            r"(?:(?:public|private|internal|external|immutable|constant)\s+)*([A-Za-z_]\w*)\s*;",
+            source_text,
+        )
+    )
     functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
     discovered: list[str] = []
     visited: set[tuple[str, int]] = set()
