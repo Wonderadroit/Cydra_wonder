@@ -43,6 +43,41 @@ def _function_body(source: str, function_name: str) -> str:
     return ""
 
 
+def _split_top_level_tuple_expression(expression: str) -> tuple[str, ...] | None:
+    """Split a Solidity tuple literal without breaking nested arrays/tuples."""
+    value = expression.strip()
+    if not (value.startswith("(") and value.endswith(")")):
+        return None
+    inner = value[1:-1]
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    for index, char in enumerate(inner):
+        if quote is not None:
+            if char == "\\":
+                continue
+            if char == quote:
+                quote = None
+            continue
+        if char in {"\"", "'"}:
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth < 0:
+                return None
+        elif char == "," and depth == 0:
+            parts.append(inner[start:index].strip())
+            start = index + 1
+    tail = inner[start:].strip()
+    if tail:
+        parts.append(tail)
+    elif inner.strip():
+        return None
+    return tuple(parts)
+
 def _execution_context_warp(contract_model: ContractModel, function) -> str | None:
     """Return a conservative Foundry time control for guarded internal predicates.
 
@@ -716,6 +751,46 @@ def _legacy_callback_test(
             f"expected {len(function.parameters)}, got {len(arguments)}"
         )
     runtime_bindings = runtime_dependency_constructor_bindings(contract_model, function)
+    # Recover state-backed interface dependencies directly from the target source
+    # when lightweight models omit constructor dependency metadata. This is
+    # bounded to receivers actually used by the modeled external calls.
+    if contract_model.constructor is not None:
+        try:
+            source_text = Path(contract_model.source).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            source_text = ""
+        constructor_parameters = {p.name for p in contract_model.constructor.parameters}
+        recovered_direct = []
+        receivers = set()
+        for call in function.external_calls:
+            receiver = str(call[0]) if isinstance(call, (tuple, list)) and call else str(call).rsplit(".", 1)[0]
+            if receiver:
+                receivers.add(receiver)
+        for receiver in receivers:
+            declaration = re.search(
+                rf"\b(?P<type>[A-Za-z_]\w*)\s+(?:(?:public|private|internal|external|immutable|constant)\s+)*"
+                rf"{re.escape(receiver)}\s*;",
+                source_text,
+            )
+            if declaration is None:
+                continue
+            assignment = re.search(
+                rf"\b{re.escape(receiver)}\s*=\s*(?:{re.escape(declaration.group('type'))}\s*\(\s*)?"
+                rf"(?P<parameter>[A-Za-z_]\w*)\s*\)?\s*;",
+                source_text,
+            )
+            if assignment is None or assignment.group("parameter") not in constructor_parameters:
+                continue
+            try:
+                resolved = resolve_interface(
+                    Path(contract_model.source).resolve().parent,
+                    contract_model.source,
+                    declaration.group("type"),
+                )
+            except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                continue
+            recovered_direct.append((assignment.group("parameter"), resolved))
+        runtime_bindings = tuple(dict.fromkeys((*runtime_bindings, *recovered_direct)))
     # Accept both the historical (constructor_parameter, interface) binding
     # shape and richer provenance tuples emitted by newer readiness layers.
     # The callback renderer only needs the constructor parameter and resolved
