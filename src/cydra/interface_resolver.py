@@ -277,6 +277,16 @@ def _imports_for(path: Path) -> tuple[str, ...]:
     for match in _SIMPLE_IMPORT_RE.finditer(source):
         if match.group(1) not in imports:
             imports.append(match.group(1))
+    # Explicitly handle the two canonical Solidity forms independently. This
+    # makes import discovery resilient to compact formatting while remaining
+    # strictly bounded to declarations present in this source unit.
+    for pattern in (
+        r'\bimport\s+["\']([^"\']+)["\']\s*;',
+        r'\bfrom\s+["\']([^"\']+)["\']\s*;',
+    ):
+        for match in re.finditer(pattern, source):
+            if match.group(1) not in imports:
+                imports.append(match.group(1))
     return tuple(imports)
 
 
