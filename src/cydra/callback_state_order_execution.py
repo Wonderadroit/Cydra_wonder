@@ -459,7 +459,7 @@ def _state_setup_source(
             except (OSError, UnicodeError):
                 source_text = ""
             declared_states = set(re.findall(
-                r"(?m)^\\s*(?:mapping\\s*\\([^;{}]+\\)|(?:uint|int|address|bool|bytes(?:\\d+)?))\\s+(?:(?:public|private|internal|external|immutable|constant)\\s+)*([A-Za-z_]\\w*)\\s*;",
+                r"(?m)^\s*(?:mapping\s*\([^;{}]+\)|(?:uint|int|address|bool|bytes(?:\d+)?))\s+(?:(?:public|private|internal|external|immutable|constant)\s+)*([A-Za-z_]\w*)\s*;",
                 source_text,
             ))
             state = next((part for part in action.provenance if part in declared_states), None)
@@ -810,8 +810,8 @@ def _legacy_callback_test(
     # tuple or a generated identifier gets one source-backed local.
     final_declarations = list(existing_declarations)
     final_declared = set(re.findall(
-        r"\\b[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*\\s+memory\\s+([A-Za-z_]\\w*)\\s*=",
-        "\\n".join(final_declarations),
+        r"\b[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s+memory\s+([A-Za-z_]\w*)\s*=",
+        "\n".join(final_declarations),
     ))
     for parameter, expression in zip(function.parameters, arguments):
         base = parameter.type.strip().split()[0].rstrip("[]")
