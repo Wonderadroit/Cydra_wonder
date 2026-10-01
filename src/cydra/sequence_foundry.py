@@ -298,18 +298,19 @@ def _plan_prerequisite_parameter_bindings(
                 defining_text = Path(defining_source).read_text(encoding="utf-8")
             except (OSError, UnicodeError):
                 defining_text = ""
-            match = re.search(
-                rf"\bstruct\s+{re.escape(base.split('.', 1)[-1])}\s*\{{(?P<body>.*?)\}}",
-                defining_text,
-                re.DOTALL,
-            )
-            if match:
-                parsed: list[tuple[str, str]] = []
-                for statement in match.group("body").split(";"):
-                    parts = statement.strip().split()
-                    if len(parts) >= 2:
-                        parsed.append((parts[-1], " ".join(parts[:-1])))
-                fields = tuple(parsed)
+            struct_name = base.split(".", 1)[-1]
+            marker = f"struct {struct_name}"
+            marker_index = defining_text.find(marker)
+            if marker_index >= 0:
+                open_brace = defining_text.find("{", marker_index)
+                close_brace = defining_text.find("}", open_brace + 1) if open_brace >= 0 else -1
+                if open_brace >= 0 and close_brace > open_brace:
+                    parsed: list[tuple[str, str]] = []
+                    for statement in defining_text[open_brace + 1:close_brace].split(";"):
+                        parts = statement.strip().split()
+                        if len(parts) >= 2:
+                            parsed.append((parts[-1], " ".join(parts[:-1])))
+                    fields = tuple(parsed)
         if not fields:
             raise ValueError(
                 f"unable to resolve struct fields for prerequisite parameter type {base} "
