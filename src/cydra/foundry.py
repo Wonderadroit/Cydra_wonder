@@ -747,6 +747,26 @@ def _model_initialization_source(
             declarations.append(declaration)
             declared_text = "\n".join(declarations)
 
+    # Final ABI-local guarantee: non-runtime interface/contract parameters must
+    # remain value-like locals when their synthesized argument is an identifier.
+    # Keep runtime token casts intact; only materialize the missing local case.
+    reference_names = {
+        interface.name for interface in contract_model.inherited_resolved_interfaces
+    }
+    source_for_reference_check = _source_text(contract_model)
+    for parameter, argument in zip(function.parameters, arguments):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if parameter.name in token_parameters or not re.fullmatch(r"[A-Za-z_]\w*", argument.strip()):
+            continue
+        is_reference = base in reference_names or bool(
+            re.search(rf"\b(?:interface|contract|library)\s+{re.escape(base)}\b", source_for_reference_check)
+        )
+        if is_reference and not any(
+            re.search(rf"\b{re.escape(base)}\s+{re.escape(argument.strip())}\s*;", item)
+            for item in declarations
+        ):
+            declarations.append(f"{base} {argument.strip()};")
+
     initialize_args_str = ", ".join(arguments)
     test_body = render_initialization_test_body(
         function,
