@@ -151,6 +151,18 @@ def _public_scalar_getters(source: str) -> set[str]:
     return {match.group("name") for match in _PUBLIC_SCALAR_RE.finditer(source)}
 
 
+def _public_scalar_getters_from_sources(sources: tuple[Path, ...]) -> set[str]:
+    """Collect public scalar getters across the bounded target source graph."""
+    getters: set[str] = set()
+    for path in sources:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        getters.update(_public_scalar_getters(source))
+    return getters
+
+
 def plan_public_state_observations(
     contract: ContractModel,
     function: FunctionModel,
@@ -161,12 +173,14 @@ def plan_public_state_observations(
     compiler slots. If a predicate cannot be observed through a zero-argument
     public getter, no plan is emitted.
     """
-    try:
-        source = Path(contract.source).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
+    sources = _source_graph(contract)
+    if not sources:
         return ()
 
-    getters = _public_scalar_getters(source)
+    # State may be inherited from a base contract or declared in an imported
+    # source unit. The observation surface is the bounded target source graph,
+    # not just the concrete contract file.
+    getters = _public_scalar_getters_from_sources(sources)
     polarities = dict(function.state_predicate_polarities)
     plans: list[StateObservationPlan] = []
 
