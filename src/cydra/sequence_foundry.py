@@ -194,6 +194,19 @@ def _plan_prerequisite_parameter_bindings(
                 if candidate in visited or not candidate.is_file():
                     continue
                 visited.add(candidate)
+                # A declared named import is authoritative symbol provenance.
+                # Likewise, a plain import whose filename matches the symbol is
+                # unambiguous. Both cases remain strictly inside the target's
+                # explicit import graph.
+                import_source = importer_path.read_text(encoding="utf-8")
+                if (
+                    re.search(
+                        rf"import\s*\{{[^}}]*\b{re.escape(base)}\b[^}}]*\}}\s+from\s+[\'\"]{re.escape(str(candidate.relative_to(importer_path.parent)))}[\'\"]",
+                        import_source,
+                    )
+                    or candidate.stem == base
+                ):
+                    return base, str(candidate)
                 try:
                     candidate_text = candidate.read_text(encoding="utf-8")
                 except (OSError, UnicodeError):
