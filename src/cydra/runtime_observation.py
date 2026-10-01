@@ -161,11 +161,18 @@ def plan_public_state_observations(
     compiler slots. If a predicate cannot be observed through a zero-argument
     public getter, no plan is emitted.
     """
-    try:
-        source = Path(contract.source).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
+    sources = _source_graph(contract)
+    if not sources:
         return ()
 
+    # State may be declared in an imported/inherited base rather than the
+    # concrete target source unit. Public ABI getters are generated from the
+    # whole reachable source graph, so observation remains source-backed and
+    # deterministic without guessing storage slots.
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sources
+    )
     getters = _public_scalar_getters(source)
     polarities = dict(function.state_predicate_polarities)
     plans: list[StateObservationPlan] = []
