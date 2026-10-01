@@ -283,7 +283,8 @@ def _structured_default(
                         break
                     nested_fields.append(f"{nested_field.name}: {nested_value}")
                 if nested_fields:
-                    value = f"{field_base}({{ {', '.join(nested_fields)} }})"
+                    qualified_nested = qualified_user_type(contract_model, field_base)
+                    value = f"{qualified_nested}({{ {', '.join(nested_fields)} }})"
         values.append(value)
     return f"({', '.join(values)})"
 
