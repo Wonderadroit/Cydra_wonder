@@ -1070,6 +1070,26 @@ def _internal_execution_requirements(
     }
     results: list[ExecutionRequirement] = []
     visited: set[tuple[str, int]] = set()
+    def call_arguments(source: str, opening: int) -> tuple[str, ...]:
+        depth = 0
+        start = opening + 1
+        values: list[str] = []
+        for index in range(opening + 1, len(source)):
+            char = source[index]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    value = source[start:index].strip()
+                    if value:
+                        values.append(value)
+                    return tuple(values)
+                depth -= 1
+            elif char == "," and depth == 0:
+                values.append(source[start:index].strip())
+                start = index + 1
+        return ()
+
     def visit(caller: FunctionModel, depth: int) -> None:
         if depth > max_depth or (caller.name, depth) in visited:
             return
@@ -1086,6 +1106,13 @@ def _internal_execution_requirements(
             if callee is None:
                 continue
             seen_names.add(name)
+            actual_arguments = call_arguments(body, match.end() - 1)
+            caller_parameter_names = {parameter.name for parameter in caller.parameters if parameter.name}
+            forwarded_caller_inputs = {
+                parameter.name
+                for parameter, argument in zip(callee.parameters, actual_arguments)
+                if parameter.name and argument.strip() in caller_parameter_names
+            }
             modeled_predicates = list(dict.fromkeys((*callee.execution_predicates, *callee.state_predicates)))
             # Source-backed fallback for compact models that omit simple
             # require(...) guards from the predicate collections.
@@ -1123,6 +1150,11 @@ def _internal_execution_requirements(
                     execution_capabilities,
                 )
                 if category in {"cryptographic_witness", "execution_context", "local_execution"}:
+                    constraint = False
+                if forwarded_caller_inputs and any(
+                    parameter_name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
+                    for parameter_name in forwarded_caller_inputs
+                ):
                     constraint = False
                 predicate_state_names = {
                     name for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
