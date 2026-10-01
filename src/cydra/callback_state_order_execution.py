@@ -865,7 +865,7 @@ def _legacy_callback_test(
                     if parameter.name not in constructor_parameters:
                         continue
                     if re.search(
-                        rf"\b{re.escape(interface_name)}\s*\(\s*{re.escape(parameter.name)}\s*\)"
+                        rf"\b{re.escape(interface_name)}\s*\(\s*{re.escape(parameter.name)}\s*\)",
                         source_text,
                     ):
                         recovered_fallback.append((parameter.name, resolved))
