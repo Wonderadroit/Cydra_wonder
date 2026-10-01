@@ -1104,19 +1104,6 @@ def _internal_execution_requirements(
                     category = "state_observation"
                 elif simple_boolean_state and simple_boolean_state.group(0).lstrip("!").strip() not in parameter_names and simple_boolean_state.group(0).lstrip("!").strip() not in local_names:
                     category = "state_observation"
-                if False and unary_state and any(
-                    name not in parameter_names and name not in local_names
-                    and (
-                        re.search(
-                            rf"\b(?:bool|address|uint(?:\d+)?|int(?:\d+)?|bytes(?:\d+)?)\s+"
-                            rf"(?:public|private|internal|external|immutable|constant\s+)*{re.escape(name)}\s*;",
-                            direct_source,
-                        )
-                        or True
-                    )
-                    for name in unary_state
-                ):
-                    category = "state_observation"
                 constraint = _is_experiment_constraint(
                     contract,
                     callee,
