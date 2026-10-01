@@ -288,6 +288,10 @@ def _plan_prerequisite_parameter_bindings(
         imports.append(f'import {{ {symbol} }} from "{relative}";')
 
     def typed_tuple(type_name: str, expression: str, defining_source: str) -> str:
+        # Planned-input artifacts may carry escaped Solidity quotes through
+        # JSON/fixture serialization. Normalize only the escaped quote form
+        # before parsing the tuple; this preserves the intended Solidity value.
+        expression = expression.replace('\\\"', '"')
         parts = _split_top_level_tuple_expression(expression)
         if parts is None or type_name.strip().endswith("[]"):
             return expression
