@@ -476,6 +476,32 @@ def _state_setup_source(
     """Render only fully constructible target-derived state setup transitions."""
     actions = constructible_state_setup_plan(contract_model, consumer)
     if not actions:
+        # Bounded fallback for lightweight models: derive a mapping writer
+        # directly from the consumer's target-derived internal predicate.
+        functions_by_name = {
+            item.name: item
+            for item in (*contract_model.functions, *contract_model.inherited_functions)
+        }
+        for predicate in _state_relation_predicates(contract_model, consumer, next(iter(contract_model.state_variables), "")):
+            match = re.search(
+                r"\b([A-Za-z_]\w*)\s*\[[^\]]+\]\s*==\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)",
+                predicate,
+            )
+            if not match:
+                continue
+            state_name = match.group(1)
+            for writer in functions_by_name.values():
+                if writer.name == consumer.name or writer.visibility not in {"public", "external"}:
+                    continue
+                if state_name not in writer.writes:
+                    continue
+                actions = (execution_readiness.SetupAction(
+                    writer.name, caller_role(writer), (consumer.name, state_name)
+                ),)
+                break
+            if actions:
+                break
+    if not actions:
         return "", ()
     functions = {
         item.name: item
