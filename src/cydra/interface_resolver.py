@@ -480,15 +480,50 @@ def resolve_namespaced_struct_fields(root: str | Path, source_path: str | Path, 
     return tuple(fields)
 
 def resolve_struct_fields(root: str | Path, source_path: str | Path, struct_name: str) -> tuple[tuple[str, str], ...]:
-    """Resolve top-level fields of a source-defined Solidity struct."""
+    """Resolve fields of a source-defined Solidity struct, including nested declarations."""
     path = _resolve_source_path(root, source_path)
     try:
         source = _strip_comments(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError):
         return ()
-    match = re.search(rf"\bstruct\s+{re.escape(struct_name)}\s*\{{(?P<body>.*?)\}}", source, re.DOTALL)
-    if not match:
+
+    match = re.search(
+        rf"\bstruct\s+{re.escape(struct_name)}\s*\{{(?P<body>.*?)\}}",
+        source,
+        re.DOTALL,
+    )
+    if match is None:
+        # Solidity permits structs inside contracts, libraries, and interfaces.
+        # They may still be referenced by an unqualified type name from the
+        # containing source unit. Walk only declarations in this source unit;
+        # never broaden this into repository-wide symbol guessing.
+        owner_pattern = r"\b(?:contract|library|interface)\s+[A-Za-z_]\w*\s*\{"
+        for owner_match in re.finditer(owner_pattern, source):
+            owner_start = source.find("{", owner_match.start(), owner_match.end())
+            if owner_start < 0:
+                continue
+            depth = 0
+            owner_end = len(source)
+            for index in range(owner_start, len(source)):
+                if source[index] == "{":
+                    depth += 1
+                elif source[index] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        owner_end = index
+                        break
+            owner_body = source[owner_start + 1:owner_end]
+            match = re.search(
+                rf"\bstruct\s+{re.escape(struct_name)}\s*\{{(?P<body>.*?)\}}",
+                owner_body,
+                re.DOTALL,
+            )
+            if match is not None:
+                break
+
+    if match is None:
         return ()
+
     fields: list[tuple[str, str]] = []
     for statement in match.group("body").split(";"):
         statement = statement.strip()
@@ -499,7 +534,6 @@ def resolve_struct_fields(root: str | Path, source_path: str | Path, struct_name
             continue
         fields.append((parts[-1], " ".join(parts[:-1])))
     return tuple(fields)
-
 
 def resolve_named_type_source(root: str | Path, importer: str | Path, name: str) -> tuple[str, str]:
     """Resolve a user-defined Solidity type through the target's bounded import graph.
