@@ -944,7 +944,9 @@ def _legacy_callback_test(
                 )
             except (FileNotFoundError, ValueError, OSError, UnicodeError):
                 continue
-            if modeled_receiver or resolved.name:
+            # Interface resolution is fail-closed. An unresolved
+            # receiver is not a usable runtime stub and must not be dereferenced.
+            if resolved is not None and (modeled_receiver or resolved.name):
                 recovered.append((assignment.group("parameter"), resolved))
         runtime_bindings = tuple(dict.fromkeys((*runtime_bindings, *recovered)))
     runtime_stub_source, runtime_stub_variables = _runtime_stub_source(
