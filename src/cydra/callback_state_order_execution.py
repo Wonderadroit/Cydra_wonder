@@ -454,6 +454,16 @@ def _state_setup_source(
             return "", ()
         state = next((part for part in action.provenance if part in contract_model.state_variables), None)
         if state is None:
+            try:
+                source_text = Path(contract_model.source).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                source_text = ""
+            declared_states = set(re.findall(
+                r"(?m)^\\s*(?:mapping\\s*\\([^;{}]+\\)|(?:uint|int|address|bool|bytes(?:\\d+)?))\\s+(?:(?:public|private|internal|external|immutable|constant)\\s+)*([A-Za-z_]\\w*)\\s*;",
+                source_text,
+            ))
+            state = next((part for part in action.provenance if part in declared_states), None)
+        if state is None:
             return "", ()
         arguments = _state_setup_argument_vector(
             contract_model, consumer, writer, state, callback_input_name
