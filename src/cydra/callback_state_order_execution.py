@@ -496,7 +496,7 @@ def _state_setup_source(
                 if state_name not in writer.writes:
                     continue
                 actions = (execution_readiness.SetupAction(
-                    writer.name, caller_role(writer), (consumer.name, state_name)
+                    writer.name, execution_readiness.caller_role(writer), (consumer.name, state_name)
                 ),)
                 break
             if actions:
