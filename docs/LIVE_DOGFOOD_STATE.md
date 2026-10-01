@@ -148,6 +148,14 @@ Generic repair: commit `35c25d1302046cfc16fbe188062cb28c23ea4050` corrects the r
 
 Next action: validate this repair in CI, then rerun the same canonical Hinkal workflow. Expected transition: `verifyWallet: $.usedMessages[circomData.emporiumMessage]` from `state_observation / unresolved` to `state_observation / constraint`. Only after that should the generated callback experiment be inspected/executed.
 
+## Batch campaign branch correction
+
+The generic batch-capability fixes were initially developed on `dogfood/batch-capability-campaign-20261001-v2`. They have now been ported onto the canonical `dogfood-readiness-expression-provenance` branch without replacing newer canonical changes. The temporary PR was closed because the branches had diverged; the canonical branch remains the sole live-dogfood execution path.
+
+Ported generic capability areas include partial planned-input completion, nested struct resolution, inherited state writers, public mapping state observation, sequence-input validation/completion, and fail-closed unresolved-interface handling, with corresponding regression coverage.
+
+Next action: manually dispatch the canonical Hinkal workflow from this branch so the fixes are actually exercised against the pinned target.
+
 ## Automatic checkpoint format
 
 After each canonical workflow run, the workflow updates the run/artifact/commit metadata in this file. Human/agent engineering changes should update the diagnosis and next-action sections.
