@@ -1086,12 +1086,16 @@ def _internal_execution_requirements(
             if callee is None:
                 continue
             seen_names.add(name)
-            for predicate in (*callee.execution_predicates, *callee.state_predicates):
-                kind = (
-                    "internal_execution_predicate"
-                    if predicate in (*callee.execution_predicates, *callee.state_predicates)
-                    else "internal_state_predicate"
-                )
+            modeled_predicates = list(dict.fromkeys((*callee.execution_predicates, *callee.state_predicates)))
+            # Source-backed fallback for compact models that omit simple
+            # require(...) guards from the predicate collections.
+            callee_body = _source_function_body(contract, callee)
+            for require_match in re.finditer(r"\brequire\s*\(\s*(?P<predicate>[^;]+?)\s*\)", callee_body):
+                source_predicate = require_match.group("predicate").strip()
+                if source_predicate and source_predicate not in modeled_predicates:
+                    modeled_predicates.append(source_predicate)
+            for predicate in modeled_predicates:
+                kind = "internal_execution_predicate"
                 category = (
                     "state_observation"
                     if predicate in callee.state_predicates
