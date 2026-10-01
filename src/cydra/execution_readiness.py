@@ -960,9 +960,11 @@ def _classify_internal_predicate(
         r"(?:(?:public|private|internal|external|immutable|constant)\s+)*([A-Za-z_]\w*)\s*;"
     )
     for match in state_decl.finditer(source_text):
-        prefix = source_text[:match.start()]
-        if prefix.count("{") - prefix.count("}") == 1:
-            state_names.add(match.group(1))
+        # Source-backed declarations are strong evidence of persistent state.
+        # Lightweight parser models may omit inherited/private state, so do not
+        # discard an exact declaration because nested Solidity formatting confuses
+        # brace-depth heuristics.
+        state_names.add(match.group(1))
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     if identifiers & state_names or "$." in predicate:
         return "state_observation"
