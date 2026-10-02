@@ -1986,8 +1986,14 @@ def _state_observation_has_default_solution(
         if current.name in visited:
             return False
         visited.add(current.name)
-        polarities = dict(current.execution_predicate_polarities)
-        for predicate in current.execution_predicates:
+        polarities = {
+            **dict(current.execution_predicate_polarities),
+            **dict(current.state_predicate_polarities),
+        }
+        modeled_predicates = tuple(
+            dict.fromkeys((*current.execution_predicates, *current.state_predicates))
+        )
+        for predicate in modeled_predicates:
             if polarities.get(predicate) != "must_hold":
                 continue
             normalized = re.sub(r"\s+", " ", predicate).strip()
