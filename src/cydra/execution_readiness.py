@@ -206,7 +206,90 @@ def _predicate_role(predicate: str) -> str | None:
     return _address_role(principal) if principal else None
 
 
-def caller_role(function: FunctionModel) -> str | None:
+def _function_body_from_source(contract: ContractModel, function: FunctionModel) -> str | None:
+    """Resolve a modeled function body through the bounded target inheritance graph."""
+    source_path = Path(contract.source).resolve()
+    root = next(
+        (parent for parent in (source_path.parent, *source_path.parents)
+         if any((parent / marker).exists() for marker in ("foundry.toml", "package.json", "remappings.txt"))),
+        source_path.parent,
+    )
+    visited: set[Path] = set()
+
+    def walk(path: Path, inherits: tuple[str, ...]) -> str | None:
+        path = path.resolve()
+        if path in visited or not path.is_file():
+            return None
+        visited.add(path)
+        try:
+            source = _strip_comments(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            return None
+        match = re.search(rf"\\bfunction\\s+{re.escape(function.name)}\\s*\\(", source)
+        if match:
+            opening = source.find("{", match.end())
+            if opening >= 0:
+                return _body(source, opening)
+        for inherited in inherits:
+            try:
+                resolved = _resolve_inherited_contract_source(root, path, inherited)
+            except (OSError, UnicodeError):
+                continue
+            if resolved is None:
+                continue
+            try:
+                bases = parse_solidity(resolved, include_inherited=False)
+            except (OSError, UnicodeError):
+                bases = ()
+            base = next((item for item in bases if item.name == inherited), None)
+            result = walk(resolved, base.inherits if base else ())
+            if result is not None:
+                return result
+        return None
+
+    return walk(source_path, contract.inherits)
+
+
+def _state_principal_from_predicate(predicate: str) -> str | None:
+    """Extract a bare state identifier used as the caller principal."""
+    caller = r"(?:msg\\.sender|_msgSender\\(\\))"
+    identifier = r"[A-Za-z_]\\w*"
+    for pattern in (
+        rf"^\\s*{caller}\\s*==\\s*(?P<principal>{identifier})\\s*$",
+        rf"^\\s*(?P<principal>{identifier})\\s*==\\s*{caller}\\s*$",
+    ):
+        match = re.match(pattern, predicate.strip())
+        if match:
+            return match.group("principal")
+    return None
+
+
+def _state_principal_caller_role(function: FunctionModel, contract: ContractModel) -> str | None:
+    """Resolve caller role through a direct state <- caller initializer."""
+    principals = tuple(
+        name for name in (
+            _state_principal_from_predicate(predicate)
+            for predicate in function.authorization_predicates
+        )
+        if name and name in contract.state_variables
+    )
+    if not principals:
+        return None
+    principal = principals[0]
+    functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
+    for writer in functions:
+        if principal not in writer.writes and principal not in writer.effective_writes:
+            continue
+        body = _function_body_from_source(contract, writer)
+        if body and re.search(
+            rf"\\b{re.escape(principal)}\\s*=\\s*(?:msg\\.sender|_msgSender\\(\\))\\s*;",
+            body,
+        ):
+            return caller_role(writer, contract)
+    return None
+
+
+def caller_role(function: FunctionModel, contract: ContractModel | None = None) -> str | None:
     """Infer a deterministic role binding from source-backed authorization semantics."""
     for modifier in function.modifiers:
         role = _address_role(modifier)
@@ -216,87 +299,9 @@ def caller_role(function: FunctionModel) -> str | None:
         role = _predicate_role(predicate) or _address_role(predicate)
         if role is not None:
             return role
+    if contract is not None:
+        return _state_principal_caller_role(function, contract)
     return None
-
-
-
-def _source_function_bodies(contract: ContractModel) -> dict[str, str]:
-    """Recover declared function bodies for conservative provenance tracing."""
-    try:
-        source = Path(contract.source).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return {}
-    result: dict[str, str] = {}
-    for function in contract.functions:
-        match = re.search(
-            rf"\bfunction\s+{re.escape(function.name)}\s*\(",
-            source,
-        )
-        if match is None:
-            continue
-        opening = source.find("{", match.end())
-        if opening < 0:
-            continue
-        depth = 0
-        for index in range(opening, len(source)):
-            if source[index] == "{":
-                depth += 1
-            elif source[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    result[function.name] = source[opening + 1:index]
-                    break
-    return result
-
-
-def _caller_state_principal_provenance(
-    contract: ContractModel,
-    principal: str,
-) -> tuple[str, ...]:
-    """Find source-backed ways for a caller to establish a state principal.
-
-    This deliberately accepts only direct assignments from the current caller.
-    Arbitrary expressions, external calls, constructor arguments, and mapping
-    writes remain unresolved until a stronger provenance model exists.
-    """
-    assignment = re.compile(
-        rf"\b{re.escape(principal)}\s*=\s*(?:msg\.sender|_msgSender\(\))\s*;"
-    )
-    provenance: list[str] = []
-    try:
-        source = Path(contract.source).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return ()
-
-    constructor_match = re.search(r"\bconstructor\s*\([^)]*\)[^{]*\{", source)
-    if constructor_match is not None:
-        opening = source.find("{", constructor_match.start())
-        if opening >= 0:
-            depth = 0
-            for index in range(opening, len(source)):
-                if source[index] == "{":
-                    depth += 1
-                elif source[index] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        if assignment.search(source[opening + 1:index]):
-                            provenance.append("constructor_deployer")
-                        break
-
-    bodies = _source_function_bodies(contract)
-    functions_by_name = {function.name: function for function in contract.functions}
-    for name, body in bodies.items():
-        if not assignment.search(body):
-            continue
-        function = functions_by_name[name]
-        if function.visibility not in {"public", "external"}:
-            continue
-        if _caller_requirements(function, contract):
-            # A protected writer must establish its own caller separately; do not
-            # claim arbitrary attacker control from the write alone.
-            continue
-        provenance.append(f"caller_via:{name}")
-    return tuple(dict.fromkeys(provenance))
 
 
 def _constructor_role_grants(contract: ContractModel) -> tuple[tuple[str, str], ...]:
