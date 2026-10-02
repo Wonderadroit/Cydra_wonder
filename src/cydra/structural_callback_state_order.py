@@ -79,7 +79,31 @@ def _lock_guarded(tail: str, body: str) -> bool:
     )
 
 
-def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=()) -> CallbackStateOrderContribution:
+def _modeled_lock_guarded(contract: ContractModel, function_name: str) -> bool:
+    """Use parsed function/modifier provenance when source-local regex is insufficient."""
+    for function in (*contract.functions, *contract.inherited_functions):
+        if function.name != function_name:
+            continue
+        if any(
+            re.search(r"\b(?:nonReentrant|reentrancyGuard|notInReentrant|notLocked)\b", modifier)
+            for modifier in function.modifiers
+        ):
+            return True
+    return False
+
+
+def _modeled_public_callers(contract: ContractModel, function_name: str) -> tuple[str, ...]:
+    """Resolve public/external callers from the generic function model."""
+    callers: list[str] = []
+    for function in (*contract.functions, *contract.inherited_functions):
+        if function.visibility not in {"public", "external"}:
+            continue
+        if function_name in function.internal_calls and function.name not in callers:
+            callers.append(function.name)
+    return tuple(callers)
+
+
+(contract: ContractModel, semantic=()) -> CallbackStateOrderContribution:
     source = _source(contract)
     if not source:
         return CallbackStateOrderContribution((), ())
@@ -108,6 +132,8 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
         else:
             callers = _public_callers(function_name, tuple(parsed))
             if not callers:
+                callers = _modeled_public_callers(contract, function_name)
+            if not callers:
                 continue
             target = callers[0]
             target_entry = next((item for item in parsed if item[0] == target), None)
@@ -117,7 +143,10 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
         # lock for its entire execution.  Do not turn a syntactic
         # "external call followed by state write" into a false hypothesis.
         # Other public entry points can still be analyzed independently.
-        if target_entry is not None and _lock_guarded(target_entry[1], target_entry[2]):
+        if (
+            (target_entry is not None and _lock_guarded(target_entry[1], target_entry[2]))
+            or _modeled_lock_guarded(contract, target)
+        ):
             continue
 
         hypothesis_id = f"H-CALLBACK-STATE-ORDER-{target}"
