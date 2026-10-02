@@ -211,6 +211,7 @@ def test_state_observation_verifies_generic_setup_transition_postcondition():
                 "true",
                 "true",
                 "E-OBS-STATE-1",
+                "setRecipient",
             ),
         ),
     )
@@ -277,3 +278,30 @@ def test_state_observation_matches_model_state_predicate_kind():
         ),
     )
     assert verified.nodes[0].status == "verified"
+
+def test_preexisting_state_observation_does_not_verify_setup_transition():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "allowedRecipient != address(0)", "model", "required"),
+        ),
+    )
+    graph = build_prerequisite_graph(
+        readiness,
+        (SetupAction("setRecipient", None, ("Target:act:allowedRecipient",)),),
+    )
+    observed = apply_observations(
+        graph,
+        (
+            PrerequisiteObservation(
+                "state",
+                "allowedRecipient != address(0)",
+                "true",
+                "true",
+                "E-OBS-PREEXISTING",
+            ),
+        ),
+    )
+    setup = next(node for node in observed.nodes if node.kind == "setup_transition")
+    assert setup.status == "constructible"
+    assert not can_enter_security_experiment(observed)
