@@ -799,3 +799,22 @@ def test_callback_struct_literal_qualifies_struct_nested_in_inherited_contract(t
     rendered = _named_struct_literal(contract, "Dimensions", {})[0]
     assert rendered.startswith("Base.Dimensions(")
 
+
+
+def test_callback_execution_filters_unresolved_inherited_function_placeholders(tmp_path: Path):
+    from cydra.callback_state_order_execution import _execution_context_warp
+
+    source = tmp_path / "Callback.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Callback { function execute() external {} }",
+        encoding="utf-8",
+    )
+    execute = FunctionModel(
+        name="execute", visibility="external", modifiers=(), writes=(),
+        external_calls=(), line=1,
+    )
+    contract = ContractModel(
+        "Callback", str(source), (execute,), pragma="^0.8.20",
+        inherited_functions=(None,),
+    )
+    assert _execution_context_warp(contract, execute) is None
