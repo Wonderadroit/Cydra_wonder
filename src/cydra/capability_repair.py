@@ -192,13 +192,6 @@ GENERIC_EXECUTION_PREDICATE_PROVIDERS: tuple[RepairProvider, ...] = (
         "source-backed local binding and deterministic execution-predicate resolution",
     ),
     RepairProvider(
-        "CRYPTOGRAPHIC_WITNESS",
-        ("execution_predicate",),
-        "execution_readiness.cryptographic_witness_provenance",
-        ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
-        "generic cryptographic witness provenance and verifier-route analysis; unsupported witness families remain fail-closed",
-    ),
-    RepairProvider(
         "STATE_OBSERVATION",
         ("state_predicate", "public_state_observation", "public_scalar", "public_mapping", "state_relation"),
         "execution_readiness.state_observation",
