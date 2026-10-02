@@ -10,6 +10,7 @@ from .execution_readiness import _address_role, _constructor_role_grants, caller
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
 from .experiment_inputs import _type_source
+from .planned_call import conservative_argument
 
 
 def _constructor_granted_caller(function, contract_model: ContractModel) -> str | None:
@@ -617,6 +618,51 @@ def generate_sequence_test_from_experiment(
     # bounded fallback root for relative imports and type resolution.
     if project_root is None and source_path.parent.exists():
         project_root = source_path.parent
+
+    # Materialize recursively proven state prerequisites before the planned
+    # hypothesis steps. This is deliberately target-derived: the readiness
+    # solver selects the writer; this renderer only executes that proven
+    # transition with conservative ABI values.
+    if experiment.steps:
+        first_function = next(
+            (item for item in (*contract_model.functions, *contract_model.inherited_functions)
+             if item is not None and item.name == experiment.steps[0].function),
+            None,
+        )
+        if first_function is not None:
+            setup_actions = constructible_state_setup_plan(contract_model, first_function)
+            planned_functions = {step.function for step in experiment.steps}
+            caller_bindings = {
+                "owner": "owner",
+                "admin": "admin",
+                "guardian": "guardian",
+                "risk_manager": "riskManager",
+                "liquidator": "liquidator",
+                "factory": "factory",
+                "tranche": "tranche",
+            }
+            for action in setup_actions:
+                if action.function in planned_functions:
+                    continue
+                setup_function = functions.get(action.function)
+                if setup_function is None:
+                    raise ValueError(f"model has no state-setup function: {action.function}")
+                if setup_function.visibility not in {"public", "external"}:
+                    raise ValueError(f"state-setup function is not externally callable: {action.function}")
+                setup_arguments = tuple(
+                    conservative_argument(parameter)
+                    for parameter in setup_function.parameters
+                )
+                setup_caller = caller_bindings.get(action.caller_role, "attacker") if action.caller_role else "attacker"
+                rendered.append(
+                    f'        // State setup: {" -> ".join(action.provenance)}'
+                )
+                rendered.append(
+                    f"        vm.prank({setup_caller});\\n"
+                    f"        target.{action.function}({', '.join(setup_arguments)});"
+                )
+                planned_functions.add(action.function)
+
     for index, step in enumerate(experiment.steps):
         if not step.function.strip():
             raise ValueError(f"sequence step {index} has no function")
