@@ -578,9 +578,15 @@ def generate_sequence_test_from_experiment(
     if not experiment.steps:
         raise ValueError("sequence experiment has no structured steps")
 
+    # Inherited models can legitimately contain unresolved/placeholder entries
+    # while the extractor is still establishing provenance. The sequence
+    # renderer must never let one unresolved entry crash the whole experiment
+    # with an opaque NoneType.name error. Only concrete modeled functions are
+    # executable sequence surfaces; unknown steps still fail closed below.
     functions = {
         function.name: function
         for function in (*contract_model.functions, *contract_model.inherited_functions)
+        if function is not None and getattr(function, "name", None)
     }
     rendered: list[str] = []
     prerequisite_imports: list[str] = []
