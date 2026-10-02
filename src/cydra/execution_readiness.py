@@ -130,7 +130,7 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
         (
             parent
             for parent in (source_path.parent, *source_path.parents)
-            if any((parent / marker).exists() for marker in ("foundry.toml", "package.json", "remappings.txt"))
+            if any((parent / marker_name).exists() for marker_name in ("foundry.toml", "package.json", "remappings.txt"))
         ),
         source_path.parent,
     )
