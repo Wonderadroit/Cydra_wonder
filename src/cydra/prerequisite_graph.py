@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import re
 
 from .execution_readiness import ExecutionReadiness, SetupAction
 
@@ -114,13 +115,25 @@ def build_prerequisite_graph(
             )
         )
 
+    state_subjects = {item.subject for item in readiness.state_requirements}
     for action in setup_actions:
+        provenance_state = action.provenance[-1] if action.provenance else None
+        dependencies = tuple(
+            subject
+            for subject in state_subjects
+            if provenance_state
+            and re.search(
+                rf"(?<![A-Za-z0-9_]){re.escape(provenance_state)}(?![A-Za-z0-9_])",
+                subject,
+            )
+        )
         nodes.append(
             PrerequisiteNode(
                 subject=action.function,
                 kind="setup_transition",
                 status="constructible",
                 source="execution_readiness",
+                dependencies=dependencies,
                 transition=action.function,
                 verification="postcondition_required",
                 capability="STATE_SETUP",
@@ -131,6 +144,7 @@ def build_prerequisite_graph(
     for node in nodes:
         unique[(node.kind, node.subject, node.source)] = node
     return PrerequisiteGraph(tuple(unique.values()))
+
 
 
 def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
@@ -175,10 +189,31 @@ def apply_observations(
     observations: tuple[PrerequisiteObservation, ...],
 ) -> PrerequisiteGraph:
     """Promote only evidence-backed matching prerequisites; fail closed otherwise."""
-    by_subject = {(observation.kind, observation.subject): observation for observation in observations}
+    state_requirement_kinds = {
+        "state_predicate",
+        "state_dependency",
+        "execution_state_dependency",
+    }
     nodes: list[PrerequisiteNode] = []
     for node in graph.nodes:
-        observation = by_subject.get((node.kind, node.subject))
+        observation = None
+        if node.kind in state_requirement_kinds:
+            observation = next(
+                (
+                    item for item in observations
+                    if item.kind == "state" and item.subject == node.subject
+                ),
+                None,
+            )
+        else:
+            observation = next(
+                (
+                    item for item in observations
+                    if item.kind == node.kind and item.subject == node.subject
+                ),
+                None,
+            )
+
         if observation is None:
             nodes.append(node)
             continue
@@ -195,4 +230,33 @@ def apply_observations(
             nodes.append(
                 replace(node, status="blocked", verification=observation.evidence_id)
             )
+
+    verified_state_subjects = {
+        node.subject
+        for node in nodes
+        if node.kind in state_requirement_kinds and node.status == "verified"
+    }
+    for index, node in enumerate(nodes):
+        if node.kind != "setup_transition" or node.status != "constructible":
+            continue
+        matching_dependency = next(
+            (dependency for dependency in node.dependencies if dependency in verified_state_subjects),
+            None,
+        )
+        if matching_dependency is None:
+            continue
+        evidence = next(
+            (
+                item for item in observations
+                if item.kind == "state" and item.subject == matching_dependency
+            ),
+            None,
+        )
+        if evidence is not None and evidence.evidence_id:
+            nodes[index] = replace(
+                node,
+                status="verified",
+                verification=evidence.evidence_id,
+            )
+
     return PrerequisiteGraph(tuple(nodes))
