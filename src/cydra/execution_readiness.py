@@ -1990,8 +1990,25 @@ def _state_observation_has_default_solution(
             **dict(current.execution_predicate_polarities),
             **dict(current.state_predicate_polarities),
         }
+        # Compact/source-backed models can expose a guard in the Solidity body
+        # without preserving its polarity metadata. A require(...) expression
+        # is semantically a must-hold predicate at entry, so recover that
+        # provenance generically instead of treating a default-state guard as
+        # unresolved merely because the parser omitted the polarity field.
+        body = _source_function_body(contract, current)
+        source_require_predicates = {
+            match.group("predicate").strip()
+            for match in re.finditer(
+                r"\brequire\s*\(\s*(?P<predicate>[^;]+?)\s*\)",
+                body,
+            )
+        }
+        for predicate in source_require_predicates:
+            polarities.setdefault(predicate, "must_hold")
         modeled_predicates = tuple(
-            dict.fromkeys((*current.execution_predicates, *current.state_predicates))
+            dict.fromkeys(
+                (*current.execution_predicates, *current.state_predicates, *source_require_predicates)
+            )
         )
         for predicate in modeled_predicates:
             if polarities.get(predicate) != "must_hold":
