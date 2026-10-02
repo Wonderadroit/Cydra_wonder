@@ -206,7 +206,8 @@ def apply_observations(
             observation = next(
                 (
                     item for item in observations
-                    if item.kind == "state" and item.subject == node.subject
+                    if item.subject == node.subject
+                    and item.kind in {"state", node.kind}
                 ),
                 None,
             )
@@ -253,7 +254,8 @@ def apply_observations(
         evidence = next(
             (
                 item for item in observations
-                if item.kind == "state" and item.subject == matching_dependency
+                if item.subject == matching_dependency
+                and item.kind in {"state", "state_predicate", "state_dependency", "execution_state_dependency"}
             ),
             None,
         )
