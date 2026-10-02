@@ -11,7 +11,7 @@ import traceback
 import contextlib
 import io
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from run_benchmark_blind import SUPPORTED_CLASSES, run_source_investigation
 from cydra.capability_campaign import merge_campaigns
@@ -258,6 +258,7 @@ def main() -> int:
 
     local_repo = checkout.as_uri()
     results: list[dict[str, Any]] = []
+    automatic_repairs: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="cydra-live-run-") as temp:
         temp_root = Path(temp)
         shared_forge_std = temp_root / "forge-std"
@@ -312,6 +313,23 @@ def main() -> int:
                 except json.JSONDecodeError:
                     result["classification_parse_error"] = True
             results.append(result)
+
+        for result in results:
+            if not result.get("ok"):
+                continue
+            repair = run_automatic_repairs_for_source(
+                source=result["source"],
+                result=result,
+                spec=spec,
+                checkout=checkout,
+                output=output,
+                child_env=child_env,
+                round_number=1,
+            )
+            automatic_repairs.append({
+                "source": result["source"],
+                "repair": repair,
+            })
 
     campaigns = []
     for result in results:
@@ -378,23 +396,6 @@ def main() -> int:
                     "class": hypothesis.get("class"),
                 })
 
-    automatic_repairs = []
-    for result in results:
-        if not result.get("ok"):
-            continue
-        repair = run_automatic_repairs_for_source(
-            source=result["source"],
-            result=result,
-            spec=spec,
-            checkout=checkout,
-            output=output,
-            child_env=child_env,
-            round_number=1,
-        )
-        automatic_repairs.append({
-            "source": result["source"],
-            "repair": repair,
-        })
     write_json(output / "automatic-repair.json", {
         "schema_version": 1,
         "mode": "automatic_generic_repair",
