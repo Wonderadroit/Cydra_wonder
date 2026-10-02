@@ -2011,7 +2011,10 @@ def _state_observation_has_default_solution(
             )
         )
         for predicate in modeled_predicates:
-            if polarities.get(predicate) != "must_hold":
+            # Predicates recovered directly from require(...) are semantically
+            # entry guards even when the compact parser omitted polarity
+            # metadata. Model-backed predicates still require explicit polarity.
+            if predicate not in source_require_predicates and polarities.get(predicate) != "must_hold":
                 continue
             normalized = re.sub(r"\s+", " ", predicate).strip()
             def indexed_state_is_default(prefix: str) -> bool:
