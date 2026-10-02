@@ -1456,3 +1456,13 @@ def test_recursive_setup_plan_selects_caller_principal_writer(tmp_path):
     actions = constructible_state_setup_plan(model, target)
     assert [action.function for action in actions] == ["setRecipient"]
     assert actions[0].caller_role is None
+
+
+def test_solidity_concat_builtin_is_deterministic_local_expression():
+    from cydra.execution_readiness import _is_deterministic_expression
+    assert _is_deterministic_expression(
+        'bytes.concat(baseSig, abi.encodePacked(validUntil, uint48(0)))'
+    )
+    assert _is_deterministic_expression(
+        'string.concat(prefix, suffix)'
+    )
