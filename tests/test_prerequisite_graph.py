@@ -164,3 +164,21 @@ def test_prerequisite_nodes_expose_generic_capability_clusters():
         "CALLER_CONSTRUCTION": 1,
         "STATE_OBSERVATION": 1,
     }
+
+
+def test_predicate_category_preserves_specific_capability():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        execution_requirements=(
+            ExecutionRequirement(
+                "execution_predicate",
+                "verifyProof(...)",
+                "target:body",
+                "required",
+                category="cryptographic_witness",
+            ),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.nodes[0].capability == "CRYPTOGRAPHIC_WITNESS"
+    assert graph.capability_clusters == {"CRYPTOGRAPHIC_WITNESS": 1}
