@@ -1418,3 +1418,41 @@ def test_state_principal_setup_plan_includes_caller_writer(tmp_path):
     plan = constructible_state_setup_plan(model, target)
     assert [item.function for item in plan] == ["setRecipient"]
     assert plan[0].caller_role is None
+
+
+def test_recursive_setup_plan_selects_caller_principal_writer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            address allowedRecipient;
+            function setRecipient() external {
+                allowedRecipient = msg.sender;
+            }
+            function act() external {
+                require(msg.sender == allowedRecipient);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    writer = FunctionModel("setRecipient", "external", (), ("allowedRecipient",), (), 5)
+    target = FunctionModel(
+        "act",
+        "external",
+        (),
+        (),
+        (),
+        8,
+        authorization_predicates=("msg.sender == allowedRecipient",),
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (writer, target),
+        state_variables=("allowedRecipient",),
+    )
+    actions = constructible_state_setup_plan(model, target)
+    assert [action.function for action in actions] == ["setRecipient"]
+    assert actions[0].caller_role is None
