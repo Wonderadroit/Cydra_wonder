@@ -274,3 +274,14 @@ def test_automatic_repair_does_not_call_same_provider_again_when_replay_preserve
     assert result["status"] == "implementation_boundary"
     assert replayed == ["LOCAL_EXECUTION:internal_execution_predicate"]
     assert "replay_unresolved:LOCAL_EXECUTION:internal_execution_predicate" in result["implementation_boundaries"]
+
+
+def test_automatic_repair_registers_execution_predicate_state_observation():
+    from cydra.capability_repair import build_automatic_repair_plan
+
+    campaign = {"capability_clusters": [
+        {"capability": "STATE_OBSERVATION:execution_predicate"},
+    ]}
+    plan = build_automatic_repair_plan(campaign)
+    assert plan["fail_closed"] is False
+    assert plan["requirements"][0]["provider"] == "execution_readiness.state_observation"
