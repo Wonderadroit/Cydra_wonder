@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from .foundry import ExecutionResult
 from .prerequisite_graph import PrerequisiteObservation
+from .execution_readiness import SetupAction
 from .runtime_observation import StateObservationPlan
 
 
@@ -32,6 +33,7 @@ def observations_from_execution(
     experiment_id: str,
     plans: tuple[StateObservationPlan, ...],
     execution: ExecutionResult,
+    setup_actions: tuple[SetupAction, ...] = (),
 ) -> tuple[PrerequisiteObservation, ...]:
     """Promote only assertions that actually executed and passed.
 
@@ -46,6 +48,7 @@ def observations_from_execution(
     observations: list[PrerequisiteObservation] = []
     for plan in plans:
         evidence_id = observation_evidence_id(experiment_id, plan)
+        transition = next((action.function for action in setup_actions if action.provenance and action.provenance[-1] == plan.state), None)
         observations.append(
             PrerequisiteObservation(
                 kind="state",
@@ -53,6 +56,7 @@ def observations_from_execution(
                 expected="true",
                 observed="true",
                 evidence_id=evidence_id,
+                transition=transition,
             )
         )
     return tuple(observations)
