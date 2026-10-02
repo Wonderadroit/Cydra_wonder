@@ -2,7 +2,12 @@ from dataclasses import replace
 from pathlib import Path
 
 from cydra.compiler_constraints import ConstraintEvidence
-from cydra.execution_readiness import inspect_execution_readiness, constructible_state_setup_plan, _caller_requirements
+from cydra.execution_readiness import (
+    inspect_execution_readiness,
+    constructible_state_setup_plan,
+    _caller_requirements,
+    _constructor_state_predicate_satisfied,
+)
 from cydra.models import ConstructorModel, ContractModel, FunctionModel, ModifierModel, ParameterModel
 from cydra.solidity_model import parse_solidity
 
@@ -1030,3 +1035,57 @@ def test_internal_state_discovery_follows_value_binding_and_return_expression(tm
 
     discovered = set(_state_names_from_internal_predicates(contract, run))
     assert {"verifierMap", "roots"} <= discovered
+
+def test_execution_readiness_recognizes_constructible_inherited_helper_return_branch():
+    helper = FunctionModel(
+        "rootHashExists",
+        "public",
+        (),
+        (),
+        (),
+        10,
+        parameters=(ParameterModel("_root", "uint256"), ParameterModel("_rootIndex", "uint256")),
+        return_expressions=("_root == 0", "false", "_root != 0 && roots[_rootIndex] == _root"),
+    )
+    consumer = FunctionModel(
+        "transact",
+        "external",
+        (),
+        (),
+        (),
+        20,
+        execution_predicates=("rootHashExists(circomData.rootHashHinkal, circomData.rootHashHinkalIndex)",),
+        execution_predicate_polarities=(
+            ("rootHashExists(circomData.rootHashHinkal, circomData.rootHashHinkalIndex)", "must_hold"),
+        ),
+    )
+    contract = ContractModel("Derived", "/tmp/Derived.sol", (consumer,), inherited_functions=(helper,))
+    readiness = inspect_execution_readiness(contract, consumer)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.status == "constraint"
+    assert "return branch" in requirement.detail
+
+
+def test_execution_readiness_propagates_inherited_constructor_state_equality(tmp_path):
+    base = tmp_path / "Base.sol"
+    derived = tmp_path / "Derived.sol"
+    base.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Base {
+            bool initialized;
+            constructor() { initialized = true; }
+        }
+        """,
+        encoding="utf-8",
+    )
+    derived.write_text(
+        """
+        pragma solidity ^0.8.20;
+        import "./Base.sol";
+        contract Derived is Base {}
+        """,
+        encoding="utf-8",
+    )
+    contract = next(item for item in parse_solidity(derived) if item.name == "Derived")
+    assert _constructor_state_predicate_satisfied(contract, "initialized == true")
