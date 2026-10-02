@@ -413,7 +413,7 @@ def run_automatic_repair_controller(
             "schema_version": 1,
             "mode": "automatic_generic_repair",
             "status": "implementation_boundary",
-            "rounds": max_rounds,
+            "rounds": round_number,
             "attempts": attempts,
             "implementation_boundaries": boundaries,
         }
