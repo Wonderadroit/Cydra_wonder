@@ -1286,6 +1286,77 @@ def _internal_execution_requirements(
     return tuple(dict.fromkeys(results))
 
 
+def _call_arguments_from_expression(expression: str) -> tuple[str, ...]:
+    """Split one modeled Solidity call's arguments without target-specific parsing."""
+    opening = expression.find("(")
+    if opening < 0:
+        return ()
+    depth = 0
+    start = opening + 1
+    values: list[str] = []
+    for index in range(opening + 1, len(expression)):
+        char = expression[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            if depth == 0:
+                value = expression[start:index].strip()
+                if value:
+                    values.append(value)
+                return tuple(values)
+            depth -= 1
+        elif char == "," and depth == 0:
+            values.append(expression[start:index].strip())
+            start = index + 1
+    return ()
+
+
+def _modeled_call_return_has_constructible_branch(
+    contract: ContractModel,
+    predicate: str,
+) -> bool:
+    """Recognize source-derived call branches satisfiable by generic ABI inputs.
+
+    A modeled helper can expose a normal-path branch such as return root == 0.
+    When the caller invokes that helper with a primitive ABI value, zero is a
+    generic deterministic input choice. This is evidence that the call-shaped
+    execution predicate is an input constraint rather than a capability gap.
+    """
+    match = re.match(r"^\s*(?P<name>[A-Za-z_]\w*)\s*\(", predicate)
+    if not match:
+        return False
+    callee = next(
+        (
+            item
+            for item in (*contract.functions, *contract.inherited_functions)
+            if item.name == match.group("name")
+        ),
+        None,
+    )
+    if callee is None or not callee.return_expressions:
+        return False
+    arguments = _call_arguments_from_expression(predicate)
+    if not arguments:
+        return False
+    for return_expression in callee.return_expressions:
+        for parameter_index, parameter in enumerate(callee.parameters):
+            if parameter_index >= len(arguments):
+                continue
+            base = parameter.type.strip().split()[0].rstrip("[]")
+            primitive = (
+                base in {"address", "bool", "string", "bytes"}
+                or base.startswith(("uint", "int", "bytes"))
+            )
+            if not primitive:
+                continue
+            if re.search(
+                rf"\b{re.escape(parameter.name)}\s*==\s*(?:0|false|address\(0\))",
+                return_expression,
+            ):
+                return True
+    return False
+
+
 def _execution_requirements(
     contract: ContractModel,
     function: FunctionModel,
@@ -1308,7 +1379,13 @@ def _execution_requirements(
             "unknown": "execution predicate polarity could not be established statically",
         }.get(polarity, "execution predicate polarity is unknown")
         category = _classify_internal_predicate(contract, function, predicate)
-        status = "constraint" if _is_experiment_constraint(contract, function, predicate, execution_capabilities) else "required"
+        modeled_call_branch = _modeled_call_return_has_constructible_branch(contract, predicate)
+        status = (
+            "constraint"
+            if modeled_call_branch
+            or _is_experiment_constraint(contract, function, predicate, execution_capabilities)
+            else "required"
+        )
         # Execution predicates can encode persistent state just like explicit
         # state_predicates. Reuse the existing generic setup solver rather than
         # leaving those guards permanently blocked merely because extraction
@@ -1325,6 +1402,11 @@ def _execution_requirements(
             status = "required"
         if status == "constraint":
             detail = (
+                "source-derived helper return branch is satisfiable by a generic "
+                "primitive ABI input; the generated experiment must satisfy it before "
+                "the security-relevant assertion"
+                if modeled_call_branch
+                else
                 "pure input/local execution constraint; the generated experiment "
                 "must satisfy it before the security-relevant assertion"
             )
