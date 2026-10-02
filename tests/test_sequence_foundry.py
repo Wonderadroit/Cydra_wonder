@@ -75,6 +75,28 @@ def test_sequence_renderer_emits_ordered_calls():
     assert "vm.prank(attacker);" in source
 
 
+def test_sequence_renderer_ignores_unresolved_inherited_function_entries(tmp_path):
+    """An unresolved inherited placeholder must not crash sequence rendering."""
+    model = ContractModel(
+        "SequenceFixture",
+        str(tmp_path / "SequenceFixture.sol"),
+        _model().functions,
+        inherited_functions=(None,),  # type: ignore[arg-type]
+    )
+    hypothesis, experiment = _experiment()
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        "../SequenceFixture.sol",
+        "SequenceFixture",
+        tmp_path / "generated-sequence.t.sol",
+        model,
+    )
+    source = generated.read_text(encoding="utf-8")
+    assert "target.increase(7);" in source
+    assert "target.decrease(7);" in source
+
+
 def test_sequence_renderer_rejects_unknown_step():
     hypothesis, experiment = _experiment()
     bad = Experiment(
