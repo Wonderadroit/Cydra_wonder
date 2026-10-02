@@ -359,6 +359,7 @@ def plan_public_state_observations(
         visited.add(current.name)
         for predicate in current.execution_predicates:
             plans.extend(plan_public_mapping_state_observations(contract, predicate))
+            plans.extend(scalar_plans_for_predicate(predicate))
         # Follow same-contract calls from the source with brace-aware
         # function-body extraction. This mirrors the target model's provenance
         # without relying on a regex that terminates at an inner closing brace.
