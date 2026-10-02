@@ -116,21 +116,27 @@ def build_prerequisite_graph(
         )
 
     state_requirement_kinds = {"state_predicate", "state_dependency", "execution_state_dependency"}
-    state_subjects = {
-        item.subject
-        for item in requirements
-        if item.kind in state_requirement_kinds
-    }
+    state_requirements = tuple(
+        item for item in requirements if item.kind in state_requirement_kinds
+    )
+
+    def _shares_state_symbol(subject: str, provenance: str) -> bool:
+        """Relate setup provenance to expression-based state requirements generically."""
+        subject_symbols = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", subject))
+        provenance_symbols = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", provenance))
+        ignored = {
+            "address", "bool", "bytes", "string", "uint", "uint8", "uint16",
+            "uint32", "uint64", "uint128", "uint256", "int", "int8", "int16",
+            "int32", "int64", "int128", "int256", "true", "false",
+        }
+        return bool((subject_symbols - ignored) & (provenance_symbols - ignored))
+
     for action in setup_actions:
         provenance_state = action.provenance[-1] if action.provenance else None
         dependencies = tuple(
-            subject
-            for subject in state_subjects
-            if provenance_state
-            and re.search(
-                rf"(?<![A-Za-z0-9_]){re.escape(provenance_state)}(?![A-Za-z0-9_])",
-                subject,
-            )
+            item.subject
+            for item in state_requirements
+            if provenance_state and _shares_state_symbol(item.subject, provenance_state)
         )
         nodes.append(
             PrerequisiteNode(
