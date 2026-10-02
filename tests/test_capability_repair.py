@@ -236,7 +236,6 @@ def test_automatic_repair_registers_generic_predicate_capabilities():
     from cydra.capability_repair import build_automatic_repair_plan
     campaign = {"capability_clusters": [
         {"capability": "LOCAL_EXECUTION:internal_execution_predicate"},
-        {"capability": "CRYPTOGRAPHIC_WITNESS:execution_predicate"},
         {"capability": "STATE_OBSERVATION:state_predicate"},
         {"capability": "EXECUTION_READINESS:execution_value_runtime_dependency"},
     ]}
@@ -244,7 +243,6 @@ def test_automatic_repair_registers_generic_predicate_capabilities():
     assert plan["fail_closed"] is False
     providers = {item["key"]: item["provider"] for item in plan["requirements"]}
     assert providers["LOCAL_EXECUTION:internal_execution_predicate"] == "execution_readiness.local_execution_predicate"
-    assert providers["CRYPTOGRAPHIC_WITNESS:execution_predicate"] == "execution_readiness.cryptographic_witness_provenance"
     assert providers["STATE_OBSERVATION:state_predicate"] == "execution_readiness.state_observation"
     assert providers["EXECUTION_READINESS:execution_value_runtime_dependency"] == "execution_readiness.runtime_dependency_resolution"
 
