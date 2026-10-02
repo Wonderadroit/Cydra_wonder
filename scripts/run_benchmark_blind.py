@@ -573,7 +573,7 @@ def _run_state_prerequisite_observation(
         raise ValueError("state prerequisite has no deterministic public runtime observation")
     from cydra.models import ExperimentStep
     setup_steps = _setup_steps(contract, setup_actions)
-    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions) if item is not None}
     target_function = functions.get(hypothesis.target_function)
     if target_function is None:
         raise ValueError(f"state target function is not modeled: {hypothesis.target_function}")
