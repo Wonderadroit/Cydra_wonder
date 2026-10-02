@@ -219,12 +219,21 @@ def run_automatic_repairs_for_source(
             os.environ.update(previous_env)
         (replay_artifact / "runner.stdout.txt").write_text(stdout.getvalue(), encoding="utf-8")
         (replay_artifact / "runner.stderr.txt").write_text(stderr.getvalue(), encoding="utf-8")
+        replay_campaign = {}
+        classification_path = replay_artifact / "freeze" / "classification.json"
+        if classification_path.is_file():
+            try:
+                replay_classification = json.loads(classification_path.read_text(encoding="utf-8"))
+                replay_campaign = replay_classification.get("capability_campaign") or {}
+            except (OSError, ValueError):
+                replay_campaign = {}
         return {
             "exit_code": exit_code,
             "artifact": str(replay_artifact.relative_to(output)),
             "target_ref": spec["target_ref"],
             "hypothesis_ids": list(requirement.affected_hypothesis_ids),
             "experiment_ids": list(requirement.affected_experiment_ids),
+            "campaign": replay_campaign,
         }
 
     return run_automatic_repair_controller(
