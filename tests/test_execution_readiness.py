@@ -1348,3 +1348,73 @@ def test_state_principal_arbitrary_assignment_remains_unresolved(tmp_path):
         item.kind == "caller_predicate" and item.status == "required"
         for item in readiness.caller_requirements
     )
+
+
+def test_state_principal_modifier_can_be_established_by_caller_writer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            address allowedRecipient;
+            modifier onlyAllowedRecipient() {
+                require(msg.sender == allowedRecipient);
+                _;
+            }
+            function setRecipient() external {
+                allowedRecipient = msg.sender;
+            }
+            function act() external onlyAllowedRecipient {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    writer = FunctionModel("setRecipient", "external", (), ("allowedRecipient",), (), 8)
+    target = FunctionModel("act", "external", ("onlyAllowedRecipient",), (), (), 11)
+    modifier = ModifierModel(
+        "onlyAllowedRecipient",
+        body="require(msg.sender == allowedRecipient); _;",
+    )
+    model = ContractModel(
+        "Target", str(source), (writer, target),
+        state_variables=("allowedRecipient",),
+        modifiers=(modifier,),
+    )
+    readiness = inspect_execution_readiness(model, target)
+    principal = next(
+        item for item in readiness.caller_requirements
+        if item.kind == "caller_state_principal"
+    )
+    assert principal.status == "constraint"
+
+
+def test_state_principal_setup_plan_includes_caller_writer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            address allowedRecipient;
+            function setRecipient() external {
+                allowedRecipient = msg.sender;
+            }
+            function act() external {
+                require(msg.sender == allowedRecipient);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    writer = FunctionModel("setRecipient", "external", (), ("allowedRecipient",), (), 5)
+    target = FunctionModel(
+        "act", "external", (), (), (), 8,
+        authorization_predicates=("msg.sender == allowedRecipient",),
+    )
+    model = ContractModel(
+        "Target", str(source), (writer, target),
+        state_variables=("allowedRecipient",),
+    )
+    from cydra.execution_readiness import constructible_state_setup_plan
+    plan = constructible_state_setup_plan(model, target)
+    assert [item.function for item in plan] == ["setRecipient"]
+    assert plan[0].caller_role is None
