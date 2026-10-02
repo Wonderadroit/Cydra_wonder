@@ -158,6 +158,19 @@ def run_automatic_repairs_for_source(
         automatic_plan = build_automatic_repair_plan(campaign)
     if not automatic_plan.get("requirements"):
         return {"status": "no_requirements", "attempts": []}
+    # Preserve the exact hypothesis/experiment provenance emitted by the
+    # source-level repair contract when constructing the executable controller.
+    campaign["capability_clusters"] = [
+        {
+            "capability": item["key"],
+            "count": 1,
+            "hypothesis_ids": item.get("affected_hypothesis_ids", []),
+            "experiment_ids": item.get("affected_experiment_ids", []),
+            "stages": [item.get("stage", "execution")],
+            "reasons": [item.get("reason", "")],
+        }
+        for item in automatic_plan["requirements"]
+    ]
 
     repair_root = output / "automatic-repair" / f"round-{round_number:02d}" / f"{len(source):04d}-{Path(source).stem}"
     repair_root.mkdir(parents=True, exist_ok=True)
