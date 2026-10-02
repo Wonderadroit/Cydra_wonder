@@ -123,40 +123,6 @@ def test_execution_readiness_uses_compiler_collection_constraints_for_setup_disc
 
 
 
-
-def test_crypto_predicate_exposes_target_derived_witness_route():
-    from cydra.execution_readiness import _cryptographic_witness_route
-    function = FunctionModel(
-        name="verify",
-        visibility="internal",
-        modifiers=(),
-        writes=(),
-        external_calls=(),
-        line=1,
-        parameters=(
-            ParameterModel("proof", "bytes", "calldata"),
-            ParameterModel("publicInput", "uint256", "calldata"),
-        ),
-        return_expressions=("true",),
-    )
-    contract = ContractModel("Target", "/tmp/Target.sol", (function,))
-    route = _cryptographic_witness_route(
-        contract,
-        "verifyProof(proof, publicInput)",
-    )
-    assert "target-derived verifier verifyProof" in route
-    assert "proof <- proof" in route
-    assert "publicInput <- publicInput" in route
-
-
-def test_unresolved_crypto_predicate_remains_fail_closed():
-    from cydra.execution_readiness import _cryptographic_witness_route
-    contract = ContractModel("Target", "/tmp/Target.sol", ())
-    route = _cryptographic_witness_route(contract, "verifier.verifyProof(proof)")
-    assert "external verifier verifier.verifyProof" in route
-    assert "must be resolved" in route
-
-
 def test_execution_readiness_preserves_local_guard_as_path_prerequisite():
     function = FunctionModel(
         "start", "external", (), (), (), 1,
@@ -1032,3 +998,121 @@ def test_internal_state_prerequisite_uses_constructible_writer_or_default_state(
 def test_internal_state_discovery_follows_value_binding_and_return_expression(tmp_path):
     source = tmp_path / "Target.sol"
     source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => address) public verifierMap;
+            mapping(uint256 => uint256) public roots;
+
+            function run(uint256 id, uint256 root) external {
+                verify(id);
+                rootHashExists(root, id);
+            }
+
+            function verify(uint256 id) internal {
+                address verifier = verifierMap[id];
+                require(address(verifier) != address(0));
+            }
+
+            function rootHashExists(uint256 root, uint256 index) public view returns (bool) {
+                return root == 0 || roots[index] == root;
+            }
+
+            function registerVerifier(uint256 id, address verifier) external {
+                verifierMap[id] = verifier;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+
+    from cydra.execution_readiness import _state_names_from_internal_predicates
+
+    discovered = set(_state_names_from_internal_predicates(contract, run))
+    assert {"verifierMap", "roots"} <= discovered
+
+def test_execution_readiness_recognizes_constructible_inherited_helper_return_branch():
+    helper = FunctionModel(
+        "rootHashExists",
+        "public",
+        (),
+        (),
+        (),
+        10,
+        parameters=(ParameterModel("_root", "uint256"), ParameterModel("_rootIndex", "uint256")),
+        return_expressions=("_root == 0", "false", "_root != 0 && roots[_rootIndex] == _root"),
+    )
+    consumer = FunctionModel(
+        "transact",
+        "external",
+        (),
+        (),
+        (),
+        20,
+        execution_predicates=("rootHashExists(circomData.rootHashHinkal, circomData.rootHashHinkalIndex)",),
+        execution_predicate_polarities=(
+            ("rootHashExists(circomData.rootHashHinkal, circomData.rootHashHinkalIndex)", "must_hold"),
+        ),
+    )
+    contract = ContractModel("Derived", "/tmp/Derived.sol", (consumer,), inherited_functions=(helper,))
+    readiness = inspect_execution_readiness(contract, consumer)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.status == "constraint"
+    assert "return branch" in requirement.detail
+
+
+def test_execution_readiness_propagates_inherited_constructor_state_equality(tmp_path):
+    base = tmp_path / "Base.sol"
+    derived = tmp_path / "Derived.sol"
+    base.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Base {
+            bool initialized;
+            constructor() { initialized = true; }
+        }
+        """,
+        encoding="utf-8",
+    )
+    derived.write_text(
+        """
+        pragma solidity ^0.8.20;
+        import "./Base.sol";
+        contract Derived is Base {}
+        """,
+        encoding="utf-8",
+    )
+    contract = next(item for item in parse_solidity(derived) if item.name == "Derived")
+    assert _constructor_state_predicate_satisfied(contract, "initialized == true")
+
+
+def test_crypto_predicate_exposes_target_derived_witness_route():
+    from cydra.execution_readiness import _cryptographic_witness_route
+
+    function = FunctionModel(
+        "verify", "internal", (), (), (), 1,
+        parameters=(
+            ParameterModel("proof", "bytes"),
+            ParameterModel("publicInput", "uint256"),
+        ),
+        return_expressions=("true",),
+    )
+    contract = ContractModel("Target", "/tmp/Target.sol", (function,))
+    route = _cryptographic_witness_route(contract, "verify(proof, publicInput)")
+    assert "target-derived verifier verify" in route
+    assert "proof <- proof" in route
+    assert "publicInput <- publicInput" in route
+
+
+def test_unresolved_crypto_predicate_remains_explicit():
+    from cydra.execution_readiness import _cryptographic_witness_route
+
+    contract = ContractModel("Target", "/tmp/Target.sol", ())
+    route = _cryptographic_witness_route(contract, "verifier.verifyProof(proof)")
+    assert "external verifier verifier.verifyProof" in route
+    assert "must be resolved before witness construction" in route
