@@ -953,6 +953,114 @@ def _source_function_body(contract: ContractModel, function: FunctionModel) -> s
     return source[opening + 1:]
 
 
+def _constructor_state_equalities(
+    contract: ContractModel,
+) -> dict[str, tuple[str, ...]]:
+    """Collect source-backed constructor state equalities across inheritance."""
+    source_path = Path(contract.source).resolve()
+    project_root = next(
+        (
+            parent
+            for parent in (source_path.parent, *source_path.parents)
+            if any((parent / marker).exists() for marker in ("foundry.toml", "package.json", "remappings.txt"))
+        ),
+        source_path.parent,
+    )
+    facts: dict[str, list[str]] = {}
+    visited: set[Path] = set()
+
+    def constructor_body(source: str) -> str:
+        match = re.search(r"\bconstructor\s*\(", source)
+        if not match:
+            return ""
+        opening = source.find("(", match.start())
+        depth = 0
+        closing = None
+        for index in range(opening, len(source)):
+            char = source[index]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    closing = index
+                    break
+        if closing is None:
+            return ""
+        brace = source.find("{", closing)
+        if brace < 0:
+            return ""
+        depth = 0
+        for index in range(brace, len(source)):
+            char = source[index]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return source[brace + 1:index]
+        return ""
+
+    def visit(path: Path, inherited_names: tuple[str, ...]) -> None:
+        path = path.resolve()
+        if path in visited or not path.is_file():
+            return
+        visited.add(path)
+        try:
+            source = _strip_comments(path.read_text(encoding="utf-8"))
+            models = parse_solidity(path, include_inherited=False)
+        except (OSError, UnicodeError):
+            return
+        model = models[0] if models else None
+        state_names = set(model.state_variables if model is not None else ())
+        body = constructor_body(source)
+        for state in state_names:
+            match = re.search(
+                rf"\b{re.escape(state)}(?:\[[^;{}]+\])?\s*=\s*([^;]+);",
+                body,
+            )
+            if match:
+                value = re.sub(r"\s+", " ", match.group(1)).strip()
+                facts.setdefault(state, []).append(value)
+        for inherited_name in inherited_names:
+            try:
+                resolved = _resolve_inherited_contract_source(project_root, path, inherited_name)
+            except (OSError, UnicodeError):
+                continue
+            if resolved is not None:
+                try:
+                    base_models = parse_solidity(resolved, include_inherited=False)
+                    base_names = base_models[0].inherits if base_models else ()
+                except (OSError, UnicodeError):
+                    base_names = ()
+                visit(resolved, base_names)
+
+    visit(source_path, contract.inherits)
+    return {name: tuple(dict.fromkeys(values)) for name, values in facts.items()}
+
+
+def _constructor_state_predicate_satisfied(
+    contract: ContractModel,
+    predicate: str,
+) -> bool:
+    """Check simple state predicates against inherited constructor provenance."""
+    facts = _constructor_state_equalities(contract)
+    normalized = re.sub(r"\s+", " ", predicate).strip()
+    for state, values in facts.items():
+        for value in values:
+            if re.fullmatch(
+                rf"{re.escape(state)}\s*==\s*{re.escape(value)}",
+                normalized,
+            ) or re.fullmatch(
+                rf"{re.escape(value)}\s*==\s*{re.escape(state)}",
+                normalized,
+            ):
+                return True
+            if re.fullmatch(rf"!{re.escape(state)}", normalized) and value in {"false", "0", "address(0)"}:
+                return True
+    return False
+
+
 def _classify_internal_predicate(
     contract: ContractModel,
     callee: FunctionModel,
@@ -1217,6 +1325,10 @@ def _internal_execution_requirements(
                         for state in predicate_state_names
                     )
                 )
+                constructor_state = (
+                    category == "state_observation"
+                    and _constructor_state_predicate_satisfied(contract, predicate)
+                )
                 state_observation = (
                     category == "state_observation"
                     and plan_namespaced_state_observation(contract, callee, predicate) is not None
@@ -1243,7 +1355,7 @@ def _internal_execution_requirements(
                         )
                     )
                 )
-                if constraint or capability_constraint or state_observation or state_setup or default_state:
+                if constraint or capability_constraint or state_observation or state_setup or default_state or constructor_state:
                     status = "constraint"
                     if capability_constraint and not constraint:
                         detail = (
@@ -1254,6 +1366,11 @@ def _internal_execution_requirements(
                         detail = (
                             "fresh target state satisfies this persistent prerequisite by its "
                             "modeled default value; the experiment must preserve that state"
+                        )
+                    elif constructor_state:
+                        detail = (
+                            "inherited/current constructor source establishes this persistent "
+                            "state equality; the experiment must preserve that constructor state"
                         )
                     elif state_setup:
                         detail = (
