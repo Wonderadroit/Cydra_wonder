@@ -124,3 +124,22 @@ Additional adapters such as Solana/Rust may be added later, but only through the
 **language adapter → system model → invariants → hypotheses → experiments → deterministic evidence → causal verification → finding**
 
 A new language must not weaken the core evidence and provenance rules.
+
+
+## Automatic capability-repair loop
+
+The canonical live campaign now has an automatic generic repair orchestration boundary.
+
+When a live experiment exposes a capability cluster, CYDRA may automatically:
+
+- select a registered generic capability implementation;
+- run that implementation's focused regression;
+- replay the exact same frozen target/source investigation;
+- retain the original hypothesis and experiment provenance;
+- persist the repair/replay result.
+
+The controller is bounded and fail-closed. A capability without a registered generic implementation becomes an explicit implementation boundary. Repair success is never security evidence, and no target-specific repair is permitted.
+
+This makes the durable campaign loop:
+
+**detect gap → select generic implementation → regression → exact-target replay → inspect new evidence → repeat or stop at a genuine boundary.**
