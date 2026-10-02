@@ -176,3 +176,31 @@ def test_public_mapping_observation_accepts_separate_nonzero_guard(tmp_path):
     plans = plan_public_state_observations(model, model.functions[0])
     assert len(plans) == 1
     assert plans[0].getter == "target.externalActionMap(id)"
+
+
+def test_compound_state_predicate_can_use_source_backed_boolean_view(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { "
+        "uint256 public tokenCount; int256[] public deltaAmounts; "
+        "function ready() public view returns (bool) { "
+        "return tokenCount > 0 && deltaAmounts.length == tokenCount; "
+        "} }",
+        encoding="utf-8",
+    )
+    predicate = "tokenCount > 0 && deltaAmounts.length == tokenCount"
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "use", "external", (), (), (), 1,
+                state_predicates=(predicate,),
+                state_predicate_polarities=((predicate, "must_hold"),),
+            ),
+        ),
+    )
+    plans = plan_public_state_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].getter == "target.ready()"
+    assert plans[0].expression == "target.ready()"
