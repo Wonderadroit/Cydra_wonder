@@ -56,6 +56,32 @@ def _gap_key(gap: Any) -> str:
     return str(capability) if not sub else f"{capability}:{sub}"
 
 
+def _prerequisite_gaps(status: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert fail-closed prerequisite nodes into campaign capability gaps.
+
+    Readiness can correctly block an experiment even when the capability
+    resolver has no implementation gap. Preserve that causal blocker in the
+    campaign ledger instead of reporting a misleading zero-gap campaign.
+    """
+    prerequisites = status.get("prerequisites") or {}
+    nodes = prerequisites.get("nodes") if isinstance(prerequisites, dict) else None
+    if not isinstance(nodes, list):
+        return []
+    gaps: list[dict[str, Any]] = []
+    for node in nodes:
+        if not isinstance(node, dict) or node.get("status") not in {"unresolved", "blocked"}:
+            continue
+        capability = node.get("capability") or "EXECUTION_READINESS"
+        gaps.append({
+            "capability": capability,
+            "subcapability": node.get("kind"),
+            "stage": "execution_prerequisite",
+            "reason": node.get("subject") or "unresolved prerequisite",
+            "status": node.get("status"),
+        })
+    return gaps
+
+
 def _status_kind(status: dict[str, Any]) -> str:
     if status.get("blind_executed"):
         classification = str(status.get("classification", "")).lower()
