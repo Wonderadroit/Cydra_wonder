@@ -26,9 +26,15 @@ The graph is target-neutral:
 
 Recursive setup actions retain provenance from the consumer function and required state. Sequence rendering now checks that generated setup actions carry that provenance, including nested writer chains.
 
-## Next behavioral gate
+## Postcondition verification
 
-The next implementation must connect `postcondition_required` to deterministic runtime observation. It must verify the state/value needed by the experiment before treating a setup sequence as sufficient. The verifier must fail closed when the predicate cannot be observed generically.
+A constructible setup transition remains blocked until its source-backed postcondition is observed at runtime. State observations are matched to the exact modeled predicate (including the neutral runtime observation kind used by the evidence adapter), and a setup action is promoted only when its provenance state is among the successfully observed predicates. Unrelated setup actions remain constructible and therefore block security-experiment entry.
+
+This preserves the boundary:
+
+`constructible setup -> execute -> observe source-backed postcondition -> verified setup`
+
+If no deterministic observation can be established, CYDRA remains fail-closed rather than treating transaction success as proof.
 
 No target-specific vulnerability answer, selector, severity, or historical finding is encoded here.
 
