@@ -1016,7 +1016,7 @@ def _constructor_state_equalities(
         body = constructor_body(source)
         for state in state_names:
             match = re.search(
-                rf"\b{re.escape(state)}(?:\[[^;{}]+\])?\s*=\s*([^;]+);",
+                rf"\b{re.escape(state)}(?:\[[^;{{}}]+\])?\s*=\s*([^;]+);",
                 body,
             )
             if match:
