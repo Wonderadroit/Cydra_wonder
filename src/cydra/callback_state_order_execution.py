@@ -85,7 +85,11 @@ def _execution_context_warp(contract_model: ContractModel, function) -> str | No
     chooses the extremal EVM timestamp that makes the guarded comparison false;
     mixed low/high requirements fail closed rather than guessing an interval.
     """
-    functions = {item.name: item for item in (*contract_model.functions, *contract_model.inherited_functions)}
+    functions = {
+        item.name: item
+        for item in (*contract_model.functions, *contract_model.inherited_functions)
+        if item is not None and getattr(item, "name", None)
+    }
     visited: set[str] = set()
     modes: set[str] = set()
 
@@ -370,6 +374,7 @@ def _state_relation_predicates(
     functions = {
         item.name: item
         for item in (*contract_model.functions, *contract_model.inherited_functions)
+        if item is not None and getattr(item, "name", None)
     }
     source = Path(contract_model.source).read_text(encoding="utf-8")
     visited: set[tuple[str, int, tuple[tuple[str, str], ...]]] = set()
@@ -487,6 +492,7 @@ def _state_setup_source(
         functions_by_name = {
             item.name: item
             for item in (*contract_model.functions, *contract_model.inherited_functions)
+            if item is not None and getattr(item, "name", None)
         }
         for predicate in _state_relation_predicates(contract_model, consumer, next(iter(contract_model.state_variables), "")):
             match = re.search(
@@ -800,7 +806,7 @@ def _legacy_callback_test(
 ) -> Path:
     function = next(
         (item for item in (*contract_model.functions, *contract_model.inherited_functions)
-         if item.name == hypothesis.target_function),
+         if item is not None and getattr(item, "name", None) == hypothesis.target_function),
         None,
     )
     if function is None:
@@ -1154,7 +1160,7 @@ def generate_callback_state_order_test(
     """Render a generic callback experiment from target-observed call provenance."""
     function = next(
         (item for item in (*contract_model.functions, *contract_model.inherited_functions)
-         if item.name == hypothesis.target_function),
+         if item is not None and getattr(item, "name", None) == hypothesis.target_function),
         None,
     )
     if function is None:
