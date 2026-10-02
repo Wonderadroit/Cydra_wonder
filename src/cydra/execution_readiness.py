@@ -1318,9 +1318,14 @@ def _classify_internal_predicate(
     # A cryptographic witness may be derived through several deterministic
     # locals. Follow modeled value provenance transitively rather than requiring
     # the guard variable itself to contain a crypto keyword.
+    # Hashing is not, by itself, a cryptographic witness requirement.
+    # Deterministic builtins such as keccak256/sha256 can be satisfied by
+    # constructing their inputs when the predicate is otherwise a local/input
+    # constraint. Reserve the witness category for predicates that require a
+    # secret/signature/proof/recovery relationship.
     crypto_terms = (
-        "signature", "digest", "hash", "recover", "ecrecover", "ecdsa",
-        "proof", "nonce", "typeddata", "domainseparator",
+        "signature", "ecrecover", "ecdsa", "proof", "typeddata",
+        "domainseparator", "recover",
     )
     visited: set[str] = set()
 
