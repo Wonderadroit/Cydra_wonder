@@ -2041,6 +2041,14 @@ def _state_observation_has_default_solution(
                     remainder = remainder[end + 1:].lstrip()
                 return not remainder
 
+            # A plain unary boolean guard such as !verified is the
+            # Solidity zero/default-state form for a bool. It does not have
+            # an index suffix, so it must be handled before the indexed-state
+            # parser below.
+            if normalized == f"!{state}":
+                return True
+            if normalized == f"{state} == false":
+                return True
             if indexed_state_is_default(f"!{state}"):
                 return True
             if normalized.startswith(f"{state}") and normalized.endswith("== false"):
