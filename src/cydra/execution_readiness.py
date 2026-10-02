@@ -192,8 +192,8 @@ def _caller_principal_from_predicate(predicate: str) -> str | None:
     caller = r"(?:msg\.sender|_msgSender\(\))"
     identifier = r"[A-Za-z_]\w*"
     for pattern in (
-        rf"^\\s*{caller}\\s*==\\s*(?P<principal>{identifier})\\s*$",
-        rf"^\\s*(?P<principal>{identifier})\\s*==\\s*{caller}\\s*$",
+        rf"^\s*{caller}\s*==\s*(?P<principal>{identifier})\s*$",
+        rf"^\s*(?P<principal>{identifier})\s*==\s*{caller}\s*$",
     ):
         match = re.match(pattern, predicate.strip())
         if match:
@@ -225,7 +225,7 @@ def _function_body_from_source(contract: ContractModel, function: FunctionModel)
             source = _strip_comments(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError):
             return None
-        match = re.search(rf"\\bfunction\\s+{re.escape(function.name)}\\s*\\(", source)
+        match = re.search(rf"\bfunction\s+{re.escape(function.name)}\s*\(", source)
         if match:
             opening = source.find("{", match.end())
             if opening >= 0:
@@ -252,8 +252,8 @@ def _function_body_from_source(contract: ContractModel, function: FunctionModel)
 
 def _state_principal_from_predicate(predicate: str) -> str | None:
     """Extract a bare state identifier used as the caller principal."""
-    caller = r"(?:msg\\.sender|_msgSender\\(\\))"
-    identifier = r"[A-Za-z_]\\w*"
+    caller = r"(?:msg\.sender|_msgSender\(\))"
+    identifier = r"[A-Za-z_]\w*"
     for pattern in (
         rf"^\\s*{caller}\\s*==\\s*(?P<principal>{identifier})\\s*$",
         rf"^\\s*(?P<principal>{identifier})\\s*==\\s*{caller}\\s*$",
@@ -282,7 +282,7 @@ def _state_principal_caller_role(function: FunctionModel, contract: ContractMode
             continue
         body = _function_body_from_source(contract, writer)
         if body and re.search(
-            rf"\\b{re.escape(principal)}\\s*=\\s*(?:msg\\.sender|_msgSender\\(\\))\\s*;",
+            rf"\b{re.escape(principal)}\s*=\s*(?:msg\.sender|_msgSender\(\))\s*;",
             body,
         ):
             return caller_role(writer, contract)
@@ -516,6 +516,35 @@ def _caller_requirements(
                             )
                         )
                         continue
+                modifier_state_principals = tuple(
+                    dict.fromkeys(
+                        principal
+                        for predicate in _authorization_predicates_from_body(definition_body)
+                        for principal in [_caller_principal_from_predicate(predicate)]
+                        if principal is not None
+                    )
+                )
+                modifier_state_provenance = tuple(
+                    principal
+                    for principal in modifier_state_principals
+                    if _caller_state_principal_provenance(contract, principal)
+                ) if contract is not None else ()
+                if modifier_state_provenance:
+                    principal = modifier_state_provenance[0]
+                    requirements.append(
+                        ExecutionRequirement(
+                            "caller_state_principal",
+                            principal,
+                            f"{function.name}:modifier",
+                            "constraint",
+                            "modifier caller check is source-backed by a deterministic state principal; "
+                            + ", ".join(_caller_state_principal_provenance(contract, principal))
+                            + "; sequence planning may establish the principal before the protected call",
+                            category="caller",
+                        )
+                    )
+                    continue
+
                 detail = (
                     f"resolved modifier body establishes caller authorization semantics"
                     f"{': invocation arguments ' + rendered_args if rendered_args else ''}; "
@@ -2310,7 +2339,15 @@ def constructible_state_setup_plan(
             principal = _state_principal_from_predicate(predicate)
             if principal and principal in contract.state_variables and principal not in names:
                 names.append(principal)
-        for predicate in fn.authorization_predicates:
+        predicates = list(fn.authorization_predicates)
+        for modifier_name in fn.modifiers:
+            modifier = next(
+                (item for item in (*contract.modifiers, *contract.inherited_modifiers) if item.name == modifier_name),
+                None,
+            )
+            if modifier is not None:
+                predicates.extend(_authorization_predicates_from_body(modifier.body))
+        for predicate in predicates:
             principal = _caller_principal_from_predicate(predicate)
             if principal and _caller_state_principal_provenance(contract, principal) and principal not in names:
                 names.append(principal)
