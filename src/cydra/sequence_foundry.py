@@ -351,9 +351,10 @@ def _plan_prerequisite_parameter_bindings(
         # before parsing the tuple; this preserves the intended Solidity value.
         expression = expression.replace('\\\"', '"')
         base = type_name.strip().split()[0]
-        # Normalize typed struct constructors before tuple parsing so named
-        # struct literals can be reordered by source-declared field order.
-        expression = _coerce_struct_constructor_to_tuple(expression, base)
+        # Preserve named-field struct literals for source-order reordering;
+        # only positional typed constructors should be coerced to tuples.
+        if _split_top_level_named_struct_literal(expression) is None:
+            expression = _coerce_struct_constructor_to_tuple(expression, base)
         parts = _split_top_level_tuple_expression(expression)
         if type_name.strip().endswith("[]"):
             return expression
