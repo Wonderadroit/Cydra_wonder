@@ -224,7 +224,11 @@ def run_automatic_repairs_for_source(
         if classification_path.is_file():
             try:
                 replay_classification = json.loads(classification_path.read_text(encoding="utf-8"))
-                replay_campaign = replay_classification.get("capability_campaign") or {}
+                replay_campaign = {"capability_clusters": [
+                    {"capability": key, "count": count, "hypothesis_ids": [], "experiment_ids": [],
+                     "stages": ["execution"], "reasons": []}
+                    for key, count in (replay_classification.get("capability_clusters") or {}).items()
+                ]}
             except (OSError, ValueError):
                 replay_campaign = {}
         return {
