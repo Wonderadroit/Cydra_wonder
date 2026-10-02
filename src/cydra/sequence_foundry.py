@@ -105,6 +105,51 @@ def _split_top_level_tuple_expression(value: str) -> tuple[str, ...] | None:
     return tuple(parts)
 
 
+def _split_top_level_named_struct_literal(value: str) -> dict[str, str] | None:
+    """Parse a Solidity-like named struct literal into field/value pairs."""
+    text = value.strip()
+    if len(text) < 2 or text[0] != "{" or text[-1] != "}":
+        return None
+    parts = _split_top_level_tuple_expression("(" + text[1:-1].strip() + ")")
+    if parts is None:
+        return None
+    fields: dict[str, str] = {}
+    for part in parts:
+        colon = None
+        stack: list[str] = []
+        quote: str | None = None
+        escaped = False
+        pairs = {")": "(", "]": "[", "}": "{"}
+        for index, char in enumerate(part):
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif char == "\\\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char in {'"', "'"}:
+                quote = char
+            elif char in "([{":
+                stack.append(char)
+            elif char in ")]}":
+                if not stack or stack[-1] != pairs[char]:
+                    return None
+                stack.pop()
+            elif char == ":" and not stack:
+                colon = index
+                break
+        if colon is None:
+            return None
+        name = part[:colon].strip()
+        value_text = part[colon + 1:].strip()
+        if not re.fullmatch(r"[A-Za-z_]\\w*", name) or not value_text:
+            return None
+        fields[name] = value_text
+    return fields or None
+
+
 def _coerce_struct_constructor_to_tuple(expression: str, expected_type: str) -> str:
     """Normalize a typed constructor matching the expected struct type into a tuple."""
     text = expression.strip()
@@ -306,7 +351,7 @@ def _plan_prerequisite_parameter_bindings(
         # before parsing the tuple; this preserves the intended Solidity value.
         expression = expression.replace('\\\"', '"')
         parts = _split_top_level_tuple_expression(expression)
-        if parts is None or type_name.strip().endswith("[]"):
+        if type_name.strip().endswith("[]"):
             return expression
         base = type_name.strip().split()[0]
         fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
@@ -344,6 +389,17 @@ def _plan_prerequisite_parameter_bindings(
                 f"unable to resolve struct fields for prerequisite parameter type {base} "
                 f"from {defining_source}"
             )
+        if parts is None:
+            named_parts = _split_top_level_named_struct_literal(expression)
+            if named_parts is not None:
+                try:
+                    parts = tuple(named_parts[field_name] for field_name, _ in fields)
+                except KeyError as exc:
+                    raise ValueError(
+                        f"prerequisite named struct literal for {base} is missing field {exc.args[0]}"
+                    ) from exc
+            else:
+                return expression
         if len(fields) != len(parts):
             raise ValueError(
                 f"prerequisite struct tuple arity mismatch for {base}: "
@@ -839,7 +895,7 @@ def generate_sequence_test_from_experiment(
     if experiment.steps:
         first_function = next(
             (item for item in (*contract_model.functions, *contract_model.inherited_functions)
-             if item.name == experiment.steps[0].function),
+             if item is not None and item.name == experiment.steps[0].function),
             None,
         )
         if first_function is not None:
