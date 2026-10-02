@@ -280,32 +280,36 @@ def _caller_requirements(
             has_role_check = any(token in definition.body for token in role_tokens)
             if has_caller_check or has_role_check:
                 rendered_args = ", ".join(invocation_args)
+                # Map common modifier semantics to the role they establish.
+                # onlyOwner is an owner check; role-bearing modifiers expose
+                # their role through the invocation argument. Keep this generic
+                # so constructor provenance can satisfy either form.
+                required_role = (
+                    "owner"
+                    if modifier in {"onlyOwner", "onlyOwner2Step"}
+                    else (invocation_args[0] if invocation_args else None)
+                )
+                owner_grants = _constructor_role_grants(contract)
                 role_established_for_deployer = bool(
-                    invocation_args
+                    required_role
                     and any(
-                        role == invocation_args[0]
+                        granted_role == required_role
                         and account in {"msg.sender", "_msgSender()"}
-                        for role, account in _constructor_role_grants(contract)
+                        for granted_role, account in owner_grants
                     )
                 )
-                # onlyOwner-style modifiers commonly compare owner state
-                # directly rather than using hasRole. Constructor provenance
-                # above is sufficient evidence that the deployment caller owns
-                # the target when the inherited Ownable constructor transfers
-                # ownership to msg.sender/_msgSender().
-                owner_grants = _constructor_role_grants(contract)
                 constructor_params = (
                     contract.constructor.parameters if contract.constructor is not None else ()
                 )
                 owner_established_for_deployer = bool(
-                    role == "owner"
+                    required_role == "owner"
                     and any(
                         granted_role == "owner"
                         and (
                             account in {"msg.sender", "_msgSender()"}
                             or any(
                                 account == parameter.name
-                                and _address_role(parameter.name or "") == "admin"
+                                and _address_role(parameter.name or "")
                                 for parameter in constructor_params
                             )
                         )
