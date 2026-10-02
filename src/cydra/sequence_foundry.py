@@ -626,7 +626,7 @@ def generate_sequence_test_from_experiment(
     if experiment.steps:
         first_function = next(
             (item for item in (*contract_model.functions, *contract_model.inherited_functions)
-             if item is not None and item.name == experiment.steps[0].function),
+             if item is not None and getattr(item, "name", None) == experiment.steps[0].function),
             None,
         )
         if first_function is not None:
@@ -995,7 +995,7 @@ def generate_sequence_test_from_experiment(
     if experiment.steps:
         first_function = next(
             (item for item in (*contract_model.functions, *contract_model.inherited_functions)
-             if item is not None and item.name == experiment.steps[0].function),
+             if item is not None and getattr(item, "name", None) == experiment.steps[0].function),
             None,
         )
         if first_function is not None:
