@@ -1256,3 +1256,31 @@ This preserves the doctrine:
 **LLMs propose. Tools test. Evidence decides.**
 
 The LLM/engineering layer may implement the generic requirement; the live target remains the test oracle for whether that capability is actually sufficient.
+
+
+## §63 — Automatic generic repair orchestration is live
+
+The canonical live runner now consumes the capability-repair contract instead of leaving it as a passive JSON handoff.
+
+For each target-derived capability cluster it can:
+
+1. select a registered generic implementation boundary;
+2. run the implementation's focused regression suite;
+3. replay the exact frozen target/source investigation with the original target ref;
+4. preserve the affected hypothesis/experiment provenance;
+5. persist the repair/replay outcome;
+6. fail closed when no generic implementation is registered or regression fails.
+
+The controller is bounded and target-neutral. It never edits target code, changes the target ref, changes the security hypothesis to fit a repair, or promotes repair success to security evidence.
+
+The important distinction is:
+
+implemented generic capability → regression → exact target replay → new evidence
+
+not:
+
+capability label → presumed success.
+
+If a gap has no registered generic implementation, that is now an explicit implementation_boundary rather than a silent skip. Adding a new repair provider requires a generic implementation plus focused regression coverage; target-specific provider matching is prohibited.
+
+The next live run is therefore expected to exercise the repair controller against whatever capability frontier the frozen target actually produces. Any remaining unimplemented capability becomes the next demonstrated generic engineering gap.
