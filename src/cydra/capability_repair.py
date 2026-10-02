@@ -168,7 +168,6 @@ def run_repair_loop(
     return RepairCampaign(plan, tuple(iterations), len(iterations), "repair_plan_exhausted")
 
 
-
 @dataclass(frozen=True)
 class RepairProvider:
     """Generic implementation boundary for one capability/sub-capability."""
@@ -193,9 +192,23 @@ GENERIC_EXECUTION_PREDICATE_PROVIDERS: tuple[RepairProvider, ...] = (
     ),
     RepairProvider(
         "STATE_OBSERVATION",
-        ("state_predicate", "public_state_observation", "public_scalar", "public_mapping", "state_relation"),
+        (
+            "state_predicate",
+            "execution_predicate",
+            "public_state_observation",
+            "public_scalar",
+            "public_mapping",
+            "state_relation",
+        ),
         "execution_readiness.state_observation",
-        ("python", "-m", "pytest", "tests/test_execution_readiness.py", "tests/test_runtime_observation.py", "tests/test_state_relation_observation.py"),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "tests/test_execution_readiness.py",
+            "tests/test_runtime_observation.py",
+            "tests/test_state_relation_observation.py",
+        ),
         "source/compiler-backed state observation and prerequisite resolution",
     ),
     RepairProvider(
@@ -208,44 +221,83 @@ GENERIC_EXECUTION_PREDICATE_PROVIDERS: tuple[RepairProvider, ...] = (
 )
 
 DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
-    RepairProvider("CALL_SEQUENCE", ("ordered_steps",), "sequence_foundry.call_sequence",
-                   ("python", "-m", "pytest", "tests/test_sequence_foundry.py"),
-                   "generic ordered-call experiment materialization"),
-    RepairProvider("CONSTRUCTOR_SETUP", ("array", "primitive", "interface", "custom_struct"),
-                   "sequence_foundry.constructor_materialization",
-                   ("python", "-m", "pytest", "tests/test_sequence_foundry.py", "tests/test_execution_readiness.py"),
-                   "generic constructor argument materialization"),
-    RepairProvider("TYPE_MATERIALIZATION",
-                   ("primitive", "array", "tuple", "custom_struct", "nested_custom_struct", "namespaced_custom_struct"),
-                   "sequence_foundry.type_materialization",
-                   ("python", "-m", "pytest", "tests/test_sequence_foundry.py"),
-                   "source-backed recursive ABI/type materialization"),
-    RepairProvider("CALLER_CONSTRUCTION", ("role", "predicate", "caller_role"), "execution_readiness.caller_construction",
-                   ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
-                   "target-derived caller and role construction"),
-    RepairProvider("ROLE_ESTABLISHMENT", ("role",), "execution_readiness.role_establishment",
-                   ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
-                   "target-derived role establishment"),
-    RepairProvider("STATE_SETUP", ("constructible",), "execution_readiness.state_setup",
-                   ("python", "-m", "pytest", "tests/test_execution_readiness.py", "tests/test_prerequisite_graph.py"),
-                   "target-derived constructible state setup"),
-    RepairProvider("STATE_OBSERVATION",
-                   ("public_scalar", "public_mapping", "state_relation", "public_state_observation"),
-                   "runtime_observation.state_observation",
-                   ("python", "-m", "pytest", "tests/test_runtime_observation.py", "tests/test_state_relation_observation.py"),
-                   "bounded deterministic state observation"),
-    RepairProvider("INTERNAL_CALL_PROPAGATION", ("producer", "dependency"),
-                   "execution_readiness.internal_call_propagation",
-                   ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
-                   "internal producer/dependency propagation"),
-    RepairProvider("INPUT_CONSTRUCTION", ("execution_predicate", "internal_execution_predicate", "abi", "scalar", "array"),
-                   "experiment_inputs.source_backed_materialization",
-                   ("python", "-m", "pytest", "tests/test_experiment_inputs.py", "tests/test_execution_capabilities.py"),
-                   "source-backed execution input construction"),
-    RepairProvider("EXECUTION_CONTEXT", ("runtime", "caller", "dependency", "execution_value_runtime_dependency"),
-                   "execution_readiness.runtime_context",
-                   ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
-                   "deterministic runtime-context construction"),
+    RepairProvider(
+        "CALL_SEQUENCE",
+        ("ordered_steps",),
+        "sequence_foundry.call_sequence",
+        ("python", "-m", "pytest", "tests/test_sequence_foundry.py"),
+        "generic ordered-call experiment materialization",
+    ),
+    RepairProvider(
+        "CONSTRUCTOR_SETUP",
+        ("array", "primitive", "interface", "custom_struct"),
+        "sequence_foundry.constructor_materialization",
+        ("python", "-m", "pytest", "tests/test_sequence_foundry.py", "tests/test_execution_readiness.py"),
+        "generic constructor argument materialization",
+    ),
+    RepairProvider(
+        "TYPE_MATERIALIZATION",
+        ("primitive", "array", "tuple", "custom_struct", "nested_custom_struct", "namespaced_custom_struct"),
+        "sequence_foundry.type_materialization",
+        ("python", "-m", "pytest", "tests/test_sequence_foundry.py"),
+        "source-backed recursive ABI/type materialization",
+    ),
+    RepairProvider(
+        "CALLER_CONSTRUCTION",
+        ("role", "predicate", "caller_role"),
+        "execution_readiness.caller_construction",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
+        "target-derived caller and role construction",
+    ),
+    RepairProvider(
+        "ROLE_ESTABLISHMENT",
+        ("role",),
+        "execution_readiness.role_establishment",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
+        "target-derived role establishment",
+    ),
+    RepairProvider(
+        "STATE_SETUP",
+        ("constructible",),
+        "execution_readiness.state_setup",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py", "tests/test_prerequisite_graph.py"),
+        "target-derived constructible state setup",
+    ),
+    RepairProvider(
+        "STATE_OBSERVATION",
+        (
+            "public_scalar",
+            "public_mapping",
+            "state_relation",
+            "public_state_observation",
+            "state_predicate",
+            "execution_predicate",
+        ),
+        "runtime_observation.state_observation",
+        ("python", "-m", "pytest", "tests/test_runtime_observation.py", "tests/test_state_relation_observation.py"),
+        "bounded deterministic state observation",
+    ),
+    RepairProvider(
+        "INTERNAL_CALL_PROPAGATION",
+        ("producer", "dependency"),
+        "execution_readiness.internal_call_propagation",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
+        "internal producer/dependency propagation",
+    ),
+    RepairProvider(
+        "INPUT_CONSTRUCTION",
+        ("execution_predicate", "internal_execution_predicate", "abi", "scalar", "array"),
+        "experiment_inputs.source_backed_materialization",
+        ("python", "-m", "pytest", "tests/test_experiment_inputs.py", "tests/test_execution_capabilities.py"),
+        "source-backed execution input construction",
+    ),
+    RepairProvider(
+        "EXECUTION_CONTEXT",
+        ("runtime", "caller", "dependency", "execution_value_runtime_dependency"),
+        "execution_readiness.runtime_context",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
+        "deterministic runtime-context construction",
+    ),
     *GENERIC_EXECUTION_PREDICATE_PROVIDERS,
 )
 
@@ -379,15 +431,8 @@ def run_automatic_repair_controller(
             attempts.append(attempt)
             progressed = True
 
-            # The replay contract may return a newly observed capability
-            # campaign. Merge it into the next frontier without trusting
-            # free-form status text as evidence.
             next_campaign = replay.get("campaign")
             if isinstance(next_campaign, Mapping):
-                # A provider is not a repair if the exact same capability remains
-                # unresolved after replay. Preserve that boundary explicitly so
-                # the controller cannot report "complete" merely because the
-                # provider itself ran.
                 replay_keys = {
                     str(cluster.get("capability"))
                     for cluster in (next_campaign.get("capability_clusters") or ())
@@ -422,6 +467,6 @@ def run_automatic_repair_controller(
         "schema_version": 1,
         "mode": "automatic_generic_repair",
         "status": "repair_budget_exhausted",
-        "rounds": max_rounds,
+        "rounds": round_number,
         "attempts": attempts,
     }
