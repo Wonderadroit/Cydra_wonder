@@ -252,7 +252,7 @@ DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
     RepairProvider("EXECUTION_CONTEXT", ("runtime", "caller", "dependency", "execution_value_runtime_dependency"),
                    "execution_readiness.runtime_context",
                    ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
-                   "deterministic runtime-context construction"),,
+                   "deterministic runtime-context construction"),
     *GENERIC_EXECUTION_PREDICATE_PROVIDERS,
 )
 
