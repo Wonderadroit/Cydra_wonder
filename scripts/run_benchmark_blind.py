@@ -993,6 +993,30 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
             statuses.append(status)
             continue
 
+        # An experiment with an incomplete canonical ABI vector is not executable.
+        # Do not hand malformed empty arguments to a Solidity renderer; preserve
+        # the condition as an explicit generic capability gap.
+        if function is not None and len(experiment.planned_inputs) != len(function.parameters):
+            failure = classify_materialization_failure(
+                ValueError(
+                    f"canonical input vector incomplete for {hypothesis.target_function}: "
+                    f"expected {len(function.parameters)} arguments, got {len(experiment.planned_inputs)}"
+                )
+            )
+            capability_resolution = replace(
+                capability_resolution,
+                gaps=(*capability_resolution.gaps, failure.gap),
+            )
+            status["capability_resolution"] = _json(capability_resolution)
+            status["blind_executed"] = False
+            status["classification"] = "NOT_REACHED"
+            status["campaign_status"] = "BLOCKED_BY_CAPABILITY"
+            status["capability_failure"] = True
+            status["failure_stage"] = "input_construction"
+            status["blocked_reason"] = failure.gap.reason
+            statuses.append(status)
+            continue
+
         # Do not execute a security experiment until every modeled prerequisite
         # has explicit evidence. Discovery is not verification.
         if not can_enter_security_experiment(prerequisite_graph):
