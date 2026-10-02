@@ -406,12 +406,12 @@ def _plan_prerequisite_parameter_bindings(
         if parts is None and named_parts is not None:
             try:
                 parts = tuple(named_parts[field_name] for field_name, _ in fields)
-                except KeyError as exc:
-                    raise ValueError(
-                        f"prerequisite named struct literal for {base} is missing field {exc.args[0]}"
-                    ) from exc
-            else:
-                return expression
+            except KeyError as exc:
+                raise ValueError(
+                    f"prerequisite named struct literal for {base} is missing field {exc.args[0]}"
+                ) from exc
+        elif parts is None:
+            return expression
         if len(fields) != len(parts):
             raise ValueError(
                 f"prerequisite struct tuple arity mismatch for {base}: "
