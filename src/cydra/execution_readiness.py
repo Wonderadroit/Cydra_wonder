@@ -1515,7 +1515,7 @@ def _execution_requirements(
                     "execution predicate references persistent state with a "
                     "target-derived constructible setup transition"
                 )
-        if category == "cryptographic_witness":
+        if category == "cryptographic_witness" and not modeled_call_branch:
             status = "required"
         if status == "constraint":
             detail = (
