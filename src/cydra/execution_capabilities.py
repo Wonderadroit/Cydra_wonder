@@ -221,9 +221,31 @@ def build_experiment_contract(hypothesis: Hypothesis, experiment: Experiment, co
         add(Capability.CALLER_CONSTRUCTION, 'caller requirements', 'execution_readiness')
     if readiness.constructor_requirements:
         add(Capability.CONSTRUCTOR_SETUP, 'constructor requirements', 'execution_readiness')
-    if readiness.state_setup_candidates or readiness.state_requirements:
+    # Capability requirements describe an actual execution gap, not merely the
+    # existence of a readiness surface. A constructible setup candidate is
+    # already consumable by the recursive state planner, and input/local
+    # execution predicates are not state-observation gaps. Keeping this
+    # distinction prevents a globally-partial capability registry from turning
+    # every target with modeled state into BLOCKED_BY_CAPABILITY.
+    unresolved_state_requirements = tuple(
+        item for item in readiness.state_requirements
+        if item.status in {"unresolved", "required"}
+    )
+    constructible_state_candidates = tuple(
+        item for item in readiness.state_setup_candidates
+        if item.status == "constructible"
+    )
+    if unresolved_state_requirements and not constructible_state_candidates:
         add(Capability.STATE_SETUP, 'persistent state prerequisites', 'execution_readiness')
-    if readiness.state_requirements or readiness.execution_requirements:
+    unresolved_state_observation = tuple(
+        item for item in (
+            *readiness.state_requirements,
+            *readiness.execution_requirements,
+        )
+        if item.status in {"unresolved", "required"}
+        and item.category == "state_observation"
+    )
+    if unresolved_state_observation:
         add(Capability.STATE_OBSERVATION, 'state/execution prerequisites', 'runtime_observation')
     if readiness.runtime_requirements:
         add(Capability.INTERNAL_CALL_PROPAGATION, 'internal call prerequisites', 'execution_readiness')
