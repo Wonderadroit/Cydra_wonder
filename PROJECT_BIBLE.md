@@ -1231,3 +1231,28 @@ Rules:
 2. New helper calls must have a focused regression that exercises the affected rendering path rather than relying only on import-time coverage.
 3. A renderer `NameError` is classified as a generic call-sequence/materialization failure and must not alter the security hypothesis.
 4. The same experiment intent must be rerun after the dependency fix.
+
+
+## §62 — Capability Repair Controller: Diagnose → Implement → Regress → Resume
+
+The live-target campaign is now required to expose capability failures as a machine-actionable repair contract.
+
+The intended loop is:
+
+**target model → frontier → experiment → capability/readiness diagnosis → generic repair requirement → generic implementation → regression → exact experiment rerun → evidence → model/frontier update**
+
+Rules:
+
+1. A capability requirement is clustered by generic capability/sub-capability, never by target name, target function, historical finding, or vulnerability-specific exploit.
+2. capability_repair.json is the durable handoff between diagnosis and repair. It records the reusable capability contract, affected experiments, stage, and reason.
+3. A repair is not considered complete merely because code changed. The repair must pass the generic regression gate before the blocked experiment is eligible for exact-target resumption.
+4. A repaired experiment retains its original hypothesis, experiment identity, planned inputs, provenance, and evidence history. Repair must not regenerate the security question merely to fit the implementation.
+5. If no generic repair implementation exists, the controller must stop fail-closed with an explicit implementation requirement. It must not invent a target-specific workaround.
+6. A repair controller may resume every experiment in the same capability cluster after one generic repair. Capability work is engineering state, not security evidence.
+7. A repaired execution can produce measured evidence, rejected hypotheses, unmeasurable results, or a confirmed finding only through the normal causal/reproducibility gates. Repair success itself is never a security conclusion.
+
+This preserves the doctrine:
+
+**LLMs propose. Tools test. Evidence decides.**
+
+The LLM/engineering layer may implement the generic requirement; the live target remains the test oracle for whether that capability is actually sufficient.
