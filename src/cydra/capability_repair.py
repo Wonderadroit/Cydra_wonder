@@ -202,7 +202,7 @@ DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
                    ("python", "-m", "pytest", "tests/test_execution_readiness.py", "tests/test_prerequisite_graph.py"),
                    "target-derived constructible state setup"),
     RepairProvider("STATE_OBSERVATION",
-                   ("public_scalar", "public_mapping", "state_relation"),
+                   ("public_scalar", "public_mapping", "state_relation", "public_state_observation"),
                    "runtime_observation.state_observation",
                    ("python", "-m", "pytest", "tests/test_runtime_observation.py", "tests/test_state_relation_observation.py"),
                    "bounded deterministic state observation"),
