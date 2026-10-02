@@ -274,15 +274,27 @@ def _caller_requirements(
             if has_caller_check or has_role_check:
                 rendered_args = ", ".join(invocation_args)
                 role_established_for_deployer = bool(
-                    has_role_check
-                    and invocation_args
+                    invocation_args
                     and any(
                         role == invocation_args[0]
                         and account in {"msg.sender", "_msgSender()"}
                         for role, account in _constructor_role_grants(contract)
                     )
                 )
-                if role_established_for_deployer:
+                # onlyOwner-style modifiers commonly compare owner state
+                # directly rather than using hasRole. Constructor provenance
+                # above is sufficient evidence that the deployment caller owns
+                # the target when the inherited Ownable constructor transfers
+                # ownership to msg.sender/_msgSender().
+                owner_established_for_deployer = bool(
+                    role == "owner"
+                    and any(
+                        granted_role == "owner"
+                        and account in {"msg.sender", "_msgSender()"}
+                        for granted_role, account in _constructor_role_grants(contract)
+                    )
+                )
+                if role_established_for_deployer or owner_established_for_deployer:
                     requirements.append(
                         ExecutionRequirement(
                             "caller_role",
@@ -1247,6 +1259,13 @@ def _execution_requirements(
 ) -> tuple[ExecutionRequirement, ...]:
     polarities = dict(function.execution_predicate_polarities)
     requirements: list[ExecutionRequirement] = []
+    setup_candidates = _state_setup_candidates(contract, function)
+    setup_states = {
+        part
+        for candidate in setup_candidates
+        for part in candidate.source.rsplit(":state:", 1)[-1:]
+        if part
+    }
     for predicate in function.execution_predicates:
         polarity = polarities.get(predicate, "unknown")
         detail = {
@@ -1256,6 +1275,18 @@ def _execution_requirements(
         }.get(polarity, "execution predicate polarity is unknown")
         category = _classify_internal_predicate(contract, function, predicate)
         status = "constraint" if _is_experiment_constraint(contract, function, predicate, execution_capabilities) else "required"
+        # Execution predicates can encode persistent state just like explicit
+        # state_predicates. Reuse the existing generic setup solver rather than
+        # leaving those guards permanently blocked merely because extraction
+        # classified them as execution-path predicates.
+        if category == "state_observation":
+            referenced_states = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
+            if referenced_states.intersection(set(setup_states)):
+                status = "constraint"
+                detail = (
+                    "execution predicate references persistent state with a "
+                    "target-derived constructible setup transition"
+                )
         if category == "cryptographic_witness":
             status = "required"
         if status == "constraint":
