@@ -219,6 +219,86 @@ def caller_role(function: FunctionModel) -> str | None:
     return None
 
 
+
+def _source_function_bodies(contract: ContractModel) -> dict[str, str]:
+    """Recover declared function bodies for conservative provenance tracing."""
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return {}
+    result: dict[str, str] = {}
+    for function in contract.functions:
+        match = re.search(
+            rf"\\bfunction\\s+{re.escape(function.name)}\\s*\\(",
+            source,
+        )
+        if match is None:
+            continue
+        opening = source.find("{", match.end())
+        if opening < 0:
+            continue
+        depth = 0
+        for index in range(opening, len(source)):
+            if source[index] == "{":
+                depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    result[function.name] = source[opening + 1:index]
+                    break
+    return result
+
+
+def _caller_state_principal_provenance(
+    contract: ContractModel,
+    principal: str,
+) -> tuple[str, ...]:
+    """Find source-backed ways for a caller to establish a state principal.
+
+    This deliberately accepts only direct assignments from the current caller.
+    Arbitrary expressions, external calls, constructor arguments, and mapping
+    writes remain unresolved until a stronger provenance model exists.
+    """
+    assignment = re.compile(
+        rf"\\b{re.escape(principal)}\\s*=\\s*(?:msg\\.sender|_msgSender\\(\\))\\s*;"
+    )
+    provenance: list[str] = []
+    try:
+        source = Path(contract.source).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ()
+
+    constructor_match = re.search(r"\\bconstructor\\s*\\([^)]*\\)[^{]*\\{", source)
+    if constructor_match is not None:
+        opening = source.find("{", constructor_match.start())
+        if opening >= 0:
+            depth = 0
+            for index in range(opening, len(source)):
+                if source[index] == "{":
+                    depth += 1
+                elif source[index] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        if assignment.search(source[opening + 1:index]):
+                            provenance.append("constructor_deployer")
+                        break
+
+    bodies = _source_function_bodies(contract)
+    functions_by_name = {function.name: function for function in contract.functions}
+    for name, body in bodies.items():
+        if not assignment.search(body):
+            continue
+        function = functions_by_name[name]
+        if function.visibility not in {"public", "external"}:
+            continue
+        if _caller_requirements(function, contract):
+            # A protected writer must establish its own caller separately; do not
+            # claim arbitrary attacker control from the write alone.
+            continue
+        provenance.append(f"caller_via:{name}")
+    return tuple(dict.fromkeys(provenance))
+
+
 def _constructor_role_grants(contract: ContractModel) -> tuple[tuple[str, str], ...]:
     """Collect constructor role grants across the modeled inheritance graph."""
     source_path = Path(contract.source).resolve()
@@ -433,15 +513,35 @@ def _caller_requirements(
         )
 
     for predicate in function.authorization_predicates:
-        requirements.append(
-            ExecutionRequirement(
-                "caller_predicate",
-                predicate,
-                f"{function.name}:body",
-                "required",
-                "function body checks caller identity",
-            )
+        principal = _caller_principal_from_predicate(predicate)
+        provenance = (
+            _caller_state_principal_provenance(contract, principal)
+            if contract is not None and principal is not None
+            else ()
         )
+        if provenance:
+            requirements.append(
+                ExecutionRequirement(
+                    "caller_state_principal",
+                    principal,
+                    f"{function.name}:body",
+                    "constraint",
+                    "caller identity is source-backed by a deterministic state principal; "
+                    + ", ".join(provenance)
+                    + "; sequence planning may establish the principal before the protected call",
+                    category="caller",
+                )
+            )
+        else:
+            requirements.append(
+                ExecutionRequirement(
+                    "caller_predicate",
+                    predicate,
+                    f"{function.name}:body",
+                    "required",
+                    "function body checks caller identity",
+                )
+            )
     return tuple(dict.fromkeys(requirements))
 
 
