@@ -255,6 +255,53 @@ def plan_public_state_observations(
     for predicate in function.state_predicates:
         plans.extend(plan_public_mapping_state_observations(contract, predicate))
 
+    # Source-backed boolean views are deterministic observation surfaces for
+    # compound state predicates that cannot be read through Solidity public
+    # storage getters (for example dynamic-array length relations). Only accept
+    # a view whose return expression is structurally identical after whitespace
+    # normalization; never infer a new predicate or storage slot.
+    function_pattern = re.compile(
+        r"\bfunction\s+(?P<name>[A-Za-z_]\w*)\s*\((?P<params>[^)]*)\)"
+        r"(?P<attrs>[^{};]*)\{(?P<body>.*?)\}",
+        re.DOTALL,
+    )
+    for predicate in function.state_predicates:
+        normalized_predicate = re.sub(r"\s+", " ", predicate).strip()
+        if not normalized_predicate:
+            continue
+        polarity = polarities.get(predicate, "unknown")
+        if polarity not in {"must_hold", "must_not_hold"}:
+            continue
+        for source_path in sources:
+            try:
+                source = source_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            for match in function_pattern.finditer(source):
+                attrs = match.group("attrs")
+                params = match.group("params").strip()
+                if params or not re.search(r"\b(?:public|external)\b", attrs) or not re.search(r"\bview\b", attrs):
+                    continue
+                if re.search(r"\breturns\s*\(\s*bool\s*\)", attrs) is None:
+                    continue
+                body = re.sub(r"\s+", " ", match.group("body")).strip()
+                returned = re.fullmatch(r"return\s+(?P<expression>.+?)\s*;", body)
+                if returned is None:
+                    continue
+                expression = returned.group("expression").strip()
+                if re.sub(r"\s+", " ", expression).strip() != normalized_predicate:
+                    continue
+                observed = f"target.{match.group('name')}()"
+                plans.append(StateObservationPlan(
+                    state=match.group("name"),
+                    getter=observed,
+                    expression=observed if polarity == "must_hold" else f"!({observed})",
+                    predicate=predicate,
+                    polarity=polarity,
+                    source=f"{source_path}:view",
+                ))
+                break
+
     # Direct scalar predicates remain the first observation surface.
     for predicate in function.state_predicates:
         polarity = polarities.get(predicate, "unknown")
