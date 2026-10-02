@@ -598,7 +598,7 @@ def _run_state_prerequisite_observation(
         stop_before_target=True,
     )
     execution = run_foundry_test(project, generated, observation_experiment.experiment_id, "prerequisite")
-    observations = observations_from_execution(observation_experiment.experiment_id, plans, execution)
+    observations = observations_from_execution(observation_experiment.experiment_id, plans, execution, setup_actions)
     evidence = evidence_records_from_execution(observation_experiment.experiment_id, plans, execution)
     return execution, observations, evidence
 
