@@ -91,3 +91,60 @@ def test_repair_loop_stops_fail_closed_when_repair_is_not_verified():
     assert campaign.stopped_reason == "repair_blocked"
     assert campaign.repaired_keys == ()
     assert calls == ["CALL_SEQUENCE"]
+
+
+
+def test_automatic_repair_plan_resolves_generic_provider():
+    from cydra.capability_repair import build_automatic_repair_plan
+    plan = build_automatic_repair_plan(_campaign())
+    assert plan["fail_closed"] is False
+    assert plan["requirements"][0]["status"] == "IMPLEMENTED"
+    assert plan["requirements"][0]["provider"] == "sequence_foundry.call_sequence"
+
+
+def test_automatic_repair_controller_regresses_then_replays_same_requirement():
+    from cydra.capability_repair import run_automatic_repair_controller
+    regressions = []
+    replays = []
+
+    def regression(provider):
+        regressions.append(provider.implementation_id)
+        return True
+
+    def replay(requirement):
+        replays.append(requirement.key)
+        return {"same_experiment": requirement.affected_experiment_ids[0]}
+
+    result = run_automatic_repair_controller(
+        _campaign(), regression=regression, rerun_target=replay
+    )
+    assert result["status"] == "complete"
+    assert regressions == [
+        "sequence_foundry.call_sequence",
+        "runtime_observation.state_observation",
+    ]
+    assert replays == [
+        "CALL_SEQUENCE",
+        "STATE_OBSERVATION:public_state_observation",
+    ]
+
+
+def test_automatic_repair_controller_fails_closed_for_unknown_capability():
+    from cydra.capability_repair import run_automatic_repair_controller
+
+    campaign = {
+        "capability_clusters": [{
+            "capability": "CRYPTOGRAPHIC_WITNESS",
+            "hypothesis_ids": ["H-CRYPTO"],
+            "experiment_ids": ["X-CRYPTO"],
+            "stages": ["prerequisites"],
+            "reasons": ["witness materialization is unresolved"],
+        }]
+    }
+    result = run_automatic_repair_controller(
+        campaign, regression=lambda _provider: True,
+        rerun_target=lambda _requirement: {"unexpected": True},
+    )
+    assert result["status"] == "implementation_boundary"
+    assert result["attempts"][0]["status"] == "UNIMPLEMENTED"
+    assert result["attempts"][0]["rerun_requested"] is False
