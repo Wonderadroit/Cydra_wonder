@@ -1205,3 +1205,55 @@ def test_sequence_renderer_lowers_complex_struct_argument_into_local(tmp_path):
     assert "Target.Data memory cydra_arg_0_1 = (0, 0, new uint256[](0));" in rendered
     assert "target.transact(0, cydra_arg_0_1);" in rendered
     assert "target.transact(0, (0, 0, new uint256[](0)))" not in rendered
+
+
+def test_sequence_renderer_materializes_dynamic_constructor_array(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        "pragma solidity ^0.8.20; "
+        "contract Target { "
+        "address[] internal recipients; "
+        "constructor(address[] memory initialRecipients) { recipients = initialRecipients; } "
+        "function ping() external {} "
+        "}",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(target),
+        (FunctionModel("ping", "external", (), (), (), 4),),
+        constructor=ConstructorModel(
+            (ParameterModel("initialRecipients", "address[] memory", "memory"),),
+            3,
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-CONSTRUCTOR-array",
+        "candidate",
+        "INV-CONSTRUCTOR-array",
+        "ping",
+        "attacker",
+        "candidate",
+    )
+    experiment = Experiment(
+        "X-CONSTRUCTOR-array",
+        hypothesis.hypothesis_id,
+        "ping",
+        ("violation",),
+        1.0,
+        steps=(ExperimentStep("ping", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        "../Target.sol",
+        "Target",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "new Target(new address[](0))" in rendered
+    assert "target.ping();" in rendered

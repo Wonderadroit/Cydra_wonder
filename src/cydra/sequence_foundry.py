@@ -807,10 +807,46 @@ def generate_sequence_test_from_experiment(
                         pass
 
     for parameter in (contract_model.constructor.parameters if contract_model.constructor else ()):
+        # Parameter type metadata may preserve data-location tokens (for
+        # example "address[] memory"). Normalize those tokens before deciding
+        # whether the constructor input is an array.
         parameter_type = parameter.type.strip()
-        base = parameter_type.split()[0].rstrip("[]")
-        if parameter_type.endswith("[]"):
-            raise ValueError(f"unsupported sequence constructor array type: {parameter.type}")
+        normalized_type = parameter_type.split()[0]
+        base = normalized_type.rstrip("[]")
+        if normalized_type.endswith("[]"):
+            # Dynamic arrays are valid constructor inputs. Use an empty,
+            # compiler-valid memory array instead of treating the whole array
+            # surface as an unsupported target-specific case.
+            if base in direct_interfaces:
+                constructor_arguments.append(f"new {base}[](0)")
+                resolved = direct_interfaces[base]
+                resolved_source = getattr(resolved, "source_path", None)
+                if resolved_source and project_root is not None:
+                    constructor_imports.append(
+                        f'import {{ {base} }} from "{Path(os.path.relpath(project_root / resolved_source, path.parent)).as_posix()}";'
+                    )
+            elif base in named_type_sources:
+                constructor_arguments.append(f"new {base}[](0)")
+                resolved_path = Path(project_root / named_type_sources[base])
+                relative = Path(os.path.relpath(resolved_path, path.parent)).as_posix()
+                constructor_imports.append(f'import {{ {base} }} from "{relative}";')
+            elif "." in base:
+                namespace, type_name = base.split(".", 1)
+                try:
+                    namespace_source, _ = resolve_named_type_source(project_root, contract_model.source, namespace)
+                except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                    namespace_source = None
+                if namespace_source is None:
+                    raise ValueError(f"unable to resolve sequence constructor array type: {parameter.type}")
+                constructor_arguments.append(f"new {base}[](0)")
+                relative = Path(os.path.relpath(project_root / namespace_source, path.parent)).as_posix()
+                constructor_imports.append(f'import {{ {namespace} }} from "{relative}";')
+            else:
+                constructor_arguments.append(f"new {base}[](0)")
+            # Array materialization above fully satisfies this constructor
+            # parameter. Do not fall through and append a scalar value for
+            # the element base type (e.g. address[] -> address).
+            continue
         if base == "address":
             role = _address_role(parameter.name)
             constructor_arguments.append(role_addresses.get(role, "address(0)"))
