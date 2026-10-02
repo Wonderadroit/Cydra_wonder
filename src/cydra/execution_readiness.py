@@ -289,6 +289,32 @@ def _state_principal_caller_role(function: FunctionModel, contract: ContractMode
     return None
 
 
+def _caller_state_principal_provenance(
+    contract: ContractModel | None,
+    principal: str | None,
+) -> tuple[str, ...]:
+    """Return source-backed provenance for a caller principal stored in state."""
+    if contract is None or principal is None or principal not in contract.state_variables:
+        return ()
+    functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
+    for writer in functions:
+        if principal not in writer.writes and principal not in writer.effective_writes:
+            continue
+        body = _function_body_from_source(contract, writer)
+        if not body:
+            continue
+        if not re.search(
+            rf"\\b{re.escape(principal)}\\s*=\\s*(?:msg\\.sender|_msgSender\\(\\))\\s*;",
+            body,
+        ):
+            continue
+        role = caller_role(writer, contract)
+        if role:
+            return (f"writer {writer.name} is callable as role {role}",)
+        return (f"writer {writer.name} initializes {principal} directly from its caller",)
+    return ()
+
+
 def caller_role(function: FunctionModel, contract: ContractModel | None = None) -> str | None:
     """Infer a deterministic role binding from source-backed authorization semantics."""
     for modifier in function.modifiers:
@@ -2280,6 +2306,10 @@ def constructible_state_setup_plan(
 
     def required_state_names(fn: FunctionModel) -> tuple[str, ...]:
         names = list(_state_names_from_predicates(fn))
+        for predicate in fn.authorization_predicates:
+            principal = _state_principal_from_predicate(predicate)
+            if principal and principal in contract.state_variables and principal not in names:
+                names.append(principal)
         for predicate in fn.authorization_predicates:
             principal = _caller_principal_from_predicate(predicate)
             if principal and _caller_state_principal_provenance(contract, principal) and principal not in names:
