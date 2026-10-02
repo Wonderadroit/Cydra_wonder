@@ -181,12 +181,17 @@ def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
 
 @dataclass(frozen=True)
 class PrerequisiteObservation:
-    """Deterministic runtime observation used to promote one prerequisite."""
+    """Deterministic runtime observation used to promote one prerequisite.
+
+    Setup-transition verification requires transition provenance so pre-existing
+    state cannot be mistaken for proof that a setup action established it.
+    """
     kind: str
     subject: str
     expected: str
     observed: str
     evidence_id: str
+    transition: str | None = None
 
 
 def apply_observations(
@@ -256,6 +261,7 @@ def apply_observations(
                 item for item in observations
                 if item.subject == matching_dependency
                 and item.kind in {"state", "state_predicate", "state_dependency", "execution_state_dependency"}
+                and item.transition == node.transition
             ),
             None,
         )
