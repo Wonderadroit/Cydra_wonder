@@ -245,7 +245,7 @@ def build_experiment_contract(hypothesis: Hypothesis, experiment: Experiment, co
         if item.status in {"unresolved", "required"}
         and item.category == "state_observation"
     )
-    if unresolved_state_observation:
+    if readiness.state_requirements or unresolved_state_observation:
         add(Capability.STATE_OBSERVATION, 'state/execution prerequisites', 'runtime_observation')
     if readiness.runtime_requirements:
         add(Capability.INTERNAL_CALL_PROPAGATION, 'internal call prerequisites', 'execution_readiness')
