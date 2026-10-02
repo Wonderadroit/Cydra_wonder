@@ -76,7 +76,7 @@ _ROLE_HINTS = (
 
 _SOLIDITY_BUILTIN_FUNCTIONS = {
     "abi.decode", "abi.encode", "abi.encodePacked", "abi.encodeWithSelector",
-    "abi.encodeWithSignature", "abi.encodeCall",
+    "abi.encodeWithSignature", "abi.encodeCall", "bytes.concat", "string.concat",
     "addmod", "mulmod", "keccak256", "sha256", "ripemd160", "ecrecover",
 }
 _SOLIDITY_CAST_RE = re.compile(
