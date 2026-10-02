@@ -120,6 +120,53 @@ def plan_public_mapping_state_observations(
             source=f"{contract.source}:mapping",
         ),)
 
+    # Source-backed boolean view relations can expose private mappings without
+    # exposing the mapping itself. For example, a target may implement
+    # isRelayInList(key) as "return relayIndex[key] != 0". Recognize the
+    # relation generically instead of requiring the storage mapping to be public.
+    relation_match = re.fullmatch(
+        r"(?P<state>[A-Za-z_]\\w*)\\s*\\[(?P<key>[^\\]]+)\\]\\s*==\\s*0",
+        normalized,
+    )
+    if relation_match:
+        state = relation_match.group("state")
+        key = relation_match.group("key").strip()
+        for source_path in sources:
+            try:
+                source = source_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            function_pattern = re.compile(
+                r"\\bfunction\\s+(?P<name>[A-Za-z_]\\w*)\\s*\\([^)]*\\)"
+                r"(?P<attrs>[^{};]*)\\{(?P<body>.*?)\\}",
+                re.DOTALL,
+            )
+            for function_match in function_pattern.finditer(source):
+                attrs = function_match.group("attrs")
+                body = re.sub(r"\\s+", " ", function_match.group("body")).strip()
+                if not re.search(r"\\b(?:public|external)\\b", attrs):
+                    continue
+                if not re.search(r"\\bview\\b", attrs):
+                    continue
+                return_match = re.search(
+                    rf"return\\s+{re.escape(state)}\\s*\\[\\s*(?P<index>[^\\]]+)\\s*\\]\\s*!=\\s*0\\s*;",
+                    body,
+                )
+                if return_match is None:
+                    continue
+                observed_key = return_match.group("index").strip()
+                if observed_key != key:
+                    continue
+                getter = function_match.group("name")
+                return (StateObservationPlan(
+                    state=state,
+                    getter=f"target.{getter}({key})",
+                    expression=f"!target.{getter}({key})",
+                    predicate=predicate,
+                    polarity="must_hold",
+                    source=f"{source_path}:mapping-relation",
+                ),)
+
     # Default-false mapping guard.
     match = re.fullmatch(
         r"!\s*(?P<state>[A-Za-z_]\w*)\s*\[(?P<key>[^\]]+)\]",
