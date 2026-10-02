@@ -353,9 +353,19 @@ def _plan_prerequisite_parameter_bindings(
         base = type_name.strip().split()[0]
         # Preserve named-field struct literals for source-order reordering;
         # only positional typed constructors should be coerced to tuples.
-        if _split_top_level_named_struct_literal(expression) is None:
+        named_parts = _split_top_level_named_struct_literal(expression)
+        if named_parts is None:
             expression = _coerce_struct_constructor_to_tuple(expression, base)
         parts = _split_top_level_tuple_expression(expression)
+        # Planned inputs may wrap a named struct literal in parentheses,
+        # producing a one-element tuple whose sole element is the literal.
+        # Unwrap that representation before arity validation so
+        # {field: value, ...} is reordered by the source-defined field order.
+        if named_parts is None and parts is not None and len(parts) == 1:
+            wrapped_named_parts = _split_top_level_named_struct_literal(parts[0])
+            if wrapped_named_parts is not None:
+                named_parts = wrapped_named_parts
+                parts = None
         if type_name.strip().endswith("[]"):
             return expression
         fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
@@ -393,11 +403,9 @@ def _plan_prerequisite_parameter_bindings(
                 f"unable to resolve struct fields for prerequisite parameter type {base} "
                 f"from {defining_source}"
             )
-        if parts is None:
-            named_parts = _split_top_level_named_struct_literal(expression)
-            if named_parts is not None:
-                try:
-                    parts = tuple(named_parts[field_name] for field_name, _ in fields)
+        if parts is None and named_parts is not None:
+            try:
+                parts = tuple(named_parts[field_name] for field_name, _ in fields)
                 except KeyError as exc:
                     raise ValueError(
                         f"prerequisite named struct literal for {base} is missing field {exc.args[0]}"
