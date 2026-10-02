@@ -577,7 +577,7 @@ def _constructor_role_grants(body: str) -> tuple[tuple[str, str], ...]:
     # constructor transition used by _transferOwnership. Preserve that
     # source-derived provenance so inherited onlyOwner checks can be satisfied
     # by the deployment caller without naming a target-specific contract.
-    for match in re.finditer(r"\b_transferOwnership\s*\(", body):
+    for match in re.finditer(r"\b(?:_transferOwnership|__Ownable(?:2Step)?_init)\s*\(", body):
         arguments = _balanced_parenthesized(body, body.find("(", match.start()))
         account = arguments.strip()
         if account:
