@@ -183,3 +183,50 @@ def test_automatic_repair_controller_consumes_new_replay_frontier():
     assert result["status"] == "complete"
     assert replayed == ["CALL_SEQUENCE", "STATE_OBSERVATION:public_scalar"]
     assert [a["round"] for a in result["attempts"]] == [1, 2]
+
+
+def test_automatic_repair_continues_known_repairs_after_unknown_boundary():
+    from cydra.capability_repair import run_automatic_repair_controller
+
+    campaign = {"capability_clusters": [
+        {
+            "capability": "CRYPTOGRAPHIC_WITNESS:execution_predicate",
+            "hypothesis_ids": ["HC"],
+            "experiment_ids": ["XC"],
+            "stages": ["execution_prerequisite"],
+            "reasons": ["proof witness unresolved"],
+        },
+        {
+            "capability": "INPUT_CONSTRUCTION:internal_execution_predicate",
+            "hypothesis_ids": ["HI"],
+            "experiment_ids": ["XI"],
+            "stages": ["execution_prerequisite"],
+            "reasons": ["predicate input unresolved"],
+        },
+    ]}
+    replayed = []
+
+    result = run_automatic_repair_controller(
+        campaign,
+        regression=lambda _provider: True,
+        rerun_target=lambda requirement: (
+            replayed.append(requirement.key) or {"campaign": {"capability_clusters": []}}
+        ),
+    )
+
+    assert result["status"] == "implementation_boundary"
+    assert replayed == ["INPUT_CONSTRUCTION:internal_execution_predicate"]
+    assert result["implementation_boundaries"] == ["CRYPTOGRAPHIC_WITNESS:execution_predicate"]
+
+
+def test_automatic_repair_accepts_generic_execution_aliases():
+    from cydra.capability_repair import build_automatic_repair_plan
+
+    campaign = {"capability_clusters": [
+        {"capability": "CALLER_CONSTRUCTION:caller_role"},
+        {"capability": "INPUT_CONSTRUCTION:internal_execution_predicate"},
+        {"capability": "EXECUTION_CONTEXT:execution_value_runtime_dependency"},
+    ]}
+    plan = build_automatic_repair_plan(campaign)
+    assert plan["fail_closed"] is False
+    assert all(item["status"] == "IMPLEMENTED" for item in plan["requirements"])
