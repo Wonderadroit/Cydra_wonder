@@ -1259,18 +1259,28 @@ def _internal_execution_requirements(
             return
         visited.add((caller.name, depth))
         body = _source_function_body(contract, caller)
-        if not body:
+        # Model-only callers used by analysis integrations may not have a
+        # readable source path. Preserve the explicit internal-call relation
+        # emitted by the Solidity model so readiness propagation remains
+        # generic instead of silently dropping the callee prerequisites.
+        if body:
+            call_sites = tuple(
+                (match.group(1), match.end() - 1)
+                for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body)
+            )
+        else:
+            call_sites = tuple((name, None) for name in caller.internal_calls)
+        if not call_sites:
             return
         seen_names: set[str] = set()
-        for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
-            name = match.group(1)
+        for name, opening in call_sites:
             if name in ignored or name == caller.name or name in seen_names:
                 continue
             callee = by_name.get(name)
             if callee is None:
                 continue
             seen_names.add(name)
-            actual_arguments = call_arguments(body, match.end() - 1)
+            actual_arguments = call_arguments(body, opening) if opening is not None else ()
             caller_parameter_names = {parameter.name for parameter in caller.parameters if parameter.name}
             forwarded_caller_inputs = {
                 parameter.name
