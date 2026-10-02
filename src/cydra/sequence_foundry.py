@@ -350,10 +350,13 @@ def _plan_prerequisite_parameter_bindings(
         # JSON/fixture serialization. Normalize only the escaped quote form
         # before parsing the tuple; this preserves the intended Solidity value.
         expression = expression.replace('\\\"', '"')
+        base = type_name.strip().split()[0]
+        # Normalize typed struct constructors before tuple parsing so named
+        # struct literals can be reordered by source-declared field order.
+        expression = _coerce_struct_constructor_to_tuple(expression, base)
         parts = _split_top_level_tuple_expression(expression)
         if type_name.strip().endswith("[]"):
             return expression
-        base = type_name.strip().split()[0]
         fields = resolve_struct_fields(project_root, defining_source, base.split(".", 1)[-1])
         if not fields:
             # The parameter model may have already resolved a plain custom type
