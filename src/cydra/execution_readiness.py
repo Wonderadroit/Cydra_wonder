@@ -220,6 +220,13 @@ def _constructor_role_grants(contract: ContractModel) -> tuple[tuple[str, str], 
                 if item not in grants:
                     grants.append(item)
         current_path = Path(current.source).resolve()
+        # OpenZeppelin Ownable establishes the deployment caller as owner even
+        # when the dependency source is outside the target checkout's local
+        # import graph (for example a remapped lib/ dependency). Treat this as
+        # generic library semantics, not target-specific provenance.
+        inherited_names = {name.strip().split("(", 1)[0] for name in current.inherits}
+        if {"Ownable", "Ownable2Step"} & inherited_names and ("owner", "msg.sender") not in grants:
+            grants.append(("owner", "msg.sender"))
         for inherited_name in current.inherits:
             try:
                 resolved_path = _resolve_inherited_contract_source(project_root, current_path, inherited_name)
@@ -286,12 +293,23 @@ def _caller_requirements(
                 # above is sufficient evidence that the deployment caller owns
                 # the target when the inherited Ownable constructor transfers
                 # ownership to msg.sender/_msgSender().
+                owner_grants = _constructor_role_grants(contract)
+                constructor_params = (
+                    contract.constructor.parameters if contract.constructor is not None else ()
+                )
                 owner_established_for_deployer = bool(
                     role == "owner"
                     and any(
                         granted_role == "owner"
-                        and account in {"msg.sender", "_msgSender()"}
-                        for granted_role, account in _constructor_role_grants(contract)
+                        and (
+                            account in {"msg.sender", "_msgSender()"}
+                            or any(
+                                account == parameter.name
+                                and _address_role(parameter.name or "") == "admin"
+                                for parameter in constructor_params
+                            )
+                        )
+                        for granted_role, account in owner_grants
                     )
                 )
                 if role_established_for_deployer or owner_established_for_deployer:
