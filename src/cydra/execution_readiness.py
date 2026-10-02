@@ -1315,11 +1315,11 @@ def _internal_execution_requirements(
                 )
                 if category in {"cryptographic_witness", "execution_context"}:
                     constraint = False
-                if forwarded_caller_inputs and any(
-                    parameter_name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
-                    for parameter_name in forwarded_caller_inputs
-                ):
-                    constraint = False
+                # A forwarded caller input remains constructible when the
+                # callee predicate is otherwise a generic input/local constraint.
+                # The caller experiment owns materialization of that parameter;
+                # forwarding provenance is evidence of data flow, not a reason
+                # to turn an already-satisfiable predicate back into a blocker.
                 predicate_state_names = {
                     name for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
                     if name in set(contract.state_variables)
