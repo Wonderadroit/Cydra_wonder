@@ -103,7 +103,7 @@ def _modeled_public_callers(contract: ContractModel, function_name: str) -> tupl
     return tuple(callers)
 
 
-(contract: ContractModel, semantic=()) -> CallbackStateOrderContribution:
+def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=()) -> CallbackStateOrderContribution:
     source = _source(contract)
     if not source:
         return CallbackStateOrderContribution((), ())
