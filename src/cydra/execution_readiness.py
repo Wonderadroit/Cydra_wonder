@@ -1151,6 +1151,16 @@ def _classify_internal_predicate(
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     if identifiers & state_names or "$." in predicate:
         return "state_observation"
+    # A local guard can be a thin wrapper around a persistent-state lookup,
+    # such as verifier = verifierMap[verifierId] followed by
+    # address(verifier) != address(0). Preserve that state provenance so the
+    # generic state-setup solver can connect the guard to a constructible
+    # writer instead of treating the value as an opaque local execution gap.
+    for local_name in identifiers.intersection(binding_by_name):
+        binding = binding_by_name.get(local_name, "")
+        binding_names = set(re.findall(r"\b[A-Za-z_]\w*\b", binding))
+        if binding_names.intersection(state_names):
+            return "state_observation"
     # Last source-backed declaration check for compact/generated fixtures.
     # This intentionally checks only declarations whose type is a Solidity
     # persistent-value primitive and never treats an arbitrary identifier as
@@ -1314,9 +1324,19 @@ def _internal_execution_requirements(
                     name for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
                     if name in set(contract.state_variables)
                 }
+                # Internal predicates may name a local whose value is sourced
+                # from persistent state. Include those state names in the setup
+                # relation so a constructible mapping writer can satisfy the
+                # prerequisite without target-specific knowledge.
+                predicate_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
+                binding_map = dict(callee.execution_value_bindings)
+                for local_name in predicate_identifiers.intersection(binding_map):
+                    predicate_state_names.update(
+                        name for name in re.findall(r"\b[A-Za-z_]\w*\b", binding_map[local_name])
+                        if name in set(contract.state_variables)
+                    )
                 state_setup = (
-                    category == "state_observation"
-                    and bool(predicate_state_names.intersection(constructible_internal_states))
+                    category == "state_observation"                    and bool(predicate_state_names.intersection(constructible_internal_states))
                 )
                 default_state = (
                     category == "state_observation"
