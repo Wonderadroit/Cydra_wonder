@@ -688,7 +688,7 @@ def generate_sequence_test_from_experiment(
                 parameter.name: argument
                 for parameter, argument in zip(function.parameters, step.arguments)
             }
-            relation_role = caller_role(function)
+            relation_role = caller_role(function, contract_model)
             relation_caller = {
                 "owner": "owner",
                 "admin": "admin",
@@ -761,7 +761,7 @@ def generate_sequence_test_from_experiment(
         prerequisite_imports.extend(argument_imports)
         arguments = ", ".join(call_arguments)
         constructor_caller = _constructor_granted_caller(function, contract_model)
-        role = caller_role(function)
+        role = caller_role(function, contract_model)
         caller_bindings = {"owner": "owner", "admin": "admin", "guardian": "guardian", "risk_manager": "riskManager", "liquidator": "liquidator", "factory": "factory"}
         caller = constructor_caller or (caller_bindings.get(role, "attacker") if role else "attacker")
         rendered.append(f"        vm.prank({caller});\n        target.{step.function}({arguments});")
