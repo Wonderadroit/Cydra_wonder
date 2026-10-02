@@ -288,13 +288,19 @@ def run_automatic_repair_controller(
         plan = derive_repair_plan(frontier)
         actionable = [item for item in plan.actionable if item.key not in seen]
         if not actionable:
-            return {
+            status = "implementation_boundary" if boundaries else (
+                "complete" if attempts else "no_requirements"
+            )
+            result = {
                 "schema_version": 1,
                 "mode": "automatic_generic_repair",
-                "status": "complete" if attempts else "no_requirements",
+                "status": status,
                 "rounds": round_number - 1,
                 "attempts": attempts,
             }
+            if boundaries:
+                result["implementation_boundaries"] = boundaries
+            return result
 
         progressed = False
         for requirement in actionable:
