@@ -487,7 +487,7 @@ def _setup_argument(function, index: int, role: str | None) -> str:
 
 
 def _setup_steps(contract, setup_actions):
-    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions) if item is not None}
     steps = []
     for action in setup_actions:
         function = functions.get(action.function)
