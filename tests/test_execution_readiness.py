@@ -1246,3 +1246,23 @@ def test_internal_forwarded_parameter_or_predicate_remains_constructible():
     )
     assert requirement.status == "constraint"
     assert requirement.category == "input_construction"
+
+
+def test_modifier_caller_predicate_uses_constructor_role_provenance():
+    modifier = ModifierModel(
+        "onlyGuardian",
+        body="require(msg.sender == guardian); _;",
+    )
+    function = FunctionModel(
+        "act", "external", ("onlyGuardian",), (), (), 10,
+    )
+    contract = ContractModel(
+        "Target", "/tmp/Target.sol", (function,),
+        constructor=ConstructorModel(
+            (), 1, role_grants=(("guardian", "msg.sender"),)
+        ),
+        modifiers=(modifier,),
+    )
+    readiness = inspect_execution_readiness(contract, function)
+    item = next(x for x in readiness.caller_requirements if x.kind == "caller_role")
+    assert item.status == "constraint"
