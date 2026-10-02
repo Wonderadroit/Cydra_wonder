@@ -71,6 +71,14 @@ def _public_callers(function_name: str, functions: tuple[tuple[str, str, str], .
     )
 
 
+def _lock_guarded(tail: str, body: str) -> bool:
+    """Return whether the callable is protected by a recognizable reentrancy guard."""
+    return bool(
+        re.search(r"\b(?:nonReentrant|reentrancyGuard|notInReentrant|notLocked)\b", tail)
+        or re.search(r"\b(?:reentrancyLock|_reentrancyGuardEntered|_locked)\b", body)
+    )
+
+
 def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=()) -> CallbackStateOrderContribution:
     source = _source(contract)
     if not source:
@@ -96,11 +104,21 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
 
         if function_name in public_names:
             target = function_name
+            target_entry = next((item for item in parsed if item[0] == target), None)
         else:
             callers = _public_callers(function_name, tuple(parsed))
             if not callers:
                 continue
             target = callers[0]
+            target_entry = next((item for item in parsed if item[0] == target), None)
+
+        # A reentrant call into the selected public wrapper is not a viable
+        # experiment when that wrapper itself holds a recognizable reentrancy
+        # lock for its entire execution.  Do not turn a syntactic
+        # "external call followed by state write" into a false hypothesis.
+        # Other public entry points can still be analyzed independently.
+        if target_entry is not None and _lock_guarded(target_entry[1], target_entry[2]):
+            continue
 
         hypothesis_id = f"H-CALLBACK-STATE-ORDER-{target}"
         if hypothesis_id in seen:
