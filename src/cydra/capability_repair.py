@@ -264,20 +264,6 @@ DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
         "target-derived constructible state setup",
     ),
     RepairProvider(
-        "STATE_OBSERVATION",
-        (
-            "public_scalar",
-            "public_mapping",
-            "state_relation",
-            "public_state_observation",
-            "state_predicate",
-            "execution_predicate",
-        ),
-        "runtime_observation.state_observation",
-        ("python", "-m", "pytest", "tests/test_runtime_observation.py", "tests/test_state_relation_observation.py"),
-        "bounded deterministic state observation",
-    ),
-    RepairProvider(
         "INTERNAL_CALL_PROPAGATION",
         ("producer", "dependency"),
         "execution_readiness.internal_call_propagation",
