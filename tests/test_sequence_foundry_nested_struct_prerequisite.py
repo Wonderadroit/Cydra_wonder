@@ -1,4 +1,4 @@
-from cydra.sequence_foundry import _coerce_struct_constructor_to_tuple
+from cydra.sequence_foundry import _coerce_struct_constructor_to_tuple, generate_sequence_test_from_experiment
 
 
 def test_typed_struct_constructor_is_normalized_to_tuple():
@@ -16,7 +16,7 @@ def test_non_struct_expression_is_unchanged():
 
 
 
-def test_named_struct_constructor_is_reordered_by_source_fields():
+def test_named_struct_constructor_is_reordered_by_source_fields(tmp_path):
     from pathlib import Path
     from cydra.models import ContractModel, Experiment, ExperimentStep, FunctionModel, Hypothesis, ParameterModel
 
