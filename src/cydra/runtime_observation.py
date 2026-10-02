@@ -125,7 +125,7 @@ def plan_public_mapping_state_observations(
     # isRelayInList(key) as "return relayIndex[key] != 0". Recognize the
     # relation generically instead of requiring the storage mapping to be public.
     relation_match = re.fullmatch(
-        r"(?P<state>[A-Za-z_]\\w*)\\s*\\[(?P<key>[^\\]]+)\\]\\s*==\\s*0",
+        r"(?P<state>[A-Za-z_]\w*)\s*\[(?P<key>[^\]]+)\]\s*==\s*0",
         normalized,
     )
     if relation_match:
@@ -137,19 +137,19 @@ def plan_public_mapping_state_observations(
             except (OSError, UnicodeError):
                 continue
             function_pattern = re.compile(
-                r"\\bfunction\\s+(?P<name>[A-Za-z_]\\w*)\\s*\\([^)]*\\)"
-                r"(?P<attrs>[^{};]*)\\{(?P<body>.*?)\\}",
+                r"\bfunction\s+(?P<name>[A-Za-z_]\w*)\s*\([^)]*\)"
+                r"(?P<attrs>[^{};]*)\{(?P<body>.*?)\}",
                 re.DOTALL,
             )
             for function_match in function_pattern.finditer(source):
                 attrs = function_match.group("attrs")
-                body = re.sub(r"\\s+", " ", function_match.group("body")).strip()
-                if not re.search(r"\\b(?:public|external)\\b", attrs):
+                body = re.sub(r"\s+", " ", function_match.group("body")).strip()
+                if not re.search(r"\b(?:public|external)\b", attrs):
                     continue
-                if not re.search(r"\\bview\\b", attrs):
+                if not re.search(r"\bview\b", attrs):
                     continue
                 return_match = re.search(
-                    rf"return\\s+{re.escape(state)}\\s*\\[\\s*(?P<index>[^\\]]+)\\s*\\]\\s*!=\\s*0\\s*;",
+                    rf"return\s+{re.escape(state)}\s*\[\s*(?P<index>[^\]]+)\s*\]\s*!=\s*0\s*;",
                     body,
                 )
                 if return_match is None:
