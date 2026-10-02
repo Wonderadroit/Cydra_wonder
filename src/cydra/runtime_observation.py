@@ -155,9 +155,21 @@ def plan_public_mapping_state_observations(
                 if return_match is None:
                     continue
                 observed_key = return_match.group("index").strip()
-                if observed_key != key:
+                # The view's parameter name need not match the predicate's
+                # symbolic key. What matters is that the returned mapping
+                # relation is over the view's single input; bind that input to
+                # the predicate key at the call site.
+                params_text = function_match.group("name")
+                signature_match = re.search(
+                    rf"\bfunction\s+{re.escape(params_text)}\s*\((?P<params>[^)]*)\)",
+                    source,
+                )
+                if signature_match is None:
                     continue
-                getter = function_match.group("name")
+                params = [item.strip() for item in signature_match.group("params").split(",") if item.strip()]
+                if len(params) != 1:
+                    continue
+                getter = params_text
                 return (StateObservationPlan(
                     state=state,
                     getter=f"target.{getter}({key})",
