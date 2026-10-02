@@ -124,6 +124,14 @@ def build_capability_campaign(
 
         resolution = _resolution_mapping(status.get("capability_resolution"))
         gaps = list(resolution.get("gaps") or [])
+        # Readiness can expose a real unresolved execution predicate even when
+        # the capability resolver has no explicit implementation gap. Carry
+        # those fail-closed prerequisite nodes into the same campaign ledger.
+        existing_gap_keys = {_gap_key(gap) for gap in gaps}
+        for gap in _prerequisite_gaps(status):
+            if _gap_key(gap) not in existing_gap_keys:
+                gaps.append(gap)
+                existing_gap_keys.add(_gap_key(gap))
         materialization = status.get("materialization_failure")
         if materialization:
             gap = materialization.get("gap") if isinstance(materialization, dict) else None
