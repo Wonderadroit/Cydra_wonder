@@ -124,7 +124,7 @@ def _split_top_level_named_struct_literal(value: str) -> dict[str, str] | None:
             if quote is not None:
                 if escaped:
                     escaped = False
-                elif char == "\\\\":
+                elif char == "\\":
                     escaped = True
                 elif char == quote:
                     quote = None
@@ -144,7 +144,7 @@ def _split_top_level_named_struct_literal(value: str) -> dict[str, str] | None:
             return None
         name = part[:colon].strip()
         value_text = part[colon + 1:].strip()
-        if not re.fullmatch(r"[A-Za-z_]\\w*", name) or not value_text:
+        if not re.fullmatch(r"[A-Za-z_]\w*", name) or not value_text:
             return None
         fields[name] = value_text
     return fields or None
