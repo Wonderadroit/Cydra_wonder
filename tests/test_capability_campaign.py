@@ -126,3 +126,23 @@ def test_campaign_surfaces_unresolved_prerequisite_capability():
     assert campaign["blocked_experiments"][0]["required_capabilities"] == [
         "CRYPTOGRAPHIC_WITNESS:execution_predicate"
     ]
+
+
+def test_planned_unimplemented_reasoning_surface_enters_repair_frontier():
+    campaign = build_capability_campaign(
+        [],
+        [],
+        planned_unimplemented=[{
+            "hypothesis_id": "H-EXTERNAL-OUTCOME-target",
+            "invariant_id": "INV-EXTERNAL-OUTCOME-target",
+            "target_function": "target",
+            "experiment_id": "X-H-EXTERNAL-OUTCOME-target",
+            "reason": "reasoning surface has no generic runtime adapter",
+        }],
+    )
+    assert campaign["summary"]["capability_clusters"] == 1
+    cluster = campaign["capability_clusters"][0]
+    assert cluster["capability"] == "REASONING_SURFACE:INV-EXTERNAL-OUTCOME-target"
+    assert cluster["hypothesis_ids"] == ["H-EXTERNAL-OUTCOME-target"]
+    assert cluster["experiment_ids"] == ["X-H-EXTERNAL-OUTCOME-target"]
+    assert campaign["dependency_graph"]["edges"][0]["type"] == "blocks"
