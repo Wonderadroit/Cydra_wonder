@@ -1489,14 +1489,20 @@ def _cryptographic_witness_route(
         "abi.encodeWithSignature", "abi.encodeCall", "keccak256", "sha256",
         "ripemd160", "ecrecover", "addmod", "mulmod",
     }
-    calls = []
-    for match in re.finditer(
-        r"(?P<head>[A-Za-z_]\w*(?:\([^)]*\))?(?:\.[A-Za-z_]\w*)?)\s*\(",
-        predicate,
-    ):
-        head = match.group("head")
-        if head not in builtin_calls:
-            calls.append(head)
+    def modeled_calls(expression: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        discovered: list[tuple[str, tuple[str, ...]]] = []
+        for match in re.finditer(
+            r"(?P<head>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(",
+            expression,
+        ):
+            head = match.group("head")
+            if head in builtin_calls:
+                continue
+            arguments = _call_arguments_from_expression(expression[match.start():])
+            discovered.append((head, arguments))
+        return tuple(dict.fromkeys(discovered))
+
+    calls = modeled_calls(predicate)
     if not calls:
         return (
             "cryptographic predicate has no non-builtin call-shaped producer "
@@ -1505,9 +1511,8 @@ def _cryptographic_witness_route(
 
     functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
     by_name = {item.name: item for item in functions}
-    arguments = _call_arguments_from_expression(predicate)
     routes = []
-    for call in calls:
+    for call, arguments in calls:
         method = call.rsplit(".", 1)[-1]
         callee = by_name.get(method)
         if callee is not None:
