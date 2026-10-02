@@ -53,6 +53,7 @@ from cydra.structural_configuration_binding import generate_configuration_bindin
 from cydra.guard_parity_execution import generate_guard_parity_test
 from cydra.callback_state_order_execution import generate_callback_state_order_test
 from cydra.capability_campaign import build_capability_campaign
+from cydra.capability_repair import build_repair_artifact
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity", "callback_state_order"}
 
@@ -159,6 +160,7 @@ FREEZE_FILES = (
     "capability_failures.json",
     "blocked_experiments.json",
     "dependency_graph.json",
+    "capability_repair.json",
 )
 
 
@@ -1445,7 +1447,12 @@ def run_source_investigation(
             execution_readiness,
             planned_unimplemented=unexecuted_reasoning_surfaces,
         )
+        repair_artifact = build_repair_artifact(campaign)
         classification["campaign"] = campaign["summary"]
+        classification["capability_repair"] = {
+            "requirements": len(repair_artifact["requirements"]),
+            "mode": repair_artifact["mode"],
+        }
         capability_clusters: dict[str, int] = {}
         capability_frontier = {"total": len(execution_readiness), "executable": 0, "partial": 0, "blocked": 0}
         for item in execution_readiness:
@@ -1535,6 +1542,7 @@ def run_source_investigation(
             "capability_failures.json": campaign["capability_failures"],
             "blocked_experiments.json": campaign["blocked_experiments"],
             "dependency_graph.json": campaign["dependency_graph"],
+            "capability_repair.json": repair_artifact,
         }
         create_freeze(files, text_files, freeze)
 
