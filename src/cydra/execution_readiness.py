@@ -289,7 +289,7 @@ def _state_principal_caller_role(function: FunctionModel, contract: ContractMode
     if not principals:
         return None
     principal = principals[0]
-    functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
+    functions = tuple(dict.fromkeys(item for item in (*contract.functions, *contract.inherited_functions) if item is not None))
     for writer in functions:
         if principal not in writer.writes and principal not in writer.effective_writes:
             continue
@@ -317,7 +317,7 @@ def _caller_state_principal_provenance(
         if not body:
             continue
         if not re.search(
-            rf"\\b{re.escape(principal)}\\s*=\\s*(?:msg\\.sender|_msgSender\\(\\))\\s*;",
+            rf"\b{re.escape(principal)}\s*=\s*(?:msg\.sender|_msgSender\(\))\s*;",
             body,
         ):
             continue
@@ -1459,7 +1459,7 @@ def _internal_execution_requirements(
     fail-closed.
     """
     functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
-    by_name = {item.name: item for item in functions}
+    by_name = {item.name: item for item in functions if item is not None}
     ignored = {"if", "for", "while", "require", "revert", "assert", "emit", "return", "new", "delete", "unchecked", "abi", "keccak256", "sha256", "ecrecover"}
     # Internal guards can depend on persistent state that is not directly
     # named by the top-level action. Reuse the same target-derived setup
