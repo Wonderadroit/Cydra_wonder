@@ -121,7 +121,7 @@ def test_automatic_repair_controller_regresses_then_replays_same_requirement():
     assert result["status"] == "complete"
     assert regressions == [
         "sequence_foundry.call_sequence",
-        "runtime_observation.state_observation",
+        "execution_readiness.state_observation",
     ]
     assert replays == [
         "CALL_SEQUENCE",
