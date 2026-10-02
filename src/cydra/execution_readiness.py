@@ -255,8 +255,8 @@ def _state_principal_from_predicate(predicate: str) -> str | None:
     caller = r"(?:msg\.sender|_msgSender\(\))"
     identifier = r"[A-Za-z_]\w*"
     for pattern in (
-        rf"^\\s*{caller}\\s*==\\s*(?P<principal>{identifier})\\s*$",
-        rf"^\\s*(?P<principal>{identifier})\\s*==\\s*{caller}\\s*$",
+        rf"^\s*{caller}\s*==\s*(?P<principal>{identifier})\s*$",
+        rf"^\s*(?P<principal>{identifier})\s*==\s*{caller}\s*$",
     ):
         match = re.match(pattern, predicate.strip())
         if match:
