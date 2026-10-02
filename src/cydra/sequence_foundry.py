@@ -705,7 +705,11 @@ def generate_sequence_test_from_experiment(
     # struct-constructor error before the actual experiment can execute.
     constructor_arguments: list[str] = []
     constructor_imports: list[str] = []
-    inherited_interfaces = {item.name: item for item in contract_model.inherited_resolved_interfaces}
+    inherited_interfaces = {
+        item.name: item
+        for item in contract_model.inherited_resolved_interfaces
+        if item is not None and getattr(item, "name", None)
+    }
     direct_interfaces: dict[str, object] = {}
     named_type_sources: dict[str, str] = {}
     erc20_stub_needed = False
