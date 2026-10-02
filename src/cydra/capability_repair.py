@@ -210,6 +210,14 @@ DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
                    "execution_readiness.internal_call_propagation",
                    ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
                    "internal producer/dependency propagation"),
+    RepairProvider("INPUT_CONSTRUCTION", ("execution_predicate", "abi", "scalar", "array"),
+                   "experiment_inputs.source_backed_materialization",
+                   ("python", "-m", "pytest", "tests/test_experiment_inputs.py", "tests/test_execution_capabilities.py"),
+                   "source-backed execution input construction"),
+    RepairProvider("EXECUTION_CONTEXT", ("runtime", "caller", "dependency"),
+                   "execution_readiness.runtime_context",
+                   ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
+                   "deterministic runtime-context construction"),
 )
 
 
