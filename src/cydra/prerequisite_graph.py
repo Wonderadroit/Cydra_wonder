@@ -50,7 +50,17 @@ class PrerequisiteGraph:
 
 def _capability_for_requirement(kind: str, category: str | None = None) -> str:
     """Map readiness evidence to a stable execution capability name."""
-    category_mapping = {\n        "cryptographic_witness": "CRYPTOGRAPHIC_WITNESS",\n        "execution_context": "EXECUTION_CONTEXT",\n        "state_observation": "STATE_OBSERVATION",\n        "local_execution": "LOCAL_EXECUTION",\n        "input_construction": "INPUT_CONSTRUCTION",\n    }\n    if category in category_mapping:\n        return category_mapping[category]\n\n    mapping = {
+    category_mapping = {
+        "cryptographic_witness": "CRYPTOGRAPHIC_WITNESS",
+        "execution_context": "EXECUTION_CONTEXT",
+        "state_observation": "STATE_OBSERVATION",
+        "local_execution": "LOCAL_EXECUTION",
+        "input_construction": "INPUT_CONSTRUCTION",
+    }
+    if category in category_mapping:
+        return category_mapping[category]
+
+    mapping = {
         "caller_role": "CALLER_CONSTRUCTION",
         "caller_state_dependency": "STATE_SETUP",
         "caller_state_setup_candidate": "STATE_SETUP",
