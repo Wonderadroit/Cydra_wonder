@@ -230,3 +230,49 @@ def test_automatic_repair_accepts_generic_execution_aliases():
     plan = build_automatic_repair_plan(campaign)
     assert plan["fail_closed"] is False
     assert all(item["status"] == "IMPLEMENTED" for item in plan["requirements"])
+
+
+def test_automatic_repair_registers_generic_predicate_capabilities():
+    from cydra.capability_repair import build_automatic_repair_plan
+    campaign = {"capability_clusters": [
+        {"capability": "LOCAL_EXECUTION:internal_execution_predicate"},
+        {"capability": "CRYPTOGRAPHIC_WITNESS:execution_predicate"},
+        {"capability": "STATE_OBSERVATION:state_predicate"},
+        {"capability": "EXECUTION_READINESS:execution_value_runtime_dependency"},
+    ]}
+    plan = build_automatic_repair_plan(campaign)
+    assert plan["fail_closed"] is False
+    providers = {item["key"]: item["provider"] for item in plan["requirements"]}
+    assert providers["LOCAL_EXECUTION:internal_execution_predicate"] == "execution_readiness.local_execution_predicate"
+    assert providers["CRYPTOGRAPHIC_WITNESS:execution_predicate"] == "execution_readiness.cryptographic_witness_provenance"
+    assert providers["STATE_OBSERVATION:state_predicate"] == "execution_readiness.state_observation"
+    assert providers["EXECUTION_READINESS:execution_value_runtime_dependency"] == "execution_readiness.runtime_dependency_resolution"
+
+
+def test_automatic_repair_does_not_call_same_provider_again_when_replay_preserves_gap():
+    from cydra.capability_repair import run_automatic_repair_controller
+    replayed = []
+    campaign = {"capability_clusters": [{
+        "capability": "LOCAL_EXECUTION:internal_execution_predicate",
+        "hypothesis_ids": ["H1"],
+        "experiment_ids": ["X1"],
+        "stages": ["execution_prerequisite"],
+        "reasons": ["local value remains unresolved"],
+    }]}
+    def replay(requirement):
+        replayed.append(requirement.key)
+        return {"campaign": {"capability_clusters": [{
+            "capability": requirement.key,
+            "hypothesis_ids": ["H1"],
+            "experiment_ids": ["X1"],
+            "stages": ["execution_prerequisite"],
+            "reasons": ["still unresolved after generic replay"],
+        }]}}
+    result = run_automatic_repair_controller(
+        campaign,
+        regression=lambda _provider: True,
+        rerun_target=replay,
+    )
+    assert result["status"] == "implementation_boundary"
+    assert replayed == ["LOCAL_EXECUTION:internal_execution_predicate"]
+    assert "replay_unresolved:LOCAL_EXECUTION:internal_execution_predicate" in result["implementation_boundaries"]
