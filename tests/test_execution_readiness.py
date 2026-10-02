@@ -736,6 +736,38 @@ def test_internal_execution_input_prerequisite_can_be_an_experiment_constraint(t
     assert propagated.status == "constraint"
     assert propagated.category == "input_construction"
 
+def test_internal_local_binding_from_mapping_connects_to_generic_state_setup(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        mapping(uint256 => address) verifierMap;
+        function run(uint256 key) external { verify(key); }
+        function verify(uint256 key) internal {
+            address verifier = verifierMap[key];
+            require(address(verifier) != address(0));
+        }
+        function registerVerifier(uint256 key, address verifier) external {
+            verifierMap[key] = verifier;
+        }
+    }
+    """, encoding="utf-8")
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, function)
+    propagated = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+        and item.subject == "verify: address(verifier) != address(0)"
+    )
+    assert propagated.category == "state_observation"
+    assert propagated.status == "constraint"
+    assert any(
+        item.kind == "internal_state_setup_candidate"
+        and item.subject == "registerVerifier"
+        and item.status == "constructible"
+        for item in readiness.state_setup_candidates
+    )
+
 def test_internal_mapping_predicate_feeds_generic_state_setup_candidates(tmp_path):
     source = tmp_path / "Target.sol"
     source.write_text("""
