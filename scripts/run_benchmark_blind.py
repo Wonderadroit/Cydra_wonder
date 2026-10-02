@@ -53,7 +53,7 @@ from cydra.structural_configuration_binding import generate_configuration_bindin
 from cydra.guard_parity_execution import generate_guard_parity_test
 from cydra.callback_state_order_execution import generate_callback_state_order_test
 from cydra.capability_campaign import build_capability_campaign
-from cydra.capability_repair import build_repair_artifact
+from cydra.capability_repair import build_repair_artifact, build_automatic_repair_plan
 
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity", "callback_state_order"}
 
@@ -1453,6 +1453,7 @@ def run_source_investigation(
             "requirements": len(repair_artifact["requirements"]),
             "mode": repair_artifact["mode"],
         }
+        classification["automatic_repair"] = build_automatic_repair_plan(campaign)
         capability_clusters: dict[str, int] = {}
         capability_frontier = {"total": len(execution_readiness), "executable": 0, "partial": 0, "blocked": 0}
         for item in execution_readiness:
