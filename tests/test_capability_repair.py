@@ -148,3 +148,38 @@ def test_automatic_repair_controller_fails_closed_for_unknown_capability():
     assert result["status"] == "implementation_boundary"
     assert result["attempts"][0]["status"] == "UNIMPLEMENTED"
     assert result["attempts"][0]["rerun_requested"] is False
+
+
+
+def test_automatic_repair_controller_consumes_new_replay_frontier():
+    from cydra.capability_repair import run_automatic_repair_controller
+
+    campaign = {"capability_clusters": [{
+        "capability": "CALL_SEQUENCE",
+        "hypothesis_ids": ["H1"],
+        "experiment_ids": ["X1"],
+        "stages": ["execution"],
+        "reasons": ["ordered calls unavailable"],
+    }]}
+    replayed = []
+
+    def replay(requirement):
+        replayed.append(requirement.key)
+        if requirement.key == "CALL_SEQUENCE":
+            return {"campaign": {"capability_clusters": [{
+                "capability": "STATE_OBSERVATION:public_scalar",
+                "hypothesis_ids": ["H2"],
+                "experiment_ids": ["X2"],
+                "stages": ["execution"],
+                "reasons": ["state value required"],
+            }]}}
+        return {"campaign": {"capability_clusters": []}}
+
+    result = run_automatic_repair_controller(
+        campaign,
+        regression=lambda _provider: True,
+        rerun_target=replay,
+    )
+    assert result["status"] == "complete"
+    assert replayed == ["CALL_SEQUENCE", "STATE_OBSERVATION:public_scalar"]
+    assert [a["round"] for a in result["attempts"]] == [1, 2]
