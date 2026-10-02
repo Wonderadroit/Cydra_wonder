@@ -1466,3 +1466,25 @@ def test_solidity_concat_builtin_is_deterministic_local_expression():
     assert _is_deterministic_expression(
         'string.concat(prefix, suffix)'
     )
+
+
+def test_deterministic_hash_relation_is_not_misclassified_as_cryptographic_witness():
+    function = FunctionModel(
+        "deployHinkal",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        parameters=(
+            ParameterModel("fullBytecode", "bytes"),
+            ParameterModel("bytecodeHash", "bytes32"),
+        ),
+        execution_predicates=("keccak256(fullBytecode) != bytecodeHash",),
+        execution_predicate_polarities=(("keccak256(fullBytecode) != bytecodeHash", "must_hold"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.category != "cryptographic_witness"
+    assert requirement.status == "constraint"
