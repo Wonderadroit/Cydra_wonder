@@ -1109,6 +1109,40 @@ def test_crypto_predicate_exposes_target_derived_witness_route():
     assert "publicInput <- publicInput" in route
 
 
+def test_crypto_predicate_preserves_nested_call_argument_provenance():
+    from cydra.execution_readiness import _cryptographic_witness_route
+
+    verifier = FunctionModel(
+        "verifyProof", "internal", (), (), (), 1,
+        parameters=(
+            ParameterModel("a", "uint256"),
+            ParameterModel("b", "uint256"),
+            ParameterModel("c", "uint256"),
+            ParameterModel("input", "uint256"),
+            ParameterModel("verifierId", "uint256"),
+        ),
+        return_expressions=("verifier.verifyProof(a, b, c, input, verifierId)",),
+    )
+    builder = FunctionModel(
+        "buildVerifierId", "internal", (), (), (), 2,
+        parameters=(
+            ParameterModel("dimensions", "uint256"),
+            ParameterModel("externalActionId", "uint256"),
+        ),
+        return_expressions=("keccak256(abi.encode(dimensions, externalActionId))",),
+    )
+    contract = ContractModel("Target", "/tmp/Target.sol", (verifier, builder))
+    route = _cryptographic_witness_route(
+        contract,
+        "verifyProof(a, b, c, inputForCircom, buildVerifierId(dimensions, externalActionId))",
+    )
+    assert "a <- a" in route
+    assert "input <- inputForCircom" in route
+    assert "verifierId <- buildVerifierId(dimensions, externalActionId)" in route
+    assert "dimensions <- dimensions" in route
+    assert "externalActionId <- externalActionId" in route
+
+
 def test_unresolved_crypto_predicate_remains_explicit():
     from cydra.execution_readiness import _cryptographic_witness_route
 
