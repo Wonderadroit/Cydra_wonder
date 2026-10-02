@@ -216,7 +216,11 @@ def _caller_bound_parameter_paths(contract_model: ContractModel, function) -> tu
     name a field or contract; it only materializes an equality already expressed
     by the target's modeled execution predicates.
     """
-    functions = {item.name: item for item in (*contract_model.functions, *contract_model.inherited_functions)}
+    functions = {
+        item.name: item
+        for item in (*contract_model.functions, *contract_model.inherited_functions)
+        if item is not None and getattr(item, "name", None)
+    }
     ordered: list[str] = []
     visited: set[str] = set()
 
@@ -1319,6 +1323,7 @@ def generate_callback_state_order_test(
     modeled_functions = {
         item.name: item
         for item in (*contract_model.functions, *contract_model.inherited_functions)
+        if item is not None and getattr(item, "name", None)
     }
     seen_callees: set[str] = set()
     for call_match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", callback_body):
