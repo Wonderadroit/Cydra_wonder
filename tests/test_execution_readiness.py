@@ -1198,3 +1198,49 @@ def test_deterministic_local_execution_predicate_is_generic_input_constraint():
     requirement = next(item for item in readiness.execution_requirements if item.kind == "execution_predicate")
     assert requirement.category == "local_execution"
     assert requirement.status == "constraint"
+
+
+def test_internal_forwarded_parameter_predicate_remains_constructible():
+    predicate = "data.externalAddress == msg.sender"
+    callee = FunctionModel(
+        "internalCheck", "internal", (), (), (), 10,
+        parameters=(ParameterModel("data", "Data"),),
+        execution_predicates=(predicate,),
+        execution_predicate_polarities=((predicate, "must_hold"),),
+    )
+    caller = FunctionModel(
+        "run", "external", (), (), (), 20,
+        parameters=(ParameterModel("data", "Data"),),
+    )
+    contract = ContractModel(
+        "Target", "Target.sol", (caller, callee),
+    )
+    readiness = inspect_execution_readiness(contract, caller)
+    requirement = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "internalCheck: data.externalAddress == msg.sender"
+    )
+    assert requirement.status == "constraint"
+    assert requirement.category == "input_construction"
+
+
+def test_internal_forwarded_parameter_or_predicate_remains_constructible():
+    predicate = "data.relay == address(0) || hasPaidToRelay"
+    callee = FunctionModel(
+        "internalCheck", "internal", (), (), (), 10,
+        parameters=(ParameterModel("data", "Data"),),
+        execution_predicates=(predicate,),
+        execution_predicate_polarities=((predicate, "must_hold"),),
+    )
+    caller = FunctionModel(
+        "run", "external", (), (), (), 20,
+        parameters=(ParameterModel("data", "Data"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (caller, callee))
+    readiness = inspect_execution_readiness(contract, caller)
+    requirement = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "internalCheck: data.relay == address(0) || hasPaidToRelay"
+    )
+    assert requirement.status == "constraint"
+    assert requirement.category == "input_construction"
