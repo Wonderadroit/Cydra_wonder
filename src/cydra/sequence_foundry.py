@@ -839,6 +839,10 @@ def generate_sequence_test_from_experiment(
                 constructor_imports.append(f'import {{ {namespace} }} from "{relative}";')
             else:
                 constructor_arguments.append(f"new {base}[](0)")
+            # Array materialization above fully satisfies this constructor
+            # parameter. Do not fall through and append a scalar value for
+            # the element base type (e.g. address[] -> address).
+            continue
         if base == "address":
             role = _address_role(parameter.name)
             constructor_arguments.append(role_addresses.get(role, "address(0)"))
