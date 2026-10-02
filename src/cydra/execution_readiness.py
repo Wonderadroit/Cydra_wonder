@@ -187,14 +187,33 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
     return tuple(requirements)
 
 
+def _caller_principal_from_predicate(predicate: str) -> str | None:
+    """Extract a principal from a direct caller-to-identifier equality."""
+    caller = r"(?:msg\\.sender|_msgSender\\(\\))"
+    identifier = r"[A-Za-z_]\\w*"
+    for pattern in (
+        rf"^\\s*{caller}\\s*==\\s*(?P<principal>{identifier})\\s*$",
+        rf"^\\s*(?P<principal>{identifier})\\s*==\\s*{caller}\\s*$",
+    ):
+        match = re.match(pattern, predicate.strip())
+        if match:
+            return match.group("principal")
+    return None
+
+
+def _predicate_role(predicate: str) -> str | None:
+    principal = _caller_principal_from_predicate(predicate)
+    return _address_role(principal) if principal else None
+
+
 def caller_role(function: FunctionModel) -> str | None:
-    """Infer a deterministic role binding from a modeled authorization modifier."""
+    """Infer a deterministic role binding from source-backed authorization semantics."""
     for modifier in function.modifiers:
         role = _address_role(modifier)
         if role is not None:
             return role
     for predicate in function.authorization_predicates:
-        role = _address_role(predicate)
+        role = _predicate_role(predicate) or _address_role(predicate)
         if role is not None:
             return role
     return None
@@ -247,6 +266,25 @@ def _constructor_role_grants(contract: ContractModel) -> tuple[tuple[str, str], 
 
     visit(contract)
     return tuple(grants)
+
+
+def _authorization_predicates_from_body(body: str) -> tuple[str, ...]:
+    """Extract direct caller predicates from a modifier body conservatively."""
+    predicates: list[str] = []
+    for match in re.finditer(r"\\brequire\\s*\\(", body):
+        opening = body.find("(", match.start())
+        depth = 0
+        for index in range(opening, len(body)):
+            if body[index] == "(":
+                depth += 1
+            elif body[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    predicate = body[opening + 1:index].split(",", 1)[0].strip()
+                    if "msg.sender" in predicate or "_msgSender()" in predicate:
+                        predicates.append(predicate)
+                    break
+    return tuple(dict.fromkeys(predicates))
 
 
 def _caller_requirements(
@@ -340,6 +378,33 @@ def _caller_requirements(
                         )
                     )
                     continue
+                predicate_roles = tuple(
+                    role
+                    for role in (
+                        _predicate_role(predicate)
+                        for predicate in _authorization_predicates_from_body(definition_body)
+                    )
+                    if role is not None
+                )
+                inferred_role = predicate_roles[0] if len(set(predicate_roles)) == 1 else None
+                if inferred_role is not None:
+                    owner_grants = _constructor_role_grants(contract)
+                    if any(
+                        granted_role == inferred_role
+                        and account in {"msg.sender", "_msgSender()"}
+                        for granted_role, account in owner_grants
+                    ):
+                        requirements.append(
+                            ExecutionRequirement(
+                                "caller_role",
+                                f"{modifier}({rendered_args})",
+                                f"{function.name}:modifier",
+                                "constraint",
+                                "modifier source directly compares the caller with a role principal "
+                                "whose constructor provenance binds that role to the deployment caller",
+                            )
+                        )
+                        continue
                 detail = (
                     f"resolved modifier body establishes caller authorization semantics"
                     f"{': invocation arguments ' + rendered_args if rendered_args else ''}; "
