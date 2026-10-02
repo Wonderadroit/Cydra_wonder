@@ -192,7 +192,7 @@ DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
                    "sequence_foundry.type_materialization",
                    ("python", "-m", "pytest", "tests/test_sequence_foundry.py"),
                    "source-backed recursive ABI/type materialization"),
-    RepairProvider("CALLER_CONSTRUCTION", ("role", "predicate"), "execution_readiness.caller_construction",
+    RepairProvider("CALLER_CONSTRUCTION", ("role", "predicate", "caller_role"), "execution_readiness.caller_construction",
                    ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
                    "target-derived caller and role construction"),
     RepairProvider("ROLE_ESTABLISHMENT", ("role",), "execution_readiness.role_establishment",
@@ -210,11 +210,11 @@ DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
                    "execution_readiness.internal_call_propagation",
                    ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
                    "internal producer/dependency propagation"),
-    RepairProvider("INPUT_CONSTRUCTION", ("execution_predicate", "abi", "scalar", "array"),
+    RepairProvider("INPUT_CONSTRUCTION", ("execution_predicate", "internal_execution_predicate", "abi", "scalar", "array"),
                    "experiment_inputs.source_backed_materialization",
                    ("python", "-m", "pytest", "tests/test_experiment_inputs.py", "tests/test_execution_capabilities.py"),
                    "source-backed execution input construction"),
-    RepairProvider("EXECUTION_CONTEXT", ("runtime", "caller", "dependency"),
+    RepairProvider("EXECUTION_CONTEXT", ("runtime", "caller", "dependency", "execution_value_runtime_dependency"),
                    "execution_readiness.runtime_context",
                    ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
                    "deterministic runtime-context construction"),
@@ -282,6 +282,7 @@ def run_automatic_repair_controller(
     frontier = dict(campaign)
     attempts: list[dict[str, object]] = []
     seen: set[str] = set()
+    boundaries: list[str] = []
 
     for round_number in range(1, max_rounds + 1):
         plan = derive_repair_plan(frontier)
@@ -307,13 +308,10 @@ def run_automatic_repair_controller(
                     "message": "no registered generic implementation; fail-closed",
                     "rerun_requested": False,
                 })
-                return {
-                    "schema_version": 1,
-                    "mode": "automatic_generic_repair",
-                    "status": "implementation_boundary",
-                    "rounds": round_number,
-                    "attempts": attempts,
-                }
+                boundaries.append(requirement.key)
+                # One unknown capability must not prevent independent known
+                # generic capabilities from being repaired and replayed.
+                continue
 
             if not regression(provider):
                 attempts.append({
@@ -358,6 +356,16 @@ def run_automatic_repair_controller(
 
         if not progressed:
             break
+
+    if boundaries:
+        return {
+            "schema_version": 1,
+            "mode": "automatic_generic_repair",
+            "status": "implementation_boundary",
+            "rounds": max_rounds,
+            "attempts": attempts,
+            "implementation_boundaries": boundaries,
+        }
 
     return {
         "schema_version": 1,
