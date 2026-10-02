@@ -206,6 +206,19 @@ def _predicate_role(predicate: str) -> str | None:
     return _address_role(principal) if principal else None
 
 
+def _balanced_function_body(source: str, opening: int) -> str:
+    """Return a brace-balanced Solidity function body from its opening brace."""
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[opening + 1:index]
+    return source[opening + 1:]
+
+
 def _function_body_from_source(contract: ContractModel, function: FunctionModel) -> str | None:
     """Resolve a modeled function body through the bounded target inheritance graph."""
     source_path = Path(contract.source).resolve()
@@ -229,7 +242,7 @@ def _function_body_from_source(contract: ContractModel, function: FunctionModel)
         if match:
             opening = source.find("{", match.end())
             if opening >= 0:
-                return _body(source, opening)
+                return _balanced_function_body(source, opening)
         for inherited in inherits:
             try:
                 resolved = _resolve_inherited_contract_source(root, path, inherited)
@@ -866,7 +879,7 @@ def _execution_dataflow_requirements(
     """
     predicates = " ".join(function.execution_predicates)
     requirements: list[ExecutionRequirement] = []
-    functions_by_name = {item.name: item for item in (*contract.inherited_functions, *contract.functions)}
+    functions_by_name = {item.name: item for item in (*contract.inherited_functions, *contract.functions) if item is not None}
     semantic_effects = build_state_effect_index(semantic_evidence)
 
     for local, expression in function.execution_value_bindings:
@@ -986,6 +999,8 @@ def _execution_dataflow_requirements(
         if needs_positive_result and re.search(r"\bmaxWithdraw\s*\(\s*msg\.sender\s*\)", expression):
             balance_writers = []
             for candidate in (*contract.inherited_functions, *contract.functions):
+                if candidate is None:
+                    continue
                 if candidate.name == function.name or candidate.visibility not in {"public", "external"}:
                     continue
                 writes = state_writes_for_function(semantic_effects, candidate.name)
@@ -2002,7 +2017,7 @@ def _state_names_from_internal_predicates(
             source_text,
         )
     )
-    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions) if item is not None}
     discovered: list[str] = []
     visited: set[tuple[str, int]] = set()
 
