@@ -907,7 +907,15 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         )
         experiment_contract = build_experiment_contract(hypothesis, experiment, contract, readiness)
         capability_resolution = solve_capabilities(experiment_contract)
-        prerequisite_graph = build_prerequisite_graph(readiness)
+        setup_actions = ()
+        if class_name in {"state", "callback_state_order"} and (readiness.state_requirements or readiness.state_setup_candidates):
+            setup_actions = constructible_state_setup_plan(
+                contract,
+                function,
+                tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
+                compiler_evidence.evidence,
+            )
+        prerequisite_graph = build_prerequisite_graph(readiness, setup_actions)
         prerequisite_observation_evidence = ()
         status_prerequisite = {}
         if readiness.caller_requirements:
@@ -931,12 +939,6 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                     "materialization_failure": _json(failure),
                 }
         if class_name in {"state", "callback_state_order"} and (readiness.state_requirements or readiness.state_setup_candidates):
-            setup_actions = constructible_state_setup_plan(
-                contract,
-                function,
-                tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
-                compiler_evidence.evidence,
-            )
             observation_plans = plan_public_state_observations(contract, function)
             if observation_plans:
                 try:
