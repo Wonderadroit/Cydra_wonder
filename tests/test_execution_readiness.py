@@ -665,7 +665,7 @@ def test_internal_execution_prerequisite_categories_are_descriptive(tmp_path):
     categories = {item.category for item in readiness.execution_requirements if item.kind == "internal_execution_predicate"}
     assert "state_observation" in categories
     assert "input_construction" in categories
-    assert all(item.status == "unresolved" for item in readiness.execution_requirements if item.kind == "internal_execution_predicate")
+    assert all(item.status == "constraint" for item in readiness.execution_requirements if item.kind == "internal_execution_predicate")
 
 
 def test_internal_execution_temporal_prerequisite_is_execution_context(tmp_path):
@@ -1211,6 +1211,7 @@ def test_internal_forwarded_parameter_predicate_remains_constructible():
     caller = FunctionModel(
         "run", "external", (), (), (), 20,
         parameters=(ParameterModel("data", "Data"),),
+        internal_calls=("internalCheck",),
     )
     contract = ContractModel(
         "Target", "Target.sol", (caller, callee),
@@ -1235,6 +1236,7 @@ def test_internal_forwarded_parameter_or_predicate_remains_constructible():
     caller = FunctionModel(
         "run", "external", (), (), (), 20,
         parameters=(ParameterModel("data", "Data"),),
+        internal_calls=("internalCheck",),
     )
     contract = ContractModel("Target", "Target.sol", (caller, callee))
     readiness = inspect_execution_readiness(contract, caller)
