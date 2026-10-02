@@ -273,7 +273,12 @@ def _caller_requirements(
 
         invocation_args = invocations.get(modifier, ())
         definition = modifier_map.get(modifier)
-        if definition is not None:
+        # OpenZeppelin's onlyOwner is stable library semantics. Its source may
+        # be outside the bounded target import graph, so recognize the modifier
+        # name itself rather than treating the missing dependency source as an
+        # authorization mystery.
+        known_library_caller_modifier = modifier in {"onlyOwner", "onlyOwner2Step"}
+        if definition is not None or known_library_caller_modifier:
             caller_tokens = ("msg.sender", "_msgSender()", "tx.origin")
             role_tokens = ("hasRole(", "_checkRole(", "onlyRole", "role")
             has_caller_check = any(token in definition.body for token in caller_tokens)
