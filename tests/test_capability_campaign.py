@@ -99,3 +99,30 @@ def test_batch_campaign_accepts_capability_resolution_dataclass():
     campaign = build_capability_campaign(statuses, [])
     assert campaign["summary"]["blocked_experiments"] == 1
     assert campaign["capability_clusters"][0]["capability"] == "STATE_SETUP:mapping"
+
+
+def test_campaign_surfaces_unresolved_prerequisite_capability():
+    statuses = [{
+        "hypothesis_id": "H-CRYPTO",
+        "experiment_id": "X-CRYPTO",
+        "class": "callback_state_order",
+        "target_function": "transact",
+        "blind_executed": False,
+        "classification": "NOT_REACHED",
+        "classification_blocked_reason": "security experiment prerequisites are not verified",
+        "prerequisites": {
+            "nodes": [{
+                "kind": "execution_predicate",
+                "subject": "verifyProof(...)",
+                "status": "unresolved",
+                "capability": "CRYPTOGRAPHIC_WITNESS",
+            }]
+        },
+        "capability_resolution": {"gaps": []},
+    }]
+    campaign = build_capability_campaign(statuses, [])
+    assert campaign["summary"]["capability_clusters"] == 1
+    assert campaign["capability_clusters"][0]["capability"] == "CRYPTOGRAPHIC_WITNESS:execution_predicate"
+    assert campaign["blocked_experiments"][0]["required_capabilities"] == [
+        "CRYPTOGRAPHIC_WITNESS:execution_predicate"
+    ]
