@@ -807,9 +807,13 @@ def generate_sequence_test_from_experiment(
                         pass
 
     for parameter in (contract_model.constructor.parameters if contract_model.constructor else ()):
+        # Parameter type metadata may preserve data-location tokens (for
+        # example "address[] memory"). Normalize those tokens before deciding
+        # whether the constructor input is an array.
         parameter_type = parameter.type.strip()
-        base = parameter_type.split()[0].rstrip("[]")
-        if parameter_type.endswith("[]"):
+        normalized_type = parameter_type.split()[0]
+        base = normalized_type.rstrip("[]")
+        if normalized_type.endswith("[]"):
             # Dynamic arrays are valid constructor inputs. Use an empty,
             # compiler-valid memory array instead of treating the whole array
             # surface as an unsupported target-specific case.
