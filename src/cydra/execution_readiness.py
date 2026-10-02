@@ -1193,6 +1193,72 @@ def _classify_internal_predicate(
     return "input_construction"
 
 
+
+def _cryptographic_witness_route(
+    contract: ContractModel,
+    predicate: str,
+) -> str:
+    """Describe the target-derived route behind a cryptographic execution predicate.
+
+    This is provenance, not a witness generator and not proof of satisfiability.
+    The purpose is to turn a lexical CRYPTOGRAPHIC_WITNESS blocker into a
+    concrete next investigation step: identify the verifier/proof call, its
+    modeled inputs, and whether its producer is local or an unresolved
+    external endpoint.
+    """
+    builtin_calls = {
+        "abi.decode", "abi.encode", "abi.encodePacked", "abi.encodeWithSelector",
+        "abi.encodeWithSignature", "abi.encodeCall", "keccak256", "sha256",
+        "ripemd160", "ecrecover", "addmod", "mulmod",
+    }
+    calls = []
+    for match in re.finditer(
+        r"(?P<head>[A-Za-z_]\w*(?:\([^)]*\))?(?:\.[A-Za-z_]\w*)?)\s*\(",
+        predicate,
+    ):
+        head = match.group("head")
+        if head in builtin_calls:
+            continue
+        calls.append(head)
+    if not calls:
+        return (
+            "cryptographic predicate has no non-builtin call-shaped producer in "
+            "the current model; witness provenance remains unresolved"
+        )
+
+    functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
+    by_name = {item.name: item for item in functions}
+    routes = []
+    for call in calls:
+        method = call.rsplit(".", 1)[-1]
+        callee = by_name.get(method)
+        arguments = _call_arguments_from_expression(predicate)
+        if callee is not None:
+            parameter_bindings = []
+            for parameter, argument in zip(callee.parameters, arguments):
+                if parameter.name:
+                    parameter_bindings.append(f"{parameter.name} <- {argument}")
+            params = ", ".join(parameter_bindings) or "arguments not positionally resolved"
+            returns = ", ".join(callee.return_expressions) or "<return expression not modeled>"
+            routes.append(
+                f"target-derived verifier {call}; source={callee.name}; "
+                f"inputs={params}; returns={returns}"
+            )
+        else:
+            receiver = call.rsplit(".", 1)[0] if "." in call else None
+            if receiver:
+                routes.append(
+                    f"external verifier {call}; receiver={receiver}; "
+                    "interface/endpoint must be resolved before witness construction"
+                )
+            else:
+                routes.append(
+                    f"unresolved verifier/proof producer {call}; "
+                    "no compiler-model-resolved local function is available"
+                )
+    return "; ".join(dict.fromkeys(routes))
+
+
 def _internal_execution_requirements(
     contract: ContractModel,
     function: FunctionModel,
@@ -1517,6 +1583,11 @@ def _execution_requirements(
                 )
         if category == "cryptographic_witness" and not modeled_call_branch:
             status = "required"
+            detail = (
+                "cryptographic witness prerequisite; "
+                + _cryptographic_witness_route(contract, predicate)
+                + ". No witness is synthesized at readiness time."
+            )
         if status == "constraint":
             detail = (
                 "source-derived helper return branch is satisfiable by a generic "
@@ -1998,139 +2069,3 @@ def constructible_state_setup_plan(
         # can be established by a verified target transition". Other unresolved
         # prerequisites remain hard blockers, and state with no writer remains
         # unresolved.
-        planned_state_names = set(required_state_names(fn))
-        default_satisfied_states = {
-            state for state in planned_state_names
-            if _state_observation_has_default_solution(contract, fn, state)
-        }
-        all_planned_state_names = set(planned_state_names)
-        planned_state_names.difference_update(default_satisfied_states)
-        state_writer_names = {
-            state: tuple(writer.name for writer in writers_for(state))
-            for state in planned_state_names
-        }
-        hard_blockers = []
-        for item in readiness.blockers:
-            if (
-                item.status == "unresolved"
-                and item.category == "state_observation"
-                and not any(
-                    state in item.subject and state in default_satisfied_states
-                    for state in all_planned_state_names
-                )
-                and any(
-                    state in item.subject and state_writer_names.get(state)
-                    for state in planned_state_names
-                )
-            ):
-                continue
-            hard_blockers.append(item)
-        if hard_blockers:
-            memo[key] = None
-            return None
-        if any(item.kind == "caller_state_dependency" and item.status == "unresolved" for item in readiness.execution_requirements):
-            memo[key] = None
-            return None
-        if any(item.status == "unresolved" for item in readiness.runtime_requirements):
-            memo[key] = None
-            return None
-        if any(
-            item.kind in {"execution_value_dependency", "execution_value_runtime_dependency"}
-            and item.status == "unresolved"
-            for item in readiness.execution_requirements
-        ):
-            memo[key] = None
-            return None
-        if any(item.kind == "execution_predicate" and "polarity could not be established" in item.detail for item in readiness.execution_requirements):
-            memo[key] = None
-            return None
-        actions = []
-        # The readiness surface is the authoritative evidence that a writer is
-        # constructible.  The recursive planner still resolves nested state
-        # prerequisites, but it must not discard an already-proven primitive
-        # writer merely because re-inspecting that writer through a different
-        # call-graph context loses provenance that was established at the
-        # consumer boundary.  This is especially important for inherited
-        # writers whose authorization/state model is assembled across contracts.
-        constructible_candidates = {}
-        for candidate in readiness.state_setup_candidates:
-            if candidate.status != "constructible":
-                continue
-            marker = candidate.source.rsplit(":", 1)[-1]
-            constructible_candidates.setdefault((marker, candidate.subject), candidate)
-
-        for state in required_state_names(fn):
-            if state in default_satisfied_states:
-                continue
-            selected = None
-            for writer in writers_for(state):
-                if writer.name in stack or writer.name == fn.name:
-                    continue
-                primitive = all(
-                    parameter.type.strip().split()[0].rstrip("[]") in {"address", "bool", "string", "bytes"}
-                    or parameter.type.strip().split()[0].rstrip("[]").startswith(("uint", "int", "bytes"))
-                    for parameter in writer.parameters
-                )
-                if not primitive:
-                    continue
-                nested = visit(writer, (*stack, fn.name), depth + 1)
-                if nested is not None:
-                    selected = (*nested, SetupAction(writer.name, caller_role(writer), (*stack, fn.name, state)))
-                    break
-
-                # A constructible candidate has already passed the generic ABI,
-                # runtime-dependency, and authorization checks. If that writer
-                # has no additional state prerequisites of its own, it is safe
-                # to consume that evidence directly instead of inventing a
-                # second target-specific proof path.
-                if constructible_candidates.get((state, writer.name)) is not None:
-                    writer_states = tuple(
-                        item
-                        for item in (
-                            *required_state_names(writer),
-                            *_state_names_from_internal_predicates(contract, writer),
-                        )
-                        if not _state_observation_has_default_solution(contract, writer, item)
-                    )
-                    if not writer_states:
-                        selected = (SetupAction(writer.name, caller_role(writer), (*stack, fn.name, state)),)
-                        break
-            if selected is None:
-                memo[key] = None
-                return None
-            seen = {item.function for item in actions}
-            actions.extend(item for item in selected if item.function not in seen)
-        memo[key] = tuple(actions)
-        return memo[key]
-
-    return visit(function, (), 0) or ()
-
-
-def inspect_execution_readiness(
-    contract: ContractModel,
-    function: FunctionModel | None = None,
-    constraints: tuple[ConstraintEvidence, ...] = (),
-    semantic_evidence: tuple[SemanticRelationshipEvidence, ...] = (),
-    execution_capabilities: frozenset[str] = frozenset(),
-) -> ExecutionReadiness:
-    """Derive target execution prerequisites without making vulnerability claims."""
-    selected = function
-    return ExecutionReadiness(
-        contract=contract.name,
-        constructor_requirements=_constructor_requirements(contract),
-        caller_requirements=_caller_requirements(selected, contract) if selected else (),
-        runtime_requirements=_runtime_requirements(contract, selected) if selected else (),
-        execution_requirements=(
-            (*_execution_requirements(contract, selected, execution_capabilities), *_execution_dataflow_requirements(contract, selected, semantic_evidence, execution_capabilities))
-            if selected else ()
-        ),
-        state_requirements=(
-            (*_state_requirements(contract, selected), *_constraint_state_requirements(selected, constraints))
-            if selected else ()
-        ),
-        state_setup_candidates=(
-            (*_state_setup_candidates(contract, selected, constraints, semantic_evidence),
-             *_internal_state_setup_candidates(contract, selected, semantic_evidence))
-            if selected else ()
-        ),
-    )
