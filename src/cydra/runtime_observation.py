@@ -317,11 +317,11 @@ def plan_public_state_observations(
     # Reuse the same bounded source graph and fail-closed scalar matching used for
     # explicit state predicates; do not infer private storage or compiler slots.
     def scalar_plans_for_predicate(predicate: str, polarity: str = "must_hold") -> list[StateObservationPlan]:
-        normalized = re.sub(r"\\s+", " ", predicate).strip()
+        normalized = re.sub(r"\s+", " ", predicate).strip()
         conjuncts = [item.strip() for item in normalized.split("&&") if item.strip()]
         plans: list[StateObservationPlan] = []
         for conjunct in conjuncts:
-            matches = list(re.finditer(r"(?<![.\\w])(?P<state>[A-Za-z_]\\w*)\\b", conjunct))
+            matches = list(re.finditer(r"(?<![.\w])(?P<state>[A-Za-z_]\w*)\b", conjunct))
             for match in matches:
                 state = match.group("state")
                 if state not in getters:
@@ -329,10 +329,16 @@ def plan_public_state_observations(
                 # Only expose a state identifier when it is actually used as an
                 # operand in a comparison. This avoids treating struct fields or
                 # local variables as target storage observations.
-                if not re.search(rf"(?<![.\\w]){re.escape(state)}\\s*(?:==|!=|>=|<=|>|<)", conjunct) and not re.search(rf"(?:==|!=|>=|<=|>|<)\\s*{re.escape(state)}\\b", conjunct):
+                if not re.search(
+                    rf"(?<![.\w]){re.escape(state)}\s*(?:==|!=|>=|<=|>|<)",
+                    conjunct,
+                ) and not re.search(
+                    rf"(?:==|!=|>=|<=|>|<)\s*{re.escape(state)}\b",
+                    conjunct,
+                ):
                     continue
                 expression = re.sub(
-                    rf"(?<![.\\w]){re.escape(state)}\\b",
+                    rf"(?<![.\w]){re.escape(state)}\b",
                     f"target.{state}()",
                     conjunct,
                     count=1,
