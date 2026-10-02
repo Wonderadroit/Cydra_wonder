@@ -229,7 +229,7 @@ def _source_function_bodies(contract: ContractModel) -> dict[str, str]:
     result: dict[str, str] = {}
     for function in contract.functions:
         match = re.search(
-            rf"\\bfunction\\s+{re.escape(function.name)}\\s*\\(",
+            rf"\bfunction\s+{re.escape(function.name)}\s*\(",
             source,
         )
         if match is None:
@@ -260,7 +260,7 @@ def _caller_state_principal_provenance(
     writes remain unresolved until a stronger provenance model exists.
     """
     assignment = re.compile(
-        rf"\\b{re.escape(principal)}\\s*=\\s*(?:msg\\.sender|_msgSender\\(\\))\\s*;"
+        rf"\b{re.escape(principal)}\s*=\s*(?:msg\.sender|_msgSender\(\))\s*;"
     )
     provenance: list[str] = []
     try:
@@ -268,7 +268,7 @@ def _caller_state_principal_provenance(
     except (OSError, UnicodeError):
         return ()
 
-    constructor_match = re.search(r"\\bconstructor\\s*\\([^)]*\\)[^{]*\\{", source)
+    constructor_match = re.search(r"\bconstructor\s*\([^)]*\)[^{]*\{", source)
     if constructor_match is not None:
         opening = source.find("{", constructor_match.start())
         if opening >= 0:
