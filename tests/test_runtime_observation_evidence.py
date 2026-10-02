@@ -176,14 +176,25 @@ def test_constructible_state_setup_still_blocks_experiment():
         ),
     ))
     assert not can_enter_security_experiment(graph)
+
+def _epoch_plan():
+    return StateObservationPlan(
+        state="allowedRecipient",
+        getter="target.allowedRecipient()",
+        expression="target.allowedRecipient() != address(0)",
+        predicate="allowedRecipient != address(0)",
+        polarity="must_hold",
+        source="Target.sol:10",
+    )
+
 def test_state_observation_records_matching_setup_transition():
     from cydra.execution_readiness import SetupAction
     setup = SetupAction("setRecipient", None, ("act", "allowedRecipient"))
-    observations = observations_from_execution("SETUP-002", (plan,), _execution(), (setup,))
+    observations = observations_from_execution("SETUP-002", (_epoch_plan(),), _execution(), (setup,))
     assert observations[0].transition == "setRecipient"
 
 def test_state_observation_without_matching_setup_transition_has_no_transition():
     from cydra.execution_readiness import SetupAction
     setup = SetupAction("otherSetup", None, ("act", "otherState"))
-    observations = observations_from_execution("SETUP-003", (plan,), _execution(), (setup,))
+    observations = observations_from_execution("SETUP-003", (_epoch_plan(),), _execution(), (setup,))
     assert observations[0].transition is None
