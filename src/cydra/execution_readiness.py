@@ -189,8 +189,8 @@ def _constructor_requirements(contract: ContractModel) -> tuple[ExecutionRequire
 
 def _caller_principal_from_predicate(predicate: str) -> str | None:
     """Extract a principal from a direct caller-to-identifier equality."""
-    caller = r"(?:msg\\.sender|_msgSender\\(\\))"
-    identifier = r"[A-Za-z_]\\w*"
+    caller = r"(?:msg\.sender|_msgSender\(\))"
+    identifier = r"[A-Za-z_]\w*"
     for pattern in (
         rf"^\\s*{caller}\\s*==\\s*(?P<principal>{identifier})\\s*$",
         rf"^\\s*(?P<principal>{identifier})\\s*==\\s*{caller}\\s*$",
@@ -271,7 +271,7 @@ def _constructor_role_grants(contract: ContractModel) -> tuple[tuple[str, str], 
 def _authorization_predicates_from_body(body: str) -> tuple[str, ...]:
     """Extract direct caller predicates from a modifier body conservatively."""
     predicates: list[str] = []
-    for match in re.finditer(r"\\brequire\\s*\\(", body):
+    for match in re.finditer(r"\brequire\s*\(", body):
         opening = body.find("(", match.start())
         depth = 0
         for index in range(opening, len(body)):
