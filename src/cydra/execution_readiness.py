@@ -281,8 +281,15 @@ def _caller_requirements(
         if definition is not None or known_library_caller_modifier:
             caller_tokens = ("msg.sender", "_msgSender()", "tx.origin")
             role_tokens = ("hasRole(", "_checkRole(", "onlyRole", "role")
-            has_caller_check = any(token in definition.body for token in caller_tokens)
-            has_role_check = any(token in definition.body for token in role_tokens)
+            # A known library modifier may be intentionally represented without
+            # its source definition in the bounded target model. Treat the
+            # modifier's documented semantics as sufficient evidence, while
+            # keeping unresolved definitions safe for ordinary modifiers.
+            definition_body = definition.body if definition is not None else ""
+            has_caller_check = known_library_caller_modifier or any(
+                token in definition_body for token in caller_tokens
+            )
+            has_role_check = any(token in definition_body for token in role_tokens)
             if has_caller_check or has_role_check:
                 rendered_args = ", ".join(invocation_args)
                 # Map common modifier semantics to the role they establish.
