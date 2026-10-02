@@ -179,6 +179,41 @@ class RepairProvider:
     description: str
 
 
+# These providers correspond to generic execution abstractions already present in
+# CYDRA's source-backed readiness model. Registering a provider means the generic
+# capability can be exercised and regressed; it does not make an arbitrary target
+# witness satisfiable.
+GENERIC_EXECUTION_PREDICATE_PROVIDERS: tuple[RepairProvider, ...] = (
+    RepairProvider(
+        "LOCAL_EXECUTION",
+        ("internal_execution_predicate", "execution_predicate"),
+        "execution_readiness.local_execution_predicate",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
+        "source-backed local binding and deterministic execution-predicate resolution",
+    ),
+    RepairProvider(
+        "CRYPTOGRAPHIC_WITNESS",
+        ("execution_predicate",),
+        "execution_readiness.cryptographic_witness_provenance",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
+        "generic cryptographic witness provenance and verifier-route analysis; unsupported witness families remain fail-closed",
+    ),
+    RepairProvider(
+        "STATE_OBSERVATION",
+        ("state_predicate", "public_state_observation", "public_scalar", "public_mapping", "state_relation"),
+        "execution_readiness.state_observation",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py", "tests/test_runtime_observation.py", "tests/test_state_relation_observation.py"),
+        "source/compiler-backed state observation and prerequisite resolution",
+    ),
+    RepairProvider(
+        "EXECUTION_READINESS",
+        ("execution_value_runtime_dependency",),
+        "execution_readiness.runtime_dependency_resolution",
+        ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
+        "generic runtime-value dependency discovery and fail-closed readiness",
+    ),
+)
+
 DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
     RepairProvider("CALL_SEQUENCE", ("ordered_steps",), "sequence_foundry.call_sequence",
                    ("python", "-m", "pytest", "tests/test_sequence_foundry.py"),
@@ -217,7 +252,8 @@ DEFAULT_REPAIR_PROVIDERS: tuple[RepairProvider, ...] = (
     RepairProvider("EXECUTION_CONTEXT", ("runtime", "caller", "dependency", "execution_value_runtime_dependency"),
                    "execution_readiness.runtime_context",
                    ("python", "-m", "pytest", "tests/test_execution_readiness.py"),
-                   "deterministic runtime-context construction"),
+                   "deterministic runtime-context construction"),,
+    *GENERIC_EXECUTION_PREDICATE_PROVIDERS,
 )
 
 
@@ -352,6 +388,20 @@ def run_automatic_repair_controller(
             # campaign. Merge it into the next frontier without trusting
             # free-form status text as evidence.
             next_campaign = replay.get("campaign")
+            if isinstance(next_campaign, Mapping):
+                # A provider is not a repair if the exact same capability remains
+                # unresolved after replay. Preserve that boundary explicitly so
+                # the controller cannot report "complete" merely because the
+                # provider itself ran.
+                replay_keys = {
+                    str(cluster.get("capability"))
+                    for cluster in (next_campaign.get("capability_clusters") or ())
+                    if isinstance(cluster, Mapping) and cluster.get("capability")
+                }
+                if requirement.key in replay_keys:
+                    boundary = f"replay_unresolved:{requirement.key}"
+                    if boundary not in boundaries:
+                        boundaries.append(boundary)
             if isinstance(next_campaign, Mapping):
                 old_clusters = list(frontier.get("capability_clusters") or ())
                 new_clusters = list(next_campaign.get("capability_clusters") or ())
