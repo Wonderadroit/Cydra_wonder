@@ -310,8 +310,8 @@ def _caller_state_principal_provenance(
             continue
         role = caller_role(writer, contract)
         if role:
-            return (f"writer {writer.name} is callable as role {role}",)
-        return (f"writer {writer.name} initializes {principal} directly from its caller",)
+            return (f"caller_via:{writer.name}", f"writer_role:{role}")
+        return (f"caller_via:{writer.name}", f"writer initializes {principal} from its caller")
     return ()
 
 
