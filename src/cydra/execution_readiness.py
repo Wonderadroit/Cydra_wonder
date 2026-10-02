@@ -1334,6 +1334,24 @@ def _internal_execution_requirements(
                     name for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
                     if name in set(contract.state_variables)
                 }
+                # Solidity parsing can leave state_variables empty for compact
+                # source-backed models. Recover persistent-value declarations from
+                # the target source so default-state reasoning remains generic.
+                try:
+                    source_state = Path(contract.source).read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    source_state = ""
+                source_state_decl = re.compile(
+                    r"\b(?:mapping\s*\([^;{}]+\)|(?:uint|int|address|bool|bytes(?:\d+)?))\s+"
+                    r"(?:(?:public|private|internal|external|immutable|constant)\s+)*([A-Za-z_]\w*)\s*;"
+                )
+                source_state_names = {
+                    match.group(1) for match in source_state_decl.finditer(source_state)
+                }
+                predicate_state_names.update(
+                    name for name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
+                    if name in source_state_names
+                )
                 # Internal predicates may name a local whose value is sourced
                 # from persistent state. Include those state names in the setup
                 # relation so a constructible mapping writer can satisfy the
