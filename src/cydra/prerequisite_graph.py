@@ -48,9 +48,9 @@ class PrerequisiteGraph:
         return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
 
-def _capability_for_requirement(kind: str) -> str:
+def _capability_for_requirement(kind: str, category: str | None = None) -> str:
     """Map readiness evidence to a stable execution capability name."""
-    mapping = {
+    category_mapping = {\n        "cryptographic_witness": "CRYPTOGRAPHIC_WITNESS",\n        "execution_context": "EXECUTION_CONTEXT",\n        "state_observation": "STATE_OBSERVATION",\n        "local_execution": "LOCAL_EXECUTION",\n        "input_construction": "INPUT_CONSTRUCTION",\n    }\n    if category in category_mapping:\n        return category_mapping[category]\n\n    mapping = {
         "caller_role": "CALLER_CONSTRUCTION",
         "caller_state_dependency": "STATE_SETUP",
         "caller_state_setup_candidate": "STATE_SETUP",
@@ -100,7 +100,7 @@ def build_prerequisite_graph(
                 status=status,
                 source=item.source,
                 verification="runtime_observation_required",
-                capability=_capability_for_requirement(item.kind),
+                capability=_capability_for_requirement(item.kind, item.category),
             )
         )
 
