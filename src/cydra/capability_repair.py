@@ -299,9 +299,9 @@ def run_automatic_repair_controller(
     regression: Callable[[RepairProvider], bool],
     rerun_target: Callable[[RepairRequirement], Mapping[str, object]],
     providers: tuple[RepairProvider, ...] = DEFAULT_REPAIR_PROVIDERS,
-    max_rounds: int = 8,
+    max_rounds: int | None = None,
 ) -> dict[str, object]:
-    """Run a bounded generic repair/replay frontier until it stops changing.
+    """Run the generic repair/replay frontier to semantic convergence.
 
     A replay may expose a new capability cluster. That cluster is merged into
     the frontier and processed in a later round. A repair is never considered
@@ -313,7 +313,9 @@ def run_automatic_repair_controller(
     seen: set[str] = set()
     boundaries: list[str] = []
 
-    for round_number in range(1, max_rounds + 1):
+    round_number = 0
+    while max_rounds is None or round_number < max_rounds:
+        round_number += 1
         plan = derive_repair_plan(frontier)
         actionable = [item for item in plan.actionable if item.key not in seen]
         if not actionable:
