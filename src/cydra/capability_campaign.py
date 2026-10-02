@@ -198,6 +198,41 @@ def build_capability_campaign(
             if hypothesis_id:
                 edges.append({"from": key, "to": hypothesis_id, "type": "blocks"})
 
+    # Planned reasoning surfaces are capability work even when they have no
+    # resolver gap yet. Keep them in the same normalized frontier so the
+    # automatic repair controller can either select a generic provider or record
+    # an explicit implementation boundary. Previously these items were only
+    # emitted under planned_unimplemented, which made them invisible to repair
+    # planning and caused the live exploration frontier to stop at budget 0.
+    for item in planned_unimplemented:
+        if not isinstance(item, dict):
+            continue
+        hypothesis_id = item.get("hypothesis_id")
+        experiment_id = item.get("experiment_id")
+        invariant_id = str(item.get("invariant_id") or "UNKNOWN")
+        capability = str(item.get("capability") or "REASONING_SURFACE")
+        key = capability if ":" in capability else f"{capability}:{invariant_id}"
+        cluster = clusters.setdefault(key, {
+            "capability": key,
+            "count": 0,
+            "hypothesis_ids": [],
+            "experiment_ids": [],
+            "stages": [],
+            "reasons": [],
+        })
+        cluster["count"] += 1
+        if hypothesis_id and hypothesis_id not in cluster["hypothesis_ids"]:
+            cluster["hypothesis_ids"].append(hypothesis_id)
+        if experiment_id and experiment_id not in cluster["experiment_ids"]:
+            cluster["experiment_ids"].append(experiment_id)
+        if "planning" not in cluster["stages"]:
+            cluster["stages"].append("planning")
+        reason = item.get("reason") or "planned reasoning surface has no generic runtime implementation"
+        if reason not in cluster["reasons"]:
+            cluster["reasons"].append(reason)
+        if hypothesis_id:
+            edges.append({"from": key, "to": hypothesis_id, "type": "blocks"})
+
     for item in readiness_by_hypothesis.values():
         resolution = _resolution_mapping(item.get("capability_resolution"))
         if not resolution:
