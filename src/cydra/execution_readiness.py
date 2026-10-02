@@ -2280,6 +2280,10 @@ def constructible_state_setup_plan(
 
     def required_state_names(fn: FunctionModel) -> tuple[str, ...]:
         names = list(_state_names_from_predicates(fn))
+        for predicate in fn.authorization_predicates:
+            principal = _caller_principal_from_predicate(predicate)
+            if principal and _caller_state_principal_provenance(contract, principal) and principal not in names:
+                names.append(principal)
         for constraint in constraints:
             if constraint.function != fn.name or ".length" not in constraint.predicate:
                 continue
@@ -2332,7 +2336,19 @@ def constructible_state_setup_plan(
             for state in planned_state_names
         }
         hard_blockers = []
+        caller_principal_states = {
+            principal
+            for predicate in fn.authorization_predicates
+            for principal in [_caller_principal_from_predicate(predicate)]
+            if principal and _caller_state_principal_provenance(contract, principal)
+        }
         for item in readiness.blockers:
+            if (
+                item.status == "unresolved"
+                and item.kind == "caller_state_principal"
+                and item.subject in caller_principal_states
+            ):
+                continue
             if (
                 item.status == "unresolved"
                 and item.category == "state_observation"
