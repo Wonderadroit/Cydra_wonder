@@ -15,6 +15,11 @@ from typing import Any
 
 from run_benchmark_blind import SUPPORTED_CLASSES, run_source_investigation
 from cydra.capability_campaign import merge_campaigns
+from cydra.capability_repair import (
+    RepairRequirement,
+    build_automatic_repair_plan,
+    run_automatic_repair_controller,
+)
 
 
 REQUIRED_KEYS = {
@@ -121,6 +126,99 @@ def prepare_shared_dependencies(checkout: Path, temp_root: Path) -> dict[str, st
         environment["CYDRA_OPENZEPPELIN_UPGRADEABLE"] = os.fspath(oz_upgradeable)
 
     return environment
+
+
+def run_automatic_repairs_for_source(
+    *,
+    source: str,
+    result: dict[str, Any],
+    spec: dict[str, Any],
+    checkout: Path,
+    output: Path,
+    child_env: dict[str, str],
+    round_number: int,
+) -> dict[str, Any]:
+    """Regress known generic capabilities and replay the exact frozen target."""
+    classification = result.get("classification") or {}
+    campaign = {
+        "capability_clusters": [
+            {
+                "capability": key,
+                "count": count,
+                "hypothesis_ids": [],
+                "experiment_ids": [],
+                "stages": [],
+                "reasons": [],
+            }
+            for key, count in (classification.get("capability_clusters") or {}).items()
+        ]
+    }
+    automatic_plan = classification.get("automatic_repair")
+    if automatic_plan is None:
+        automatic_plan = build_automatic_repair_plan(campaign)
+    if not automatic_plan.get("requirements"):
+        return {"status": "no_requirements", "attempts": []}
+
+    repair_root = output / "automatic-repair" / f"round-{round_number:02d}" / f"{len(source):04d}-{Path(source).stem}"
+    repair_root.mkdir(parents=True, exist_ok=True)
+
+    def regression(provider) -> bool:
+        environment = os.environ.copy()
+        environment.update(child_env)
+        command = list(provider.regression_command)
+        completed = subprocess.run(
+            command,
+            cwd=Path(__file__).resolve().parents[1],
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        (repair_root / "regression.stdout.txt").write_text(completed.stdout, encoding="utf-8")
+        (repair_root / "regression.stderr.txt").write_text(completed.stderr, encoding="utf-8")
+        write_json(repair_root / "regression.json", {
+            "provider": provider.implementation_id,
+            "command": command,
+            "exit_code": completed.returncode,
+            "passed": completed.returncode == 0,
+        })
+        return completed.returncode == 0
+
+    def replay(requirement: RepairRequirement) -> Mapping[str, object]:
+        replay_artifact = repair_root / "replay" / f"{requirement.key.replace(':', '__')}"
+        replay_artifact.mkdir(parents=True, exist_ok=True)
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        previous_env = os.environ.copy()
+        try:
+            os.environ.update(child_env)
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = run_source_investigation(
+                    target_repo=checkout.as_uri(),
+                    target_ref=spec["target_ref"],
+                    target_path=source,
+                    target_project=spec["project_path"],
+                    classes=tuple(sorted(SUPPORTED_CLASSES)),
+                    freeze=replay_artifact / "freeze",
+                )
+        finally:
+            os.environ.clear()
+            os.environ.update(previous_env)
+        (replay_artifact / "runner.stdout.txt").write_text(stdout.getvalue(), encoding="utf-8")
+        (replay_artifact / "runner.stderr.txt").write_text(stderr.getvalue(), encoding="utf-8")
+        return {
+            "exit_code": exit_code,
+            "artifact": str(replay_artifact.relative_to(output)),
+            "target_ref": spec["target_ref"],
+            "hypothesis_ids": list(requirement.affected_hypothesis_ids),
+            "experiment_ids": list(requirement.affected_experiment_ids),
+        }
+
+    return run_automatic_repair_controller(
+        campaign,
+        regression=regression,
+        rerun_target=replay,
+    )
 
 
 def main() -> int:
@@ -280,6 +378,30 @@ def main() -> int:
                     "class": hypothesis.get("class"),
                 })
 
+    automatic_repairs = []
+    for result in results:
+        if not result.get("ok"):
+            continue
+        repair = run_automatic_repairs_for_source(
+            source=result["source"],
+            result=result,
+            spec=spec,
+            checkout=checkout,
+            output=output,
+            child_env=child_env,
+            round_number=1,
+        )
+        automatic_repairs.append({
+            "source": result["source"],
+            "repair": repair,
+        })
+    write_json(output / "automatic-repair.json", {
+        "schema_version": 1,
+        "mode": "automatic_generic_repair",
+        "target_ref": frozen,
+        "repairs": automatic_repairs,
+    })
+
     summary = {
         "status": "completed",
         "target_ref": frozen,
@@ -287,6 +409,7 @@ def main() -> int:
         "sources_completed": sum(1 for item in results if item["ok"]),
         "sources_failed": sum(1 for item in results if not item["ok"]),
         "confirmed_candidates": confirmed,
+        "automatic_repairs": automatic_repairs,
         "results": results,
         "note": "A confirmed candidate still requires causal and independent human validation before submission.",
     }
