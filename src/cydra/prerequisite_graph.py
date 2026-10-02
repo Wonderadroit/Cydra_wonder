@@ -115,7 +115,12 @@ def build_prerequisite_graph(
             )
         )
 
-    state_subjects = {item.subject for item in readiness.state_requirements}
+    state_requirement_kinds = {"state_predicate", "state_dependency", "execution_state_dependency"}
+    state_subjects = {
+        item.subject
+        for item in requirements
+        if item.kind in state_requirement_kinds
+    }
     for action in setup_actions:
         provenance_state = action.provenance[-1] if action.provenance else None
         dependencies = tuple(
