@@ -1347,7 +1347,7 @@ def _classify_internal_predicate(
             return "cryptographic_witness"
 
     if any(term in normalized for term in (
-        "signature", "digest", "hash", "recover", "ecrecover", "ecdsa",
+        "signature", "recover", "ecrecover", "ecdsa",
         "proof", "nonce", "typeddata", "domainseparator",
     )):
         return "cryptographic_witness"
