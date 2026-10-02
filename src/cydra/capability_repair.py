@@ -272,38 +272,97 @@ def run_automatic_repair_controller(
     providers: tuple[RepairProvider, ...] = DEFAULT_REPAIR_PROVIDERS,
     max_rounds: int = 8,
 ) -> dict[str, object]:
-    """Regress each registered generic capability, replay the same target, then continue.
+    """Run a bounded generic repair/replay frontier until it stops changing.
 
-    No target code is changed and no security result is inferred. If no generic
-    provider exists, the controller stops fail-closed at the implementation boundary.
+    A replay may expose a new capability cluster. That cluster is merged into
+    the frontier and processed in a later round. A repair is never considered
+    successful merely because its regression passed: the frozen-target replay
+    must complete and may expose additional prerequisites.
     """
-    plan = derive_repair_plan(campaign)
+    frontier = dict(campaign)
     attempts: list[dict[str, object]] = []
     seen: set[str] = set()
 
-    for requirement in plan.actionable:
-        if len(attempts) >= max_rounds:
-            return {"schema_version": 1, "mode": "automatic_generic_repair",
-                    "status": "repair_budget_exhausted", "attempts": attempts}
-        if requirement.key in seen:
-            continue
-        seen.add(requirement.key)
-        provider = repair_provider_for(requirement, providers)
-        if provider is None:
-            attempts.append({"requirement": requirement.key, "status": "UNIMPLEMENTED",
-                             "message": "no registered generic implementation; fail-closed",
-                             "rerun_requested": False})
-            return {"schema_version": 1, "mode": "automatic_generic_repair",
-                    "status": "implementation_boundary", "attempts": attempts}
-        if not regression(provider):
-            attempts.append({"requirement": requirement.key, "provider": provider.implementation_id,
-                             "status": "REGRESSION_FAILED", "rerun_requested": False})
-            return {"schema_version": 1, "mode": "automatic_generic_repair",
-                    "status": "regression_failed", "attempts": attempts}
-        replay = dict(rerun_target(requirement))
-        attempts.append({"requirement": requirement.key, "provider": provider.implementation_id,
-                         "status": "REPLAYED", "regression_passed": True,
-                         "rerun_requested": True, "replay": replay})
+    for round_number in range(1, max_rounds + 1):
+        plan = derive_repair_plan(frontier)
+        actionable = [item for item in plan.actionable if item.key not in seen]
+        if not actionable:
+            return {
+                "schema_version": 1,
+                "mode": "automatic_generic_repair",
+                "status": "complete" if attempts else "no_requirements",
+                "rounds": round_number - 1,
+                "attempts": attempts,
+            }
 
-    return {"schema_version": 1, "mode": "automatic_generic_repair",
-            "status": "complete" if attempts else "no_requirements", "attempts": attempts}
+        progressed = False
+        for requirement in actionable:
+            seen.add(requirement.key)
+            provider = repair_provider_for(requirement, providers)
+            if provider is None:
+                attempts.append({
+                    "round": round_number,
+                    "requirement": requirement.key,
+                    "status": "UNIMPLEMENTED",
+                    "message": "no registered generic implementation; fail-closed",
+                    "rerun_requested": False,
+                })
+                return {
+                    "schema_version": 1,
+                    "mode": "automatic_generic_repair",
+                    "status": "implementation_boundary",
+                    "rounds": round_number,
+                    "attempts": attempts,
+                }
+
+            if not regression(provider):
+                attempts.append({
+                    "round": round_number,
+                    "requirement": requirement.key,
+                    "provider": provider.implementation_id,
+                    "status": "REGRESSION_FAILED",
+                    "rerun_requested": False,
+                })
+                return {
+                    "schema_version": 1,
+                    "mode": "automatic_generic_repair",
+                    "status": "regression_failed",
+                    "rounds": round_number,
+                    "attempts": attempts,
+                }
+
+            replay = dict(rerun_target(requirement))
+            attempt = {
+                "round": round_number,
+                "requirement": requirement.key,
+                "provider": provider.implementation_id,
+                "status": "REPLAYED",
+                "regression_passed": True,
+                "rerun_requested": True,
+                "replay": replay,
+            }
+            attempts.append(attempt)
+            progressed = True
+
+            # The replay contract may return a newly observed capability
+            # campaign. Merge it into the next frontier without trusting
+            # free-form status text as evidence.
+            next_campaign = replay.get("campaign")
+            if isinstance(next_campaign, Mapping):
+                old_clusters = list(frontier.get("capability_clusters") or ())
+                new_clusters = list(next_campaign.get("capability_clusters") or ())
+                frontier["capability_clusters"] = old_clusters + [
+                    cluster for cluster in new_clusters
+                    if isinstance(cluster, Mapping)
+                ]
+
+        if not progressed:
+            break
+
+    return {
+        "schema_version": 1,
+        "mode": "automatic_generic_repair",
+        "status": "repair_budget_exhausted",
+        "rounds": max_rounds,
+        "attempts": attempts,
+    }
