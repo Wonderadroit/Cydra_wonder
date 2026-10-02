@@ -1226,7 +1226,7 @@ def test_sequence_renderer_materializes_dynamic_constructor_array(tmp_path):
         str(target),
         (FunctionModel("ping", "external", (), (), (), 4),),
         constructor=ConstructorModel(
-            (ParameterModel("initialRecipients", "address[]", "memory"),),
+            (ParameterModel("initialRecipients", "address[] memory", "memory"),),
             3,
         ),
     )
