@@ -1182,3 +1182,19 @@ def test_unresolved_crypto_predicate_remains_explicit():
     route = _cryptographic_witness_route(contract, "verifier.verifyProof(proof)")
     assert "external verifier verifier.verifyProof" in route
     assert "must be resolved before witness construction" in route
+
+
+def test_deterministic_local_execution_predicate_is_generic_input_constraint():
+    from cydra.execution_readiness import inspect_execution_readiness
+    from cydra.models import ContractModel, FunctionModel, ParameterModel
+    function = FunctionModel(
+        "run", "external", (), (), (), 1,
+        parameters=(ParameterModel("amount", "uint256"),),
+        execution_predicates=("localValue > 0",),
+        execution_predicate_polarities=(("localValue > 0", "must_hold"),),
+        execution_value_bindings=(("localValue", "amount + 1"),),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    requirement = next(item for item in readiness.execution_requirements if item.kind == "execution_predicate")
+    assert requirement.category == "local_execution"
+    assert requirement.status == "constraint"
