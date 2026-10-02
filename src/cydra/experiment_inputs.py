@@ -517,7 +517,12 @@ def plan_parameter_inputs(
         parameter_list, constraints, function_name=function_name
     )
     by_index = {candidate.parameter_index: candidate.value for candidate in selected}
-    return tuple(
+    planned = tuple(
         by_index.get(index, safe_defaults.get(parameter.name, ""))
         for index, parameter in enumerate(parameter_list)
     )
+    # Never emit an incomplete ABI vector. An empty slot is not a Solidity
+    # value and must remain a capability gap for the renderer/materializer.
+    if any(not value.strip() for value in planned):
+        return ()
+    return planned
