@@ -1313,7 +1313,7 @@ def _internal_execution_requirements(
                     predicate,
                     execution_capabilities,
                 )
-                if category in {"cryptographic_witness", "execution_context", "local_execution"}:
+                if category in {"cryptographic_witness", "execution_context"}:
                     constraint = False
                 if forwarded_caller_inputs and any(
                     parameter_name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
