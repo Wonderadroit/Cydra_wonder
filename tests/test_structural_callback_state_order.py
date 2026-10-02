@@ -53,3 +53,38 @@ def test_callback_state_order_surface_detects_external_interface_call_then_write
         if item.hypothesis_id == "H-CALLBACK-STATE-ORDER-act"
     )
     assert hypothesis.invariant_id == "INV-CALLBACK-STATE-ORDER-act"
+
+
+def test_callback_state_order_surface_rejects_reentrant_public_wrapper_with_non_reentrant_guard(tmp_path: Path):
+    source = tmp_path / "GuardedCallback.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract GuardedCallback {
+            mapping(address => uint256) public lastTrade;
+            bool internal locked;
+
+            modifier nonReentrant() {
+                require(!locked);
+                locked = true;
+                _;
+                locked = false;
+            }
+
+            function trade() external nonReentrant {
+                _trade();
+            }
+
+            function _trade() internal {
+                payable(msg.sender).transfer(msg.value);
+                lastTrade[msg.sender] = block.timestamp;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    result = investigate(source)
+    assert not any(
+        item.hypothesis_id == "H-CALLBACK-STATE-ORDER-trade"
+        for item in result.hypotheses
+    )
