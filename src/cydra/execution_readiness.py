@@ -1874,12 +1874,54 @@ def _execution_requirements(
                     "target-derived constructible setup transition"
                 )
         if category == "cryptographic_witness" and not modeled_call_branch:
-            status = "required"
-            detail = (
-                "cryptographic witness prerequisite; "
-                + _cryptographic_witness_route(contract, predicate)
-                + ". No witness is synthesized at readiness time."
+            # A negative verification predicate is a constructible prerequisite
+            # when the target's own ABI/type model can materialize an explicitly
+            # empty/zero signature witness. The evidence must come from the
+            # source-backed type materializer; do not infer this from names alone.
+            negative_crypto = bool(
+                re.fullmatch(
+                    r"!\s*[A-Za-z_]\\w*|[A-Za-z_]\\w*\\s*==\\s*false",
+                    predicate.strip(),
+                )
             )
+            negative_witness = False
+            if negative_crypto:
+                try:
+                    from .experiment_inputs import prove_parameter_materialization
+                    proofs = prove_parameter_materialization(function.parameters, contract)
+                    if proofs:
+                        provenance = " ".join(
+                            item
+                            for proof in proofs
+                            for item in proof.provenance
+                        ).lower()
+                        expression = " ".join(proof.expression for proof in proofs).lower()
+                        has_crypto_field = any(
+                            token in provenance
+                            for token in ("signature", ".sig:", ".v:", ".r:", ".s:", "proof")
+                        )
+                        has_empty_witness = (
+                            'bytes("")' in expression
+                            or "bytes32(0)" in expression
+                            or re.search(r"\\bv\\s*[:=].*?0", expression) is not None
+                        )
+                        negative_witness = has_crypto_field and has_empty_witness
+                except (OSError, ValueError, TypeError):
+                    negative_witness = False
+            if negative_witness:
+                status = "constraint"
+                detail = (
+                    "source-backed recursive ABI materialization provides a "
+                    "deterministic empty/zero cryptographic witness for the "
+                    "target's explicit negative verification branch"
+                )
+            else:
+                status = "required"
+                detail = (
+                    "cryptographic witness prerequisite; "
+                    + _cryptographic_witness_route(contract, predicate)
+                    + ". No witness is synthesized at readiness time."
+                )
         if status == "constraint":
             detail = (
                 "source-derived helper return branch is satisfiable by a generic "
