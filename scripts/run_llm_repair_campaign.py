@@ -72,9 +72,21 @@ def output_text(response) -> str:
 
 
 def files_for(capability: str) -> list[str]:
-    hit = run(
-        ["rg", "-l", "--hidden", "--glob", "!.git", capability, "src", "tests", "scripts"]
-    )
+    """Find relevant source files without relying on an external search binary."""
+    matches: list[str] = []
+    for root_name in ("src", "tests", "scripts"):
+        root = ROOT / root_name
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or ".git" in path.parts:
+                continue
+            try:
+                text = path.read_text(errors="replace")
+            except OSError:
+                continue
+            if capability in text:
+                matches.append(path.relative_to(ROOT).as_posix())
     return list(
         dict.fromkeys(
             [
@@ -83,10 +95,9 @@ def files_for(capability: str) -> list[str]:
                 "src/cydra/capability_repair.py",
                 "scripts/run_live_contest.py",
             ]
-            + (hit.stdout.splitlines() if hit.returncode == 0 else [])[:25]
+            + sorted(matches)[:25]
         )
     )
-
 
 def context(artifact: Path, capability: str) -> str:
     campaign_path = artifact / "capability_campaign.json"
