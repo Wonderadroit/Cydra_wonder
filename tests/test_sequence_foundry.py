@@ -1279,3 +1279,21 @@ def test_sequence_renderer_materializes_dynamic_constructor_array(tmp_path):
     rendered = generated.read_text(encoding="utf-8")
     assert "new Target(new address[](0))" in rendered
     assert "target.ping();" in rendered
+
+
+def test_sequence_renderer_fails_closed_on_missing_step(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { function ping() external {} }",
+        encoding="utf-8",
+    )
+    model = ContractModel("Target", str(source), (FunctionModel("ping", "external", (), (), (), 4),))
+    hypothesis = Hypothesis("H-MISSING-STEP", "candidate", "INV-MISSING-STEP", "ping", "attacker", "candidate")
+    experiment = Experiment(
+        "X-MISSING-STEP", hypothesis.hypothesis_id, "ping", ("violation",), 1.0, steps=(None,)
+    )
+    with pytest.raises(ValueError, match="CALL_SEQUENCE: prerequisite step 0 is unavailable"):
+        generate_sequence_test_from_experiment(
+            hypothesis, experiment, "../Target.sol", "Target",
+            tmp_path / "test" / "generated.t.sol", model,
+        )
