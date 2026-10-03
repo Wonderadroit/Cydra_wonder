@@ -260,7 +260,7 @@ def _deterministic_local_setups(
 ) -> tuple[str, ...] | None:
     """Materialize a bounded self-accumulating local from public target state."""
     bindings = dict(function.execution_value_bindings)
-    identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
+    identifiers = set(re.findall(r"(?<![.\w])[A-Za-z_]\w*\b", predicate))
     builtin_names = {
         "abi", "bytes", "concat", "keccak256", "sha256", "ripemd160",
         "ecrecover", "address", "true", "false", "this",
