@@ -184,7 +184,7 @@ def _attach_input_plan(
     placeholder against the peer function's actual parameter model. No invariant
     class or benchmark-specific knowledge is used here.
     """
-    function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+    function = next((item for item in (*contract.functions, *contract.inherited_functions) if item is not None and item.name == hypothesis.target_function), None)
     bound = experiment
     if function is not None:
         planned_defaults = _planned_defaults(tuple(function.parameters), experiment.planned_inputs)
@@ -212,7 +212,7 @@ def _attach_input_plan(
     if not bound.steps:
         return bound
 
-    functions = {item.name: item for item in contract.functions}
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions) if item is not None}
     planned_steps: list[ExperimentStep] = []
     for step in bound.steps:
         step_function = functions.get(step.function)
