@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 import urllib.error
@@ -103,6 +104,10 @@ def patch_paths_are_safe() -> tuple[bool, str]:
     if diff.returncode != 0:
         return False, diff.stderr[:4000]
     paths = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
+    status = run(["git", "status", "--porcelain"])
+    if status.returncode != 0:
+        return False, status.stderr[:4000]
+    paths.extend(line[3:].strip() for line in status.stdout.splitlines() if line.startswith("?? "))
     unsafe = [
         path for path in paths
         if path.startswith(FORBIDDEN_PATCH_ROOTS)
@@ -151,13 +156,17 @@ def main() -> int:
         "live-artifacts",
     ]
 
+    blocked_capabilities: set[str] = set()
     for attempt in range(1, MAX_ATTEMPTS + 1):
         if time.time() - started >= MAX_HOURS * 3600:
             break
 
         print(f"=== autonomous repair/replay cycle {attempt} ===")
-        result = run(target)
         artifact = ROOT / "live-artifacts"
+        if artifact.exists():
+            shutil.rmtree(artifact)
+        artifact.mkdir(parents=True, exist_ok=True)
+        result = run(target)
         campaign_path = artifact / "capability_campaign.json"
         campaign = json.loads(campaign_path.read_text()) if campaign_path.exists() else {}
         clusters = campaign.get("capability_clusters") or []
@@ -166,7 +175,11 @@ def main() -> int:
             print("No capability frontier remains.")
             return 0
 
-        capability = str(clusters[0].get("capability") or "")
+        available = [cluster for cluster in clusters if str(cluster.get("capability") or "") not in blocked_capabilities]
+        if not available:
+            print("No unblocked capability frontier remains.")
+            return 0
+        capability = str(available[0].get("capability") or "")
         if not capability:
             print("Capability frontier entry has no capability name; failing closed.")
             return 0
@@ -188,11 +201,13 @@ def main() -> int:
 
         if proposal.get("decision") != "PATCH":
             print("LLM boundary:", proposal.get("reason", ""))
-            return 0
+            blocked_capabilities.add(capability)
+            continue
 
         ok, message = apply_patch(str(proposal.get("patch") or ""))
         print("patch:", ok, message)
         if not ok:
+            blocked_capabilities.add(capability)
             continue
 
         # The model never supplies the executable test command. CYDRA owns the
@@ -202,6 +217,7 @@ def main() -> int:
         if regression.returncode != 0:
             print("regression failed; reverting patch and continuing")
             run(["git", "reset", "--hard", "HEAD"])
+            blocked_capabilities.add(capability)
             continue
 
         print("regression passed; replaying exact frozen target on next cycle.")
