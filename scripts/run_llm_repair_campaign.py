@@ -9,11 +9,14 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = os.getenv("CYDRA_LLM_MODEL", "gpt-5.6-sol")
+PROVIDER = os.getenv("CYDRA_LLM_PROVIDER", "openai").strip().lower()
+MODEL = os.getenv("CYDRA_LLM_MODEL", "openrouter/free" if PROVIDER == "openrouter" else "gpt-5.6-sol")
+BASE_URL = os.getenv("CYDRA_LLM_BASE_URL", "https://openrouter.ai/api/v1" if PROVIDER == "openrouter" else "https://api.openai.com/v1").rstrip("/")
+API_KEY = os.getenv("CYDRA_LLM_API_KEY", "").strip() or os.getenv("OPENROUTER_API_KEY" if PROVIDER == "openrouter" else "OPENAI_API_KEY", "").strip()
 MAX_HOURS = float(os.getenv("CYDRA_EMERGENCY_MAX_HOURS", "6"))
 MAX_ATTEMPTS = int(os.getenv("CYDRA_LLM_MAX_ATTEMPTS", "20"))
 ALLOWED_PATCH_ROOTS = ("src/cydra/", "tests/", "scripts/")
-FORBIDDEN_PATCH_ROOTS = (".github/", "targets/", ".git/")
+FORBIDDEN_PATCH_ROOTS = (".github/", "targets/", ".git/", "scripts/run_llm_repair_campaign.py")
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
@@ -21,7 +24,7 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def api(prompt: str):
-    key = os.getenv("OPENAI_API_KEY", "").strip()
+    key = API_KEY
     if not key:
         return None
     body = {
@@ -39,7 +42,7 @@ def api(prompt: str):
         "max_output_tokens": 14000,
     }
     req = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
+        f"{BASE_URL}/responses",
         data=json.dumps(body).encode(),
         headers={
             "Authorization": "Bearer " + key,
