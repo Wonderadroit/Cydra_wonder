@@ -346,7 +346,7 @@ def plan_public_state_observations(
     # State may be inherited from a base contract or declared in an imported
     # source unit. The observation surface is the bounded target source graph,
     # not just the concrete contract file.
-    getters = _public_scalar_getters_from_sources(sources) | _public_state_names_from_sources(sources)
+    getters = _public_scalar_getters_from_sources(sources)
     polarities = dict(function.state_predicate_polarities)
     plans: list[StateObservationPlan] = []
 
@@ -475,9 +475,9 @@ def plan_public_state_observations(
                 state = match.group("state")
                 if state in getters:
                     candidate_states.append(state)
+            setup = _deterministic_local_setups(function, sources, conjunct, getters)
             if not candidate_states:
                 continue
-            setup = _deterministic_local_setups(function, sources, conjunct, getters)
             if setup is None:
                 parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
                 unresolved = {
