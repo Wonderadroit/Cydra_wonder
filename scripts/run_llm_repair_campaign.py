@@ -135,8 +135,8 @@ def apply_patch(patch: str) -> tuple[bool, str]:
 
 
 def main() -> int:
-    if not os.getenv("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY absent; LLM repair disabled.")
+    if not API_KEY:
+        print("No LLM API key configured for provider:", PROVIDER)
         return 0
 
     started = time.time()
