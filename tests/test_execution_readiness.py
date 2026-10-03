@@ -1541,7 +1541,7 @@ def test_execution_readiness_resolves_named_return_internal_producer_guard(tmp_p
         if item.subject == "deploy: contractAddress == address(0)"
     )
     assert internal.status == "constraint"
-    assert internal.category == "local_execution"
+    assert internal.category == "input_construction"
     assert not any(
         item.kind in {"execution_value_dependency", "execution_value_runtime_dependency"}
         and item.status == "unresolved"
