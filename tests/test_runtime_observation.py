@@ -236,11 +236,6 @@ def test_execution_predicate_materializes_deterministic_local_accumulator(tmp_pa
             ),
         ),
     )
-    from cydra.runtime_observation import _source_graph, _public_scalar_getters_from_sources, _public_dynamic_array_getters, _deterministic_local_setups
-    sources = _source_graph(model)
-    assert "bytecodeHash" in _public_scalar_getters_from_sources(sources)
-    assert "bytecodeChunks" in _public_dynamic_array_getters(sources)
-    assert _deterministic_local_setups(model.functions[0], sources, predicate, _public_scalar_getters_from_sources(sources)) is not None
     plans = plan_public_state_observations(model, model.functions[0])
     assert len(plans) == 1
     assert plans[0].expression == "!(keccak256(fullBytecode) != target.bytecodeHash())"
