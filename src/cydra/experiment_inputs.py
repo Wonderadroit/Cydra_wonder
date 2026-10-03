@@ -521,6 +521,45 @@ def plan_parameter_inputs(
         by_index.get(index, safe_defaults.get(parameter.name, ""))
         for index, parameter in enumerate(parameter_list)
     )
+
+    # Generic negative cryptographic witnesses: when the target explicitly
+    # requires a verifier result to be false (for example !verified) and the
+    # modeled provenance shows ECDSA/ecrecover, deterministic zero/empty
+    # signature components are a safe way to exercise the negative branch.
+    # This does not assert any security outcome; it only constructs the
+    # source-derived prerequisite represented by the predicate.
+    if contract_model is not None and function_name:
+        functions = {
+            item.name: item
+            for item in (*contract_model.functions, *contract_model.inherited_functions)
+            if item is not None
+        }
+        function = functions.get(function_name)
+        if function is not None:
+            negative_crypto = any(
+                re.fullmatch(r"!\s*[A-Za-z_]\\w*|[A-Za-z_]\\w*\\s*==\\s*false", predicate.strip())
+                and any(
+                    term in " ".join(function.execution_value_bindings).lower()
+                    for term in ("ecdsa", "ecrecover", "recover")
+                )
+                for predicate in function.execution_predicates
+            )
+            if negative_crypto:
+                adjusted = list(planned)
+                for index, parameter in enumerate(parameter_list):
+                    name = (parameter.name or "").lower()
+                    base = parameter.type.strip().split()[0].rstrip("[]")
+                    if base == "bytes":
+                        if any(token in name for token in ("signature", "sig", "proof")):
+                            adjusted[index] = 'bytes("")'
+                    elif base.startswith("bytes") and base[5:].isdigit():
+                        if any(token in name for token in ("r", "s", "signature", "sig", "proof")):
+                            adjusted[index] = f"{base}(0)"
+                    elif base.startswith("uint"):
+                        if name in {"v", "recovery", "recoveryid"}:
+                            adjusted[index] = "0"
+                planned = tuple(adjusted)
+
     # Never emit an incomplete ABI vector. An empty slot is not a Solidity
     # value and must remain a capability gap for the renderer/materializer.
     if any(not value.strip() for value in planned):
