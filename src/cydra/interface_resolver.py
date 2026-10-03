@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import json
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,17 @@ _FUNCTION_RE = re.compile(
     r"\bfunction\s+(\w+)\s*\(([^)]*)\)\s*([^;{]*)\breturns\s*\(([^)]*)\)\s*;",
     re.MULTILINE,
 )
-_IMPORT_RE = re.compile(r"\bimport\s+(?:[^\"]*from\s+)?\"([^\"]+)\"\s*;", re.MULTILINE)
+_IMPORT_RE = re.compile(
+    r'\bimport\s+(?:(?:\{[^}]*\}|\*\s+as\s+[A-Za-z_]\w*|[^;]*?)\s+from\s+)?["\']([^"\']+)["\']\s*;',
+    re.MULTILINE,
+)
+# Minimal import grammar used as a bounded fallback for compact/generated
+# Solidity fixtures. It intentionally captures only the source path; symbol
+# resolution remains bounded to that explicitly declared import edge.
+_SIMPLE_IMPORT_RE = re.compile(
+    r'\bimport\s+(?:\{[^}]*\}\s+from\s+|\*\s+as\s+[A-Za-z_]\w*\s+from\s+)?["\']([^"\']+)["\']\s*;',
+    re.MULTILINE,
+)
 _REMAP_RE = re.compile(r"^\s*([^=\s]+)\s*=\s*(\S+)\s*$")
 _DECLARED_TYPE_RE = re.compile(
     r"^\s*(?:struct\s+(?P<struct>[A-Za-z_]\w*)\s*\{|"
@@ -98,6 +109,75 @@ def _split_parameters(text: str) -> tuple[str, ...]:
     return tuple(parts)
 
 
+def _foundry_remappings(root: str | Path) -> tuple[tuple[str, str], ...]:
+    """Read explicit remappings from foundry.toml without requiring a TOML package."""
+    path = Path(root) / "foundry.toml"
+    if not path.exists():
+        return ()
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ()
+    match = re.search(r"(?m)^\s*remappings\s*=\s*\[([^\]]*)\]", source)
+    if not match:
+        return ()
+    result: list[tuple[str, str]] = []
+    for item in re.finditer(r'"([^"]+)"', match.group(1)):
+        parsed = _REMAP_RE.match(item.group(1))
+        if parsed:
+            result.append(parsed.groups())
+    return tuple(result)
+
+
+def _dependency_roots(root: str | Path) -> tuple[Path, ...]:
+    """Return bounded Foundry/npm dependency roots used by the target adapter."""
+    root = Path(root).resolve()
+    roots: list[Path] = []
+    for name in ("lib", "node_modules"):
+        candidate = root / name
+        if candidate.is_dir() and candidate not in roots:
+            roots.append(candidate)
+    return tuple(roots)
+
+
+def _dependency_package_dirs(root: str | Path) -> tuple[Path, ...]:
+    """Return bounded direct dependency package directories, including npm scopes."""
+    result: list[Path] = []
+    for dependency_root in _dependency_roots(root):
+        try:
+            children = tuple(sorted(dependency_root.iterdir(), key=lambda item: item.name))
+        except OSError:
+            continue
+        for child in children:
+            if not child.is_dir():
+                continue
+            result.append(child)
+            # npm scoped packages live one level below the scope directory,
+            # e.g. node_modules/@openzeppelin/contracts. Keep this bounded to
+            # the package-manager's direct scope layout; never recursively scan
+            # arbitrary dependency trees.
+            if child.name.startswith("@"):
+                try:
+                    scoped = tuple(sorted(child.iterdir(), key=lambda item: item.name))
+                except OSError:
+                    continue
+                result.extend(item for item in scoped if item.is_dir())
+    return tuple(dict.fromkeys(result))
+
+
+def _package_name(path: Path) -> str | None:
+    """Read an optional package manifest name for dependency provenance."""
+    manifest = path / "package.json"
+    if not manifest.is_file():
+        return None
+    try:
+        value = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    name = value.get("name") if isinstance(value, dict) else None
+    return name if isinstance(name, str) and name else None
+
+
 def parse_remappings(root: str | Path) -> tuple[tuple[str, str], ...]:
     root = Path(root)
     path = root / "remappings.txt"
@@ -114,12 +194,21 @@ def parse_remappings(root: str | Path) -> tuple[tuple[str, str], ...]:
     return tuple(result)
 
 
+def _resolve_source_path(root: str | Path, source_path: str | Path) -> Path:
+    """Resolve a source path relative to the declared project root when needed."""
+    root = Path(root).resolve()
+    path = Path(source_path)
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve()
+
+
 def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> tuple[Path, str] | None:
     root = Path(root).resolve()
-    importer = Path(importer).resolve()
-    remappings = parse_remappings(root)
+    importer = _resolve_source_path(root, importer)
+    remappings = (*parse_remappings(root), *_foundry_remappings(root))
 
-    for prefix, destination in sorted(remappings, key=lambda item: len(item[0]), reverse=True):
+    for prefix, destination in sorted(dict.fromkeys(remappings), key=lambda item: len(item[0]), reverse=True):
         if import_path.startswith(prefix):
             candidate = root / destination / import_path[len(prefix):]
             if candidate.is_file():
@@ -137,47 +226,137 @@ def resolve_import(root: str | Path, importer: str | Path, import_path: str) -> 
     if repository_relative.is_file():
         return repository_relative, "project_relative"
 
+    # Foundry's auto-detected dependency remappings may not exist in
+    # remappings.txt or foundry.toml. Resolve them only inside declared
+    # dependency roots; do not scan the target source tree for symbols.
+    parts = import_path.split("/")
+    if import_path.startswith("@") and len(parts) >= 2:
+        package_candidates = ["/".join(parts[:2])]
+        suffix = "/".join(parts[2:])
+    elif parts:
+        package_candidates = [parts[0]]
+        suffix = "/".join(parts[1:])
+    else:
+        package_candidates = []
+        suffix = ""
+
+    for dependency_root in _dependency_roots(root):
+        for package_dir in _dependency_package_dirs(root):
+            if _package_name(package_dir) not in package_candidates:
+                continue
+            for source_root in ("", "src", "contracts"):
+                candidate = (package_dir / source_root / suffix).resolve()
+                if candidate.is_file():
+                    return candidate, "dependency_package"
+
+    # Foundry library directories may use a repository directory name that
+    # differs from the import package name (for example an OpenZeppelin library).
+    # Compare only the path after the import package prefix, and require a unique
+    # match across direct dependency roots. Ambiguity remains unresolved.
+    candidates: list[Path] = []
+    for dependency_root in _dependency_roots(root):
+        for package_dir in _dependency_package_dirs(root):
+            if not package_dir.is_dir():
+                continue
+            for source_root in ("", "src", "contracts"):
+                candidate = (package_dir / source_root / suffix).resolve()
+                if candidate.is_file() and candidate not in candidates:
+                    candidates.append(candidate)
+    if len(candidates) == 1:
+        return candidates[0], "dependency_path"
+
     return None
 
 
 def _imports_for(path: Path) -> tuple[str, ...]:
     source = _strip_comments(path.read_text(encoding="utf-8"))
-    return tuple(match.group(1) for match in _IMPORT_RE.finditer(source))
+    imports = [match.group(1) for match in _IMPORT_RE.finditer(source)]
+    # Keep a simpler grammar as a bounded fallback. This is still strictly
+    # source-declared import traversal; it only protects compact/generated
+    # fixtures whose import formatting defeats the richer parser.
+    for match in _SIMPLE_IMPORT_RE.finditer(source):
+        if match.group(1) not in imports:
+            imports.append(match.group(1))
+    # Explicitly handle the two canonical Solidity forms independently. This
+    # makes import discovery resilient to compact formatting while remaining
+    # strictly bounded to declarations present in this source unit.
+    for pattern in (
+        r'\bimport\s+["\']([^"\']+)["\']\s*;',
+        r'\bfrom\s+["\']([^"\']+)["\']\s*;',
+    ):
+        for match in re.finditer(pattern, source):
+            if match.group(1) not in imports:
+                imports.append(match.group(1))
+    return tuple(imports)
 
 
 def resolve_interface(root: str | Path, importer: str | Path, name: str) -> ResolvedInterface:
-    root = Path(root).resolve()
-    importer = Path(importer).resolve()
-    imports = _imports_for(importer)
-    for import_path in imports:
-        if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
-            continue
-        resolved = resolve_import(root, importer, import_path)
-        if resolved is None:
-            raise FileNotFoundError(
-                f"Unable to resolve interface {name}: declared import {import_path} "
-                f"from {importer} has no remapping or relative target"
-            )
-        path, method = resolved
-        return _extract_interface(name, path, method, root)
+    """Resolve an interface through the target's import/dependency graph.
 
-    # Some repositories alias or aggregate interface declarations in files
-    # whose filename does not match the symbol. Inspect resolved imports as a
-    # generic fallback rather than requiring filename/name coincidence.
-    for import_path in imports:
-        resolved = resolve_import(root, importer, import_path)
-        if resolved is None:
-            continue
-        path, method = resolved
+    Solidity names can be used through an import that is several source units
+    away from the target contract (for example Hinkal -> HinkalBase -> IMerkle).
+    Resolution follows only declared imports, never a repository-wide filename
+    search, so provenance remains bounded to the target's dependency graph.
+    """
+    root = Path(root).resolve()
+    importer = _resolve_source_path(root, importer)
+    visited: set[Path] = set()
+
+    def walk(path: Path) -> ResolvedInterface | None:
+        path = path.resolve()
+        if path in visited or not path.is_file():
+            return None
+        visited.add(path)
+
+        imports = _imports_for(path)
+
+        # Preserve the existing strict behavior for a direct import whose
+        # filename explicitly identifies the requested interface.
+        for import_path in imports:
+            if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
+                continue
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                if path == importer:
+                    raise FileNotFoundError(
+                        f"Unable to resolve interface {name}: declared import {import_path} "
+                        f"from {path} has no remapping or relative target"
+                    )
+                continue
+            resolved_path, method = resolved
+            try:
+                source = _strip_comments(resolved_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                continue
+            if re.search(rf"\binterface\s+{re.escape(name)}\b", source):
+                return _extract_interface(name, resolved_path, method, root)
+
+        # A source unit may aggregate or alias the interface without a
+        # filename/name match. Inspect the unit itself before descending.
         try:
             source = _strip_comments(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError):
-            continue
+            source = ""
         if re.search(rf"\binterface\s+{re.escape(name)}\b", source):
+            method = "dependency_graph" if path != importer else "direct_source"
             return _extract_interface(name, path, method, root)
 
+        # Follow every resolvable declared import. This is the generic
+        # transitive dependency case; cycles are bounded by the visited set.
+        for import_path in imports:
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            result = walk(resolved[0])
+            if result is not None:
+                return result
+        return None
+
+    resolved = walk(importer)
+    if resolved is not None:
+        return resolved
     raise FileNotFoundError(
-        f"Unable to resolve interface {name}: no declared import matching {name}.sol in {importer}"
+        f"Unable to resolve interface {name} through imports from {importer}"
     )
 
 
@@ -267,69 +446,129 @@ def _extract_interface(
     )
 
 
-def resolve_named_type_source(root: str | Path, importer: str | Path, name: str) -> tuple[str, str]:
-    """Resolve a user-defined Solidity type through the import graph.
+def resolve_namespaced_struct_fields(root: str | Path, source_path: str | Path, namespace: str, struct_name: str) -> tuple[tuple[str, str], ...]:
+    """Resolve a struct nested inside a contract, library, or interface."""
+    path = _resolve_source_path(root, source_path)
+    try:
+        source = _strip_comments(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        return ()
+    owner = re.search(rf"\b(?:contract|library|interface)\s+{re.escape(namespace)}\b", source)
+    if owner is None:
+        return ()
+    body_start = source.find("{", owner.end())
+    if body_start < 0:
+        return ()
+    depth = 0
+    body_end = len(source)
+    for index in range(body_start, len(source)):
+        if source[index] == "{": depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                body_end = index
+                break
+    body = source[body_start + 1:body_end]
+    match = re.search(rf"\bstruct\s+{re.escape(struct_name)}\s*\{{(?P<body>.*?)\}}", body, re.DOTALL)
+    if match is None:
+        return ()
+    fields: list[tuple[str, str]] = []
+    for statement in match.group("body").split(";"):
+        parts = statement.strip().split()
+        if len(parts) >= 2:
+            fields.append((parts[-1], " ".join(parts[:-1])))
+    return tuple(fields)
 
-    Constructor parameters may use a contract/library/interface type that is
-    imported indirectly (for example LendingPool imports ERC20 from DebtToken,
-    while DebtToken imports ERC20 from Solmate). The generated harness only
-    needs the defining source path so it can emit an explicit Type(address)
-    constructor value. This resolver follows declared imports recursively and
-    records the first source unit that actually declares the requested type.
+def resolve_struct_fields(root: str | Path, source_path: str | Path, struct_name: str) -> tuple[tuple[str, str], ...]:
+    """Resolve top-level fields of a source-defined Solidity struct."""
+    path = _resolve_source_path(root, source_path)
+    try:
+        source = _strip_comments(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        return ()
+    match = re.search(rf"\bstruct\s+{re.escape(struct_name)}\s*\{{(?P<body>.*?)\}}", source, re.DOTALL)
+    if not match:
+        return ()
+    fields: list[tuple[str, str]] = []
+    for statement in match.group("body").split(";"):
+        statement = statement.strip()
+        if not statement:
+            continue
+        parts = statement.split()
+        if len(parts) < 2:
+            continue
+        fields.append((parts[-1], " ".join(parts[:-1])))
+    return tuple(fields)
+
+
+def resolve_named_type_source(root: str | Path, importer: str | Path, name: str) -> tuple[str, str]:
+    """Resolve a user-defined Solidity type through the target's bounded import graph.
+
+    The resolver deliberately separates graph discovery from symbol matching:
+    every reachable source unit is discovered from declared imports, then the
+    requested declaration is checked in each unit. This handles plain imports,
+    named imports, aliases, transitive imports, and files whose names do not
+    match the Solidity symbol (for example Nested.sol declaring Outer).
     """
     root = Path(root).resolve()
-    start = Path(importer).resolve()
+    start = _resolve_source_path(root, importer)
     visited: set[Path] = set()
-
     declaration = re.compile(
         rf"\b(?:contract|interface|library|struct|enum|type)\s+{re.escape(name)}\b"
     )
-    named_import = re.compile(
-        r'import\s*\{([^}]+)\}\s*from\s*"([^"]+)"\s*;',
-        re.MULTILINE,
-    )
+    def imports_for(path: Path) -> tuple[str, ...]:
+        try:
+            return _imports_for(path)
+        except (OSError, UnicodeError):
+            return ()
 
-    def walk(path: Path) -> tuple[str, str] | None:
+    # Check the importer itself first. This covers source units that declare
+    # free structs/types directly and avoids making local declarations depend on
+    # Foundry metadata or import traversal.
+    try:
+        start_source = _strip_comments(start.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        start_source = ""
+    if declaration.search(start_source):
+        return start.relative_to(root).as_posix(), "declaration"
+
+    # Carry the resolution method on each graph edge so callers can
+    # distinguish a direct declared import from a transitive declaration.
+    pending: list[tuple[Path, str]] = [(start, "declaration")]
+    while pending:
+        path, edge_method = pending.pop(0)
         path = path.resolve()
         if path in visited or not path.is_file():
-            return None
+            continue
         visited.add(path)
         try:
             source = _strip_comments(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError):
-            return None
+            continue
 
         if declaration.search(source):
-            return path.relative_to(root).as_posix(), "declaration"
+            return path.relative_to(root).as_posix(), edge_method
 
-        for match in named_import.finditer(source):
-            symbols_text, import_path = match.groups()
-            symbols = []
-            for symbol in _split_parameters(symbols_text):
-                token = re.split(r"\s+as\s+", symbol.strip(), maxsplit=1)[-1].strip()
-                if token:
-                    symbols.append(token)
-            if name not in symbols:
-                continue
+        for import_path in imports_for(path):
             resolved = resolve_import(root, path, import_path)
             if resolved is None:
-                continue
-            found = walk(resolved[0])
-            if found is not None:
-                return found
+                # Explicit relative imports are authoritative for temporary
+                # target fixtures even when Foundry metadata is absent.
+                direct = (path.parent / import_path).resolve()
+                if direct.is_file():
+                    resolved = (direct, "declared_import")
+            if resolved is not None:
+                imported_path, method = resolved
+                imported_path = imported_path.resolve()
+                if path == start:
+                    # A direct declared import has one stable provenance label,
+                    # independent of whether its filesystem edge was relative,
+                    # project-relative, or resolved through an explicit remapping.
+                    method = "declared_import"
+                imported_path = imported_path.resolve()
+                if imported_path not in visited:
+                    pending.append((imported_path, method))
 
-        for import_path in _imports_for(path):
-            resolved = resolve_import(root, path, import_path)
-            if resolved is None:
-                continue
-            found = walk(resolved[0])
-            if found is not None:
-                return found
-        return None
-
-    found = walk(start)
-    if found is None:
-        raise FileNotFoundError(
-            f"Unable to resolve user-defined type {name} through imports from {start}"
-        )
-    return found
+    raise FileNotFoundError(
+        f"Unable to resolve user-defined type {name} through imports from {start}"
+    )

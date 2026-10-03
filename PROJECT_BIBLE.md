@@ -117,10 +117,29 @@ The readiness model records, without making vulnerability claims:
 - caller roles and caller-identity predicates;
 - external runtime dependencies and trust-boundary calls;
 - unresolved prerequisites and their provenance.
+- prerequisite observation may intentionally stop before the target transition; in that mode, the target function identifies the observation surface but its ABI arguments must not be materialized or executed. Complex/custom target types therefore cannot become a false readiness blocker before setup-state verification.
 
 The execution planner must distinguish three states: prerequisites already satisfied, prerequisites deterministically constructible by the adapter/harness, and prerequisites unresolved. An unresolved prerequisite is an execution/environment gap, not evidence of a vulnerability.
 
 This layer is generic and must not contain target-specific exceptions. Adapter work should progressively turn constructible prerequisites into deterministic fixtures/configuration; reasoning remains responsible for choosing security hypotheses; deterministic execution remains responsible for evidence.
+
+
+### 7.2 Provenance-backed recursive type materialization
+
+Custom Solidity types are execution-readiness objects, not names that may be marked available by recognition alone.
+
+When an experiment requires a custom parameter, CYDRA must establish:
+
+declared type → defining source → field/type resolution → recursive materialization strategy → compiler-valid expression → provenance
+
+The materializer must recursively handle primitives, arrays, structs, enums, user-defined value types, and namespaced definitions where the source graph permits resolution. Each resolved field retains a path and defining-source provenance.
+
+A custom type is execution-ready only when the complete required resolution chain has been demonstrated. Otherwise readiness remains unresolved/partial and the failure must expose the deepest unresolved generic capability rather than silently inventing a target-specific value.
+
+This rule applies equally to live targets and regression fixtures. In particular, a target-specific type such as CircomData must never receive a hardcoded special case merely because a current dogfood target uses it.
+
+The capability layer may consume a successful materialization proof to remove the corresponding TYPE_MATERIALIZATION gap. That proof does not establish semantic correctness of the values; Foundry execution remains responsible for compiler/runtime verification and causal evidence.
+
 
 ## 8. Invariants
 
@@ -598,7 +617,6 @@ Successful blind benchmark 010 evidence:
 
 This milestone demonstrates a fourth materially different blind discovery mechanism after authorization, arithmetic rounding, and sibling postcondition parity. It must not become a TimelockController-specific detector. The next unfamiliar target must test whether temporal precondition reasoning generalizes beyond the extracted fixture.
 
-
 ## 36. Historical backtest milestone — repeated-record idempotency / value release
 
 An unfamiliar historical mechanism has now completed the blind differential finding path: a user-controlled batch can repeat the same state-record identifier, and a value-releasing transition can consume that record more than once when it does not enforce the record's required pre-state before the side effect.
@@ -898,1115 +916,371 @@ A guarded address input cannot always be tested with an arbitrary nonzero EOA. I
 
 The generic initialization surface therefore now:
 - recognizes the guarded address as a dependency boundary;
-- deploys a minimal CydraInitializerDependencyProbe with a fallback returning a valid static word;
-- substitutes the deployed probe for the conservative zero-address replacement when the target requires a nonzero address;
-- keeps the probe target-agnostic rather than naming Stader, getAdmin, or the historical exploit;
-- records successful state mutation as the security assertion failure for an arbitrary-caller lifecycle hypothesis;
-- treats revert/no-execution as non-confirmation;
-- binds storage-access observation to the renderer-selected target variable rather than a hard-coded target name.
 
-This is an important distinction in the maturity gate:
+## 28. Live dogfood milestone — internal prerequisite closure
 
-**Input validity is not the same as environmental validity.**
+The canonical live dogfood loop has now demonstrated a specific execution-readiness boundary:
 
-An experiment must provide enough adversarial environment for the target's own mechanism to execute, while remaining class-neutral and without importing the historical answer.
+- CYDRA can propagate a state prerequisite from an internal callee into the top-level target action.
+- CYDRA can derive a target-owned writer for that persistent state from the modeled program, without naming the target or vulnerability class.
+- A constructible writer is evidence that the prerequisite can potentially be established; it is not itself proof of the security hypothesis.
+- Fresh-state defaults may satisfy a persistent prerequisite when the source-backed predicate establishes the required zero/default value.
+- Internal state prerequisites must therefore distinguish:
+  1. already/default satisfied state;
+  2. target-derived constructible setup transitions;
+  3. genuinely unresolved state;
+  4. blocked/contradicted state.
+- The readiness layer must propagate these distinctions through internal call boundaries so that an executable security hypothesis is not rejected merely because its prerequisite lives inside a helper function.
 
-### 48. Research-loop CI validation
+The demonstrated implementation rule is:
 
-The canonical Solidity research workflow now also runs for pull requests in addition to main pushes, manual dispatch, and the daily schedule. This makes changes to the blind research machinery subject to the same durable regression/research path before merge.
+**internal prerequisite → identify persistent state → identify target-derived writer/default → verify writer readiness → establish/observe state → reassess security-path readiness.**
 
-A workflow being configured is not equivalent to a successful run. CI status and research artifacts must be inspected before a campaign result is counted as evidence.
+This is a generic execution-readiness capability. It must not contain target-specific function names, vulnerability-class branches, or Hinkal-specific assumptions.
 
+The live dogfood target remains the source of evidence for the next missing capability. After this repair, rerun the same target and inspect whether the security experiment becomes reachable. Do not add another abstraction until the next observed blocker justifies it.
+## Live dogfood milestone — source-defined namespaced constructor materialization
 
-## 49. Unfamiliar initializer dependency probing — runner validation checkpoint
+The Hinkal live dogfood campaign exposed a generic constructor-materialization gap while trying to verify prerequisites for a callback-state-order hypothesis.
 
-The Stader initializer campaign exposed one additional execution-layer defect after the target-agnostic dependency probe was added: the generated-test substitution regex for replacing the conservative zero-address placeholder with the local dependency probe was over-escaped. The reasoning capability itself was correct, but the renderer could not reliably materialize the intended input.
+A constructor parameter may use a Solidity namespaced struct type such as `Namespace.StructName`. The sequence renderer must resolve the namespace through the target's declared import graph, resolve the struct fields from the defining source unit, and materialize compiler-valid field values without naming the target or supplying target-specific constants.
 
-The repair corrected the substitution patterns without adding any Stader-specific condition.
+The implementation now follows this generic boundary:
 
-This is a useful distinction for the maturity gate:
+**namespaced constructor type → resolve imported namespace → resolve source-defined struct fields → materialize supported field defaults → render/import the namespaced struct → let runtime execution verify semantic validity.**
 
-**A generalized hypothesis can still fail at experiment materialization.**
+The resolver must fail closed for unsupported or unresolved custom field types. Compiler-valid defaults are not treated as verified runtime dependencies; if deployment or subsequent execution rejects them, that becomes the next observed execution-readiness gap.
 
-The campaign therefore treats generation correctness as part of the causal research path:
+A regression covers an imported interface containing `MerkleConstructorArgs`-style source-defined fields. The live target remains the authoritative test surface; do not add target-specific constructor values merely to bypass a readiness failure.
 
-**Hypothesis → planned input → rendered experiment → executable target path → observed state change → causal conclusion.**
 
-A renderer failure is a pipeline/generalization failure, not evidence against the hypothesis and never a finding.
 
-## 50. Research CI must execute the triggering revision
-The Solidity research workflow previously declared a pull-request trigger but explicitly checked out `main`. That meant a pull-request validation run could execute the already-merged baseline instead of the proposed research changes.
+## 45. Generated execution diagnostics must be valid Solidity literals
 
-The workflow now checks out `github.sha`, so push, manual, scheduled, and pull-request executions test the revision that triggered the run.
+When CYDRA renders source-derived predicates, relations, or other diagnostic text into generated Solidity tests, the diagnostic text must be encoded as a Solidity string literal before insertion into the generated source. Source predicates may contain newlines, quotes, backslashes, or tabs because they come from formatted target expressions. Raw insertion can therefore turn a valid modeled prerequisite into a compiler failure before the observation executes.
 
-This is required for research evidence provenance: a reported green regression or backtest artifact must correspond to the exact CYDRA source revision being evaluated.
+The generic sequence renderer now centralizes diagnostic-string escaping and applies it to prerequisite and state-relation assertion messages. This is a renderer-boundary concern, not a target-specific workaround. Regression coverage must include multiline source predicates and verify that the generated test remains single-line syntactically valid Solidity while preserving the diagnostic content.
 
-The available GitHub connector currently does not expose the workflow-run listing needed to inspect the resulting Actions logs/artifacts directly. Therefore a configured workflow is not counted as an observed research result until its execution artifacts can be inspected.
+The rule is: **model/source text may be arbitrary diagnostic content; generated Solidity must receive a correctly escaped literal.** A rendering failure is an execution-capability gap and must be fixed generically before the security experiment is classified.
 
 
-## 51. Unfamiliar Stader initializer — first blind end-to-end security result
+## 46. Prerequisite observations must bind source-derived custom parameters
 
-The Stader unfamiliar-target campaign has now completed the generic initialization reasoning and execution path on the pinned VaultProxy.sol revision 7566b5a35f32ebd55d3578b8bd05c038feb7d9cc.
+A prerequisite observation may depend on a target function parameter even though the target transition itself is intentionally not executed. If that parameter is a user-defined struct or another source-defined custom type, emitting the predicate directly can leave an undeclared symbolic identifier in the generated harness.
 
-The important result is a blind security-relevant state-transition observation, not merely a generated hypothesis:
+The generic sequence renderer must therefore:
 
-- compiler-backed semantic evidence succeeded;
-- CYDRA independently generated H-INIT-initialise from the unfamiliar target;
-- the experiment was rendered and executed by Foundry;
-- an arbitrary caller successfully reached initialise;
-- the generic storage-access assertion observed 6 target storage writes;
-- the execution therefore failed the invariant that an arbitrary caller must not be able to claim initialization state;
-- the canonical initialization classifier promoted the hypothesis to confirmed;
-- the same CI research run was rerun successfully, reproducing the result.
+1. inspect the target function's modeled parameter list;
+2. determine which custom parameters are actually referenced by the planned observation predicates;
+3. resolve those types through the target's declared import graph;
+4. materialize the planned experiment argument into a typed local value;
+5. use ABI encoding/decoding for tuple-shaped struct arguments so nested structs and arrays do not require target-specific field mappings;
+6. emit the required type import with provenance from the resolved source; and
+7. continue to stop before the target transition when prerequisite-only observation is requested.
 
-The campaign also exposed and repaired three generic blockers before reaching this result:
-1. target-project npm dependencies were absent from the temporary checkout;
-2. the generic fallback initializer renderer emitted invalid try ...; { Solidity;
-3. the runtime classifier did not recognize the generic initializer-mutation assertion emitted by the renderer.
+This does **not** mean executing the target function or assuming that the supplied argument satisfies the target's guards. The local value exists only so a deterministic source-backed observation can be compiled and evaluated.
 
-None of these repairs add Stader-specific names, selectors, exploit sequences, or historical answers.
+The rule is: **stop-before-target does not mean stop-before-binding the target-derived symbols required by the observation.** Symbolic prerequisites must be made compiler-visible through generic parameter modeling, or CYDRA must fail closed.
 
-The current evidence proves a real causal initialization-state violation on the historical target. It does not yet claim the complete historical impact or declare the final finding gate READY. The next step is adversarial causal verification of the security/economic consequence using the target's own dependency boundary, followed by an independent reproduction. If that impact cannot be demonstrated generically, the result remains a confirmed invariant violation rather than a fully promoted finding.
+No target-specific parameter names, struct fields, constants, or Hinkal-specific construction logic belong in this layer.
 
-This milestone is stronger evidence for the Solidity maturity gate because the hypothesis was generated on an unfamiliar project and the experiment was materialized and executed without historical-answer leakage. It is not evidence that Solidity generalization is complete.
 
-The canonical research artifacts for the successful run must remain the provenance source for this milestone.
- 
+## 47. Prerequisite binding must consume the canonical planned input vector
 
-Causal verification record:
-- blind hypothesis: `H-INIT-initialise`;
-- blind experiment: `X-H-INIT-initialise`;
-- compiler semantic evidence: `initialise` writes `owner`;
-- blind execution: one Foundry test, one failure, six target storage writes;
-- attacker-controlled dependency behavior: the generated probe returns the attacker address from the initializer's `getAdmin()` dependency;
-- target code causal chain: `initialise` → `staderConfig.getAdmin()` → `owner`;
-- reproducibility: the same result was reproduced in CI on the PR run and again on merged `main` run #35;
-- finding gate: **READY** for the bounded initialization/privilege-takeover claim.
+The live dogfood exposed a transport-layer gap after custom parameter binding was implemented: the experiment carried a complete canonical `planned_inputs` vector, while the structured target step used by prerequisite observation could legitimately carry an empty argument tuple. The binding planner therefore received zero arguments even though the experiment already contained the source-derived ABI inputs.
 
-The public historical Stader finding is external corroboration discovered only after the blind campaign; it is not part of CYDRA's blind evidence or hypothesis-generation context.
+The generic execution boundary must preserve the canonical input vector when converting an experiment into prerequisite observations. For the target observation step, if the structured step has no explicit argument vector and the experiment has a complete `planned_inputs` vector, the renderer must use that vector for parameter binding. This is transport preservation, not new target reasoning.
 
-## 52. Unfamiliar Olas transfer-accounting — blind end-to-end finding
+The rule is: **one canonical planned input vector must not be silently discarded when execution changes representation.** Structured steps may refine or explicitly override inputs, but an empty step must not erase a complete experiment-level plan. Arity mismatches remain fail-closed when neither representation supplies a complete vector.
 
-The Olas historical campaign is the next unfamiliar-project generalization result after the Stader initializer and Olympus cross-contract campaigns. The target was the historical Olas repository at commit `3ce502ec8b475885b90668e617f3983cea3ae29f`, with `registries/contracts/staking/StakingToken.sol` as the source surface. The historical answer was kept out of hypothesis generation.
+Regression coverage must verify that a custom-typed target parameter is successfully materialized from `Experiment.planned_inputs` even when the corresponding prerequisite step contains no arguments, while the target transition remains unexecuted in stop-before-target mode.
 
-The campaign exposed and repaired only demonstrated generic blockers:
-- inherited accounting state (`balance` and `availableRewards`) was absent from the lightweight target model, so the reasoning surface was generalized to recover a local-alias → state-addition → state-assignment flow directly from observed source dataflow;
-- the execution gate checked `transferFrom` case-sensitively and therefore missed `safeTransferFrom`; the gate now recognizes both generic inbound transfer forms;
-- the campaign runner duplicated the already-built-in transfer-accounting reasoning surface when explicitly injecting it, so the blind harness now uses the canonical pipeline once;
-- the target's unrelated historical test fixtures had optional Gnosis Safe dependencies, so the causal regression isolates the production path from unrelated target tests;
-- the injected causal test uses an ABI-compatible local tuple and target-agnostic initialization dependencies rather than relying on the target's global struct declaration.
 
-The resulting blind chain completed:
+## 48. Planned custom-struct inputs must preserve source-derived nested types
 
-**Target → System Model → Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Patched Execution → Causal Verification → Finding Gate**
+The canonical live dogfood exposed the next prerequisite-binding boundary after planned-input transport was repaired. A complete experiment input vector may contain nested tuple expressions for a user-defined struct. Passing those raw nested tuples to `abi.encode` is not compiler-safe when the nested components have no inferred Solidity type.
 
-Observed result:
-- blind hypothesis: `H-TRANSFER-ACCOUNTING-deposit`;
-- invariant: internal credit for an inbound token transfer must equal the actual token balance delta received, not merely the requested amount;
-- experiment: `X-H-TRANSFER-ACCOUNTING-deposit`, using a 100-unit deposit boundary;
-- vulnerable execution: 1 Foundry test executed and failed the accounting assertion because the contract credited the requested 100 while the fee-on-transfer test token delivered 90;
-- patched execution: 1 Foundry test executed and passed after the patched target bounded the credited amount to the actual received balance delta;
-- causal verification: `VERIFIED`, chain `causal:olas-transfer-accounting-differential`;
-- finding gate: **READY**;
-- historical public reporting was not used during hypothesis generation and is post-run corroboration only.
+The generic renderer must therefore preserve the experiment's values while recovering source-defined nested struct types from the import graph and struct field model. Nested tuple expressions are recursively rendered through their resolved struct constructors; primitive values and already-typed dynamic-array expressions remain unchanged. Required custom type imports are emitted from the same source-resolution provenance.
 
-This is evidence of a blind, reproducible transfer-accounting capability on an unfamiliar Solidity project and materially strengthens the Solidity maturity gate. It does not by itself close the maturity gate; additional unfamiliar targets and materially different mechanisms remain required.
-
-
-## 53. Unfamiliar Morph L2 initializer — blind causal finding with independent reproduction
-
-The Morph L2 historical campaign has now completed the full blind initialization-finding path on the pinned `morph-l2/morph` revision `aa35ed6d1d0bb1e0a38f04dcfb9c5b3203f90604`, using `contracts/contracts/l2/staking/L2Staking.sol` as the source surface. The historical answer was not supplied during hypothesis generation.
-
-The campaign exposed and repaired demonstrated generic blockers rather than adding Morph-specific knowledge:
-- constant/immutable declarations were incorrectly entering mutable lifecycle-state modeling, so a timestamp/epoch constant could select the wrong double-call lifecycle shape instead of the arbitrary-caller initialization probe;
-- generic initializer inputs used zero addresses and zero scalars, which could fail ordinary target preconditions before the hypothesized transition was observable;
-- the generic initializer probe needed to preserve typed ABI encoding while safely treating an ordinary revert as non-confirmation, so the fallback now uses a typed `try/catch` call and observes target storage writes;
-- timestamp/epoch-constrained initializer parameters now receive a generic future, epoch-aligned value when the target source exposes the corresponding `block.timestamp` modulo guard;
-- the finding gate now requires an independent fresh vulnerable execution and patched control reproduction after the first causal differential succeeds.
+This is a type-materialization capability, not target-specific argument construction. The renderer must not learn Hinkal's `CircomData` fields or nested struct names as special cases. If a nested custom type cannot be resolved or its tuple arity cannot be established, the renderer must fail closed rather than guess.
 
-The resulting blind chain completed:
+The rule is: **planned values come from the experiment; types come from the target's source model.** Together they form the compiler-visible prerequisite value without executing the target transition.
 
-**Target → System Model → Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Patched Control → Causal Verification → Independent Reproduction → Finding Gate**
 
-Observed result from CI research run #109:
-- blind hypothesis: `H-INIT-initialize`;
-- invariant: `INV-INIT-001` — initialization must not allow an arbitrary caller to claim privileged initialization state after deployment;
-- compiler-backed semantic evidence: 366 records;
-- vulnerable blind execution: one Foundry test executed and failed because the arbitrary initializer call mutated 2 target storage slots;
-- patched control: one Foundry test executed and passed after a synthetic constructor `_disableInitializers()` control was applied;
-- causal verification: `VERIFIED`, chain `causal:initialization-lock-differential`;
-- independent reproduction: vulnerable execution failed with the same 2-storage-write assertion and the reproduced patched control passed;
-- reproduction verification: `VERIFIED`, chain `reproduction:initialization-lock-differential`;
-- finding gate: **READY**.
+## 49. Recursive prerequisite struct materialization must fail closed
 
-The exact target revision and all raw execution/provenance evidence are preserved in the CI research artifact. The finding is bounded to the demonstrated initialization-state control failure; the artifact does not claim impact beyond what the executed invariant and causal differential establish.
+When a prerequisite observation requires binding a source-defined custom parameter, the renderer may encounter nested user-defined structs inside the planned tuple value.
 
-This milestone is materially stronger evidence for Solidity generalization because the target was unfamiliar, the hypothesis was generated blind, the execution required generic input/environment handling, the causal control was synthetic rather than a supplied historical patch, and the result survived an independent reproduction. It does not close the Solidity maturity gate; another unfamiliar target and a materially different mechanism are still required.
+The generic rule is:
 
-## 54. Unfamiliar Alchemix authorization — blind causal finding with independent reproduction
+- planned values come from the canonical experiment input;
+- every custom type comes from the target source/import model;
+- nested custom fields must be recursively resolved and rendered as typed struct constructors;
+- source field count must match the planned tuple arity;
+- nested custom values must themselves be tuple expressions when recursive construction is required;
+- the renderer must import every resolved custom type from its source provenance;
+- **never silently fall back to an untyped tuple when a custom struct cannot be resolved or its shape is inconsistent**.
 
-The real historical Alchemix authorization campaign has now completed the full blind authorization path on the pinned Alchemix Protocol revision `0261dd5a23c63aaa354d56f506701a6fa79cfe1f`, using `contracts/AlchemistEth.sol` as the source surface. The historical answer was not supplied during hypothesis generation.
+A raw tuple can appear superficially valid while Solidity rejects it at the call boundary. Silent fallback therefore converts a renderer capability gap into an opaque compiler failure. The generic renderer must instead fail closed with the unresolved type/source/arity so the missing capability is observable and regressible.
 
-The campaign required and demonstrated several generic execution capabilities rather than a target-specific Alchemix detector:
-- authorization reasoning identified `setWhitelist` as an externally callable state-mutating administrative surface with no observed authorization modifier;
-- the blind runner inferred an authorization control from observed modifier semantics and selected `onlyGov` from the target's sibling-function usage, rather than hard-coding the modifier name;
-- the causal control is applied to the same isolated Foundry source tree that the generated blind test imports, preserving the vulnerable-versus-control differential;
-- the generated authorization assertion renderer is handled generically for both success-gated and revert-gated authorization assertions;
-- the finding gate requires both a first causal differential and a fresh vulnerable/patched reproduction before `READY`;
-- the CI workflow was corrected to execute the exact command arguments and to preserve the machine-readable result artifact.
+This rule applies to all targets and all custom nested types; it is not a Hinkal-specific workaround.
 
-The resulting blind chain completed:
 
-**Target → System Model → Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+## 50. Nested custom structs may share the defining source unit
 
-Observed result from the real Alchemix CI campaign (run #301):
-- blind hypothesis: `H-AUTH-setWhitelist`;
-- invariant: `INV-AUTH-001` — an arbitrary external caller must not mutate privileged authorization/configuration state;
-- blind execution: one Foundry test executed and failed because an unauthorized caller successfully invoked the modeled administrative operation;
-- blind classification: `confirmed`;
-- inferred causal authorization control: `onlyGov`;
-- patched execution: one Foundry test executed and passed after the inferred authorization modifier was applied;
-- causal verification: `VERIFIED`, chain `causal:authorization-modifier-differential`;
-- independent vulnerable reproduction: one fresh Foundry test executed and failed with the same authorization assertion;
-- independent patched reproduction: one fresh Foundry test executed and passed;
-- reproduction verification: `VERIFIED`, chain `reproduction:authorization-modifier-differential`;
-- finding gate: **READY**.
+A source-defined custom struct does not necessarily live in a separate file. Solidity source units may declare several top-level structs together, with one struct using another declared earlier in the same unit. The prerequisite type resolver must therefore treat the current defining source as authoritative before requiring another import-graph traversal.
 
-The machine-readable CI artifact records the exact historical target, hypothesis, experiment, execution results, inferred control, causal verification, reproduction verification, and `finding_gate: READY`. The result is bounded to the demonstrated missing-authorization state-transition claim and does not infer impact beyond the executed invariant.
+The generic rule is:
+- when recursively materializing a custom struct field, first determine whether the field type is declared in the current defining source unit;
+- if it is, preserve that source as the provenance for recursive field resolution and generated imports;
+- otherwise resolve the type through the declared import/dependency graph;
+- never add a target-specific filename or known struct-name exception to bridge this case.
 
-This milestone materially strengthens the Solidity generalization gate because it is a genuinely unfamiliar target and a materially different mechanism from the earlier Morph/Olas initialization and transfer-accounting findings. The hypothesis was generated from the target's observed model, the causal control was inferred from sibling authorization semantics, and the result survived independent vulnerable/patched reproduction. It still does not mean arbitrary Solidity research is solved; the next priority remains another unfamiliar mechanism and continued adversarial generalization.
+This distinction matters because compiler-visible Solidity types can share a source unit even when the parent struct itself was imported from that unit. A resolver failure at this boundary is an execution-readiness capability gap, not evidence against the security hypothesis.
 
-## 55. Unfamiliar Blueberry cross-contract read-only state — blind causal finding with independent reproduction
 
-A third materially different unfamiliar-target mechanism has now completed the full causal/reproduction finding gate: transient cross-contract state observed through a public state-derived view during an external callback.
+## 51. Imported nested custom types must resolve the named import declaration directly
 
-Target:
-- repository: `https://github.com/sherlock-audit/2023-04-blueberry.git`;
-- pinned revision: `1f123ee62b0479637557ea320493249059db6981`;
-- source: `blueberry-core/contracts/oracle/BalancerPairOracle.sol`;
-- target function discovered blind: `getPrice`.
+Recursive prerequisite struct materialization can encounter a nested custom field whose declaration lives in a separately imported source unit. The type resolver must preserve the source provenance expressed by the import graph and directly inspect the resolved named-import source for the requested declaration before continuing broader traversal.
 
-The new reasoning surface is class-neutral. It looks for a public/external view that combines state-derived reads from multiple external components (for example a balance/reserve vector with a supply/rate/invariant) and lacks an observed context guard. It then forms the hypothesis that a callback can observe one component while it is in an intermediate state, producing a value that differs from the settled observation. No Blueberry, Balancer, Curve, pool, or historical-answer condition is encoded in the reasoning rule.
+The generic rule is:
+- resolve the declared import path using the normal Foundry/remapping/relative-import rules;
+- when the import explicitly names the requested custom type, inspect that resolved source unit for the declaration first;
+- retain the resolved source path as provenance for recursive field resolution and generated imports;
+- only then continue transitive traversal if the declaration is not found;
+- never substitute a repository-wide filename search or a target-specific type/path exception.
 
-The blind campaign completed:
+This closes a source-resolution boundary exposed by the live dogfood: a parent struct can be defined in one source unit while a nested field type is explicitly imported from another. Failure to resolve that imported declaration is an execution-readiness gap, not evidence against the hypothesis being tested.
 
-**Target → System Model → Cross-Contract Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Synthetic Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
 
-Observed CI result from the Blueberry backtest:
-- blind hypothesis: `H-READONLY-XCONTRACT-getPrice`;
-- invariant: `INV-READONLY-XCONTRACT-getPrice`;
-- blind execution: one Foundry test executed and failed because the callback-time `getPrice` observation differed from the settled-state expectation;
-- patched causal control: one Foundry test executed and the synthetic external-context guard reverted the callback-time observation;
-- causal verification: **VERIFIED**;
-- independent vulnerable reproduction: one fresh Foundry test executed and failed with the same transient-state assertion;
-- independent patched reproduction: one fresh Foundry test executed and the synthetic guard prevented the observation;
-- reproduction verification: **VERIFIED**;
-- finding gate: **READY**.
+## 52. Direct declared import paths remain a bounded fallback for nested type resolution
 
-The causal control is deliberately described as **synthetic**, not as a claim that this exact guard is the historical production remediation. Its purpose is to demonstrate causality: blocking observation while the external component is in the intermediate context removes the observed transient value. The result therefore supports the bounded claim that the target's state-derived view can return a materially different value when queried during an external state transition. Impact beyond that invariant is not asserted.
+When recursively materializing a source-defined custom type, an explicitly declared relative import path is authoritative even if the normal import classifier cannot classify that path. The resolver may fall back to the importing source unit's direct relative path, inspect that resolved file for the requested declaration, and preserve that file as provenance. This fallback remains bounded to a declared import edge; it must never become a repository-wide filename or symbol search, and unresolved ambiguity must still fail closed.
 
-The CI artifact for run #17 records:
-- target revision and source path;
-- blind hypothesis and invariant;
-- executable vulnerable differential;
-- patched differential;
-- causal verification;
-- independent reproduction;
-- independent patched reproduction;
-- `finding_gate: READY`.
 
-This milestone materially expands the Solidity generalization evidence beyond authorization, initialization, transfer/accounting, rounding, and state-transition parity. It is especially important because the mechanism is **cross-contract**: the vulnerable observation is not merely a local state write/read sequence, but a trust-boundary problem involving externally sourced state observed during another component's transition.
+## 53. Exact filename imports must bypass import-classification ambiguity
 
-The Solidity maturity gate remains open. The next investigation should seek another unfamiliar target and mechanism, preferably one where the existing reasoning surfaces are initially insufficient, while continuing to reject unsupported impact and target-specific hardcoding.
+For a requested user-defined type, an explicitly declared import whose path names the requested source file is itself sufficient provenance. If normal import classification cannot resolve that edge, the resolver may inspect the importing source unit's direct path for that exact declared file and verify the declaration there. This remains a bounded declared-import fallback, not a repository-wide search or target-specific exception.
 
 
-## 56. Unfamiliar TitlesGraph storage-reference persistence — blind causal finding with independent reproduction
+## 54. Exact declared relative imports are the primary nested-type provenance edge
 
-A fourth materially different unfamiliar-target mechanism has now completed the full causal/reproduction finding gate: a state-changing helper copies a persistent storage element into a memory return variable and mutates the copy, so the apparent state transition does not persist.
+When a source-defined custom type is referenced through an explicit import whose path identifies the defining source unit, sequence prerequisite resolution must inspect that declared path directly before invoking broader import/remapping classification.
 
-Target:
-- repository: https://github.com/sherlock-audit/2024-04-titles.git;
-- pinned revision: d7f60952df22da00b772db5d3a8272a988546089;
-- source: wallflower-contract-v2/src/graph/TitlesGraph.sol;
-- target function discovered blind: acknowledgeEdge;
-- related helper discovered blind: _setAcknowledged.
+Rules:
 
-The new reasoning surface is class-neutral. It identifies the topology persistent collection element → memory alias → member mutation → externally reachable caller, then proposes the invariant that a successful state-changing operation must persist the modeled state transition across the transaction boundary. It does not encode TitlesGraph, acknowledgeEdge, _setAcknowledged, acknowledged, or the historical answer.
+1. For importer-relative paths such as `./StealthAddressStructure.sol` or `../types/Foo.sol`, construct the exact importer-relative path and verify that it is a file.
+2. For explicit repository-relative paths, inspect the exact repository-relative path before broader dependency resolution.
+3. Verify that the resolved source actually declares the requested type.
+4. Preserve the declared source path as provenance.
+5. Only if the bounded direct path does not resolve may normal remapping/dependency traversal continue.
+6. This is an import-graph rule, not a target-specific exception and never permits repository-wide filename searching.
+7. If the declared path exists but does not declare the requested type, fail closed rather than substituting an unrelated source.
 
-The blind campaign completed:
+The purpose is to keep execution-readiness aligned with the target parser's source provenance: an explicit Solidity import edge is authoritative evidence about where a custom type comes from.
+## 55. Security experiments require an explicit capability contract
 
-**Target → System Model → Persistence Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Synthetic Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+The execution layer must not treat a security hypothesis as directly executable merely because an experiment object exists. Reasoning and execution are separated by a normalized capability contract.
 
-Observed CI result from the unfamiliar storage-persistence backtest (run #17):
-- blind hypothesis: H-STORAGE-PERSISTENCE-acknowledgeEdge;
-- invariant: INV-STORAGE-PERSISTENCE-acknowledgeEdge;
-- blind execution: one Foundry test executed and failed because the successful acknowledgment did not persist to the target's stored edge;
-- patched causal control: the isolated target source was changed only at the causal reference boundary from Edge memory to Edge storage;
-- patched execution: one Foundry test executed and passed;
-- causal verification: VERIFIED, chain causal:storage-persistence-differential;
-- independent vulnerable reproduction: one fresh Foundry test executed and failed with the same persistence assertion;
-- independent patched reproduction: one fresh Foundry test executed and passed;
-- reproduction verification: VERIFIED;
-- finding gate: READY.
+The canonical handoff is:
 
-The causal control is explicitly a synthetic control, not a claim that this exact source edit is the historical production remediation. Its purpose is to isolate the causal variable: changing the reference location from memory to storage makes the observed state transition persist.
+**hypothesis → experiment intent → capability requirements → capability solver → materialization plan → executor → evidence**
 
-The final machine-readable artifact records:
-- target repository, pinned revision, and source;
-- blind hypothesis and invariant;
-- vulnerable execution: executed=true, tests_run=1, tests_failed=1;
-- patched execution: executed=true, tests_run=1, tests_failed=0;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction_verified: true;
-- finding_gate: READY.
+The capability contract records the concrete execution capabilities required by one experiment without deciding whether the hypothesis is true. Capability names are mechanism-level and reusable across targets, including:
 
-This milestone materially expands the Solidity generalization evidence into storage-reference semantics / state persistence, a mechanism that the previous reasoning surfaces did not recognize. The result is bounded to the demonstrated persistence violation: acknowledgeEdge can return successfully while the intended acknowledgment state remains unchanged. No broader impact is asserted without additional evidence.
+- CALLER_CONSTRUCTION
+- ROLE_ESTABLISHMENT
+- STATE_SETUP
+- CONSTRUCTOR_SETUP
+- CALLBACK_HARNESS
+- REENTRANCY_HARNESS
+- VALUE_PROVISION
+- TOKEN_PROVISION
+- BALANCE_PROVISION
+- ADDRESS_PROVISION
+- PROXY_DEPLOYMENT
+- EVENT_OBSERVATION
+- STATE_OBSERVATION
+- CALL_SEQUENCE
+- INTERNAL_CALL_PROPAGATION
+- TYPE_MATERIALIZATION
 
-The Solidity maturity gate remains open. The next investigation should continue toward another unfamiliar mechanism, preferably one that initially breaks the current reasoning surfaces, while preserving the same blind, causal, independent-reproduction, and fail-closed finding gate.
+A capability may also expose bounded sub-capabilities, such as primitive, array, tuple, custom-struct, nested-custom-struct, and namespaced-custom-struct materialization.
 
+The solver must distinguish:
 
-## 57. Unfamiliar Tapioca double-debit fund-flow — blind causal finding with independent reproduction
+1. **available** — the generic execution surface exists;
+2. **partial** — the surface exists but target-specific materialization/readiness still has to be proven;
+3. **missing** — no generic implementation exists;
+4. **blocked** — the requested sub-capability cannot currently be realized.
 
-A fifth materially different unfamiliar-target mechanism has completed the full causal/reproduction finding gate: a leveraged purchase flow acquires the economic value into the market through the external executor path and then invokes a collateral-accounting path that pulls the same modeled collateral amount from the caller again, while only one collateral accounting position is recorded.
+Partial is not executable success. The canonical runner must still require target-derived readiness and runtime evidence before executing or classifying the security experiment.
 
-Target:
-- repository: https://github.com/sherlock-audit/2024-02-tapioca.git;
-- target source: Tapioca-bar/contracts/markets/bigBang/BBLeverage.sol;
-- target function discovered blind: buyCollateral;
-- related inherited mechanisms: BBLendingCommon._addCollateral and BBCommon._addTokens.
+The capability layer must never contain a target name, target function name, vulnerability-class branch, historical answer, or hard-coded target input. A live-target failure may justify a generic capability repair, but it must never become a target-specific capability.
 
-The new reasoning surface is class-neutral. It looks for the topology external value acquisition → returned value/accounting → subsequent caller-funded pull, then proposes the invariant that one economic amount must not be charged twice while only one persistent accounting position is recorded. It does not encode Tapioca, buyCollateral, the historical issue, or its expected answer.
+## 56. Capability gaps must be clustered and resumed, not rediscovered
 
-The blind campaign completed:
+A materialization failure is an execution-capability observation. It must be recorded using the most specific generic capability and sub-capability that the current model can establish. Multiple hypotheses blocked by the same capability represent one engineering gap, not independent target failures.
 
-**Target → System Model → Fund-Flow Invariant → Blind Hypothesis → Experiment → Vulnerable Execution → Synthetic Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+The canonical campaign should therefore preserve three distinct states:
 
-Observed CI result from the unfamiliar double-debit backtest (run #11):
-- blind hypothesis: H-DOUBLE-DEBIT-buyCollateral;
-- invariant: INV-DOUBLE-DEBIT-buyCollateral;
-- blind execution: one Foundry test executed and failed because the same modeled economic amount was charged twice;
-- patched causal control: the second caller-funded pull was disabled while retaining the acquired collateral and accounting position;
-- patched execution: one Foundry test executed and passed;
-- causal verification: VERIFIED, chain causal:double-debit-differential;
-- independent vulnerable reproduction: one fresh Foundry test executed and failed with the same double-charge assertion;
-- independent patched reproduction: one fresh Foundry test executed and passed;
-- reproduction verification: VERIFIED;
-- finding gate: READY.
+- **understood + executable** — the target model produced a testable experiment and readiness permits execution;
+- **understood + blocked** — the target model and hypothesis exist, but a named capability or target-derived readiness prerequisite prevents execution;
+- **not understood / unexplored** — no sufficient model or hypothesis exists yet.
 
-The benchmark binds its hypothesis to the real Tapioca source by requiring the observed buyCollateral, _borrow, leverageExecutor.getCollateral, and _addCollateral topology, plus the inherited _addTokens implementation in BBCommon. The executable Foundry harness is source-derived and isolates that fund-flow causal variable rather than claiming to compile the entire historical Tapioca dependency graph.
+Blocked must never be interpreted as safe, rejected, or disproven.
 
-The causal control is explicitly synthetic, not a claim that this exact harness edit is the historical production remediation. Its purpose is to isolate whether the second caller-funded pull is the variable that creates the extra economic charge.
+Capability fixes must be resumable. Once a generic capability is repaired, previously blocked experiments should be eligible for rematerialization without regenerating or changing the underlying security hypothesis. The experiment intent and canonical planned inputs remain the source of truth; the materializer is replaceable.
 
-The final machine-readable CI artifact records:
-- blind hypothesis and invariant;
-- blind execution: executed=true, tests_run=1, tests_failed=1;
-- patched execution: executed=true, tests_run=1, tests_failed=0;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction_verified: true;
-- finding_gate: READY.
+The campaign should report capability clusters such as TYPE_MATERIALIZATION:nested_custom_struct or STATE_OBSERVATION:public_mapping so one generic repair can unlock every affected frontier experiment. This is an engineering prioritization signal, not a vulnerability ranking.
 
-This milestone expands the Solidity generalization evidence into **fund-flow provenance / duplicate economic charging**, distinct from transfer accounting, storage persistence, authorization, initialization, and transient read-only state. The result is bounded to the demonstrated double-charge invariant; broader financial impact is not asserted without additional evidence.
+## 57. Progressive experiment materialization
 
-The Solidity maturity gate remains open. The next investigation should continue against an unfamiliar mechanism that is not reducible to an already-covered surface, while preserving blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and fail-closed finding gates.
+Experiment realization must be staged so a late compiler/materialization failure does not discard earlier successful work. The preferred generic stages are:
 
+**subject → prerequisites → attacker capability → call sequence → observations → outcome distinction**
 
-## 58. Unfamiliar execution-domain signature replay — blind causal finding with independent reproduction
+Each completed stage is durable evidence of execution preparation. A later missing capability blocks only the dependent stage and records the exact capability gap. After repair, materialization resumes from the earliest incomplete stage.
 
-A sixth materially different mechanism has completed the canonical causal/reproduction gate as a **source-derived execution-domain differential**: a signature authorization whose digest does not bind the deployment or chain context can be accepted by a second deployment, while a domain-bound control rejects the same authorization.
+The materializer must not jump directly from a semantic hypothesis to a large generated Solidity file when an intermediate capability contract can identify the missing surface first. This keeps compiler failures attributable to the correct execution boundary and makes generic fixes reusable across targets.
 
-Target-derived source:
-- repository: https://github.com/sherlock-audit/2024-10-ethos-network.git;
-- source path: ethos/packages/contracts/contracts/EthosAttestation.sol;
-- blind target function: createAttestation;
-- target-derived topology: createAttestation → digest helper → validateAndSaveSignature.
+The controller remains responsible for selecting the next information-gain experiment. The capability solver is not a security ranking mechanism and must never decide whether a hypothesis is interesting, valid, or vulnerable.
 
-The reasoning surface is class-neutral. It identifies signature verification combined with a digest helper and checks whether the observed signed message binds execution-domain context such as chainid or address(this). It does not encode the historical issue or expected answer.
 
-The executable differential uses an isolated source-derived control because the public audit repository's nested Ethos source revision is not independently checkout-able as a top-level repository ref. The target source is preserved in the benchmark as a source snapshot; therefore this milestone is **not** treated as equivalent to the pinned historical-source milestones.
+## 58. Materialization failures must become structured capability evidence
 
-Observed CI result (latest dedicated signature-replay run):
-- blind hypothesis: H-SIGNATURE-REPLAY-createAttestation;
-- invariant: INV-SIGNATURE-REPLAY-createAttestation;
-- vulnerable execution: executed=true, tests_run=1, tests_failed=1;
-- patched execution: executed=true, tests_run=1, tests_failed=0;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction verification: VERIFIED;
-- finding gate: READY.
+A planned security experiment is not allowed to collapse into an opaque renderer exception. When execution realization fails, the pipeline must preserve the original experiment intent and convert the failure into generic capability evidence.
 
-The initial harness mistake was caught by the differential itself: the first version asserted that vulnerable replay should succeed, causing both controls to PASS and the gate to remain UNRESOLVED. The harness was corrected so the security invariant is expressed as a failure condition on replay; the next run produced the required FAIL/PASS differential and VERIFIED causal chain.
+Rules:
 
-The result demonstrates another generalizable reasoning/execution surface — **signature-domain binding / authorization replay** — distinct from authorization topology, initialization, transfer/accounting, rounding, transient cross-contract state, storage-reference persistence, and duplicate economic charging.
+1. A materialization failure records the execution stage: subject, prerequisites, attacker, call sequence, observations, or outcome.
+2. It records the generic capability and sub-capability that failed, such as TYPE_MATERIALIZATION:nested_custom_struct or STATE_OBSERVATION:public_mapping.
+3. It records a failure class (for example resolver, type materializer, observation planner, or constructor materialization) and source provenance when the failing evidence identifies one.
+4. The structured gap augments the experiment's capability resolution; it does not replace the original hypothesis, experiment contract, planned inputs, or readiness model.
+5. BLOCKED means the experiment could not be realized at the current capability boundary. It never means rejected, disproven, safe, or uninteresting.
+6. Failure classification must be derived from generic execution/materialization semantics. It must not contain a target name, target-specific filename exception, vulnerability-specific branch, or hardcoded target input.
+7. The same structured gap must be clusterable across experiments so one generic repair can resume every affected experiment.
+8. A materialization failure is execution evidence about CYDRA's capability boundary, not security evidence about the target.
 
-Important boundary: this milestone demonstrates that CYDRA can independently derive and causally verify the execution-domain invariant from the preserved target source. It does **not** claim a newly discovered production vulnerability in Ethos until CYDRA executes the actual target dependency graph or another independently reproducible target implementation with equivalent semantics.
+This preserves the separation:
 
-The Solidity maturity gate remains open. The next cycle should prioritize an unfamiliar target that can be executed directly, so the same signature-domain reasoning can be tested without a source-snapshot boundary.
+reasoning intent -> experiment contract -> capability resolution -> materialization -> tool evidence -> security conclusion
 
+A renderer error is therefore no longer merely a debugging message; it is a reusable, resumable capability signal.
 
-## 59. Unfamiliar single-use signed authorization — blind causal finding on a directly executable target
 
-A seventh materially distinct mechanism has now completed the full causal/reproduction finding gate on an unfamiliar target whose **actual pinned repository and dependency graph were executed**: a valid signed claim can be submitted repeatedly because the claim path records a per-minter consumption marker but does not reject the already-consumed state before recording it again.
+## 59. Relative source paths must resolve from the declared project root
 
-Target:
-- repository: https://github.com/code-423n4/2024-08-phi.git;
-- pinned revision: 2465e04364b759c721f1a0aebace69920411f8aa;
-- source: src/PhiFactory.sol;
-- blind target function: signatureClaim;
-- related helper discovered from the target topology: _validateAndUpdateClaimState.
+Execution-readiness resolvers receive source paths from the target model, and those paths may be relative to the target project root. A resolver must not interpret a relative importer path against the process working directory because the working directory is an execution detail, not source provenance.
 
-The new reasoning surface is class-neutral. It identifies a signed state-changing entry point, follows its claim-state helper, observes a persistent boolean/mapping consumption marker being written, and asks whether the same marker is checked and rejected before the write. It does not encode Phi, signatureClaim, artMinted, credMinted, or the historical answer.
+Rules:
 
-The blind campaign completed:
+1. Normalize every relative source/importer path against the declared project root before reading it or traversing its imports.
+2. Preserve absolute paths unchanged after normalization.
+3. Apply the same normalization consistently to interface resolution, user-defined type resolution, struct-field resolution, and import resolution.
+4. Keep the existing bounded import-graph rules: root anchoring fixes path context; it does not authorize repository-wide symbol searches.
+5. Add regressions using a relative source path whose project root differs from the process working directory.
 
-**Target → System Model → Single-Use Authorization Invariant → Blind Hypothesis → Experiment → Actual Target Execution → Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+This is a generic source-provenance rule. It prevents valid target import edges from becoming false capability gaps merely because the runner's current working directory differs from the target project root.
 
-Observed dedicated CI run #4 (run ID 35538206816, artifact ID 10613118546):
-- blind hypothesis: H-SIGNATURE-REUSE-signatureClaim;
-- invariant: INV-SIGNATURE-REUSE-signatureClaim;
-- the blind hypothesis bound to the observed _validateAndUpdateClaimState consumption-marker topology;
-- vulnerable execution: executed=true, tests_run=1, tests_failed=1; the exact same signed authorization was accepted twice;
-- patched causal control: the target source was changed only to reject an already-consumed artMinted state with the target's existing AddressAlreadyMinted error;
-- patched execution: executed=true, tests_run=1, tests_failed=0;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction verification: VERIFIED;
-- finding gate: READY.
 
-The executable test used the real Phi claim setup from the pinned repository, generated one valid signed claim, submitted that exact authorization twice, and required the second submission to be rejected. On the vulnerable source the second claim succeeded and the security assertion failed. On the patched control the second claim reverted and the test passed.
+## 60. Generic constructor defaults must avoid known unsigned lower-bound underflow
 
-This milestone is stronger than Milestone 58 on target provenance: it does not use a preserved source snapshot or a synthetic standalone authorization fixture. CYDRA cloned the pinned Phi repository, initialized its dependencies, installed the repository's declared npm dependencies, compiled the real Solidity project, and executed the generated test against that dependency graph. The patched version is still a causal control, not a claim that the historical production remediation was exactly that edit.
+Constructor materialization must not assume that zero is universally safe for unsigned integer inputs. A source-level constructor may immediately use an unsigned value as a lower-bounded operand, such as value - 1, making zero an invalid harness default even though the Solidity type itself accepts it.
 
-The benchmark also caught and repaired two implementation blockers before reaching READY: the reasoning test initially lacked an explicit recover topology, and the target repository required npm-installed @prb/test dependencies for its existing test harness. The final run was green only after both were resolved.
+Rules:
 
-This milestone expands the demonstrated Solidity reasoning surface into **single-use signed authorization / consumption-state enforcement**, distinct from execution-domain signature binding. It also demonstrates that CYDRA can connect cryptographic authorization evidence to persistent application state and then verify the resulting lifecycle invariant against a real unfamiliar project.
+1. The generic constructor materializer uses the smallest non-zero unsigned integer default (1) rather than zero when no stronger target-derived constructor value is available.
+2. Signed integers may retain zero as their neutral default unless source-derived constraints require another value.
+3. This default is only a materialization fallback; target-derived constructor requirements remain authoritative and must be modeled when known.
+4. A constructor runtime failure is not security evidence against the target; it is execution-capability evidence until the generated setup is valid.
+5. Regression tests must cover unsigned constructor values used in subtraction so this class of harness underflow cannot silently recur.
 
-Boundary: the benchmark proves the demonstrated invariant violation in the pinned historical Phi source and its causal reproduction. It does not independently assign severity beyond the tested unauthorized repeated claim transition, and it does not generalize the result to all signature-based systems without evidence.
+The purpose is generic execution robustness: valid constructor domains must be respected before prerequisite or security experiments can begin.
 
-The Solidity maturity gate remains open. The next cycle should deliberately seek a materially different mechanism and unfamiliar target, while preserving direct execution, blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
-## 60. Unfamiliar epoch-boundary accounting — blind causal finding with independent reproduction
 
-An eighth materially distinct Solidity mechanism has now completed the full causal/reproduction finding gate on an unfamiliar target whose **actual pinned repository and dependency graph were executed**: a reward/accounting transition can carry the rate from the epoch containing an unaligned checkpoint across the next epoch boundary because the segment end is calculated as the current position plus a full epoch rather than the next aligned epoch boundary.
+## §61 — Constructor-Established Role Binding Is Generic Execution Capability
 
-Target:
-- repository: https://github.com/code-423n4/2024-01-canto.git;
-- pinned revision: 5e0d6f1f981993f83d0db862bcf1b2a49bb6ff50;
-- source: src/LendingLedger.sol;
-- blind target function: update_market;
-- observed mechanism: BLOCK_EPOCH-aligned cantoPerBlock schedule combined with an unaligned market.lastRewardBlock and iterative reward accumulation.
+When target-derived evidence shows that a constructor establishes an authorization role for its deployment caller (msg.sender / _msgSender()), the execution materializer must reuse that provenance rather than inventing a target-specific role grant.
 
-The new reasoning surface derives the epoch-accounting invariant from the target source. It recognizes an epoch bucket derived from the current position, a next segment expressed as current position + BLOCK_EPOCH, and a bounded interval calculation. The implementation was generalized to preserve Solidity token boundaries and numeric separators and to recover directly from source text when the lightweight model does not expose a function. It does not encode the Canto historical answer.
+The generic sequence renderer therefore:
 
-The blind campaign completed:
+1. resolves modifier invocation arguments for the experiment step;
+2. matches the required role expression against constructor role-grant evidence across the modeled inheritance graph;
+3. when the constructor grant is to its deployment caller, selects a deterministic CYDRA runtime identity for that role (including DEFAULT_ADMIN_ROLE);
+4. deploys the target under that identity when required;
+5. executes the authorized experiment step under the same identity.
 
-**Target → System Model → Epoch Accounting Invariant → Blind Hypothesis → Experiment → Actual Target Execution → Causal Control → Causal Verification → Independent Reproduction → Finding Gate**
+This is execution materialization, not authorization bypass evidence. It exists to reproduce a legitimate target state established by the target's own construction semantics.
 
-Observed dedicated CI run #11 (run ID 35539921742, artifact ID 10614910600):
-- blind hypothesis: H-EPOCH-ACCOUNTING-update_market;
-- invariant: INV-EPOCH-ACCOUNTING-update_market;
-- vulnerable execution: executed=true, tests_run=1, tests_failed=1;
-- vulnerable observation: starting at block 50,000 and updating through block 150,000 produced 100,000e18 accumulated CANTO-per-share instead of the piecewise 150,000e18 schedule implied by 50,000 blocks at 1e18/block followed by 50,000 blocks at 2e18/block;
-- patched causal control: only the epoch segment-end expression was changed from i + BLOCK_EPOCH to the next aligned epoch boundary;
-- patched execution: executed=true, tests_run=1, tests_failed=0;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction verification: VERIFIED;
-- finding gate: READY.
+Development rule remains:
 
-The actual pinned Canto repository was cloned and executed with Foundry. The benchmark did not install or mutate an unrelated npm dependency graph. The generated Foundry harness configured two reward epochs, created an unaligned checkpoint, crossed the epoch boundary, and asserted the resulting accounting state. Four fresh target clones were used for vulnerable, patched, independent-vulnerable, and independent-patched executions.
+**observed runtime blocker → identify reusable target-derived capability → generic implementation → regression → rerun the exact same experiment.**
 
-The causal control is explicitly synthetic: it isolates the epoch-segment-end calculation as the causal variable and is not presented as the historical production remediation.
+Never encode a target-name-specific role grant or force privileged state merely to make a hypothesis execute. Evidence that a role is established must come from the target model/provenance.
 
-This milestone expands the demonstrated Solidity reasoning surface into **piecewise epoch-boundary accounting / temporal rate partitioning**, distinct from authorization, initialization, transfer/accounting, rounding, transient cross-contract state, storage-reference persistence, duplicate economic charging, signature-domain binding, and single-use signed authorization.
 
-Boundary: this benchmark establishes the invariant violation and causal reproduction in the pinned historical Canto revision. It is evidence of CYDRA's ability to derive and verify this mechanism on a directly executable unfamiliar target; it is not by itself an open-ended proof that every temporal/accounting defect can be discovered.
 
-The Solidity maturity gate remains open. The next cycle should deliberately seek another unfamiliar mechanism that is not reducible to the current reasoning surfaces, while preserving direct execution, blind hypothesis generation, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
-## 61. Unfamiliar control-flow progress failure — blind causal finding with independent reproduction
+## 61. Renderer dependencies must be explicit and regression-covered
 
-A ninth materially distinct Solidity mechanism has now completed the full causal/reproduction finding gate on an unfamiliar target whose actual pinned repository and dependency graph were executed: a reachable continue branch in a gas-optimized loop bypasses the loop-counter update, so a previously processed element can prevent the loop from advancing and make the whole batch execution exhaust gas.
+Execution materialization code must explicitly import every helper it invokes. A missing renderer dependency is a capability implementation failure, not target evidence.
 
-Target:
-- repository: https://github.com/code-423n4/2023-09-venus.git;
-- pinned revision: 23f5db740d8a794ac563ac32195b675c53042bb4;
-- source: contracts/Tokens/Prime/Prime.sol;
-- blind target function: updateScores;
-- observed mechanism: a loop over users checks isScoreUpdated[nextScoreUpdateRoundId][user] and executes continue without advancing i.
+Rules:
 
-The new reasoning surface derives a loop progress / termination invariant from source topology: every reachable iteration of a terminating loop must make progress toward its termination condition, and a continue branch must not bypass the loop-counter or termination-state update. The planner then asks for a discriminating execution containing an already-processed first element followed by a still-unprocessed element. It does not receive the historical finding as its answer.
+1. Renderer helpers used for deployment, caller construction, sequence rendering, or observation materialization must be imported from their defining module.
+2. New helper calls must have a focused regression that exercises the affected rendering path rather than relying only on import-time coverage.
+3. A renderer `NameError` is classified as a generic call-sequence/materialization failure and must not alter the security hypothesis.
+4. The same experiment intent must be rerun after the dependency fix.
 
-The blind campaign completed:
 
-Target -> System Model -> Loop Progress Invariant -> Blind Hypothesis -> Experiment -> Actual Target Execution -> Causal Control -> Causal Verification -> Independent Reproduction -> Finding Gate
+## §62 — Capability Repair Controller: Diagnose → Implement → Regress → Resume
 
-Dedicated CI run #25 (run ID 35555875658, artifact ID 10620885446):
-- blind hypothesis: H-CONTROL-FLOW-updateScores;
-- invariant: INV-CONTROL-FLOW-updateScores;
-- vulnerable execution: executed=true, tests_run=1, tests_failed=1;
-- vulnerable observation: with the first supplied user already marked as processed and a second user still pending, updateScores failed to make progress and exhausted the bounded gas call;
-- patched causal control: only the continue branch was changed to increment i before continuing;
-- patched execution: executed=true, tests_run=1, tests_failed=0;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction verification: VERIFIED;
-- finding gate: READY.
+The live-target campaign is now required to expose capability failures as a machine-actionable repair contract.
 
-The target was executed through its real upgradeable ERC1967 proxy boundary. The pinned Venus repository was cloned at the historical revision, its declared npm dependency graph was installed, Foundry dependencies were initialized, and the generated test executed against the real target implementation. A minimal access-control contract was used only as an environmental dependency required to reach the target's externally callable setup; the vulnerable loop and its state transition remained the pinned target implementation.
+The intended loop is:
 
-This milestone demonstrates a materially different reasoning capability from the accounting, authorization, lifecycle, transfer, rounding, state-persistence, signature, and epoch-boundary surfaces: control-flow progress / termination reasoning. CYDRA derived the invariant from loop topology, selected an input that makes the problematic branch reachable, isolated the progress update as the causal variable, and reproduced the differential independently.
+**target model → frontier → experiment → capability/readiness diagnosis → generic repair requirement → generic implementation → regression → exact experiment rerun → evidence → model/frontier update**
 
-Boundary: this benchmark establishes the control-flow invariant violation and causal reproduction in the pinned historical Venus revision. It does not claim that every non-terminating-loop defect is discoverable by this single structural surface, and the synthetic patch is a causal control rather than a claim about the historical production remediation.
+Rules:
 
-The Solidity maturity gate remains open. The demonstrated surface count is now nine materially distinct mechanisms, but the final gate still requires evidence that CYDRA can select and validate findings beyond its existing explicitly designed reasoning surfaces. The next campaign should therefore move toward a more open-ended blind target where the vulnerability class and specialized surface are not supplied in advance, while preserving direct execution, causal isolation, independent reproduction, provenance, uncertainty, and the fail-closed finding gate.
+1. A capability requirement is clustered by generic capability/sub-capability, never by target name, target function, historical finding, or vulnerability-specific exploit.
+2. capability_repair.json is the durable handoff between diagnosis and repair. It records the reusable capability contract, affected experiments, stage, and reason.
+3. A repair is not considered complete merely because code changed. The repair must pass the generic regression gate before the blocked experiment is eligible for exact-target resumption.
+4. A repaired experiment retains its original hypothesis, experiment identity, planned inputs, provenance, and evidence history. Repair must not regenerate the security question merely to fit the implementation.
+5. If no generic repair implementation exists, the controller must stop fail-closed with an explicit implementation requirement. It must not invent a target-specific workaround.
+6. A repair controller may resume every experiment in the same capability cluster after one generic repair. Capability work is engineering state, not security evidence.
+7. A repaired execution can produce measured evidence, rejected hypotheses, unmeasurable results, or a confirmed finding only through the normal causal/reproducibility gates. Repair success itself is never a security conclusion.
 
+This preserves the doctrine:
 
+**LLMs propose. Tools test. Evidence decides.**
 
-## Milestone 62 — First class-hidden open-ended blind discovery
+The LLM/engineering layer may implement the generic requirement; the live target remains the test oracle for whether that capability is actually sufficient.
 
-Benchmark 022 completed the first true class-hidden blind campaign. CYDRA investigated a pinned unfamiliar Intuition AtomWallet target without being supplied a vulnerability class, target function, state surface, exploit sequence, or historical answer. It generated three candidate hypotheses and its class-neutral information-per-cost selector independently selected H-SIGNED-METADATA-_validateSignature. The selected experiment was executed against the real pinned repository and dependency graph. The vulnerable target accepted the same 65-byte ECDSA signature after only the 12-byte validity metadata suffix was changed, including after the original validity window had expired. A minimal causal control bound the validity metadata into the signed digest; vulnerable execution failed the security assertion and the patched control passed. Fresh independent vulnerable and patched clones reproduced the same split. Canonical causal verification reached verified, reproduction verification was true, and the finding gate reached READY.
 
-This milestone is materially different from the prior specialized benchmarks because the benchmark selection boundary is class-hidden: the benchmark does not tell CYDRA what mechanism to look for. The benchmark harness retains the historical oracle only for evaluation and causal-control construction after CYDRA has selected and tested its own hypothesis.
+## §63 — Automatic generic repair orchestration is live
 
-**Maturity gate:** still open. This milestone establishes the first open-ended selection-and-verification result, but it is one bounded class-hidden campaign. Solidity maturity should close only after repeated open-ended unfamiliar-target campaigns demonstrate that CYDRA can choose and causally verify findings across materially different mechanisms without benchmark-provided vulnerability-class guidance.
+The canonical live runner now consumes the capability-repair contract instead of leaving it as a passive JSON handoff.
 
+For each target-derived capability cluster it can:
 
-## Milestone 64 — strict blind signature-reuse finding (Benchmark 025)
-- Benchmark 025 reran the unfamiliar pinned Phi signature-reuse target through CYDRA's normal investigation pipeline rather than injecting the signature-reuse reasoning surface or custom experiment planner.
-- Blind context supplied no vulnerability class, target function, state surface, reasoning-surface injection, or benchmark answer. The class-neutral selector independently selected H-SIGNATURE-REUSE-signatureClaim.
-- The selected hypothesis was tested against the actual pinned Phi repository and dependency graph. Vulnerable execution FAIL demonstrated that the same signed authorization was accepted twice; the isolated patched control PASS rejected reuse.
-- Canonical causal verification reached VERIFIED. Independent vulnerable reproduction FAIL and independent patched reproduction PASS; finding gate READY.
-- The strict blind run completed successfully in CI, and the canonical Solidity research loop on the merged main commit also completed successfully.
-- This strengthens the generalization evidence because the historical signature-reuse capability survived the normal blind orchestration boundary instead of being manually supplied by the benchmark harness.
-- The Solidity maturity gate remains open. Benchmark 025 is a third consecutive open-ended/class-hidden causal success across signed metadata integrity, role-intent authorization, and signature-consumption mechanisms, but closure still requires further unfamiliar-target campaigns and evidence that CYDRA continues to discover findings without accumulating target-shaped detectors.
+1. select a registered generic implementation boundary;
+2. run the implementation's focused regression suite;
+3. replay the exact frozen target/source investigation with the original target ref;
+4. preserve the affected hypothesis/experiment provenance;
+5. persist the repair/replay outcome;
+6. fail closed when no generic implementation is registered or regression fails.
 
-## Milestone 63 — class-hidden role-intent blind finding (Benchmark 023)
-- Benchmark 023 exercised a stricter open-ended blind campaign against unfamiliar pinned Blackhole target contracts/SetterTopNPoolsStrategy.sol at revision 92fff849d3b266e609e6d63478c4164d9f608e91.
-- CYDRA received only the pinned source target. The benchmark did not supply the vulnerability class, target function, exploit sequence, or expected answer.
-- A new class-neutral reasoning surface, role-intent parity, identified a documented caller boundary (owner or AVM) that was narrower in enforcement (onlyExecutor). The blind selector selected H-INTENT-PARITY-setTopNPools as its only candidate.
-- Real pinned target execution: vulnerable FAIL (owner caller rejected); causal control PASS after changing only the setter modifier to onlyOwnerOrExecutor; canonical causal verification VERIFIED.
-- Independent vulnerable reproduction FAIL and independent patched reproduction PASS. Finding gate READY.
-- Target execution used the actual pinned source and dependency versions, with an isolated Foundry harness to avoid unrelated compilation failures elsewhere in the historical repository.
-- This is a reproduced historical benchmark finding, not a claim of a newly discovered production vulnerability.
-- The Solidity maturity gate remains open: this adds another class-hidden blind success, but closure still requires repeated genuinely open-ended campaigns across materially different mechanisms without benchmark-specific detectors being introduced solely for the target.
+The controller is bounded and target-neutral. It never edits target code, changes the target ref, changes the security hypothesis to fit a repair, or promotes repair success to security evidence.
 
+The important distinction is:
 
-## Milestone 65 — strict blind control-flow selection miss and pipeline exposure
+implemented generic capability → regression → exact target replay → new evidence
 
-Benchmark 026 was run as an adversarial strict-blind test against the pinned unfamiliar Venus Prime control-flow target. The benchmark supplied no vulnerability class, target function, state surface, reasoning-surface injection, custom planner, exploit sequence, or historical answer. The normal selector instead chose H-INIT-initialize/initialize, so the campaign failed before target execution.
+not:
 
-This failure is retained as evidence rather than hidden or repaired by benchmark-specific ranking. Diagnosis showed that the demonstrated generic control-flow reasoning surface existed but was not part of the normal default reasoning surface set. The existing specialized control-flow benchmark was still green, proving the reasoning capability itself; the blind miss was therefore an orchestration/generalization boundary, not a failure of the control-flow detector.
+capability label → presumed success.
 
-PR #123 promoted the already demonstrated control-flow reasoning surface and its existing planner into the normal class-neutral pipeline. Existing full regression and the specialized control-flow backtest remained green, and the strict blind signature-reuse campaign also remained green after the change.
+If a gap has no registered generic implementation, that is now an explicit implementation_boundary rather than a silent skip. Adding a new repair provider requires a generic implementation plus focused regression coverage; target-specific provider matching is prohibited.
 
-The strict blind control-flow campaign remains closed as a negative regression experiment. The important remaining blocker is broader research-loop hypothesis selection: after the normal pipeline exposes multiple valid hypotheses, CYDRA currently makes a one-shot score choice and does not yet execute a selected hypothesis, update its belief from the result, and then choose the next discriminating hypothesis. The next development work should address that generic evidence-driven loop rather than special-case control-flow or initialization.
-
-The Solidity maturity gate remains open. This milestone is a deliberate negative result that identifies the next general capability needed for open-ended discovery.
-
-
-## Milestone 66 — evidence-driven iterative blind finding
-
-Benchmark 027 closed the generic research-loop gap identified by Benchmark 026.
-
-Against the pinned unfamiliar Venus Prime target, CYDRA began with a strict blind investigation: no vulnerability class, target function, state surface, reasoning-surface injection, custom planner, exploit sequence, or historical answer. The normal selector first chose the initialization hypothesis. CYDRA executed that selected hypothesis; its measured result was non-confirming/unmeasurable rather than silently treated as success. The generic hypothesis-selection API then excluded that candidate and performed a second selection.
-
-The second selection reached the independent control-flow hypothesis. CYDRA then executed the actual pinned target, applied an isolated causal control, and independently reproduced both vulnerable and patched behavior. Benchmark 027 completed with the causal differential verified and the finding gate READY.
-
-The campaign also exposed and fixed a generic Solidity project-root/import-provenance issue affecting non-Foundry repositories. Repository root detection now recognizes Git/package-based project roots, and generated runtime interface imports preserve the already-resolved source provenance. Full Python regression remained green.
-
-This is a materially stronger research-loop result than a one-shot benchmark: CYDRA did not need the final vulnerability class or target function to be selected initially, and it used measured evidence to reject its first hypothesis and continue research.
-
-The Solidity maturity gate remains open. The next gate is repetition on additional unfamiliar targets and materially different mechanisms, with the same strict blind boundary and causal/reproduction requirements.
-
-
-## Milestone 67 — strict blind external-call outcome finding (Benchmark 029)
-
-Benchmark 029 added a generic class-neutral reasoning surface for external-call outcome / transition integrity and exercised it against the unfamiliar pinned Nested Finance Withdrawer target.
-
-Target:
-- repository: https://github.com/code-423n4/2022-06-nested.git;
-- pinned revision: b4a153c943d54755711a2f7b80cbbf3a5bb49d76;
-- source: contracts/Withdrawer.sol;
-- blind target function selected by CYDRA: withdraw.
-
-Strict blind boundary:
-- no vulnerability class;
-- no target function;
-- no state surface;
-- no specialized reasoning-surface injection;
-- no custom planner;
-- no exploit sequence;
-- no historical answer.
-
-The normal pipeline independently selected H-EXTERNAL-OUTCOME-withdraw from the pinned source. The hypothesis was then executed against the actual pinned repository and dependency graph.
-
-The first causal harness attempt is retained as a research failure: the generated receiver test could not accept native value and the patched control was initially evaluated against the vulnerable assertion. CYDRA therefore reached UNRESOLVED, and the failure was diagnosed from execution evidence rather than counted as a finding.
-
-The harness was corrected generically:
-- the adversarial receiver now accepts native value;
-- vulnerable execution asserts that value must not be released after a false transferFrom result;
-- patched execution explicitly expects the causal validation revert;
-- the same harness is used for independent vulnerable and patched reproductions.
-
-Final dedicated CI run #7 (run ID 35585078197) completed:
-- blind hypothesis: H-EXTERNAL-OUTCOME-withdraw;
-- vulnerable execution: FAIL;
-- patched causal control: PASS;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- finding gate: READY.
-
-This is a materially different mechanism from the existing accounting, lifecycle, authorization, signature, control-flow, state-persistence, and rounding campaigns: an external dependency can report failure without reverting, and the target must not continue into a subsequent value-releasing transition.
-
-The historical Code4rena report is post-selection corroboration/evaluation context only; it was not supplied to CYDRA during hypothesis generation.
-
-This milestone strengthens the Solidity maturity evidence because the new reasoning surface generalized from a mechanism-level invariant rather than encoding the Nested target's function name, historical exploit sequence, or answer. The Solidity maturity gate remains open. The next campaigns should continue testing materially different unfamiliar mechanisms and, where possible, reduce the need for target-specific causal harness code while preserving the strict blind boundary and fail-closed finding gate.
-
-## Milestone 68 — operational end result: repeated blind causal findings on main
-
-After Benchmark 030, the merged main commit was exercised by the canonical Solidity research workflow and the open-ended blind workflow.
-
-The operational end result is now demonstrated: CYDRA can take an unfamiliar pinned Solidity target through system modeling, class-neutral hypothesis generation, experiment selection, real Foundry execution, causal differential verification, and finding-gate evaluation, producing a reproducible finding without being handed the historical vulnerability class or answer.
-
-Evidence on main commit b586cc66f62a3b1e0d0c745ac22c9e1a3efecf81 includes:
-
-- Benchmark 030 strict blind type-domain reachability: blind selection of H-TYPE-DOMAIN-reRoll-tokenId; vulnerable FAIL; causal control PASS; causal verification VERIFIED; independent vulnerable FAIL; independent patched PASS; finding gate READY.
-- Benchmark 022 open-ended blind regression: blind selection of H-SIGNED-METADATA-_validateSignature; vulnerable FAIL; patched PASS; causal verification VERIFIED; independent reproduction verified; finding gate READY.
-- The canonical Solidity research workflow completed successfully with the full Python regression suite, the verified unfamiliar-target historical backtest, real Alchemix authorization, Stader initialization, Olas transfer-accounting, and Morph initialization backtests all completing successfully. The Olas and cross-contract historical runs reached a READY finding gate with causal verification.
-- The strict-blind epoch-boundary campaign initially remained a retained negative result because its one-shot selector chose H-INTENT-PARITY-whiteListLendingMarket instead of the epoch hypothesis. That negative result is preserved as the pre-loop baseline rather than erased. After the generic evidence-driven research loop was applied, the same blind campaign independently selected H-EPOCH-ACCOUNTING-update_market, executed it against the pinned target, reproduced the causal differential, and reached READY.
-
-This establishes the practical end result required by the project: CYDRA is no longer only an architecture or benchmark framework; the merged system has demonstrated reproducible blind finding production on unfamiliar Solidity targets.
-
-The broader Solidity maturity/generalization gate remains open. Future work should improve the generic evidence-driven research loop, reduce benchmark-specific harness assumptions, and test additional unfamiliar targets. No future benchmark should be accepted merely because a specialized detector was made to select its historical answer.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 69 — generic research-loop recovery of the retained blind miss
-
-Benchmark 028 was rerun after the class-neutral evidence-driven research loop became mainline. This was a held-out regression of the exact one-shot selector failure documented in Milestone 68; no selector score, vulnerability-class hint, target function, state surface, historical answer, or benchmark-specific reasoning surface was added to the blind context.
-
-The blind investigation initially generated multiple competing hypotheses. The generic loop selected a non-executable hypothesis when appropriate, recorded the observation as UNMEASURABLE rather than treating it as success, and fed that evidence back into hypothesis selection. The next selection reached the epoch-boundary accounting hypothesis:
-
-- hypothesis: H-EPOCH-ACCOUNTING-update_market;
-- invariant: INV-EPOCH-ACCOUNTING-update_market;
-- target: pinned Canto LendingLedger.sol at revision 5e0d6f1f981993f83d0db862bcf1b2a49bb6ff50;
-- vulnerable execution: FAIL, with the observed accounting value 100000000000000000000000 versus the piecewise expected 150000000000000000000000;
-- patched causal control: PASS;
-- causal differential: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction verification: true;
-- finding gate: READY.
-
-The artifact is from the actual strict-blind CI run #37 (run ID 35596000527). Full Python regression also passed in the same job.
-
-This is important evidence about the research loop itself: the previously retained selector miss was recovered by executing and learning from the first hypothesis rather than by changing selector scoring or teaching the system the historical answer. The original one-shot miss remains preserved as a negative baseline, while the iterative run demonstrates evidence-driven recovery.
-
-Boundary: Benchmark 028 remains a bounded historical campaign and does not establish arbitrary open-ended discovery. The next maturity work should therefore continue on a genuinely unfamiliar target/mechanism and test whether the generic loop produces the same kind of recovery and finding-gate evidence without a benchmark-specific execution binding.
-
-## Milestone 70 — strict blind callback-before-state-update finding (Benchmark 032)
-
-Benchmark 032 completed the next materially different strict-blind campaign against the pinned Phi `Cred.sol` target at revision `8c0985f7a10b231f916a51af5d506dd6b0c54120`.
-
-Strict blind boundary:
-- no vulnerability class;
-- no target function;
-- no exploit sequence;
-- no state surface;
-- no specialized reasoning-surface injection;
-- no custom planner;
-- no historical answer.
-
-The normal pipeline initially selected two non-executable hypotheses and recorded both as `UNMEASURABLE`. The generic selector then selected `H-CALLBACK-STATE-ORDER-buyShareCred` from source-level callback/state-order evidence. The selected hypothesis was bound to the public `buyShareCred` wrapper while preserving the internal `_handleTrade` provenance.
-
-The campaign exposed and fixed two generic issues before completion:
-- callback topology needed source-level binding through internal helpers rather than relying on direct model writes;
-- an `UNMEASURABLE` observation needed stronger generic information-gain deprioritization so the research loop would move to a different executable hypothesis instead of repeatedly selecting the same non-renderable candidate.
-
-The isolated Foundry differential harness then executed the real pinned repository after installing its authoritative `bun.lockb` dependencies.
-
-Final canonical CI run #26 (run ID `35610469250`) completed successfully:
-- blind selection: `H-CALLBACK-STATE-ORDER-buyShareCred`;
-- vulnerable execution: FAIL;
-- patched causal control: PASS;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction verification: true;
-- finding gate: READY.
-
-The vulnerable trace showed the attacker-controlled callback successfully reentering `sellShareCred` before the temporal state was established; the patched control moved the timestamp write before the external value transfer and blocked the reentrant sell. The final artifact was uploaded by the canonical GitHub Actions run and its `result.json` records the complete blind loop, differential execution, causal verification, and READY gate.
-
-This is a materially different mechanism from the preceding resource-authorization, type-domain, epoch-boundary, external-outcome, signature, authorization, lifecycle, accounting, rounding, and control-flow campaigns. The historical Phi source was used as the pinned evaluation target and causal-control basis only after blind hypothesis selection.
-
-The Solidity maturity/generalization gate remains open. Benchmark 032 adds another successful unfamiliar-mechanism blind finding, but closure still requires repeated evidence across additional unfamiliar targets and mechanisms without target-shaped detectors or benchmark-provided selection hints.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-## Milestone 71 — iterative strict-blind read-only reentrancy finding (Benchmark 033)
-
-Benchmark 033 completed the next unfamiliar-target campaign against the pinned Bond Protocol `BondFixedTermTeller.sol` target from `sherlock-audit/2022-11-bond`.
-
-The campaign preserved the strict blind boundary:
-- no vulnerability class supplied to selection;
-- no target function supplied;
-- no exploit sequence supplied;
-- no state surface supplied;
-- no historical answer supplied;
-- no benchmark-specific selector override.
-
-The first normal class-neutral selection chose `H-EXTERNAL-OUTCOME-create`. CYDRA executed that hypothesis against the real pinned repository with a false-returning ERC20 transferFrom probe. The experiment passed, meaning the selected external-outcome hypothesis was contradicted for the target. The generic research loop fed that measured result back into selection as a rejected hypothesis rather than silently replacing it.
-
-The second selection independently reached:
-`H-READONLY-_mintToken-mapping`
-
-The selected experiment was then executed against the actual pinned Bond repository. The vulnerable implementation allowed the ERC1155 receiver callback to read the public `tokenMetadata` mapping while the bond-token supply was still zero; after the callback returned, the settled supply became the minted amount.
-
-Canonical differential result from CI run #13 (run ID `35613621802`):
-- first hypothesis: `H-EXTERNAL-OUTCOME-create`;
-- first experiment: PASS / contradicted;
-- second blind hypothesis: `H-READONLY-_mintToken-mapping`;
-- vulnerable execution: FAIL;
-- patched causal control: PASS;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL;
-- independent patched reproduction: PASS;
-- reproduction verification: true;
-- finding gate: READY.
-
-The causal control changed only the ordering in `_mintToken`: record the supply before invoking the callback-capable ERC1155 mint. The vulnerable and patched executions were run from independent clones. The uploaded CI `result.json` artifact contains the complete selection/reselection, execution differential, causal verification, and READY gate.
-
-This campaign is materially different from Benchmark 032. Benchmark 032 tested callback-before-security-state-update where the callback reentered a state-changing function; Benchmark 033 tests a read-only observation of transient aggregate state through a public mapping during a token receiver callback. It therefore adds evidence for cross-function temporal consistency and evidence-driven hypothesis reselection on an unfamiliar target.
-
-The Solidity maturity/generalization gate remains open. The next maturity step is not to add another target-shaped detector merely to increase the benchmark count. The evidence now supports continuing toward broader open-ended campaigns where CYDRA must generate, test, reject, and reselection hypotheses across unfamiliar targets while preserving causal verification and independent reproduction.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-## Milestone 72 — strict blind incentive-state divergence finding (Benchmark 036)
-
-Benchmark 036 completed a strict-blind holdout for permissionless incentive payout coupled to caller-manufactured work. The campaign required blind selection, vulnerable/patched differential execution, causal verification, independent reproduction, and READY finding-gate promotion. The campaign exposed and repaired execution-model and economic-measurement issues before the final green run. It is evidence for generic incentive-state reasoning, not evidence that the maturity gate is closed.
-
-## Milestone 73 — strict blind keeper zero-work incentive finding (Benchmark 037)
-
-Benchmark 037 completed a strict-blind holdout derived from the security-relevant shape documented in Sherlock's 2023 Perennial V2 judging material: a reward-bearing keeper path could pay after a zero-iteration settlement call. The CYDRA fixture is an executable reduction rather than the historical deployment itself.
-
-The benchmark forced the generic incentive-liveness capability to recognize reward flow through a modifier and work through iterable execution rather than relying on a direct payout in the function body. The blind boundary supplied no vulnerability class, target function, exploit sequence, invariant, patch, historical answer, or selector override.
-
-The final validated campaign on PR #158 completed all repository checks with zero failures and reached:
-- blind selection: generic incentive-liveness hypothesis for settle;
-- vulnerable execution: FAIL with the security assertion triggered by reward paid for zero work;
-- patched execution: PASS;
-- causal verification: VERIFIED;
-- independent vulnerable reproduction: FAIL with the same security assertion;
-- independent patched reproduction: PASS;
-- finding gate: READY.
-
-The campaign also exposed and repaired two harness defects before acceptance: an initially non-executable abstract fixture and an incorrect caller-balance baseline taken before target funding. This is precisely the required diagnose → repair → retest loop.
-
-The result strengthens evidence for generic incentive-state reasoning and adversarial execution measurement. It does not close the Solidity maturity/generalization gate. Further unfamiliar targets must continue to test whether the reasoning generalizes without benchmark-shaped selection or target-specific detectors.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-## Milestone 74 — multi-finding and evidence-backed severity architecture
-
-CYDRA now supports target-scoped accumulation of independently confirmed findings. The generic research loop can retain multiple verified findings across investigation rounds instead of replacing the target result after the first finding. Findings can be ordered for reporting by their demonstrated canonical impact level.
-
-Pre-confirmation impact potential is a bounded research-priority signal only. UNKNOWN receives no bonus. It must never be treated as final severity. Final severity remains evidence-backed and is required to agree with the demonstrated impact assessment.
-
-An optional program-specific severity policy can be supplied after the conservative baseline classifier. This avoids assuming that all bounty programs use identical severity taxonomies while preserving the underlying technical impact evidence.
-
-PR #162 integrated the target-scoped finding collection. PR #163 connected impact potential to generic hypothesis selection. PR #164 integrated multi-finding accumulation into the research loop. PR #165 added explicit program severity policy handling. All four milestones passed their repository CI gates before merge; PR #165 completed 39/39 checks with zero failures before merge.
-
-This architecture does not close the Solidity maturity/generalization gate. The remaining proof obligation is behavioral: repeated strict-blind unfamiliar-target campaigns must demonstrate that the generalized research loop can discover and causally verify genuine vulnerabilities, including more than one finding where the target supports it, without benchmark-specific detectors or selector overrides.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 75 — Solidity maturity/generalization gate closure campaign
-
-The maturity gate was exercised as one closure campaign rather than as individually hand-picked follow-up benchmarks.
-
-The campaign included:
-- strict-blind unfamiliar-target campaigns for Benchmarks 025, 027, and 029–037;
-- full repository regression;
-- the multi-finding research-loop regression;
-- Benchmark 038, a strict-blind executable target containing two independently exploitable authorization boundaries.
-
-The first closure attempt exposed two validation-environment failures:
-- Benchmark 032 could not execute because the closure workflow did not install Bun, although the benchmark requires it for the pinned target;
-- Benchmark 034 could not import its repository-local scripts package because the closure workflow did not preserve PYTHONPATH=.
-
-Neither failure was hidden or worked around inside CYDRA. The closure harness was corrected to reproduce the required target runtime environment, and the entire campaign was rerun.
-
-Final closure campaign run #5 (35642303164) completed with:
-- full regression: PASS;
-- multi-finding research-loop regression: PASS;
-- all 11 prior strict-blind campaigns: exit code 0;
-- Benchmark 038 strict-blind multi-finding campaign: PASS;
-- 12/12 campaign result manifests observed;
-- maturity evaluator: PASS.
-
-Benchmark 038 independently exercised the new target-scoped finding collection through the real research loop. CYDRA generated two blind authorization hypotheses: H-AUTH-setTreasury and H-AUTH-setFeeBps. The first selected hypothesis was confirmed by vulnerable execution PASS / patched execution FAIL. The loop then continued rather than stopping after the first finding, selected the second hypothesis, and independently confirmed it with the same vulnerable/patched differential. The final collection contained two distinct finding IDs: F-038-setTreasury and F-038-setFeeBps.
-
-No target-specific detector or selector override was introduced for this campaign. The multi-finding fixture is an executable validation target for the collection/reselection behavior; it is not presented as a newly discovered production vulnerability.
-
-The combined evidence satisfies the behavioral proof obligation recorded in Milestone 74: repeated strict-blind unfamiliar-target campaigns, causal differential verification and independent reproduction across materially different mechanisms, plus a target supporting multiple independently confirmed findings through the generic research loop.
-
-**Solidity maturity/generalization gate: CLOSED for this phase.**
-
-This closure means the current architecture has crossed the project's defined maturity gate; it does not mean future targets cannot expose new reasoning gaps. The doctrine remains unchanged: new failures must be diagnosed from evidence, repaired generically where possible, and regression-tested rather than patched with benchmark-specific selectors or detectors.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 76 — post-maturity multi-target causal discovery (Benchmark 043)
-
-Benchmark 043 completed the next post-maturity behavioral proof: multiple unfamiliar real targets were investigated independently through the same blind-to-causal research loop.
-
-The pinned targets were RabbitHole Quest Protocol (RabbitHoleTickets.sol) and Debt DAO Line of Credit (SpigotLib.sol). Blind selection received no vulnerability class, target function, exploit sequence, patch, historical answer, or selector override. The campaign preserved the strict blind boundary.
-
-The first canonical campaign exposed two generic gaps before acceptance:
-- RabbitHole execution was initially blocked by unrelated Vyper sources in the historical repository; generic Foundry source scoping was added so the selected Solidity target and its imports could be measured without requiring an unrelated Vyper compiler.
-- Debt DAO configuration-binding hypotheses were initially emitted as prose-only experiments and therefore could not reach execution; generic keyed-configuration planning was changed to emit a structured executable ExperimentStep, with normal generic input binding supplying arguments.
-
-Those repairs were merged generically in PRs #178 and #179 and then validated by the fresh canonical Benchmark 043 rerun in PR #180.
-
-Final canonical Benchmark 043 result (workflow run 35727326459):
-- full Python regression: PASS;
-- RabbitHole blind selection: matching authorization hypothesis for mint;
-- RabbitHole vulnerable execution: FAIL; patched execution: PASS;
-- RabbitHole causal verification: true;
-- RabbitHole independent vulnerable reproduction: FAIL; independent patched reproduction: PASS;
-- RabbitHole finding gate: READY;
-- Debt DAO blind selection: matching keyed-configuration hypothesis for claimRevenue;
-- Debt DAO vulnerable execution: FAIL; patched execution: PASS;
-- Debt DAO causal verification: true;
-- Debt DAO independent vulnerable reproduction: FAIL; independent patched reproduction: PASS;
-- Debt DAO finding gate: READY;
-- multi-target gate: READY;
-- blind boundary preserved: true.
-
-The canonical result demonstrates that the post-maturity loop can reach reproducible, causally verified findings on more than one unfamiliar target in the same campaign. The two findings are distinct mechanisms: a missing caller predicate in a minter modifier and an unvalidated keyed configuration used by an effectful revenue-claim path.
-
-Benchmark 043 is evidence of generalization across targets, not a claim that every arbitrary target will yield a finding. Future failures remain subject to the same diagnose → classify → generic repair → regression → blind retest discipline. The maturity gate remains closed; this is post-maturity validation.
-
-Doctrine remains: LLMs propose. Tools test. Evidence decides.
-
-## Milestone 77 — post-maturity negative-control campaign (Benchmark 044)
-
-Benchmark 044 added an explicit post-maturity false-positive/negative-control gate using the two unfamiliar real targets from Benchmark 043.
-
-The campaign first ran the normal blind selection stage with no vulnerability class, target function, exploit sequence, patch, historical answer, or selector override. After blind selection, the selected hypotheses were bound only to their patched counterfactual controls:
-
-- RabbitHole Quest Protocol: authorization hypothesis for `mint`;
-- Debt DAO Line of Credit: keyed-configuration hypothesis for `claimRevenue`.
-
-Final canonical Benchmark 044 workflow run `35734084452` completed successfully with:
-
-- full Python regression: PASS;
-- RabbitHole blind selection: `H-AUTH-mint`;
-- RabbitHole patched negative control: PASS;
-- RabbitHole false-positive control: PASS;
-- RabbitHole finding gate: `NOT_READY`;
-- Debt DAO blind selection: `H-CONFIG-BINDING-claimRevenue-settings`;
-- Debt DAO patched negative control: PASS;
-- Debt DAO false-positive control: PASS;
-- Debt DAO finding gate: `NOT_READY`;
-- 2/2 targets passed;
-- no READY findings;
-- causal verification correctly remained false/not claimed;
-- blind boundary preserved.
-
-The campaign therefore adds evidence that a previously demonstrated vulnerable mechanism does not automatically become a finding when its causal defect is removed. This is negative-control evidence, not a new vulnerability claim.
-
-The maturity/generalization gate remains closed. Future post-maturity work should continue testing search exhaustion, adversarial self-challenge, execution resilience, duplicate/overlap handling, reproducibility across broader target sets, and real researcher dogfood.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-\n
-
-## Milestone 78 — explicit research-loop search exhaustion (Benchmark 045)
-
-Benchmark 045 hardened the post-maturity research loop with an explicit terminal state for normal hypothesis exhaustion.
-
-Before this change, a loop whose investigation budget exceeded the number of executable candidates could raise a selection error after all candidates had already been contradicted. The generic repair now records `termination_reason` and returns `hypothesis_exhausted` when every remaining executable candidate has been eliminated after investigation has begun. Empty or unbound investigations still fail closed.
-
-Benchmark 045 acceptance:
-- two executable candidates were selected exactly once;
-- both produced `contradicted` evidence;
-- a five-round budget terminated after two rounds;
-- termination reason: `hypothesis_exhausted`;
-- empty investigation remained a fail-closed error;
-- dedicated regression and integration workflow passed.
-
-The repair is control-plane generic and does not encode a vulnerability class, target, historical answer, or selector. The maturity/generalization gate remains closed.
-
-This adds explicit evidence for search-exhaustion handling; broader post-maturity work must still validate exhaustion behavior in real multi-finding target campaigns and continue adversarial/reproducibility testing.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-\n
-
-## Milestone 79 — unmeasurable execution resilience (Benchmark 046)
-
-Benchmark 046 validated the research-loop boundary around non-measurable experiments.
-
-The campaign supplied two candidates. The first returned `UNMEASURABLE`; the generic loop recorded that outcome and selected a different candidate rather than treating the execution gap as confirmation or exhausting the investigation. The second candidate returned `confirmed`, and the loop terminated through the normal stop condition.
-
-Final canonical Benchmark 046 workflow run `35739606336` passed. The full PR-triggered workflow matrix for the change completed with 16/16 workflows successful and no failures.
-
-Acceptance demonstrated:
-- `UNMEASURABLE` is retained as an execution/evidence boundary;
-- an available alternative hypothesis can be selected after an unmeasurable experiment;
-- the unmeasurable observation is not promoted to a finding;
-- later confirmation can terminate the loop normally;
-- the recorded termination reason is `stop_condition`.
-
-This is execution-resilience evidence, not a vulnerability claim. The maturity/generalization gate remains closed.
-
-Next post-maturity validation should stress adversarial self-challenge, duplicate/overlap control, broader search exhaustion on real targets, reproducibility, and researcher dogfood.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-\n
-
-## Milestone 80 — post-maturity duplicate-finding resilience (Benchmark 047)
-
-Benchmark 047 hardened target-scoped finding collection against repeated emission of the same finding identity.
-
-The generic collection behavior is now:
-- an exact re-emission of an already-collected finding is idempotent and does not create a duplicate report;
-- reuse of an existing finding ID with different content is rejected explicitly rather than silently merged;
-- existing multi-finding accumulation remains unchanged.
-
-The benchmark and focused regression passed locally/through CI before acceptance. This is an evidence/data-integrity control only; it does not classify vulnerabilities or encode a target-specific answer.
-
-The maturity/generalization gate remains closed. This milestone is post-maturity hardening.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 81 — research-loop duplicate-finding integration (Benchmark 048)
-
-Benchmark 048 validates the duplicate-finding control through the generic research loop itself.
-
-Two confirmed research rounds deliberately emit the same finding identity. Acceptance requires the loop to complete normally while retaining exactly one finding. This proves the collection hardening is effective at the orchestration boundary, not only in an isolated collection unit.
-
-No target, vulnerability class, selector, historical answer, or severity decision is encoded.
-
-The maturity/generalization gate remains closed. This is post-maturity data-integrity hardening.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 81 — post-maturity unmeasurable exhaustion (Benchmark 048)
-
-Benchmark 048 closes a generic execution-resilience edge case discovered after Benchmark 046: within one research run, an UNMEASURABLE hypothesis must not consume repeated rounds replaying the same non-renderable experiment.
-
-Selection now:
-- prefers another executable candidate when one exists;
-- treats an UNMEASURABLE-only remaining candidate as exhausted for that run;
-- preserves the ability to retry in a new run if the execution environment materially changes.
-
-This is not a vulnerability detector and does not encode a target-specific answer. It improves information-gain discipline and prevents budget waste on identical non-measurable executions.
-
-The maturity/generalization gate remains closed.
-
-
-## Milestone 81 — post-maturity hardening batch campaign (Benchmark 049)
-
-The post-maturity resilience controls are now grouped into one auditable batch campaign.
-
-The batch executes Benchmarks 046, 047, and the two independent Benchmark 048 controls in one run, after the focused research-loop/finding regressions. Acceptance requires every control to pass together.
-
-This is validation orchestration, not a new vulnerability detector. It exists to expose interaction failures between execution resilience, hypothesis exhaustion, finding deduplication, and the research-loop boundary.
-
-The maturity/generalization gate remains closed. The batch is a post-maturity hardening gate.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## 32. Human + LLM + GitHub Actions operating model
-
-CYDRA is intentionally operated as a three-layer research system with deterministic tooling underneath:
-
-- **Human researcher:** owns authorization, program scope, target intake, ethical boundaries, final interpretation, and every external submission.
-- **LLM/research chat:** interprets CYDRA, helps plan investigations, diagnoses failures, explains evidence, proposes generic repairs, and maintains continuity through the repository's durable state. The chat is not the authoritative state store.
-- **GitHub/CYDRA:** stores the durable implementation, tests, benchmarks, Project Bible, artifacts, and merged history.
-- **GitHub Actions:** provides the reproducible execution environment for regression, blind campaigns, batch campaigns, and long-running validation.
-- **Deterministic security tools:** produce measurements and evidence; they do not independently decide that a vulnerability exists.
-
-If the chat ends, another agent must be able to resume from the repository. The durable continuation surface is the Project Bible, docs/CYDRA_OPERATING_PROTOCOL.md, code/tests, benchmark runners, workflows, CI records/artifacts, merged history, and currently open PRs.
-
-Before any continuation or implementation, the agent must inspect the current Bible, main, open PRs, recent commits, and active CI. For a failure, inspect the actual failing job/log first. The required loop is:
-
-**inspect → diagnose → generic repair → focused test → benchmark → batch/full CI → wait for all required jobs → merge → record durable state**
-
-No required campaign is declared green while jobs remain queued or running.
-
-For real authorized bug-bounty research, the operating loop is:
-
-**authorization/scope → target snapshot → system model → invariants → competing hypotheses → information-gain experiments → deterministic execution → evidence → causal verification → independent reproduction → finding package → human review/submission**
-
-CYDRA is intended for supervised bug-bounty dogfood once a target is explicitly authorized and in scope. It is not an autonomous submission system. Human review remains mandatory before external reporting.
-
-GitHub Actions is the canonical execution environment for the repository's reproducible campaigns. Independent campaigns may be batched concurrently when their target state is isolated, but batching must not alter individual benchmark semantics or blind boundaries. A blocked campaign keeps the batch fail-closed until diagnosed and retested.
-
-Solidity/EVM remains the current production adapter. Solana/Rust and other language adapters may be added later using the same evidence-driven architecture and must not weaken provenance, causal verification, reproducibility, or authorization boundaries.
-
-The detailed operating contract is maintained in docs/CYDRA_OPERATING_PROTOCOL.md.
-
-## Milestone 82 — durable human/LLM/GitHub Actions operating contract
-
-The project now explicitly records how CYDRA is meant to be used in practice:
-
-- the human researcher owns authorization, scope, final review, and submission;
-- the LLM/research chat interprets and orchestrates reasoning but is not the durable state store;
-- GitHub/CYDRA is the durable project state;
-- GitHub Actions is the reproducible execution environment;
-- deterministic security tools provide evidence;
-- another agent must be able to resume from the repository if the chat ends.
-
-This is an operating-model decision, not a new vulnerability detector. It exists to prevent agent/chat discontinuity from becoming project-state loss and to keep real bug-bounty dogfood aligned with the Project Bible.
-
-## Milestone 83 — post-maturity discovery batch closure (Benchmark 050)
-
-Benchmark 050 composed the already-demonstrated post-maturity discovery controls into one fail-closed validation campaign: the six-target unfamiliar-target batch (Benchmark 040), the multi-target blind-to-causal discovery campaign with independent reproduction (Benchmark 043), and the corresponding patched negative controls (Benchmark 044).
-
-PR #194 passed its complete pull-request workflow matrix, including the Benchmark 050 discovery-batch workflow (run 35761624933), and was merged to main as commit c945094c0f7a6e8d82dace94beb0ea52c903794c. The post-merge main matrix for that commit completed with 16/16 workflows successful and no queued or running required jobs.
-
-Benchmark 050 is validation orchestration, not a new vulnerability detector. It preserves the constituent blind boundaries and fail-closed semantics. Its acceptance closes the current post-maturity batch-validation gap, but it does not claim that CYDRA is ready for unattended production use or that every real target will yield a finding.
-
-The next evidence boundary is supervised real-world dogfood on an explicitly authorized, in-scope target. The human researcher must provide authorization and scope before execution. The first pilot should preserve the same evidence chain used in the benchmarks and should be treated as a research observation campaign, not as an autonomous submission workflow. Any new implementation need discovered by the pilot must be driven by the observed failure and repaired generically.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 84 — execution value producer and inheritance resolution
-
-The post-maturity execution-readiness work exposed a generic data-flow gap from unfamiliar-target research: a local call-result predicate could be modeled, but CYDRA did not yet resolve the function that produces that value when the producer was inherited through the Solidity source graph.
-
-The execution-readiness model now:
-- records conservative local/call-result bindings used by transient path predicates;
-- records simple return expressions as producer evidence;
-- resolves matching local call expressions to modeled producer functions when available;
-- follows concrete Solidity inheritance/import relationships to expose inherited producer functions;
-- keeps producer discovery separate from satisfiability, fixture construction, and security conclusions;
-- fails closed when the producer cannot be resolved.
-
-This is intentionally generic. It is useful for inherited ERC4626-style producers, helper functions, and future language adapters without encoding Arcadia names or vulnerability answers.
-
-The current boundary is therefore:
-
-**call-result data flow → producer resolution → producer dependency analysis → constructible prerequisite transition → prerequisite execution → state/value verification → security experiment**
-
-The remaining proof obligation is behavioral: use the repaired model against the frozen unfamiliar target, confirm that the readiness artifact identifies the producer/dependency chain, and then determine whether the generic planner can construct and verify the required prerequisite rather than merely naming it.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 85 — compiler-backed producer dependency surface
-
-Execution-readiness now consumes canonical compiler-backed state-effect evidence when available. A modeled call-result producer may therefore expose state reads as explicit execution prerequisites, while state-write evidence can continue to identify candidate prerequisite transitions.
-
-This preserves the distinction between:
-- producer discovered;
-- producer state dependency discovered;
-- state-establishing transition identified;
-- transition executed;
-- required value/condition verified.
-
-Compiler evidence is never treated as proof that a prerequisite is satisfiable or already satisfied.
-
-The next implementation boundary is generic prerequisite sequence construction and verification: connect the discovered producer/state dependency to a constructible transition, execute that transition, verify the required state/value, and only then execute the security experiment.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## CI validation note — current execution-readiness baseline
-
-The current main baseline includes generic execution value-producer and compiler-backed prerequisite evidence. Validation of this baseline must distinguish CI/pipeline health from security conclusions; target-specific execution failures are treated as capability-gap evidence and repaired at the generic abstraction layer.
-## 53. Unfamiliar-target batch — authorization execution is now live
-
-The post-maturity unfamiliar-target batch at main revision 7431af88b1204048003d333ecb6cf1a252b9d245 completed successfully with six target artifacts and preserved the blind boundary. A generic integration defect was repaired during this milestone: the repository already contained a one-sided authorization causal classifier, but the blind runner still hard-coded authorization classification as unavailable without a patched counterpart. The runner now sends measured blind authorization executions through that classifier.
-
-The campaign demonstrated the new execution surface on an unfamiliar target: Panoptic HypoVault produced four authorization hypotheses that were all materially executed. One candidate (requestDeposit) passed the security invariant and was rejected as not confirmed. Three candidates reverted before unauthorized mutation could be demonstrated and were retained as proposed/non-confirmed execution outcomes rather than promoted. This is the intended evidence discipline: a revert is not a vulnerability and a tool/security-assertion distinction is preserved.
-
-The same batch also produced a successful blind initialization execution on GTE CLOB and successful single-sided initialization execution on SukukFi Vault and Virtuals AgentFactory. No unfamiliar-target hypothesis in this six-target batch reached a confirmed finding gate. Therefore this campaign is evidence that the generic execution/classification path has advanced, not evidence of a new unfamiliar-target finding.
-
-A remaining generic gap is state-sequence causal classification. State hypotheses are currently executable at the Foundry layer but remain NOT_REACHED at classification because the runner still requires an independently verified relation and patched counterpart. The raw executions exposed genuine environmental/input prerequisites such as epoch fulfillment and zero-denominator conditions. These must be converted into verified prerequisite observations or experiment constraints before state conclusions are promoted. They must not be hidden by broadening the classifier or by treating arbitrary execution failures as security evidence.
-
-Current research chain:
-model → invariant → hypothesis → prerequisite readiness → executable experiment → observation → class-specific causal verification → reproduction → finding gate.
-
-The next maturity work is therefore not another benchmark-specific detector. It is generic state-sequence observation/prerequisite verification and then adversarial unfamiliar-target campaigns that can produce a confirmed, reproducible finding without historical-answer leakage.
-
-
-## Milestone 86 — causal finding gate demonstrated on historical blind backtests
-
-The research loop now demonstrates the complete finding-producing path on frozen historical Solidity targets, while preserving the distinction between historical validation and unfamiliar-target discovery.
-
-Confirmed, reproducible examples include:
-- Alchemix `H-AUTH-setWhitelist`: blind unauthorized-call assertion failed, the patched control passed, causal verification reached `verified`, and the reproduction path reproduced the same failure while the patched reproduction passed.
-- Olas StakingToken `H-TRANSFER-ACCOUNTING-deposit`: the vulnerable execution demonstrated accounting exceeding the actual token balance delta, the patched control passed, and causal verification reached `READY`.
-- Olympus `H-CROSS-CONTRACT-ATTRIBUTION-repayLoan`: the vulnerable execution demonstrated debt reduction from an unrelated inflow, the patched control passed, and causal verification reached `READY`.
-- Morph implementation initialization also reached a verified initialization-lock differential and `READY` finding gate.
-
-These are historical/backtest demonstrations, not claims of newly discovered public vulnerabilities. They establish that CYDRA can carry a hypothesis through execution, causal verification, reproduction, and a finding gate when the required experiment surface exists.
-
-The next proof boundary remains unfamiliar-target discovery: a frozen unfamiliar target must produce a confirmed, reproducible finding without historical answer leakage. The current Benchmark 040 batch reached real blind execution and class-specific classification, but no unfamiliar-target finding was confirmed. State-sequence and arithmetic execution remain capability gaps where the existing invariant requires stronger independent verification or a generic executable renderer. Those gaps must be repaired generically rather than bypassed.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 87 — canonical historical finding loop revalidated after operating-contract update
-
-The canonical research workflow at main commit 23715c8901e66f218e7076732b0297bc3622783e completed successfully in GitHub Actions (run 36013672664). The full Python regression suite passed, and the historical blind backtests for Alchemix authorization, Stader initialization, Olas transfer accounting, Olympus cross-contract attribution, and Morph implementation initialization completed successfully. The published artifact preserved the frozen-target provenance and causal finding gates; Morph initialization independently reached a READY gate with vulnerable execution failing the explicit initialization security assertion and the patched/reproduction controls behaving as expected.
-
-This closes a validation boundary only: the durable research loop remains green after the operating-model documentation update. It does not convert historical results into new findings and does not remove the unfamiliar-target discovery gap.
-
-The next implementation boundary remains generic runtime prerequisite observation/verification. The repository already identifies constructible state-setup candidates and can recursively plan setup transitions, but a constructible transition must not be promoted to verified merely because its transaction succeeds. The next repair must therefore connect a generated setup transition to an observable, evidence-bearing postcondition and feed that observation into the prerequisite graph before the security experiment is admitted.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-## Milestone 88 — runtime prerequisite observation is merged; state-sequence classification remains the next gap
-
-PR #214 was merged to main as commit d4f6727175b06c31458e54b6df45875e2b5acd92 after the pull-request regression matrix and research workflows completed successfully. The implementation adds generic source-backed runtime observation plans for directly observable public scalar state, immutable observation evidence IDs, conversion of executed/passing assertions into PrerequisiteObservation values, and fail-closed admission of the security experiment only after the prerequisite graph is promoted by matching evidence. Setup transaction success alone remains insufficient.
-
-Benchmark 040 run 36017834764 completed successfully on the PR head. The unfamiliar-target batch materially executed six state hypotheses on Panoptic HypoVault, but those hypotheses still classified as NOT_REACHED because their readiness artifacts contained no independently modeled state_requirements and the state classifier still requires a verified relation plus a patched differential. This is an important diagnostic result: the new prerequisite-observation machinery is green, but it does not manufacture an invariant for a state-composition hypothesis whose relation is only expressed as a generic consistency claim.
-
-Therefore the next implementation boundary is narrower and more fundamental: derive or bind an independently testable state relation from compiler/source evidence and the ordered transition model, render observations of that relation before/between/after transitions, and keep causal classification fail-closed unless the observed relation is actually justified. No target-specific state formula, historical answer, or arbitrary execution failure may be promoted into a finding.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-
-## Milestone 89 — keyed state-relation verification merged; unfamiliar-target state remains fail-closed
-
-PR #218 was merged to main as commit 11de6ca3087427cdb1829794bb36254bee3f0795. It extends the generic source-backed state-relation observation boundary from public scalar state to simple public mappings when every mapping index is a direct function parameter with matching ABI type. Generated Foundry assertions bind getter indexes to the actual experiment arguments. Dynamic indexes, signed/non-numeric values, and ambiguous getter surfaces remain unresolved. Scalar literal state-relation extraction was also repaired after CI exposed an accidental regression in the keyed extension.
-
-The merged implementation now has green structural/debug/dataflow/research/maturity validation on the merge head. Benchmark 040 run 36072220778 completed successfully. On Panoptic HypoVault, six state hypotheses were extracted, but all six remained NOT_REACHED because the selected state transitions did not expose a deterministic public unsigned-integer relation observation. This is the intended fail-closed result, not a finding.
-
-The same campaign also demonstrated that the generic blind runner can execute unfamiliar authorization hypotheses and preserve measured reverts as non-findings. Separately, Benchmark 041's blind-selection phase identified the PanopticVaultAccountant computeNAV paired-output asymmetry from compiler/source reasoning, and a causal control reproduced the known historical H-01 behavior. That campaign is useful validation of blind hypothesis selection and causal evidence plumbing, but its final PoC harness is benchmark-specific; it is not yet evidence that CYDRA can autonomously construct that complete dependency-heavy PoC on an arbitrary target.
-
-The next end-result boundary is therefore explicit: convert source-backed relations into fully generic ordered state experiments on unfamiliar targets, including mapping/struct-derived surfaces where safely observable; then add class-neutral causal differential execution without target-specific PoCs. Arithmetic/pair-symmetry execution remains a separate capability gap because the current blind runner still blocks arithmetic Foundry generation without a patched counterpart.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
-
-## Milestone 90 — activate the existing class-neutral shared-state discovery surface
-
-The post-maturity state investigation work exposed an orchestration gap rather than a missing state-analysis primitive: CYDRA already had a class-neutral cross-function state-transition reasoning surface and a generic ordered experiment planner, but the canonical default investigation path did not activate that surface. PR #228 merged the correction.
-
-The reasoning-surface transport contract was also moved out of the pipeline into a standalone module so reasoning surfaces no longer depend on orchestration internals. A regression now verifies that a normal default `investigate()` call can discover multiple externally callable transitions sharing a state surface, produce `INV-STATE-*` hypotheses with related transitions, and bind them to ordered experiments without a vulnerability-class-specific prompt.
-
-This is deliberately a composition repair, not a new vulnerability detector. It reduces the risk that a demonstrated capability exists only behind a benchmark-specific caller while remaining absent from ordinary discovery.
-
-PR #229 subsequently rebased the state-relation mismatch evidence boundary onto the new main and merged it. Generated relation assertion failures now remain explicit evidence when the generated diagnostic marker and expression are both observed; generic reverts, compilation failures, and empty executions remain non-evidence. The mismatch is still not a finding and remains downstream of causal verification.
-
-The immediate next boundary remains behavioral and causal: use the newly connected shared-state discovery surface and mismatch evidence in unfamiliar-target campaigns, then diagnose whether CYDRA can turn a generic state inconsistency into a discriminating causal experiment and independently reproducible impact without benchmark-specific PoCs. Do not add another detector unless an unfamiliar investigation demonstrates a missing general capability.
-
-Doctrine remains: **LLMs propose. Tools test. Evidence decides.**
+The next live run is therefore expected to exercise the repair controller against whatever capability frontier the frozen target actually produces. Any remaining unimplemented capability becomes the next demonstrated generic engineering gap.

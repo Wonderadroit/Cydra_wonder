@@ -1,8 +1,15 @@
+from dataclasses import replace
 from pathlib import Path
 
 from cydra.compiler_constraints import ConstraintEvidence
-from cydra.execution_readiness import inspect_execution_readiness
-from cydra.models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
+from cydra.execution_readiness import (
+    inspect_execution_readiness,
+    constructible_state_setup_plan,
+    _caller_requirements,
+    _constructor_state_predicate_satisfied,
+)
+from cydra.models import ConstructorModel, ContractModel, FunctionModel, ModifierModel, ParameterModel
+from cydra.solidity_model import parse_solidity
 
 
 def test_readiness_discovers_constructor_roles_and_dependencies():
@@ -447,3 +454,1137 @@ def test_input_state_order_guard_is_experiment_constraint() -> None:
         for item in readiness.execution_requirements
     }
     assert predicates[("execution_predicate", "epoch >= depositEpoch")] == "constraint"
+
+
+def test_execution_readiness_treats_solidity_casts_as_deterministic_dataflow():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        execution_predicates=("selector == expected", "balanceChange < 0"),
+        execution_predicate_polarities=(
+            ("selector == expected", "must_not_hold"),
+            ("balanceChange < 0", "must_not_hold"),
+        ),
+        execution_value_bindings=(
+            ("selector", "bytes4(op.callData)"),
+            ("balanceChange", "int256(after[i]) - int256(before[i])"),
+        ),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    dataflow = {
+        item.subject: item.status
+        for item in readiness.execution_requirements
+        if item.kind == "execution_dataflow"
+    }
+    assert dataflow["selector <- bytes4(op.callData)"] == "constraint"
+    assert dataflow["balanceChange <- int256(after[i]) - int256(before[i])"] == "constraint"
+
+
+def test_execution_readiness_excludes_solidity_abi_builtin_runtime_dependency():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (("abi", "decode"), ("target", "execute")),
+        1,
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    assert ("runtime_dependency", "abi.decode") not in {
+        (item.kind, item.subject) for item in readiness.runtime_requirements
+    }
+    assert ("runtime_dependency", "target.execute") in {
+        (item.kind, item.subject) for item in readiness.runtime_requirements
+    }
+
+
+def test_execution_readiness_does_not_reclassify_deterministic_casts_as_producer_dependencies():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        execution_predicates=("selector == expected", "balanceChange < 0"),
+        execution_predicate_polarities=(
+            ("selector == expected", "must_not_hold"),
+            ("balanceChange < 0", "must_not_hold"),
+        ),
+        execution_value_bindings=(
+            ("selector", "bytes4(op.callData)"),
+            ("balanceChange", "int256(after[i]) - int256(before[i])"),
+        ),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    assert not any(
+        item.kind in {"execution_value_dependency", "execution_value_runtime_dependency"}
+        for item in readiness.execution_requirements
+    )
+
+
+def test_execution_readiness_does_not_treat_returned_local_collection_as_runtime_target():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (("utxoSet", "skipLast"),),
+        1,
+        return_expressions=("utxoSet",),
+    )
+    model = ContractModel("Target", "Target.sol", (function,))
+    readiness = inspect_execution_readiness(model, function)
+    assert not any(
+        item.subject == "utxoSet.skipLast"
+        for item in readiness.runtime_requirements
+    )
+
+    
+def test_execution_readiness_allows_deterministic_local_guard_with_cast_binding():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        execution_predicates=("balanceChange < 0",),
+        execution_predicate_polarities=(("balanceChange < 0", "must_not_hold"),),
+        execution_value_bindings=(
+            ("balanceChange", "int256(after[i]) - int256(before[i])"),
+        ),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    assert readiness.execution_requirements[0].status == "constraint"
+
+
+def test_callback_reachability_capability_allows_external_call_outcome_guard():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (("op", "call"),),
+        1,
+        execution_predicates=("!success",),
+        execution_predicate_polarities=(("!success", "must_not_hold"),),
+        execution_value_bindings=(
+            ("success", "op.endpoint.call(op.callData)"),
+        ),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    blocked = inspect_execution_readiness(contract, function)
+    assert blocked.execution_requirements[0].status == "required"
+    reachable = inspect_execution_readiness(
+        contract,
+        function,
+        execution_capabilities=frozenset({"callback_state_order_reachability"}),
+    )
+    assert reachable.execution_requirements[0].status == "constraint"
+
+
+def test_callback_reachability_capability_allows_selected_external_member_call_outcome():
+    function = FunctionModel(
+        "runAction",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        execution_predicates=("!success",),
+        execution_predicate_polarities=(("!success", "must_not_hold"),),
+        execution_value_bindings=(
+            ("success", "IHinkalWallet(stack.signerAddress).callHinkalWallet(op.endpoint, op.callData, op.value)"),
+        ),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    blocked = inspect_execution_readiness(contract, function)
+    assert blocked.execution_requirements[0].status == "required"
+    reachable = inspect_execution_readiness(
+        contract,
+        function,
+        execution_capabilities=frozenset({"callback_state_order_reachability"}),
+    )
+    assert reachable.execution_requirements[0].status == "constraint"
+
+
+def test_internal_callee_execution_guards_propagate_into_caller_readiness(tmp_path):
+    from cydra.execution_readiness import inspect_execution_readiness
+    from cydra.models import ContractModel, FunctionModel
+
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target {\\n"
+        "    function runAction() external { verifyWallet(); }\\n"
+        "    function verifyWallet() internal { if (!verified) revert(); }\\n"
+        "}\\n",
+        encoding="utf-8",
+    )
+    caller = FunctionModel(
+        "runAction", "external", (), (), (), 2,
+    )
+    callee = FunctionModel(
+        "verifyWallet", "internal", (), (), (), 3,
+        execution_predicates=("!verified",),
+        execution_predicate_polarities=(("!verified", "must_not_hold"),),
+    )
+    readiness = inspect_execution_readiness(
+        ContractModel("Target", str(source), (caller, callee)), caller,
+    )
+    propagated = [
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+    ]
+    assert len(propagated) == 1
+    assert propagated[0].subject == "verifyWallet: !verified"
+    assert propagated[0].status == "unresolved"
+    assert propagated[0].source == "runAction:internal-call->verifyWallet"
+
+
+def test_internal_execution_prerequisite_categories_are_descriptive(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        bool verified;
+        function runAction(uint256 amount) external { verifyWallet(amount); }
+        function verifyWallet(uint256 amount) internal {
+            require(!verified);
+            require(amount > 0);
+        }
+    }
+    """)
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "runAction")
+    readiness = inspect_execution_readiness(contract, function)
+    categories = {item.category for item in readiness.execution_requirements if item.kind == "internal_execution_predicate"}
+    assert "state_observation" in categories
+    assert "input_construction" in categories
+    assert all(item.status == "constraint" for item in readiness.execution_requirements if item.kind == "internal_execution_predicate")
+
+
+def test_internal_execution_temporal_prerequisite_is_execution_context(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        function runAction() external { verify(); }
+        function verify() internal {
+            require(block.timestamp > deadline);
+        }
+    }
+    """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "runAction")
+    readiness = inspect_execution_readiness(contract, function)
+    propagated = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+    )
+    assert propagated.category == "execution_context"
+    assert propagated.status == "unresolved"
+
+
+def test_internal_execution_local_crypto_witness_is_not_plain_input(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        function runAction() external { verify(); }
+        function verify() internal {
+            (address recoveredAddress, uint8 err) = ECDSA.tryRecover(digest, v, r, s);
+            bool verified = err == ECDSA.RecoverError.NoError &&
+                recoveredAddress == signerAddress;
+            require(!verified);
+        }
+    }
+    """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "runAction")
+    readiness = inspect_execution_readiness(contract, function)
+    propagated = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+    )
+    assert propagated.category == "cryptographic_witness"
+    assert propagated.status == "unresolved"
+
+def test_internal_execution_input_prerequisite_can_be_an_experiment_constraint(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        function runAction() external { verify(1); }
+        function verify(uint256 amount) internal {
+            require(amount > 0);
+        }
+    }
+    """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "runAction")
+    readiness = inspect_execution_readiness(contract, function)
+    propagated = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+    )
+    assert propagated.subject == "verify: amount > 0"
+    assert propagated.status == "constraint"
+    assert propagated.category == "input_construction"
+
+def test_internal_local_binding_from_mapping_connects_to_generic_state_setup(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        mapping(uint256 => address) verifierMap;
+        function run(uint256 key) external { verify(key); }
+        function verify(uint256 key) internal {
+            address verifier = verifierMap[key];
+            require(address(verifier) != address(0));
+        }
+        function registerVerifier(uint256 key, address verifier) external {
+            verifierMap[key] = verifier;
+        }
+    }
+    """, encoding="utf-8")
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, function)
+    propagated = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+        and item.subject == "verify: address(verifier) != address(0)"
+    )
+    assert propagated.category == "state_observation"
+    assert propagated.status == "constraint"
+    assert any(
+        item.kind == "internal_state_setup_candidate"
+        and item.subject == "registerVerifier"
+        and item.status == "constructible"
+        for item in readiness.state_setup_candidates
+    )
+
+def test_internal_mapping_predicate_feeds_generic_state_setup_candidates(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+    contract Target {
+        mapping(uint256 => address) registry;
+        function run(uint256 key) external { verify(key); }
+        function verify(uint256 key) internal {
+            require(registry[key] != address(0));
+        }
+        function register(uint256 key, address value) external {
+            registry[key] = value;
+        }
+    }
+    """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, function)
+    candidates = [
+        item for item in readiness.state_setup_candidates
+        if item.kind == "internal_state_setup_candidate"
+    ]
+    assert any(item.subject == "register" and item.status == "constructible" for item in candidates)
+
+
+def test_internal_namespaced_state_observation_can_satisfy_erc7201_guard(tmp_path):
+    storage = tmp_path / "EmporiumStorage.sol"
+    storage.write_text(
+        """
+        contract EmporiumStorage {
+            /// @custom:storage-location erc7201:test.storage
+            struct Storage {
+                address helper;
+                mapping(uint256 => bool) usedMessages;
+            }
+            bytes32 private constant TestLocation =
+                0x1000000000000000000000000000000000000000000000000000000000000000;
+        }
+        """,
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    source.write_text(
+        """
+        import "./EmporiumStorage.sol";
+        contract Target is EmporiumStorage {
+            function run(uint256 message) external { verify(message); }
+            function verify(uint256 message) internal {
+                if ($.usedMessages[message]) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    caller = FunctionModel("run", "external", (), (), (), 5)
+    callee = FunctionModel(
+        "verify", "internal", (), (), (), 6,
+        execution_predicates=("$.usedMessages[message]",),
+        execution_predicate_polarities=(("$.usedMessages[message]", "must_not_hold"),),
+    )
+    readiness = inspect_execution_readiness(
+        ContractModel(
+            "Target",
+            str(source),
+            (caller, callee),
+            inherits=("EmporiumStorage",),
+        ),
+        caller,
+    )
+    propagated = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "internal_execution_predicate"
+    )
+    assert propagated.category == "state_observation"
+    assert propagated.status == "constraint"
+
+
+def test_nonreentrant_modifier_is_not_a_caller_role():
+    from cydra.models import FunctionModel, Parameter
+    from cydra.execution_readiness import _caller_requirements
+
+    function = FunctionModel(
+        name="transact",
+        visibility="external",
+        modifiers=("nonReentrant",),
+        writes=(),
+        external_calls=(),
+        line=1,
+    )
+    assert _caller_requirements(function) == ()
+
+
+def test_namespaced_interface_struct_constructor_dependency_is_constructible(tmp_path):
+    interface = tmp_path / "IMerkle.sol"
+    interface.write_text(
+        "interface IMerkle { struct MerkleConstructorArgs { uint128 levels; address poseidon2; } }\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import "./IMerkle.sol"; '
+        'contract Target { constructor(IMerkle.MerkleConstructorArgs memory args) {} }\n',
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (),
+        constructor=ConstructorModel(
+            (ParameterModel("args", "IMerkle.MerkleConstructorArgs"),),
+            1,
+        ),
+    )
+    readiness = inspect_execution_readiness(model)
+    dependency = next(
+        item for item in readiness.constructor_requirements
+        if item.kind == "constructor_dependency"
+    )
+    assert dependency.subject == "IMerkle.MerkleConstructorArgs"
+    assert dependency.status == "constraint"
+
+
+
+def test_execution_readiness_treats_parameter_equal_caller_as_constructible_input():
+    function = FunctionModel(
+        "transact", "external", (), (), (), 1,
+        parameters=(ParameterModel("data", "Data"),),
+        execution_predicates=("data.externalAddress == msg.sender",),
+        execution_predicate_polarities=(("data.externalAddress == msg.sender", "must_hold"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.status == "constraint"
+    assert requirement.category == "input_construction"
+
+
+def test_execution_readiness_treats_msg_value_equal_parameter_as_constructible_input():
+    predicate = "msg.value == _value"
+    function = FunctionModel(
+        "transfer", "internal", (), (), (), 1,
+        parameters=(ParameterModel("_value", "uint256"),),
+        execution_predicates=(predicate,),
+        execution_predicate_polarities=((predicate, "must_hold"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.status == "constraint"
+    assert requirement.category == "unknown"
+
+
+def test_state_setup_planner_accepts_default_false_mapping_guard(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(bytes32 => bool) used;
+
+            function run(bytes32 key) external {
+                verify(key);
+            }
+
+            function verify(bytes32 key) internal {
+                require(!used[key]);
+            }
+
+            function mark(bytes32 key) external {
+                used[key] = true;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+    requirement = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "verify: !used[key]"
+    )
+    assert requirement.status == "constraint"
+    assert "default value" in requirement.detail
+def test_internal_state_prerequisite_supports_nested_mapping_default_state(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text("""
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => mapping(uint256 => bool)) used;
+            function run(uint256 outerKey, uint256 innerKey) external {
+                check(outerKey, innerKey);
+            }
+            function check(uint256 outerKey, uint256 innerKey) internal {
+                require(!used[outerKey][innerKey]);
+            }
+        }
+        """, encoding="utf-8")
+    from cydra.solidity_model import parse_solidity
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+    used = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "check: !used[outerKey][innerKey]"
+    )
+    assert used.status == "constraint"
+    assert "default value" in used.detail
+
+
+def test_internal_state_prerequisite_uses_constructible_writer_or_default_state(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => address) public registry;
+            mapping(bytes32 => bool) public used;
+
+            function run(uint256 key, bytes32 note) external {
+                check(key, note);
+            }
+
+            function check(uint256 key, bytes32 note) internal {
+                require(registry[key] != address(0));
+                require(!used[note]);
+            }
+
+            function register(uint256 key, address endpoint) external {
+                registry[key] = endpoint;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+
+    registry = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "check: registry[key] != address(0)"
+    )
+    used = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "check: !used[note]"
+    )
+
+    assert registry.status == "constraint"
+    assert "constructible writer" in registry.detail
+    assert used.status == "constraint"
+    assert "default value" in used.detail
+
+
+def test_internal_state_discovery_follows_value_binding_and_return_expression(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            mapping(uint256 => address) public verifierMap;
+            mapping(uint256 => uint256) public roots;
+
+            function run(uint256 id, uint256 root) external {
+                verify(id);
+                rootHashExists(root, id);
+            }
+
+            function verify(uint256 id) internal {
+                address verifier = verifierMap[id];
+                require(address(verifier) != address(0));
+            }
+
+            function rootHashExists(uint256 root, uint256 index) public view returns (bool) {
+                return root == 0 || roots[index] == root;
+            }
+
+            function registerVerifier(uint256 id, address verifier) external {
+                verifierMap[id] = verifier;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.solidity_model import parse_solidity
+
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+
+    from cydra.execution_readiness import _state_names_from_internal_predicates
+
+    discovered = set(_state_names_from_internal_predicates(contract, run))
+    assert {"verifierMap", "roots"} <= discovered
+
+def test_execution_readiness_recognizes_constructible_inherited_helper_return_branch():
+    helper = FunctionModel(
+        "rootHashExists",
+        "public",
+        (),
+        (),
+        (),
+        10,
+        parameters=(ParameterModel("_root", "uint256"), ParameterModel("_rootIndex", "uint256")),
+        return_expressions=("_root == 0", "false", "_root != 0 && roots[_rootIndex] == _root"),
+    )
+    consumer = FunctionModel(
+        "transact",
+        "external",
+        (),
+        (),
+        (),
+        20,
+        execution_predicates=("rootHashExists(circomData.rootHashHinkal, circomData.rootHashHinkalIndex)",),
+        execution_predicate_polarities=(
+            ("rootHashExists(circomData.rootHashHinkal, circomData.rootHashHinkalIndex)", "must_hold"),
+        ),
+    )
+    contract = ContractModel("Derived", "/tmp/Derived.sol", (consumer,), inherited_functions=(helper,))
+    readiness = inspect_execution_readiness(contract, consumer)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.status == "constraint"
+    assert "return branch" in requirement.detail
+
+
+def test_execution_readiness_propagates_inherited_constructor_state_equality(tmp_path):
+    base = tmp_path / "Base.sol"
+    derived = tmp_path / "Derived.sol"
+    base.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Base {
+            bool initialized;
+            constructor() { initialized = true; }
+        }
+        """,
+        encoding="utf-8",
+    )
+    derived.write_text(
+        """
+        pragma solidity ^0.8.20;
+        import "./Base.sol";
+        contract Derived is Base {}
+        """,
+        encoding="utf-8",
+    )
+    contract = next(item for item in parse_solidity(derived) if item.name == "Derived")
+    assert _constructor_state_predicate_satisfied(contract, "initialized == true")
+
+
+def test_crypto_predicate_exposes_target_derived_witness_route():
+    from cydra.execution_readiness import _cryptographic_witness_route
+
+    function = FunctionModel(
+        "verify", "internal", (), (), (), 1,
+        parameters=(
+            ParameterModel("proof", "bytes"),
+            ParameterModel("publicInput", "uint256"),
+        ),
+        return_expressions=("true",),
+    )
+    contract = ContractModel("Target", "/tmp/Target.sol", (function,))
+    route = _cryptographic_witness_route(contract, "verify(proof, publicInput)")
+    assert "target-derived verifier verify" in route
+    assert "proof <- proof" in route
+    assert "publicInput <- publicInput" in route
+
+
+def test_crypto_predicate_preserves_nested_call_argument_provenance():
+    from cydra.execution_readiness import _cryptographic_witness_route
+
+    verifier = FunctionModel(
+        "verifyProof", "internal", (), (), (), 1,
+        parameters=(
+            ParameterModel("a", "uint256"),
+            ParameterModel("b", "uint256"),
+            ParameterModel("c", "uint256"),
+            ParameterModel("input", "uint256"),
+            ParameterModel("verifierId", "uint256"),
+        ),
+        return_expressions=("verifier.verifyProof(a, b, c, input, verifierId)",),
+    )
+    builder = FunctionModel(
+        "buildVerifierId", "internal", (), (), (), 2,
+        parameters=(
+            ParameterModel("dimensions", "uint256"),
+            ParameterModel("externalActionId", "uint256"),
+        ),
+        return_expressions=("keccak256(abi.encode(dimensions, externalActionId))",),
+    )
+    contract = ContractModel("Target", "/tmp/Target.sol", (verifier, builder))
+    route = _cryptographic_witness_route(
+        contract,
+        "verifyProof(a, b, c, inputForCircom, buildVerifierId(dimensions, externalActionId))",
+    )
+    assert "a <- a" in route
+    assert "input <- inputForCircom" in route
+    assert "verifierId <- buildVerifierId(dimensions, externalActionId)" in route
+    assert "dimensions <- dimensions" in route
+    assert "externalActionId <- externalActionId" in route
+
+
+def test_unresolved_crypto_predicate_remains_explicit():
+    from cydra.execution_readiness import _cryptographic_witness_route
+
+    contract = ContractModel("Target", "/tmp/Target.sol", ())
+    route = _cryptographic_witness_route(contract, "verifier.verifyProof(proof)")
+    assert "external verifier verifier.verifyProof" in route
+    assert "must be resolved before witness construction" in route
+
+
+def test_deterministic_local_execution_predicate_is_generic_input_constraint():
+    from cydra.execution_readiness import inspect_execution_readiness
+    from cydra.models import ContractModel, FunctionModel, ParameterModel
+    function = FunctionModel(
+        "run", "external", (), (), (), 1,
+        parameters=(ParameterModel("amount", "uint256"),),
+        execution_predicates=("localValue > 0",),
+        execution_predicate_polarities=(("localValue > 0", "must_hold"),),
+        execution_value_bindings=(("localValue", "amount + 1"),),
+    )
+    readiness = inspect_execution_readiness(ContractModel("Target", "Target.sol", (function,)), function)
+    requirement = next(item for item in readiness.execution_requirements if item.kind == "execution_predicate")
+    assert requirement.category == "local_execution"
+    assert requirement.status == "constraint"
+
+
+def test_internal_forwarded_parameter_predicate_remains_constructible():
+    predicate = "data.externalAddress == msg.sender"
+    callee = FunctionModel(
+        "internalCheck", "internal", (), (), (), 10,
+        parameters=(ParameterModel("data", "Data"),),
+        execution_predicates=(predicate,),
+        execution_predicate_polarities=((predicate, "must_hold"),),
+    )
+    caller = FunctionModel(
+        "run", "external", (), (), (), 20,
+        parameters=(ParameterModel("data", "Data"),),
+        internal_calls=("internalCheck",),
+    )
+    contract = ContractModel(
+        "Target", "Target.sol", (caller, callee),
+    )
+    readiness = inspect_execution_readiness(contract, caller)
+    requirement = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "internalCheck: data.externalAddress == msg.sender"
+    )
+    assert requirement.status == "constraint"
+    assert requirement.category == "input_construction"
+
+
+def test_internal_forwarded_parameter_or_predicate_remains_constructible():
+    predicate = "data.relay == address(0) || hasPaidToRelay"
+    callee = FunctionModel(
+        "internalCheck", "internal", (), (), (), 10,
+        parameters=(ParameterModel("data", "Data"),),
+        execution_predicates=(predicate,),
+        execution_predicate_polarities=((predicate, "must_hold"),),
+    )
+    caller = FunctionModel(
+        "run", "external", (), (), (), 20,
+        parameters=(ParameterModel("data", "Data"),),
+        internal_calls=("internalCheck",),
+    )
+    contract = ContractModel("Target", "Target.sol", (caller, callee))
+    readiness = inspect_execution_readiness(contract, caller)
+    requirement = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "internalCheck: data.relay == address(0) || hasPaidToRelay"
+    )
+    assert requirement.status == "constraint"
+    assert requirement.category == "input_construction"
+
+
+def test_modifier_caller_predicate_uses_constructor_role_provenance():
+    modifier = ModifierModel(
+        "onlyGuardian",
+        body="require(msg.sender == guardian); _;",
+    )
+    function = FunctionModel(
+        "act", "external", ("onlyGuardian",), (), (), 10,
+    )
+    contract = ContractModel(
+        "Target", "/tmp/Target.sol", (function,),
+        constructor=ConstructorModel(
+            (), 1, role_grants=(("guardian", "msg.sender"),)
+        ),
+        modifiers=(modifier,),
+    )
+    readiness = inspect_execution_readiness(contract, function)
+    item = next(x for x in readiness.caller_requirements if x.kind == "caller_role")
+    assert item.status == "constraint"
+
+
+def test_state_principal_can_be_established_by_unrestricted_caller_writer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            address allowedRecipient;
+            function setRecipient() external {
+                allowedRecipient = msg.sender;
+            }
+            function act() external {
+                require(msg.sender == allowedRecipient);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    writer = FunctionModel("setRecipient", "external", (), ("allowedRecipient",), (), 5)
+    target = FunctionModel(
+        "act",
+        "external",
+        (),
+        (),
+        (),
+        8,
+        authorization_predicates=("msg.sender == allowedRecipient",),
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (writer, target),
+        state_variables=("allowedRecipient",),
+    )
+    readiness = inspect_execution_readiness(model, target)
+    principal = next(
+        item for item in readiness.caller_requirements
+        if item.kind == "caller_state_principal"
+    )
+    assert principal.status == "constraint"
+    assert "caller_via:setRecipient" in principal.detail
+
+
+def test_state_principal_arbitrary_assignment_remains_unresolved(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            address allowedRecipient;
+            function setRecipient(address value) external {
+                allowedRecipient = value;
+            }
+            function act() external {
+                require(msg.sender == allowedRecipient);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    writer = FunctionModel("setRecipient", "external", (), ("allowedRecipient",), (), 5)
+    target = FunctionModel(
+        "act",
+        "external",
+        (),
+        (),
+        (),
+        8,
+        authorization_predicates=("msg.sender == allowedRecipient",),
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (writer, target),
+        state_variables=("allowedRecipient",),
+    )
+    readiness = inspect_execution_readiness(model, target)
+    assert any(
+        item.kind == "caller_predicate" and item.status == "required"
+        for item in readiness.caller_requirements
+    )
+
+
+def test_state_principal_modifier_can_be_established_by_caller_writer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            address allowedRecipient;
+            modifier onlyAllowedRecipient() {
+                require(msg.sender == allowedRecipient);
+                _;
+            }
+            function setRecipient() external {
+                allowedRecipient = msg.sender;
+            }
+            function act() external onlyAllowedRecipient {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    writer = FunctionModel("setRecipient", "external", (), ("allowedRecipient",), (), 8)
+    target = FunctionModel("act", "external", ("onlyAllowedRecipient",), (), (), 11)
+    modifier = ModifierModel(
+        "onlyAllowedRecipient",
+        body="require(msg.sender == allowedRecipient); _;",
+    )
+    model = ContractModel(
+        "Target", str(source), (writer, target),
+        state_variables=("allowedRecipient",),
+        modifiers=(modifier,),
+    )
+    readiness = inspect_execution_readiness(model, target)
+    principal = next(
+        item for item in readiness.caller_requirements
+        if item.kind == "caller_state_principal"
+    )
+    assert principal.status == "constraint"
+
+
+def test_state_principal_setup_plan_includes_caller_writer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            address allowedRecipient;
+            function setRecipient() external {
+                allowedRecipient = msg.sender;
+            }
+            function act() external {
+                require(msg.sender == allowedRecipient);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    writer = FunctionModel("setRecipient", "external", (), ("allowedRecipient",), (), 5)
+    target = FunctionModel(
+        "act", "external", (), (), (), 8,
+        authorization_predicates=("msg.sender == allowedRecipient",),
+    )
+    model = ContractModel(
+        "Target", str(source), (writer, target),
+        state_variables=("allowedRecipient",),
+    )
+    from cydra.execution_readiness import constructible_state_setup_plan
+    plan = constructible_state_setup_plan(model, target)
+    assert [item.function for item in plan] == ["setRecipient"]
+    assert plan[0].caller_role is None
+
+
+def test_recursive_setup_plan_selects_caller_principal_writer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            address allowedRecipient;
+            function setRecipient() external {
+                allowedRecipient = msg.sender;
+            }
+            function act() external {
+                require(msg.sender == allowedRecipient);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    writer = FunctionModel("setRecipient", "external", (), ("allowedRecipient",), (), 5)
+    target = FunctionModel(
+        "act",
+        "external",
+        (),
+        (),
+        (),
+        8,
+        authorization_predicates=("msg.sender == allowedRecipient",),
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (writer, target),
+        state_variables=("allowedRecipient",),
+    )
+    actions = constructible_state_setup_plan(model, target)
+    assert [action.function for action in actions] == ["setRecipient"]
+    assert actions[0].caller_role is None
+
+
+def test_solidity_concat_builtin_is_deterministic_local_expression():
+    from cydra.execution_readiness import _is_deterministic_expression
+    assert _is_deterministic_expression(
+        'bytes.concat(baseSig, abi.encodePacked(validUntil, uint48(0)))'
+    )
+    assert _is_deterministic_expression(
+        'string.concat(prefix, suffix)'
+    )
+
+
+def test_deterministic_hash_relation_is_not_misclassified_as_cryptographic_witness():
+    function = FunctionModel(
+        "deployHinkal",
+        "external",
+        (),
+        (),
+        (),
+        1,
+        parameters=(
+            ParameterModel("fullBytecode", "bytes"),
+            ParameterModel("bytecodeHash", "bytes32"),
+        ),
+        execution_predicates=("keccak256(fullBytecode) != bytecodeHash",),
+        execution_predicate_polarities=(("keccak256(fullBytecode) != bytecodeHash", "must_hold"),),
+    )
+    contract = ContractModel("Target", "Target.sol", (function,))
+    readiness = inspect_execution_readiness(contract, function)
+    requirement = readiness.execution_requirements[0]
+    assert requirement.category != "cryptographic_witness"
+    assert requirement.status == "constraint"
+
+
+def test_caller_state_principal_can_be_proven_from_inherited_writer_source(tmp_path):
+    base = tmp_path / "Base.sol"
+    base.write_text(
+        "contract Base { address internal allowedRecipient; "
+        "function setRecipient(address value) public { allowedRecipient = msg.sender; } "
+        "modifier onlyAllowedRecipient() { require(msg.sender == allowedRecipient); _; } }",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'import "./Base.sol"; contract Target is Base { function run() external onlyAllowedRecipient {} }',
+        encoding="utf-8",
+    )
+    functions = parse_solidity(source, include_inherited=True)
+    model = next(item for item in functions if item.name == "Target")
+    run = next(item for item in model.functions if item.name == "run")
+    requirements = _caller_requirements(run, model)
+    assert any(item.kind == "caller_state_principal" and item.subject == "allowedRecipient" for item in requirements)
+
+
+def test_execution_readiness_resolves_named_return_internal_producer_guard(tmp_path):
+    source = tmp_path / "Factory.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Factory {
+            function deploy(bytes memory code) internal returns (address contractAddress) {
+                assembly {
+                    contractAddress := create(0, add(code, 0x20), mload(code))
+                }
+                if (contractAddress == address(0)) revert();
+            }
+
+            function run(bytes memory code) external {
+                address deployed = deploy(code);
+                if (deployed == address(0)) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(source)[0]
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+
+    internal = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "deploy: contractAddress == address(0)"
+    )
+    assert internal.status == "constraint"
+    assert internal.category == "input_construction"
+    assert not any(
+        item.kind in {"execution_value_dependency", "execution_value_runtime_dependency"}
+        and item.status == "unresolved"
+        for item in readiness.execution_requirements
+    )
+
+
+def test_internal_named_return_guard_propagates_success_postcondition(tmp_path):
+    source = tmp_path / "Factory.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Factory {
+            function deploy(bytes memory code) internal returns (address contractAddress) {
+                assembly {
+                    contractAddress := create(0, add(code, 0x20), mload(code))
+                }
+                if (contractAddress == address(0)) revert();
+            }
+
+            function run(bytes memory code) external returns (address hinkal) {
+                hinkal = deploy(code);
+                if (hinkal == address(0)) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(source)[0]
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+
+    producer = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "execution_value_producer"
+    )
+    assert producer.status == "constraint"
+    assert "successful deploy return establishes" in producer.detail
+
+    dataflow = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "execution_dataflow"
+    )
+    assert dataflow.status == "constraint"
+    assert "successful deploy return establishes" in dataflow.detail

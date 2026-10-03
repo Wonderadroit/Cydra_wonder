@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import re
 
 from .execution_readiness import ExecutionReadiness, SetupAction
 
@@ -16,6 +17,7 @@ class PrerequisiteNode:
     dependencies: tuple[str, ...] = ()
     transition: str | None = None
     verification: str | None = None
+    capability: str | None = None
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,48 @@ class PrerequisiteGraph:
 
     def by_subject(self, subject: str) -> tuple[PrerequisiteNode, ...]:
         return tuple(node for node in self.nodes if node.subject == subject)
+
+    @property
+    def capability_clusters(self) -> dict[str, int]:
+        """Count unresolved prerequisites by generic execution capability."""
+        counts: dict[str, int] = {}
+        for node in self.unresolved:
+            capability = node.capability or "EXECUTION_READINESS"
+            counts[capability] = counts.get(capability, 0) + 1
+        return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def _capability_for_requirement(kind: str, category: str | None = None) -> str:
+    """Map readiness evidence to a stable execution capability name."""
+    category_mapping = {
+        "cryptographic_witness": "CRYPTOGRAPHIC_WITNESS",
+        "execution_context": "EXECUTION_CONTEXT",
+        "state_observation": "STATE_OBSERVATION",
+        "local_execution": "LOCAL_EXECUTION",
+        "input_construction": "INPUT_CONSTRUCTION",
+    }
+    if category in category_mapping:
+        return category_mapping[category]
+
+    mapping = {
+        "caller_role": "CALLER_CONSTRUCTION",
+        "caller_state_dependency": "STATE_SETUP",
+        "caller_state_setup_candidate": "STATE_SETUP",
+        "execution_state_dependency": "STATE_OBSERVATION",
+        "state_dependency": "STATE_OBSERVATION",
+        "constructor_dependency": "CONSTRUCTOR_SETUP",
+        "runtime_dependency": "INTERNAL_CALL_PROPAGATION",
+        "internal_execution_dependency": "INTERNAL_CALL_PROPAGATION",
+    }
+    if kind in mapping:
+        return mapping[kind]
+    if "state" in kind:
+        return "STATE_OBSERVATION"
+    if "constructor" in kind:
+        return "CONSTRUCTOR_SETUP"
+    if "caller" in kind or "role" in kind:
+        return "CALLER_CONSTRUCTION"
+    return "EXECUTION_READINESS"
 
 
 def build_prerequisite_graph(
@@ -67,18 +111,43 @@ def build_prerequisite_graph(
                 status=status,
                 source=item.source,
                 verification="runtime_observation_required",
+                capability=_capability_for_requirement(item.kind, item.category),
             )
         )
 
+    state_requirement_kinds = {"state_predicate", "state_dependency", "execution_state_dependency"}
+    state_requirements = tuple(
+        item for item in requirements if item.kind in state_requirement_kinds
+    )
+
+    def _shares_state_symbol(subject: str, provenance: str) -> bool:
+        """Relate setup provenance to expression-based state requirements generically."""
+        subject_symbols = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", subject))
+        provenance_symbols = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", provenance))
+        ignored = {
+            "address", "bool", "bytes", "string", "uint", "uint8", "uint16",
+            "uint32", "uint64", "uint128", "uint256", "int", "int8", "int16",
+            "int32", "int64", "int128", "int256", "true", "false",
+        }
+        return bool((subject_symbols - ignored) & (provenance_symbols - ignored))
+
     for action in setup_actions:
+        provenance_state = action.provenance[-1] if action.provenance else None
+        dependencies = tuple(
+            item.subject
+            for item in state_requirements
+            if provenance_state and _shares_state_symbol(item.subject, provenance_state)
+        )
         nodes.append(
             PrerequisiteNode(
                 subject=action.function,
                 kind="setup_transition",
                 status="constructible",
                 source="execution_readiness",
+                dependencies=dependencies,
                 transition=action.function,
                 verification="postcondition_required",
+                capability="STATE_SETUP",
             )
         )
 
@@ -88,26 +157,47 @@ def build_prerequisite_graph(
     return PrerequisiteGraph(tuple(unique.values()))
 
 
-def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
-    """Require every prerequisite to be explicitly verified.
 
-    A constructible setup action is not enough. This is deliberately fail-closed
-    so execution success cannot be mistaken for state satisfaction.
+def can_enter_security_experiment(graph: PrerequisiteGraph) -> bool:
+    """Require every security-critical prerequisite to be verified.
+
+    Constructible state/setup prerequisites remain fail-closed: merely knowing
+    that a fixture *can* be built must never be treated as proof that target
+    state is established. Runtime dependencies owned by the execution adapter
+    are different: their construction is part of the target call itself and
+    does not need a separate pre-experiment observation. The capability label
+    makes that distinction explicit without introducing target-specific logic.
     """
 
-    return not graph.unresolved and all(
-        node.status in {"verified", "constraint"} for node in graph.nodes
+    if graph.unresolved:
+        return False
+
+    allowed_constructible_capabilities = {
+        "INTERNAL_CALL_PROPAGATION",
+    }
+    return all(
+        node.status in {"verified", "constraint"}
+        or (
+            node.status == "constructible"
+            and node.capability in allowed_constructible_capabilities
+        )
+        for node in graph.nodes
     )
 
 
 @dataclass(frozen=True)
 class PrerequisiteObservation:
-    """Deterministic runtime observation used to promote one prerequisite."""
+    """Deterministic runtime observation used to promote one prerequisite.
+
+    Setup-transition verification requires transition provenance so pre-existing
+    state cannot be mistaken for proof that a setup action established it.
+    """
     kind: str
     subject: str
     expected: str
     observed: str
     evidence_id: str
+    transition: str | None = None
 
 
 def apply_observations(
@@ -115,10 +205,32 @@ def apply_observations(
     observations: tuple[PrerequisiteObservation, ...],
 ) -> PrerequisiteGraph:
     """Promote only evidence-backed matching prerequisites; fail closed otherwise."""
-    by_subject = {(observation.kind, observation.subject): observation for observation in observations}
+    state_requirement_kinds = {
+        "state_predicate",
+        "state_dependency",
+        "execution_state_dependency",
+    }
     nodes: list[PrerequisiteNode] = []
     for node in graph.nodes:
-        observation = by_subject.get((node.kind, node.subject))
+        observation = None
+        if node.kind in state_requirement_kinds:
+            observation = next(
+                (
+                    item for item in observations
+                    if item.subject == node.subject
+                    and item.kind in {"state", node.kind}
+                ),
+                None,
+            )
+        else:
+            observation = next(
+                (
+                    item for item in observations
+                    if item.kind == node.kind and item.subject == node.subject
+                ),
+                None,
+            )
+
         if observation is None:
             nodes.append(node)
             continue
@@ -135,4 +247,35 @@ def apply_observations(
             nodes.append(
                 replace(node, status="blocked", verification=observation.evidence_id)
             )
+
+    verified_state_subjects = {
+        node.subject
+        for node in nodes
+        if node.kind in state_requirement_kinds and node.status == "verified"
+    }
+    for index, node in enumerate(nodes):
+        if node.kind != "setup_transition" or node.status != "constructible":
+            continue
+        matching_dependency = next(
+            (dependency for dependency in node.dependencies if dependency in verified_state_subjects),
+            None,
+        )
+        if matching_dependency is None:
+            continue
+        evidence = next(
+            (
+                item for item in observations
+                if item.subject == matching_dependency
+                and item.kind in {"state", "state_predicate", "state_dependency", "execution_state_dependency"}
+                and item.transition == node.transition
+            ),
+            None,
+        )
+        if evidence is not None and evidence.evidence_id:
+            nodes[index] = replace(
+                node,
+                status="verified",
+                verification=evidence.evidence_id,
+            )
+
     return PrerequisiteGraph(tuple(nodes))

@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from .ast_dataflow import SemanticRelationshipEvidence
 from .compiler_constraints import ConstraintEvidence
-from .experiment_inputs import plan_parameter_inputs
+from .experiment_inputs import plan_parameter_inputs, _planned_defaults
 from .experiment_planning import bind_experiment
 from .models import ContractModel, Experiment, ExperimentStep, Hypothesis, InvestigationResult, Invariant
 from .reasoning import (
@@ -184,17 +184,27 @@ def _attach_input_plan(
     placeholder against the peer function's actual parameter model. No invariant
     class or benchmark-specific knowledge is used here.
     """
-    function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+    function = next((item for item in (*contract.functions, *contract.inherited_functions) if item is not None and item.name == hypothesis.target_function), None)
     bound = experiment
     if function is not None:
-        vector = experiment.planned_inputs or plan_parameter_inputs(
+        planned_defaults = _planned_defaults(tuple(function.parameters), experiment.planned_inputs)
+        vector = plan_parameter_inputs(
             function.parameters,
             constraints,
+            defaults=planned_defaults,
             function_name=function.name,
+            contract_model=contract,
         )
+        # The reasoning planner's planned_inputs may be descriptive placeholders
+        # (for example "same signed message"). Once the generic input planner has
+        # produced a concrete ABI vector, that execution vector supersedes those
+        # placeholders. Keep bind_experiment strict for genuinely conflicting
+        # concrete callers; normalize the envelope here at the reasoning/execution
+        # boundary instead of weakening the binding contract.
+        normalized_experiment = replace(experiment, planned_inputs=vector)
         bound = bind_experiment(
             hypothesis,
-            experiment,
+            normalized_experiment,
             target_function=function.name,
             planned_inputs=vector,
         )
@@ -202,17 +212,24 @@ def _attach_input_plan(
     if not bound.steps:
         return bound
 
-    functions = {item.name: item for item in contract.functions}
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions) if item is not None}
     planned_steps: list[ExperimentStep] = []
     for step in bound.steps:
         step_function = functions.get(step.function)
         if step_function is None:
             planned_steps.append(step)
             continue
+        # Preserve planner-supplied causal arguments for parameters that have
+        # no function-specific constraint. Constraint evidence may override only
+        # the parameter it actually binds; it must not replace the whole vector
+        # with conservative defaults.
+        existing = _planned_defaults(tuple(step_function.parameters), step.arguments)
         vector = plan_parameter_inputs(
             step_function.parameters,
             constraints,
+            defaults=existing,
             function_name=step_function.name,
+            contract_model=contract,
         )
         # An empty vector is the explicit "not safely planned" signal from the
         # generic planner. Preserve the existing step so the renderer fails closed
@@ -351,11 +368,23 @@ def investigate(
             )
         all_evidence.extend(build_evidence(contract, hypotheses))
 
+    hypotheses_by_id = {}
+    for hypothesis in all_hypotheses:
+        hypotheses_by_id.setdefault(hypothesis.hypothesis_id, hypothesis)
+    dedup_hypotheses = tuple(hypotheses_by_id.values())
+    experiment_by_hypothesis = {}
+    for experiment in all_experiments:
+        experiment_by_hypothesis.setdefault(experiment.hypothesis_id, experiment)
+    dedup_experiments = tuple(
+        experiment_by_hypothesis[hypothesis.hypothesis_id]
+        for hypothesis in dedup_hypotheses
+        if hypothesis.hypothesis_id in experiment_by_hypothesis
+    )
     return InvestigationResult(
         target=target or str(path),
         contracts=tuple(contracts),
         invariants=tuple(all_invariants),
-        hypotheses=tuple(all_hypotheses),
-        experiments=tuple(all_experiments),
+        hypotheses=dedup_hypotheses,
+        experiments=dedup_experiments,
         evidence=tuple(all_evidence),
     )

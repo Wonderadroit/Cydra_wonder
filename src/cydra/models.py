@@ -32,6 +32,10 @@ class ParameterModel:
     data_location: str | None = None
 
 
+# Backwards-compatible alias for older readiness/test integrations.
+Parameter = ParameterModel
+
+
 @dataclass(frozen=True)
 class ConstructorModel:
     parameters: tuple[ParameterModel, ...]
@@ -39,6 +43,20 @@ class ConstructorModel:
     interface_casts: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     resolved_interface_casts: tuple[tuple[str, ResolvedInterface], ...] = field(default_factory=tuple)
     derived_interface_casts: tuple[tuple[str, str, ResolvedInterface], ...] = field(default_factory=tuple)
+    # Role assignments established during construction, represented as
+    # (role_expression, account_expression). This is source-derived state
+    # evidence, not a guessed role identity.
+    role_grants: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ModifierModel:
+    """Syntactic modifier definition preserved for authorization reasoning."""
+    name: str
+    parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
+    body: str = ""
+    line: int = 0
+    internal_calls: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -49,7 +67,11 @@ class FunctionModel:
     writes: tuple[str, ...]
     external_calls: tuple[str, ...]
     line: int
+    # Keep parameters immediately after the legacy six positional fields for backwards-compatible construction.
     parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
+    # Modifier invocations preserve arguments instead of collapsing them to names.
+    # This is required to trace target-derived role expressions such as onlyRole(X).
+    modifier_invocations: tuple[tuple[str, tuple[str, ...]], ...] = field(default_factory=tuple)
     authorization_predicates: tuple[str, ...] = field(default_factory=tuple)
     state_predicates: tuple[str, ...] = field(default_factory=tuple)
     # Each entry is (predicate, polarity), where polarity records whether the
@@ -67,6 +89,18 @@ class FunctionModel:
     # Return expressions are syntax/data-flow evidence for functions that may produce
     # a value consumed by an execution predicate. They do not prove satisfiability.
     return_expressions: tuple[str, ...] = field(default_factory=tuple)
+    # Named return variables are local producer values even when Solidity uses
+    # a bare `return;` or assembly assignment rather than an explicit
+    # `return expression;` statement.
+    return_parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
+    # Direct same-contract calls observed in this function body. These are
+    # resolved only against functions declared by the same ContractModel;
+    # external/member calls remain outside this relation.
+    internal_calls: tuple[str, ...] = field(default_factory=tuple)
+    # State writes reachable through the same-contract internal-call graph,
+    # including this function's direct writes. This is a derived effect
+    # summary, not a replacement for the direct `writes` evidence.
+    effective_writes: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -83,6 +117,8 @@ class ContractModel:
     # Concrete inherited functions discovered through the source import/inheritance graph.
     # This is model provenance, not a claim that an inherited path is executable.
     inherited_functions: tuple[FunctionModel, ...] = field(default_factory=tuple)
+    modifiers: tuple[ModifierModel, ...] = field(default_factory=tuple)
+    inherited_modifiers: tuple[ModifierModel, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

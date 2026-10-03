@@ -181,7 +181,7 @@ def adapt_generated_initialization_for_proxy(source: str, target_type: str) -> s
     assignment = (
         f"implementation = new {target_type}({implementation_args});\n"
         "        CydraDelegateProxy proxy = new CydraDelegateProxy(address(implementation));\n"
-        f"        target = {target_type}(address(proxy));"
+        f"        target = {target_type}(payable(address(proxy)));"
     )
     source = pattern.sub(assignment, source, count=1)
 

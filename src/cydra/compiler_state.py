@@ -110,18 +110,69 @@ def compile_state_effects(project: str | Path, source: str | Path) -> CompilerEv
         if completed.returncode != 0:
             return CompilerEvidenceResult((), (), True, "compile_failed", command, completed.stdout, completed.stderr, tuple(map(str, build_files)))
 
-        evidence: list[SemanticRelationshipEvidence] = []
-        constraints: list[ConstraintEvidence] = []
-        versions: set[str] = set()
-        for build_file in build_files:
-            try:
-                payload = json.loads(build_file.read_text(encoding="utf-8"))
-                version = payload.get("solcVersion")
-                if isinstance(version, str):
-                    versions.add(version)
-                evidence.extend(extract_state_effects_from_build_info(build_file, source_path, project_path))
-                constraints.extend(extract_constraints_from_build_info(build_file, source_path, project_path))
-            except (OSError, json.JSONDecodeError):
-                continue
+        def collect_ast_evidence(files: tuple[Path, ...]):
+            collected_evidence: list[SemanticRelationshipEvidence] = []
+            collected_constraints: list[ConstraintEvidence] = []
+            collected_versions: set[str] = set()
+            for build_file in files:
+                try:
+                    payload = json.loads(build_file.read_text(encoding="utf-8"))
+                    version = payload.get("solcVersion")
+                    if isinstance(version, str):
+                        collected_versions.add(version)
+                    collected_evidence.extend(
+                        extract_state_effects_from_build_info(build_file, source_path, project_path)
+                    )
+                    collected_constraints.extend(
+                        extract_constraints_from_build_info(build_file, source_path, project_path)
+                    )
+                except (OSError, json.JSONDecodeError):
+                    continue
+            return (
+                collected_evidence,
+                collected_constraints,
+                collected_versions,
+            )
+
+        evidence, constraints, versions = collect_ast_evidence(build_files)
+
+        # Source-scoped Foundry builds can legally succeed while omitting the
+        # requested source unit's AST from build-info (notably for interfaces,
+        # abstract/base units, and generated verifier sources). That is a
+        # compiler-evidence acquisition gap, not a reason to declare the unit
+        # unobservable. Retry once with the complete project build so the same
+        # compiler output can be consumed from a project-wide build-info graph.
+        # Keep the compiler retry bounded: when the source-scoped build
+        # itself required via-IR, do not immediately launch a third compile.
+        # A successful via-IR compile with no source AST remains an evidence
+        # acquisition gap and is reported as such; the next generic acquisition
+        # layer can handle it without defeating the bounded compiler retry.
+        if not evidence and not constraints and "--via-ir" not in command:
+            full_command = (
+                "forge", "build", "--build-info", "--build-info-path", str(info_path),
+                *profile, "--skip", "test", "--skip", "script", "--threads", "1",
+            )
+            full_completed = subprocess.run(
+                full_command, cwd=project_path, text=True, capture_output=True, check=False
+            )
+            if full_completed.returncode == 0:
+                command = full_command
+                completed = full_completed
+                build_files = tuple(sorted(info_path.rglob("*.json")))
+                evidence, constraints, versions = collect_ast_evidence(build_files)
+            else:
+                # Preserve the successful source-scoped compiler result and its
+                # diagnostics. The fallback is an evidence-acquisition retry,
+                # never a semantic failure signal.
+                return CompilerEvidenceResult(
+                    (), (), True, "no_ast_for_source", command,
+                    completed.stdout, completed.stderr,
+                    tuple(map(str, build_files)), tuple(sorted(versions)),
+                )
+
         status = "success" if evidence or constraints else "no_ast_for_source"
-        return CompilerEvidenceResult(tuple(evidence), tuple(constraints), True, status, command, completed.stdout, completed.stderr, tuple(map(str, build_files)), tuple(sorted(versions)))
+        return CompilerEvidenceResult(
+            tuple(evidence), tuple(constraints), True, status, command,
+            completed.stdout, completed.stderr, tuple(map(str, build_files)),
+            tuple(sorted(versions)),
+        )

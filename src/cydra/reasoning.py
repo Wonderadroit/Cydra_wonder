@@ -82,7 +82,10 @@ def _has_caller_authorization_predicate(function: FunctionModel) -> bool:
 
 
 def _state_changing_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    return tuple(f for f in contract.functions if f.visibility in _STATE_CHANGING_VISIBILITIES and f.writes)
+    return tuple(
+        f for f in contract.functions
+        if f.visibility in _STATE_CHANGING_VISIBILITIES and (f.effective_writes or f.writes)
+    )
 
 
 def _externally_callable_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:

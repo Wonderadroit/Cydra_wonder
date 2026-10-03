@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
-from .interface_resolver import ResolvedInterface, resolve_interface, resolve_named_type_source
-from .models import ConstructorModel, ContractModel, FunctionModel, ParameterModel
+from .interface_resolver import ResolvedInterface, resolve_import, resolve_interface, resolve_named_type_source, _imports_for
+from .models import ConstructorModel, ContractModel, FunctionModel, ModifierModel, ParameterModel
 
 
 _CONTRACT_RE = re.compile(r"\b(?:contract|library)\s+(?P<name>\w+)(?:\s+is\s+(?P<inherits>[^\{]+))?")
@@ -14,6 +15,10 @@ _FUNCTION_RE = re.compile(
 )
 _CONSTRUCTOR_RE = re.compile(
     r"\bconstructor\s*\(([^)]*)\)\s*([^\{;]*)\{", re.MULTILINE
+)
+_MODIFIER_RE = re.compile(
+    r"\bmodifier\s+(?P<name>[A-Za-z_]\w*)\s*\((?P<parameters>[^)]*)\)\s*[^\{;]*\{",
+    re.MULTILINE,
 )
 _INTERFACE_CAST_RE = re.compile(r"\b(I[A-Z]\w*)\s*\(")
 _DECLARED_TYPE_RE = re.compile(
@@ -36,6 +41,62 @@ _STATE_DECLARATION_RE = re.compile(
 _STATE_DECLARATION_KEYWORDS = {
     "event", "error", "using", "struct", "enum", "function", "modifier", "constructor", "fallback", "receive",
 }
+
+# Solidity built-in namespaces are deterministic language operations, not runtime targets.
+_SOLIDITY_BUILTIN_RECEIVERS = {
+    "abi", "block", "msg", "tx", "type", "super", "bytes", "string",
+}
+
+_INTERNAL_CALL_KEYWORDS = {
+    "if", "for", "while", "do", "switch", "return", "require", "assert",
+    "revert", "emit", "new", "delete", "unchecked", "try", "catch",
+}
+
+
+def _internal_calls(body: str, function_names: set[str]) -> tuple[str, ...]:
+    """Resolve direct same-contract calls against known function names only."""
+    calls: list[str] = []
+    for match in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", body):
+        name = match.group(1)
+        previous = body[match.start() - 1] if match.start() > 0 else ""
+        if previous == "." or name in _INTERNAL_CALL_KEYWORDS or name not in function_names:
+            continue
+        if name not in calls:
+            calls.append(name)
+    return tuple(calls)
+
+
+def _effective_writes(functions: tuple[FunctionModel, ...]) -> tuple[FunctionModel, ...]:
+    """Compute cycle-safe transitive state-write summaries for internal calls."""
+    by_name: dict[str, set[str]] = {}
+    for function in functions:
+        by_name.setdefault(function.name, set()).update(function.writes)
+
+    cache: dict[str, frozenset[str]] = {}
+    visiting: set[str] = set()
+
+    def summarize(name: str) -> frozenset[str]:
+        if name in cache:
+            return cache[name]
+        if name in visiting:
+            return frozenset(by_name.get(name, ()))
+        visiting.add(name)
+        effects = set(by_name.get(name, ()))
+        for function in functions:
+            if function.name != name:
+                continue
+            for callee in function.internal_calls:
+                effects.update(summarize(callee))
+        visiting.remove(name)
+        result = frozenset(effects)
+        cache[name] = result
+        return result
+
+    return tuple(
+        replace(function, effective_writes=tuple(sorted(summarize(function.name))))
+        for function in functions
+    )
+
 
 
 def _strip_comments(source: str) -> str:
@@ -158,6 +219,15 @@ def _parameter_model(declaration: str) -> ParameterModel:
 
 def _parameters(parameter_text: str) -> tuple[ParameterModel, ...]:
     return tuple(_parameter_model(part) for part in _split_parameters(parameter_text))
+
+
+def _return_parameters(signature_tail: str) -> tuple[ParameterModel, ...]:
+    """Extract named Solidity return values from a function signature."""
+    match = re.search(r"\breturns\s*\(", signature_tail)
+    if match is None:
+        return ()
+    opening = signature_tail.find("(", match.start())
+    return _parameters(_balanced_parenthesized(signature_tail, opening))
 
 
 def _balanced_parenthesized(source: str, opening: int) -> str:
@@ -337,16 +407,7 @@ def _state_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> 
         # The function body has already been isolated, so the latter has no
         # branch brace to inspect. Only classify it when the next statement
         # is explicitly a revert; otherwise retain unknown polarity.
-        brace = body.find("{", opening)
-        polarity = "unknown"
-        if brace >= 0:
-            branch = _body(body, brace)
-            if re.search(r"\brevert\b", branch):
-                polarity = "must_not_hold"
-        else:
-            tail = body[_balanced_parenthesized_end(body, opening):].lstrip()
-            if re.match(r"revert\b", tail):
-                polarity = "must_not_hold"
+        polarity = _if_revert_polarity(body, opening)
         add(predicate, polarity)
 
     return tuple(results)
@@ -354,6 +415,16 @@ def _state_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> 
 
 def _state_predicates(body: str, state_variables: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(predicate for predicate, _ in _state_predicate_polarities(body, state_variables))
+
+
+def _if_revert_polarity(body: str, opening: int) -> str:
+    """Classify an if-condition only when its immediately selected branch reverts."""
+    tail_start = _balanced_parenthesized_end(body, opening)
+    tail = body[tail_start:].lstrip()
+    if tail.startswith("{"):
+        branch = _body(body, body.find("{", tail_start))
+        return "must_not_hold" if re.search(r"\brevert\b", branch) else "unknown"
+    return "must_not_hold" if re.match(r"revert\b", tail) else "unknown"
 
 
 def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
@@ -379,16 +450,7 @@ def _execution_predicate_polarities(body: str, state_variables: tuple[str, ...])
     for match in re.finditer(r"\bif\s*\(", body):
         opening = body.find("(", match.start())
         predicate = _balanced_parenthesized(body, opening).strip()
-        tail_start = _balanced_parenthesized_end(body, opening)
-        tail = body[tail_start:].lstrip()
-        polarity = "unknown"
-        brace = body.find("{", tail_start)
-        if brace >= 0:
-            branch = _body(body, brace)
-            if re.search(r"\brevert\b", branch):
-                polarity = "must_not_hold"
-        elif re.match(r"revert\b", tail):
-            polarity = "must_not_hold"
+        polarity = _if_revert_polarity(body, opening)
         # A non-reverting if branch selects a side effect; it is not an
         # entry prerequisite and must not become an execution blocker.
         if polarity != "unknown":
@@ -409,6 +471,23 @@ def _execution_value_bindings(body: str) -> tuple[tuple[str, str], ...]:
     # such as `startDebt <- = 0) revert ...`. Keep the extractor deliberately
     # conservative: only statements beginning after a statement/brace boundary
     # are considered, and control-flow keywords cannot become declaration types.
+    tuple_pattern = re.compile(
+        r"(?:^|[;{}])\s*"
+        r"\((?P<names>[^()]+)\)\s*=\s*(?P<expression>[^;{}]+);"
+    )
+    for match in tuple_pattern.finditer(body):
+        names = [
+            item.strip()
+            for item in match.group("names").split(",")
+            if re.fullmatch(r"[A-Za-z_]\w*", item.strip())
+        ]
+        expression = match.group("expression").strip()
+        if len(names) >= 2 and expression and "(" in expression:
+            for name in names:
+                item = (name, expression)
+                if item not in bindings:
+                    bindings.append(item)
+
     pattern = re.compile(
         r"(?:^|[;{}])\s*"
         r"(?!if\b|for\b|while\b|return\b|emit\b|revert\b)"
@@ -418,7 +497,12 @@ def _execution_value_bindings(body: str) -> tuple[tuple[str, str], ...]:
     for match in pattern.finditer(body):
         name = match.group("name")
         expression = match.group("expression").strip()
-        if expression and ("(" in expression or re.search(r"\b(?:msg|tx|block)\.", expression)):
+        # Preserve deterministic local dataflow as well as call-shaped
+        # producers. Downstream readiness may need to follow a local such as
+        # "verified" back to the cryptographic call that produced "err".
+        # The extractor remains statement-bounded and therefore does not infer
+        # arbitrary control-flow semantics.
+        if expression:
             item = (name, expression)
             if item not in bindings:
                 bindings.append(item)
@@ -474,6 +558,36 @@ def _project_root(path: Path) -> Path:
     return resolved.parent
 
 
+def _constructor_role_grants(body: str) -> tuple[tuple[str, str], ...]:
+    """Extract standard role-establishment calls from constructor source."""
+    grants: list[tuple[str, str]] = []
+    for match in re.finditer(r"\b(?:_grantRole|_setupRole|grantRole)\s*\(", body):
+        arguments = _balanced_parenthesized(body, body.find("(", match.start()))
+        parts = _split_parameters(arguments)
+        if len(parts) < 2:
+            continue
+        role = parts[0].strip()
+        account = parts[1].strip()
+        if not role or not account:
+            continue
+        item = (role, account)
+        if item not in grants:
+            grants.append(item)
+
+    # Modern OpenZeppelin Ownable establishes ownership through the same
+    # constructor transition used by _transferOwnership. Preserve that
+    # source-derived provenance so inherited onlyOwner checks can be satisfied
+    # by the deployment caller without naming a target-specific contract.
+    for match in re.finditer(r"\b(?:_transferOwnership|__Ownable(?:2Step)?_init)\s*\(", body):
+        arguments = _balanced_parenthesized(body, body.find("(", match.start()))
+        account = arguments.strip()
+        if account:
+            item = ("owner", account)
+            if item not in grants:
+                grants.append(item)
+    return tuple(grants)
+
+
 def _constructor_interface_casts(
     body: str,
     parameters: tuple[ParameterModel, ...],
@@ -523,6 +637,124 @@ def _constructor_interface_casts(
         derived_casts.append((derived[0], derived[1], resolved))
 
     return tuple(casts), tuple(resolved_casts), tuple(derived_casts)
+
+
+def _modifier_models(contract_source: str, source: str, contract_start: int, function_names: set[str]) -> tuple[ModifierModel, ...]:
+    """Extract modifier definitions without interpreting their authorization semantics."""
+    modifiers: list[ModifierModel] = []
+    for match in _MODIFIER_RE.finditer(contract_source):
+        body = _body(contract_source, match.end() - 1)
+        modifiers.append(
+            ModifierModel(
+                name=match.group("name"),
+                parameters=_parameters(match.group("parameters")),
+                body=body,
+                line=_line_number(source, contract_start + match.start()),
+                internal_calls=_internal_calls(body, function_names),
+            )
+        )
+    return tuple(modifiers)
+
+
+def _modifier_invocations(signature_tail: str, keywords: set[str]) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Preserve modifier invocation arguments from a function signature."""
+    invocations: list[tuple[str, tuple[str, ...]]] = []
+    for match in re.finditer(r"\b([A-Za-z_]\w*)\s*(?:\(([^()]*)\))?", signature_tail):
+        name = match.group(1)
+        if name in keywords:
+            continue
+        args = () if match.group(2) is None else tuple(
+            item.strip() for item in _split_parameters(match.group(2)) if item.strip()
+        )
+        item = (name, args)
+        if item not in invocations:
+            invocations.append(item)
+    return tuple(invocations)
+
+
+def _resolve_inherited_contract_source(
+    root: Path,
+    importer: Path,
+    name: str,
+) -> Path | None:
+    """Resolve a concrete inherited contract through declared imports only."""
+    visited: set[Path] = set()
+
+    def walk(path: Path) -> Path | None:
+        path = path.resolve()
+        if path in visited or not path.is_file():
+            return None
+        visited.add(path)
+        try:
+            imports = _imports_for(path)
+        except (OSError, UnicodeError):
+            return None
+
+        for import_path in imports:
+            if Path(import_path).name != f"{name}.sol" and not import_path.endswith(f"/{name}.sol"):
+                continue
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            candidate = resolved[0].resolve()
+            try:
+                source = _strip_comments(candidate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                continue
+            if re.search(rf"\b(?:abstract\s+)?contract\s+{re.escape(name)}\b", source):
+                return candidate
+
+        for import_path in imports:
+            resolved = resolve_import(root, path, import_path)
+            if resolved is None:
+                continue
+            candidate = resolved[0]
+            try:
+                source = _strip_comments(candidate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                continue
+            if re.search(rf"\b(?:abstract\s+)?contract\s+{re.escape(name)}\b", source):
+                return candidate
+            found = walk(candidate)
+            if found is not None:
+                return found
+        return None
+
+    return walk(importer)
+
+
+def _inherited_modifiers(
+    root: Path,
+    importer: Path,
+    inherits: tuple[str, ...],
+    seen: set[Path] | None = None,
+) -> tuple[ModifierModel, ...]:
+    """Resolve concrete inherited modifiers through the source inheritance graph."""
+    seen = set() if seen is None else seen
+    modifiers: list[ModifierModel] = []
+    for inherited_name in inherits:
+        resolved_path = _resolve_inherited_contract_source(root, importer, inherited_name)
+        if resolved_path is None:
+            continue
+        if resolved_path in seen:
+            continue
+        seen.add(resolved_path)
+        try:
+            contracts = parse_solidity(resolved_path, include_inherited=False)
+        except (OSError, UnicodeError):
+            continue
+        base = next((item for item in contracts if item.name == inherited_name), None)
+        if base is None:
+            continue
+        modifiers.extend(base.modifiers)
+        modifiers.extend(_inherited_modifiers(root, resolved_path, base.inherits, seen))
+    deduped: list[ModifierModel] = []
+    seen_names: set[str] = set()
+    for modifier in modifiers:
+        if modifier.name not in seen_names:
+            seen_names.add(modifier.name)
+            deduped.append(modifier)
+    return tuple(deduped)
 
 
 def _inherited_functions(
@@ -621,7 +853,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
 
         contract_opening = contract_source.find("{")
         contract_body = _body(contract_source, contract_opening) if contract_opening >= 0 else contract_source
-        state_variables = tuple(dict.fromkeys((*_state_variables(contract_body), *_inherited_state_variables(root, path, inherits))))
+        state_variables = tuple(dict.fromkeys((*_state_variables(contract_body), *(_inherited_state_variables(root, path, inherits) if include_inherited else ()))))
         declared_types = _declared_types(contract_body)
         inherited_resolved_interfaces: list[ResolvedInterface] = []
         for inherited_name in inherits:
@@ -646,10 +878,17 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
             constructor = ConstructorModel(
                 parameters=parameters,
                 line=_line_number(source, contract_start + constructor_match.start()),
+                role_grants=_constructor_role_grants(body),
                 interface_casts=interface_casts,
                 resolved_interface_casts=resolved_interface_casts,
                 derived_interface_casts=derived_interface_casts,
             )
+
+        function_names = {
+            match.group(1)
+            for match in _FUNCTION_RE.finditer(contract_source)
+        }
+        contract_modifiers = _modifier_models(contract_source, source, contract_start, function_names)
 
         for match in _FUNCTION_RE.finditer(contract_source):
             name = match.group(1)
@@ -674,7 +913,8 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                     continue
                 if depth == 0 and token not in solidity_signature_keywords:
                     modifier_tokens.append(token)
-            modifiers = tuple(modifier_tokens)
+            modifier_names = tuple(modifier_tokens)
+            modifier_invocations = _modifier_invocations(signature_tail, solidity_signature_keywords)
             visibility_match = re.search(r"\b(public|external|internal|private)\b", signature_tail)
             visibility = visibility_match.group(1) if visibility_match else "unspecified"
             write_candidates = re.findall(
@@ -688,16 +928,20 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
             external_calls = tuple(sorted({
                 (match.group(1), match.group(2))
                 for match in external_call_matches
-                if not re.search(r"\b(?:revert|emit)\s*$", body[max(0, match.start() - 32):match.start()])
+                if match.group(1) not in _SOLIDITY_BUILTIN_RECEIVERS
+                and not re.search(r"\b(?:revert|emit)\s*$", body[max(0, match.start() - 32):match.start()])
             }))
+            internal_calls = _internal_calls(body, function_names)
             functions.append(
                 FunctionModel(
                     name=name,
                     visibility=visibility,
-                    modifiers=modifiers,
+                    modifiers=modifier_names,
+                    modifier_invocations=modifier_invocations,
                     writes=writes,
                     external_calls=external_calls,
                     line=_line_number(source, contract_start + match.start()),
+                    internal_calls=internal_calls,
                     parameters=_parameters(parameter_text),
                     authorization_predicates=_authorization_predicates(body),
                     state_predicates=_state_predicates(body, state_variables),
@@ -706,8 +950,11 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                     execution_predicate_polarities=_execution_predicate_polarities(body, state_variables),
                     execution_value_bindings=_execution_value_bindings(body),
                     return_expressions=_return_expressions(body),
+                    return_parameters=_return_parameters(signature_tail),
                 )
             )
+
+        functions = list(_effective_writes(tuple(functions)))
 
         contracts.append(
             ContractModel(
@@ -721,6 +968,8 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                 declared_types=declared_types,
                 inherited_resolved_interfaces=tuple(inherited_resolved_interfaces),
                 inherited_functions=_inherited_functions(root, path, inherits) if include_inherited else (),
+                modifiers=contract_modifiers,
+                inherited_modifiers=_inherited_modifiers(root, path, inherits) if include_inherited else (),
             )
         )
 

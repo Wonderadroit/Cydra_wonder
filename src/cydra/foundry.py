@@ -30,6 +30,15 @@ class ExecutionResult:
     stdout: str
     stderr: str
 
+    def __getitem__(self, key: str):
+        """Preserve mapping-style compatibility for legacy execution consumers."""
+        if not isinstance(key, str):
+            raise TypeError("ExecutionResult keys must be strings")
+        try:
+            return getattr(self, key)
+        except AttributeError as exc:
+            raise KeyError(key) from exc
+
 
 @dataclass(frozen=True)
 class ExperimentOutcome:
@@ -236,6 +245,14 @@ def _initializer_argument(
     if parameter.name in runtime_arguments:
         return runtime_arguments[parameter.name], None
     parameter_type = parameter.type.strip()
+    # Explicit interface provenance is sufficient even when the target source
+    # is a temporary fixture without Foundry metadata.
+    if contract_model is not None:
+        interface_names = {interface.name for interface in contract_model.inherited_resolved_interfaces}
+        base_type = parameter_type.split()[0].rstrip("[]")
+        source_text = _source_text(contract_model)
+        if base_type in interface_names or re.search(rf"\binterface\s+{re.escape(base_type)}\b", source_text):
+            return f"parameter{index}", f"{base_type} parameter{index};"
     if parameter_type.endswith("[]"):
         base = parameter_type[:-2].strip()
         # Preserve the conservative empty boundary for primitive arrays.
@@ -306,7 +323,14 @@ def _initializer_argument(
                         )
                     )
                 except (FileNotFoundError, OSError, UnicodeError):
-                    pass
+                    # The parameter may be an interface whose source is reachable
+                    # through the target's import graph even when it is not part
+                    # of inherited_resolved_interfaces.
+                    try:
+                        if resolve_interface(project_root, contract_model.source, base_type):
+                            is_contract_type = True
+                    except (FileNotFoundError, ValueError, OSError, UnicodeError):
+                        pass
         location = "" if is_contract_type else " memory"
         declaration = f"{qualified_type}{location} {variable};"
     return variable, declaration
@@ -451,8 +475,38 @@ def _return_declaration_with_name(return_declaration: str, index: int, interface
     return f"{type_declaration} {name}", name
 
 
+def _stub_default_return(type_declaration: str) -> str | None:
+    tokens = type_declaration.strip().split()
+    if not tokens:
+        return None
+    base = tokens[0]
+    if base.endswith("[]"):
+        return f"new {base}[](0)"
+    if base == "address":
+        return "address(0)"
+    if base == "bool":
+        return "false"
+    if base == "string":
+        return '""'
+    if base == "bytes":
+        return 'bytes("")'
+    if base.startswith(("uint", "int", "bytes")):
+        return "0"
+    return None
+
+
 def _stub_method_source(interface_name: str, method, derived_returns: dict[str, str], known_interfaces: set[str]) -> str:
     parameters = ", ".join(method.parameters)
+    simple_defaults = [_stub_default_return(item) for item in method.returns]
+    can_use_unnamed_returns = bool(method.returns) and all(value is not None for value in simple_defaults)
+    if can_use_unnamed_returns and method.name not in derived_returns:
+        returns = ", ".join(item.strip() for item in method.returns)
+        signature = f"function {method.name}({parameters}) external view"
+        signature += f" returns ({returns})"
+        signature += " {"
+        if len(simple_defaults) == 1:
+            return f"    {signature} return {simple_defaults[0]}; }}"
+        return f"    {signature} return ({', '.join(simple_defaults)}); }}"
     named_returns = [_return_declaration_with_name(item, index, interface_name, known_interfaces) for index, item in enumerate(method.returns)]
     returns = ", ".join(declaration for declaration, _ in named_returns)
     signature = f"function {method.name}({parameters}) external view"
@@ -502,7 +556,8 @@ def _runtime_stub_source(
 
     variables: dict[str, str] = {}
     for interface_name in sorted(interfaces):
-        variables[interface_name] = f"{interface_name[1:]}Stub"
+        stem = interface_name[1:] if interface_name.startswith("I") and len(interface_name) > 1 else interface_name
+        variables[interface_name] = f"{stem[:1].lower()}{stem[1:]}Stub"
 
     declarations: list[str] = []
     imported_interfaces: dict[str, object] = {}
@@ -617,15 +672,21 @@ def _model_initialization_source(
     for parameter in function.parameters:
         base = parameter.type.strip().split()[0].rstrip("[]")
         interface = parameter_interfaces.get(base)
+        source_declares_interface = bool(
+            re.search(rf"\binterface\s+{re.escape(base)}\b", _source_text(contract_model))
+        )
         if (
-            (interface is not None and any(
-                method.name in {"symbol", "decimals"} for method in interface.methods
-            ))
-            or "ERC20" in base
+            not source_declares_interface
+            and (
+                (interface is not None and any(
+                    method.name in {"symbol", "decimals"} for method in interface.methods
+                ))
+                or "ERC20" in base
+            )
         ):
-            # ERC20-shaped interface parameters can be backed by the canonical
-            # CYDRA token stub even when the resolver cannot traverse an unusual
-            # remapping in the target checkout.
+            # Use the canonical token stub only for imported/runtime interfaces.
+            # A target source-declared interface is a value-like ABI reference
+            # and must remain a declared local in the initializer harness.
             token_parameters.add(parameter.name)
 
     stub_source, stub_variables = _runtime_stub_source(
@@ -679,7 +740,69 @@ def _model_initialization_source(
         # vector was planned. Special runtime declarations are only the fallback
         # for experiments whose planner could not safely represent the ABI inputs.
         arguments = list(experiment.planned_inputs)
+        # Planned inputs replace fallback values, not declarations required for
+        # reference/interface-typed locals at the Solidity call boundary.
         declarations = []
+        for index, (parameter, argument) in enumerate(zip(function.parameters, arguments)):
+            if re.fullmatch(r"[A-Za-z_]\w*", argument.strip()):
+                base = parameter.type.strip().split()[0].rstrip("[]")
+                if not _builtin_type(base):
+                    _rendered, declaration = _initializer_argument(
+                        parameter, target_type, index, contract_model=contract_model
+                    )
+                    if declaration:
+                        declarations.append(declaration)
+
+    # Final boundary check: every identifier-shaped reference/contract
+    # initializer argument must have a value-like local declaration. This is
+    # derived from the modeled ABI/source type, never from a target name.
+    existing_declarations = "\n".join(declarations)
+    for index, (parameter, argument) in enumerate(zip(function.parameters, arguments)):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if not re.fullmatch(r"[A-Za-z_]\w*", argument.strip()) or _builtin_type(base):
+            continue
+        source = _source_text(contract_model)
+        is_reference_type = base in {
+            interface.name for interface in contract_model.inherited_resolved_interfaces
+        } or bool(re.search(rf"\b(?:interface|contract|library)\s+{re.escape(base)}\b", source))
+        if is_reference_type and not re.search(rf"\b{re.escape(base)}\s+{re.escape(argument.strip())}\s*;", existing_declarations):
+            declarations.append(f"{base} {argument.strip()};")
+            existing_declarations = "\n".join(declarations)
+
+    # Interface/contract ABI references are value-like local types. Ensure
+    # identifier-shaped fallbacks always have an explicit declaration.
+    declared_text = "\n".join(declarations)
+    for index, (parameter, argument) in enumerate(zip(function.parameters, arguments)):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if not re.fullmatch(r"[A-Za-z_]\w*", argument.strip()) or _builtin_type(base):
+            continue
+        is_reference = base in {item.name for item in contract_model.inherited_resolved_interfaces}
+        if not is_reference:
+            is_reference = bool(re.search(rf"\b(?:interface|contract|library)\s+{re.escape(base)}\b", _source_text(contract_model)))
+        declaration = f"{base} {argument.strip()};"
+        if is_reference and declaration not in declared_text:
+            declarations.append(declaration)
+            declared_text = "\n".join(declarations)
+
+    # Final ABI-local guarantee: non-runtime interface/contract parameters must
+    # remain value-like locals when their synthesized argument is an identifier.
+    # Keep runtime token casts intact; only materialize the missing local case.
+    reference_names = {
+        interface.name for interface in contract_model.inherited_resolved_interfaces
+    }
+    source_for_reference_check = _source_text(contract_model)
+    for parameter, argument in zip(function.parameters, arguments):
+        base = parameter.type.strip().split()[0].rstrip("[]")
+        if parameter.name in token_parameters or not re.fullmatch(r"[A-Za-z_]\w*", argument.strip()):
+            continue
+        is_reference = base in reference_names or bool(
+            re.search(rf"\b(?:interface|contract|library)\s+{re.escape(base)}\b", source_for_reference_check)
+        )
+        if is_reference and not any(
+            re.search(rf"\b{re.escape(base)}\s+{re.escape(argument.strip())}\s*;", item)
+            for item in declarations
+        ):
+            declarations.append(f"{base} {argument.strip()};")
 
     initialize_args_str = ", ".join(arguments)
     test_body = render_initialization_test_body(

@@ -28,7 +28,7 @@ def _shared_state_writers(
         # executable state hypotheses that knowingly invoke them as attacker.
         if function.modifiers:
             continue
-        for state in function.writes:
+        for state in (function.effective_writes or function.writes):
             writers[state].add(function.name)
 
     # Compiler-linked evidence can recover/strengthen the model when the parser's

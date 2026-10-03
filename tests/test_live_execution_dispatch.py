@@ -1,5 +1,5 @@
 from cydra.models import Experiment, Hypothesis
-from scripts.run_benchmark_blind import _execution_adapter, _unknown_reasoning_status
+from scripts.run_benchmark_blind import _execution_adapter, _execution_capabilities_for_class, _unknown_reasoning_status
 
 
 def test_live_runner_uses_one_capability_dispatch_boundary():
@@ -34,3 +34,10 @@ def test_planned_unknown_surface_is_recorded_as_an_execution_gap():
     assert status["execution_capability"] == "UNIMPLEMENTED"
     assert status["blind_executed"] is False
     assert status["classification"] == "NOT_REACHED"
+
+
+def test_runtime_capability_mapping_is_shared_by_readiness_and_dispatch():
+    assert _execution_capabilities_for_class("callback_state_order") == frozenset(
+        {"callback_state_order_reachability"}
+    )
+    assert _execution_capabilities_for_class("state") == frozenset()

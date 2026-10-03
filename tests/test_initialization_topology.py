@@ -31,7 +31,7 @@ contract CydraInitializationInvariantTest is Test {
     adapted = adapt_generated_initialization_for_proxy(generated, "ListingService")
     assert "ListingService internal implementation;" in adapted
     assert "implementation = new ListingService(address(0x1234));" in adapted
-    assert "target = ListingService(address(proxy));" in adapted
+    assert "target = ListingService(payable(address(proxy)));" in adapted
     assert "contract CydraDelegateProxy" in adapted
     assert "delegatecall(gas(), implementation_" in adapted
     assert "target = new ListingService(address(0x1234));" not in adapted

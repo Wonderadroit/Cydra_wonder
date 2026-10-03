@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from cydra.compiler_state import CompilerEvidenceResult, compile_state_effects
+from cydra.caller_prerequisite import generate_caller_prerequisite_test
 from cydra.foundry import (
     ExecutionResult,
     generate_initialization_test,
@@ -32,7 +33,13 @@ from cydra.state_experiments import plan_cross_function_state_experiment
 from cydra.structural_state import generate_cross_function_state_hypotheses
 from cydra.target_adapter import inspect_target
 from cydra.execution_readiness import constructible_state_setup_plan, inspect_execution_readiness, role_address_expression
+from cydra.exploration import ExplorationState, run_bounded_exploration
 from cydra.prerequisite_graph import apply_observations, build_prerequisite_graph, can_enter_security_experiment
+from cydra.execution_capabilities import (
+    build_experiment_contract,
+    classify_materialization_failure,
+    solve_capabilities,
+)
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
 from cydra.state_relation_observation import plan_state_relation_observations
@@ -44,8 +51,11 @@ from cydra.structural_pair_symmetry import generate_pair_symmetry_hypotheses
 from cydra.structural_aggregation_order import generate_aggregation_order_hypotheses
 from cydra.structural_configuration_binding import generate_configuration_binding_hypotheses
 from cydra.guard_parity_execution import generate_guard_parity_test
+from cydra.callback_state_order_execution import generate_callback_state_order_test
+from cydra.capability_campaign import build_capability_campaign
+from cydra.capability_repair import build_repair_artifact, build_automatic_repair_plan
 
-SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
+SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity", "callback_state_order"}
 
 CLASS_CAPABILITIES = {
     "guard_parity": {
@@ -82,6 +92,15 @@ CLASS_CAPABILITIES = {
         "execute_blind": True,
         "classify_blind": True,
         "classification_path": "single-sided initialization classifier",
+    },
+    "callback_state_order": {
+        "extract": True,
+        "generate_hypothesis": True,
+        "plan_experiment": True,
+        "generate_foundry": True,
+        "execute_blind": True,
+        "classify_blind": False,
+        "classify_block_reason": "callback execution requires causal differential verification before classification",
     },
     "arithmetic": {
         "extract": True,
@@ -135,8 +154,13 @@ FREEZE_FILES = (
     "execution-human.txt",
     "integrity-check.json",
     "classification.json",
+    "exploration-state.json",
     "manifest.sha256",
     "README.md",
+    "capability_failures.json",
+    "blocked_experiments.json",
+    "dependency_graph.json",
+    "capability_repair.json",
 )
 
 
@@ -178,13 +202,40 @@ def _command_capture(cwd: Path, *command: str) -> dict[str, Any]:
     completed = subprocess.run(
         command, cwd=cwd, text=True, capture_output=True, check=False
     )
-    return {
-        "command": list(command),
+    effective_command = command
+    fallback = None
+
+    # Treat compiler strategy as an execution capability, not a target-specific
+    # workaround. If the target itself hits Solidity's stack-depth limit during
+    # a normal build, retry the same build through IR. Preserve the original
+    # failure in provenance so the run still distinguishes target compiler
+    # constraints from CYDRA evidence.
+    combined = f"{completed.stdout}\n{completed.stderr}"
+    if (
+        command[:2] == ("forge", "build")
+        and completed.returncode != 0
+        and "Stack too deep" in combined
+    ):
+        effective_command = ("forge", "build", "--via-ir")
+        fallback = {
+            "trigger": "stack-too-deep",
+            "initial_command": list(command),
+            "initial_exit_code": completed.returncode,
+        }
+        completed = subprocess.run(
+            effective_command, cwd=cwd, text=True, capture_output=True, check=False
+        )
+
+    result = {
+        "command": list(effective_command),
         "exit_code": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
         "ok": completed.returncode == 0,
     }
+    if fallback is not None:
+        result["fallback"] = fallback
+    return result
 
 
 def require_frozen_source() -> None:
@@ -366,6 +417,11 @@ def _failure_status(hypothesis, class_name: str, stage: str, error: Exception) -
         "classification": "NOT_REACHED",
         "failure_stage": stage,
         "blocked_reason": f"{type(error).__name__}: {error}",
+        "evidence_lifecycle": {
+            "state": f"{stage}_failed",
+            "transitions": ["planned", "generated", f"{stage}_failed"] if stage != "generation" else ["planned", "generation_failed"],
+            "causal_allowed": False,
+        },
     }
     if stage == "generation":
         status["foundry_generated"] = False
@@ -431,7 +487,7 @@ def _setup_argument(function, index: int, role: str | None) -> str:
 
 
 def _setup_steps(contract, setup_actions):
-    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions) if item is not None}
     steps = []
     for action in setup_actions:
         function = functions.get(action.function)
@@ -446,6 +502,65 @@ def _setup_steps(contract, setup_actions):
     return tuple(steps)
 
 
+def _run_caller_prerequisite_observation(
+    project: Path,
+    hypothesis,
+    experiment,
+    contract,
+) -> tuple[ExecutionResult, tuple[Any, ...], tuple[Any, ...]]:
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}-caller-prereq.t.sol")
+    generated = generate_caller_prerequisite_test(
+        hypothesis,
+        experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+    )
+    execution = run_foundry_test(
+        project,
+        generated,
+        f"{experiment.experiment_id}-CALLER-PREREQ",
+        "caller-prerequisite",
+    )
+    observations = ()
+    evidence = ()
+    if execution.executed and execution.status == "PASS" and execution.tests_run >= 1 and execution.tests_failed == 0:
+        from cydra.prerequisite_graph import PrerequisiteObservation
+        import hashlib
+        digest = hashlib.sha256(
+            f"{experiment.experiment_id}|caller_role|{hypothesis.target_function}".encode("utf-8")
+        ).hexdigest()[:16]
+        evidence_id = f"E-OBS-CALLER-{digest}"
+        subject = next(
+            (item.subject for item in inspect_execution_readiness(contract, next(
+                fn for fn in (*contract.functions, *contract.inherited_functions)
+                if fn.name == hypothesis.target_function
+            )).caller_requirements),
+            "caller_role",
+        )
+        observations = (
+            PrerequisiteObservation(
+                kind="caller_role",
+                subject=subject,
+                expected="satisfied",
+                observed="satisfied",
+                evidence_id=evidence_id,
+            ),
+        )
+        from cydra.models import Evidence
+        evidence = (
+            Evidence(
+                evidence_id,
+                "execution",
+                "Target-provided initialization established the caller-role prerequisite and the target function accepted the same caller.",
+                " ".join(execution.command),
+                execution.target + ".t.sol",
+            ),
+        )
+    return execution, observations, evidence
+
+
 def _run_state_prerequisite_observation(
     project: Path,
     hypothesis,
@@ -458,12 +573,18 @@ def _run_state_prerequisite_observation(
         raise ValueError("state prerequisite has no deterministic public runtime observation")
     from cydra.models import ExperimentStep
     setup_steps = _setup_steps(contract, setup_actions)
-    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions)}
+    functions = {item.name: item for item in (*contract.functions, *contract.inherited_functions) if item is not None}
     target_function = functions.get(hypothesis.target_function)
     if target_function is None:
         raise ValueError(f"state target function is not modeled: {hypothesis.target_function}")
-    target_arguments = tuple(_setup_argument(target_function, i, None) for i in range(len(target_function.parameters)))
-    observation_steps = (*setup_steps, ExperimentStep(function=hypothesis.target_function, arguments=target_arguments))
+    # The target step is a marker for prerequisite observation. When the
+    # sequence renderer is asked to stop before the target, its arguments are
+    # never rendered or executed, so requiring a fully materializable target
+    # ABI here would create a false blocker before state setup can be verified.
+    observation_steps = (
+        *setup_steps,
+        ExperimentStep(function=hypothesis.target_function, arguments=()),
+    )
     observation_experiment = replace(experiment, experiment_id=f"{experiment.experiment_id}-PREREQ", steps=observation_steps)
     output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}-prereq.t.sol")
     generated = generate_sequence_test_from_experiment(
@@ -477,7 +598,7 @@ def _run_state_prerequisite_observation(
         stop_before_target=True,
     )
     execution = run_foundry_test(project, generated, observation_experiment.experiment_id, "prerequisite")
-    observations = observations_from_execution(observation_experiment.experiment_id, plans, execution)
+    observations = observations_from_execution(observation_experiment.experiment_id, plans, execution, setup_actions)
     evidence = evidence_records_from_execution(observation_experiment.experiment_id, plans, execution)
     return execution, observations, evidence
 
@@ -613,6 +734,108 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
+def _classify_callback_state_order_execution(execution) -> tuple[str, str]:
+    """Classify the generic callback oracle from the generated test's assertions."""
+    if not execution.executed:
+        return "UNMEASURABLE", "callback execution did not execute"
+    # The generated harness asserts callbackObserved == true before the causal
+    # assertion. Therefore a passing test proves the callback was observed and
+    # the reentrant invocation was rejected. Do not depend on Foundry printing
+    # emitted events in stdout.
+    if execution.tests_failed == 0:
+        return "rejected", "callback was observed and the reentrant invocation was blocked"
+    if "reentrant callback succeeded" in execution.stdout or "reentrant callback succeeded" in execution.stderr:
+        return "candidate", "callback was observed and the reentrant invocation succeeded"
+    return "UNMEASURABLE", "callback execution failed without a causal callback oracle result"
+
+
+def _run_callback_state_order(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+    generated = generate_callback_state_order_test(
+        hypothesis,
+        experiment,
+        _target_import(contract, project),
+        contract.name,
+        output,
+        contract,
+    )
+    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    classification, reason = _classify_callback_state_order_execution(execution)
+    causal_evidence = None
+    if execution.executed and classification in {"rejected", "candidate"}:
+        from cydra.models import Evidence
+        causal_evidence = Evidence(
+            f"E-CAUSAL-{experiment.experiment_id}",
+            "causal_verification",
+            (
+                "Callback causal oracle executed: the generated attacker callback observed "
+                "the target's reentrant invocation outcome; classification="
+                f"{classification}."
+            ),
+            " ".join(execution.command),
+            execution.target + ".t.sol",
+        )
+    return {
+        "generated_path": str(generated),
+        "execution": execution,
+        "classification": classification,
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
+        "classification_blocked_reason": reason if classification == "UNMEASURABLE" else None,
+        "causal_verification": {
+            "status": "verified" if classification in {"rejected", "candidate"} else "blocked",
+            "observation": "reentrant invocation outcome is the causal differential oracle",
+            "evidence": [
+                "callbackObserved",
+                "reentrySucceeded",
+            ],
+        },
+        "evidence": causal_evidence,
+    }
+
+def _exploration_executable_hypothesis_ids(result, classes: tuple[str, ...]) -> frozenset[str]:
+    """Return hypotheses that have a concrete generic runtime adapter."""
+    executable: set[str] = set()
+    for hypothesis in result.hypotheses:
+        class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
+        if class_name is None and hypothesis.invariant_id.startswith("INV-STATE-"):
+            class_name = "state"
+        if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
+            class_name = "guard_parity"
+        if class_name is None and hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
+            class_name = "callback_state_order"
+        if class_name in classes and _execution_adapter(class_name) is not None:
+            executable.add(hypothesis.hypothesis_id)
+    return frozenset(executable)
+
+
+def _execution_lifecycle(execution: ExecutionResult, evidence: tuple[Any, ...] = ()) -> dict[str, Any]:
+    """Map a runtime attempt onto the evidence lifecycle without promoting compiler failure."""
+    if not execution.executed:
+        stderr = (execution.stderr or "").lower()
+        failed_stage = "compile_failed" if "compiler run failed" in stderr or "compiler error" in stderr else "execution_failed"
+        return {
+            "state": failed_stage,
+            "transitions": ["planned", "generated", failed_stage],
+            "causal_allowed": False,
+        }
+    state = "executed"
+    transitions = ["planned", "generated", "compiled", "executed"]
+    if evidence:
+        state = "causal" if any(getattr(item, "kind", None) == "causal_verification" for item in evidence) else "observed"
+        transitions.extend(["observed"] if state == "observed" else ["observed", "causal"])
+    return {"state": state, "transitions": transitions, "causal_allowed": state == "causal"}
+
+
+def _execution_capabilities_for_class(class_name: str) -> frozenset[str]:
+    """Return runtime capabilities owned by the selected experiment adapter."""
+    if class_name == "callback_state_order":
+        return frozenset({"callback_state_order_reachability"})
+    return frozenset()
+
+
 def _execution_adapter(class_name: str):
     """Return the generic runtime adapter for an executable capability class.
 
@@ -625,6 +848,7 @@ def _execution_adapter(class_name: str):
         "state": _run_state,
         "initialization": _run_initialization,
         "guard_parity": _run_guard_parity,
+        "callback_state_order": _run_callback_state_order,
     }.get(class_name)
 
 
@@ -663,6 +887,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
             class_name = "guard_parity"
         experiment = experiments[hypothesis.hypothesis_id]
+        if class_name is None and hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
+            class_name = "callback_state_order"
         if class_name is None:
             statuses.append(_unknown_reasoning_status(hypothesis, experiment))
             continue
@@ -671,22 +897,48 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         capability = CLASS_CAPABILITIES[class_name]
         contract = _contract_for_hypothesis(result, hypothesis)
         function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+        execution_capabilities = _execution_capabilities_for_class(class_name)
         readiness = inspect_execution_readiness(
             contract,
             function,
             tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
             compiler_evidence.evidence,
+            execution_capabilities=execution_capabilities,
         )
-        prerequisite_graph = build_prerequisite_graph(readiness)
-        prerequisite_observation_evidence = ()
-        status_prerequisite = {}
-        if class_name == "state" and readiness.state_requirements:
+        experiment_contract = build_experiment_contract(hypothesis, experiment, contract, readiness)
+        capability_resolution = solve_capabilities(experiment_contract)
+        setup_actions = ()
+        if class_name in {"state", "callback_state_order"} and (readiness.state_requirements or readiness.state_setup_candidates):
             setup_actions = constructible_state_setup_plan(
                 contract,
                 function,
                 tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
                 compiler_evidence.evidence,
             )
+        prerequisite_graph = build_prerequisite_graph(readiness, setup_actions)
+        prerequisite_observation_evidence = ()
+        status_prerequisite = {}
+        if readiness.caller_requirements:
+            try:
+                prerequisite_execution, observations, prerequisite_observation_evidence = _run_caller_prerequisite_observation(
+                    project, hypothesis, experiment, contract
+                )
+                prerequisite_graph = apply_observations(prerequisite_graph, observations)
+                status_prerequisite = {
+                    "caller_prerequisite_execution": _json(prerequisite_execution),
+                    "caller_prerequisite_observations": [o.evidence_id for o in observations],
+                }
+            except Exception as error:
+                failure = classify_materialization_failure(error)
+                capability_resolution = replace(
+                    capability_resolution,
+                    gaps=(*capability_resolution.gaps, failure.gap),
+                )
+                status_prerequisite = {
+                    "caller_prerequisite_failure": f"{type(error).__name__}: {error}",
+                    "materialization_failure": _json(failure),
+                }
+        if class_name in {"state", "callback_state_order"} and (readiness.state_requirements or readiness.state_setup_candidates):
             observation_plans = plan_public_state_observations(contract, function)
             if observation_plans:
                 try:
@@ -696,11 +948,34 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
                     prerequisite_graph = apply_observations(prerequisite_graph, observations)
                     status_prerequisite = {"prerequisite_setup_actions": [a.function for a in setup_actions], "prerequisite_observations": [o.evidence_id for o in observations], "prerequisite_execution": _json(prerequisite_execution)}
                 except Exception as error:
-                    status_prerequisite = {"prerequisite_setup_actions": [a.function for a in setup_actions], "prerequisite_observation_failure": f"{type(error).__name__}: {error}"}
+                    failure = classify_materialization_failure(error)
+                    capability_resolution = replace(
+                        capability_resolution,
+                        gaps=(*capability_resolution.gaps, failure.gap),
+                    )
+                    status_prerequisite = {
+                        "prerequisite_setup_actions": [a.function for a in setup_actions],
+                        "prerequisite_observation_failure": f"{type(error).__name__}: {error}",
+                        "materialization_failure": _json(failure),
+                    }
             else:
-                status_prerequisite = {"prerequisite_observation_failure": "no deterministic public state observation plan"}
+                failure = classify_materialization_failure(
+                    ValueError("no deterministic public state observation plan")
+                )
+                capability_resolution = replace(
+                    capability_resolution,
+                    gaps=(*capability_resolution.gaps, failure.gap),
+                )
+                status_prerequisite = {
+                    "prerequisite_observation_failure": "no deterministic public state observation plan",
+                    "materialization_failure": _json(failure),
+                }
         status: dict[str, Any] = {
             "hypothesis_id": hypothesis.hypothesis_id,
+            "experiment_id": experiment.experiment_id,
+            "target_function": hypothesis.target_function,
+            "capability_contract": _json(experiment_contract),
+            "capability_resolution": _json(capability_resolution),
             "class": class_name,
             "extracted": capability["extract"],
             "hypothesis_generated": capability["generate_hypothesis"],
@@ -715,6 +990,30 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
 
         if not capability["generate_foundry"]:
             status["foundry_generation_blocked_reason"] = capability["generate_block_reason"]
+            statuses.append(status)
+            continue
+
+        # An experiment with an incomplete canonical ABI vector is not executable.
+        # Do not hand malformed empty arguments to a Solidity renderer; preserve
+        # the condition as an explicit generic capability gap.
+        if function is not None and len(experiment.planned_inputs) != len(function.parameters):
+            failure = classify_materialization_failure(
+                ValueError(
+                    f"canonical input vector incomplete for {hypothesis.target_function}: "
+                    f"expected {len(function.parameters)} arguments, got {len(experiment.planned_inputs)}"
+                )
+            )
+            capability_resolution = replace(
+                capability_resolution,
+                gaps=(*capability_resolution.gaps, failure.gap),
+            )
+            status["capability_resolution"] = _json(capability_resolution)
+            status["blind_executed"] = False
+            status["classification"] = "NOT_REACHED"
+            status["campaign_status"] = "BLOCKED_BY_CAPABILITY"
+            status["capability_failure"] = True
+            status["failure_stage"] = "input_construction"
+            status["blocked_reason"] = failure.gap.reason
             statuses.append(status)
             continue
 
@@ -814,20 +1113,27 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
 
         status.update(status_prerequisite)
         evidence.extend(prerequisite_observation_evidence)
+        execution = run["execution"]
+        run_evidence = tuple(
+            item for item in ((run.get("evidence"),) if run.get("evidence") is not None else ())
+            if item is not None
+        )
+        lifecycle = _execution_lifecycle(execution, run_evidence)
         status.update(
             {
                 "foundry_generated": True,
-                "blind_executed": True,
+                "blind_executed": execution.executed,
                 "generated_path": run["generated_path"],
                 "classification": run["classification"],
+                "evidence_lifecycle": lifecycle,
             }
         )
         for key in ("classification_blocked_reason", "classification_path", "internal_status"):
             if key in run:
                 status[key] = run[key]
-        executions.append(run["execution"])
-        if "evidence" in run:
-            evidence.append(run["evidence"])
+        executions.append(execution)
+        if run_evidence:
+            evidence.extend(run_evidence)
         statuses.append(status)
 
     return statuses, executions, evidence
@@ -903,6 +1209,88 @@ def _blind_planner(hypothesis):
     # crash the entire blind investigation with a planner KeyError.
     return _default_experiment_planner(hypothesis)
 
+def _execute_exploration_question(
+    result,
+    decision,
+    project: Path,
+    classes: tuple[str, ...],
+    compiler_evidence: CompilerEvidenceResult,
+    trace: list[dict[str, Any]],
+    execution_sink: list[ExecutionResult],
+    evidence_sink: list[Any],
+):
+    """Execute one selected frontier hypothesis through the existing canonical boundary.
+
+    Exploration owns selection; run_layers remains the sole readiness/generation/
+    execution/classification boundary. A scoped result prevents one exploration
+    round from re-running every hypothesis while preserving the full investigation
+    result for the controller's feedback/update cycle.
+    """
+    if decision.hypothesis_id is None:
+        trace.append({
+            "question_id": decision.question_id,
+            "hypothesis_id": None,
+            "status": "NOT_EXECUTABLE",
+            "reason": "frontier question has no hypothesis-backed execution adapter",
+        })
+        return result, ()
+
+    hypothesis = next(
+        (item for item in result.hypotheses if item.hypothesis_id == decision.hypothesis_id),
+        None,
+    )
+    if hypothesis is None:
+        raise RuntimeError(f"exploration selected unknown hypothesis: {decision.hypothesis_id}")
+    experiment = next(
+        (item for item in result.experiments if item.hypothesis_id == decision.hypothesis_id),
+        None,
+    )
+    if experiment is None:
+        raise RuntimeError(f"exploration hypothesis has no experiment: {decision.hypothesis_id}")
+
+    scoped = replace(result, hypotheses=(hypothesis,), experiments=(experiment,))
+    try:
+        statuses, executions, evidence = run_layers(scoped, project, classes, compiler_evidence)
+    except Exception as error:
+        # A single experiment must never terminate the campaign. Preserve the
+        # failure as a generic capability record and continue with other work.
+        statuses = [{
+            "hypothesis_id": hypothesis.hypothesis_id,
+            "experiment_id": experiment.experiment_id,
+            "class": "campaign",
+            "target_function": hypothesis.target_function,
+            "extracted": True,
+            "hypothesis_generated": True,
+            "experiment_planned": True,
+            "foundry_generated": False,
+            "blind_executed": False,
+            "classification": "NOT_REACHED",
+            "campaign_status": "CAPABILITY_FAILURE",
+            "capability_failure": True,
+            "failure_stage": "pipeline",
+            "blocked_reason": f"{type(error).__name__}: {error}",
+            "evidence_lifecycle": {
+                "state": "pipeline_failed",
+                "transitions": ["planned", "pipeline_failed"],
+                "causal_allowed": False,
+            },
+        }]
+        executions = ()
+        evidence = ()
+    execution_sink.extend(executions)
+    evidence_sink.extend(evidence)
+    trace.append({
+        "question_id": decision.question_id,
+        "hypothesis_id": decision.hypothesis_id,
+        "statuses": statuses,
+        "executions": [_json(item) for item in executions],
+        "evidence_ids": [item.evidence_id for item in evidence],
+    })
+    return replace(
+        result,
+        evidence=tuple(dict.fromkeys((*result.evidence, *evidence))),
+    ), tuple(evidence)
+
 def run_source_investigation(
     *,
     target_repo: str,
@@ -911,6 +1299,7 @@ def run_source_investigation(
     target_project: str,
     classes: list[str] | tuple[str, ...],
     freeze: Path,
+    exploration_budget: float = 4.0,
 ) -> int:
     require_frozen_source()
     classes = validate_classes(list(classes))
@@ -957,7 +1346,7 @@ def run_source_investigation(
         unexecuted_reasoning_surfaces = []
         for hypothesis in result.hypotheses:
             class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
-            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-")):
+            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-", "INV-CALLBACK-STATE-ORDER-")):
                 continue
             if class_name is None:
                 experiment = next(
@@ -972,7 +1361,40 @@ def run_source_investigation(
                     "reason": "reasoning surface is generated and planned by the canonical pipeline but has no generic runtime adapter",
                 })
 
-        statuses, executions, evidence = run_layers(result, project, classes, compiler_evidence)
+        exploration_trace: list[dict[str, Any]] = []
+        exploration_executions: list[ExecutionResult] = []
+        exploration_evidence: list[Any] = []
+        total_frontier_cost = sum(
+            max(float(item.cost), 0.01)
+            for item in result.experiments
+            if item.hypothesis_id in _exploration_executable_hypothesis_ids(result, classes)
+        )
+        # Default live dogfooding covers every currently executable hypothesis
+        # once, while retaining an explicit caller-provided minimum budget.
+        campaign_budget = max(float(exploration_budget), total_frontier_cost)
+        exploration = run_bounded_exploration(
+            result,
+            budget=campaign_budget,
+            executable_hypothesis_ids=_exploration_executable_hypothesis_ids(result, classes),
+            execute_question=lambda current_result, decision: _execute_exploration_question(
+                current_result,
+                decision,
+                project,
+                classes,
+                compiler_evidence,
+                exploration_trace,
+                exploration_executions,
+                exploration_evidence,
+            ),
+        )
+        result = exploration.result
+        statuses = [
+            status
+            for round_result in exploration_trace
+            for status in round_result.get("statuses", [])
+        ]
+        executions = exploration_executions
+        evidence = exploration_evidence
         experiments = {experiment.hypothesis_id: experiment for experiment in result.experiments}
         execution_readiness = []
         for hypothesis in result.hypotheses:
@@ -981,30 +1403,46 @@ def run_source_investigation(
                 class_name = "state"
             if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
                 class_name = "guard_parity"
+            if class_name is None and hypothesis.invariant_id.startswith("INV-CALLBACK-STATE-ORDER-"):
+                class_name = "callback_state_order"
             if class_name is None:
                 class_name = "reasoning_surface"
             elif class_name not in classes:
                 continue
             contract = _contract_for_hypothesis(result, hypothesis)
             function = next((item for item in contract.functions if item.name == hypothesis.target_function), None)
+            execution_capabilities = _execution_capabilities_for_class(class_name)
             readiness = inspect_execution_readiness(
                 contract,
                 function,
                 tuple(item for item in compiler_evidence.constraints if item.contract == contract.name),
                 compiler_evidence.evidence,
+                execution_capabilities=execution_capabilities,
             )
+            experiment = experiments[hypothesis.hypothesis_id]
+            experiment_contract = build_experiment_contract(hypothesis, experiment, contract, readiness)
+            capability_resolution = solve_capabilities(experiment_contract)
             execution_readiness.append({
                 "hypothesis_id": hypothesis.hypothesis_id,
                 "class": class_name,
                 "target_function": hypothesis.target_function,
                 "readiness": readiness,
+                "capability_contract": experiment_contract,
+                "capability_resolution": capability_resolution,
             })
+        exploration_state = exploration.state
         build_capture = _command_capture(project, "forge", "build")
         provenance_env, _, forge_config_text = _environment_provenance(root, project)
 
         classification = {
             "surface": "compiler-backed-planned-execution",
             "hypotheses": statuses,
+            "exploration": {
+                "budget": campaign_budget,
+                "rounds": exploration.rounds,
+                "stopped_reason": exploration.stopped_reason,
+                "trace": exploration_trace,
+            },
             "outcome_taxonomy": {
                 "initialization": {"TP": "confirmed", "FP": "rejected", "FN": "not_confirmed"},
                 "authorization": {"execution": "measured", "classification": "requires_patched_counterpart"},
@@ -1030,6 +1468,33 @@ def run_source_investigation(
             }
         classification["class_coverage"] = by_class
         classification["unexecuted_reasoning_surfaces"] = unexecuted_reasoning_surfaces
+        campaign = build_capability_campaign(
+            statuses,
+            execution_readiness,
+            planned_unimplemented=unexecuted_reasoning_surfaces,
+        )
+        repair_artifact = build_repair_artifact(campaign)
+        classification["campaign"] = campaign["summary"]
+        classification["capability_repair"] = {
+            "requirements": len(repair_artifact["requirements"]),
+            "mode": repair_artifact["mode"],
+        }
+        classification["automatic_repair"] = build_automatic_repair_plan(campaign)
+        capability_clusters: dict[str, int] = {}
+        capability_frontier = {"total": len(execution_readiness), "executable": 0, "partial": 0, "blocked": 0}
+        for item in execution_readiness:
+            resolution = item["capability_resolution"]
+            if resolution.executable:
+                capability_frontier["executable"] += 1
+            elif resolution.gaps and all(gap.status.value == "partial" for gap in resolution.gaps):
+                capability_frontier["partial"] += 1
+            else:
+                capability_frontier["blocked"] += 1
+            for gap in resolution.gaps:
+                key = gap.capability.value if gap.subcapability is None else f"{gap.capability.value}:{gap.subcapability}"
+                capability_clusters[key] = capability_clusters.get(key, 0) + 1
+        classification["capability_frontier"] = capability_frontier
+        classification["capability_clusters"] = dict(sorted(capability_clusters.items(), key=lambda item: (-item[1], item[0])))
         # A target can fail the default forge build while compiler-backed
         # evidence succeeds through the generic fallback (for example via-IR).
         # Keep both facts, but expose the effective compiler state so downstream
@@ -1100,6 +1565,11 @@ def run_source_investigation(
             "experiments.json": result.experiments,
             "execution.json": execution_json,
             "classification.json": classification,
+            "exploration-state.json": exploration_state,
+            "capability_failures.json": campaign["capability_failures"],
+            "blocked_experiments.json": campaign["blocked_experiments"],
+            "dependency_graph.json": campaign["dependency_graph"],
+            "capability_repair.json": repair_artifact,
         }
         create_freeze(files, text_files, freeze)
 

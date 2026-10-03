@@ -18,6 +18,16 @@ _FUNCTION_RE = re.compile(
     re.MULTILINE,
 )
 
+_EXTERNAL_INTERACTION_RE = re.compile(
+    r"(?:"
+    r"\.call\s*\{\s*value\s*:"
+    r"|\.transfer\s*\("
+    r"|\.send\s*\("
+    r"|\.safeTransferETH\s*\("
+    r"|\b[A-Za-z_]\w*\s*\.\s*[A-Za-z_]\w*\s*\("
+    r")"
+)
+
 
 def _source(contract: ContractModel) -> str:
     try:
@@ -30,30 +40,22 @@ def _function_body(source: str, match: re.Match[str]) -> str:
     start = match.end() - 1
     depth = 0
     for index in range(start, len(source)):
-        if source[index] == "{":
+        char = source[index]
+        if char == "{":
             depth += 1
-        elif source[index] == "}":
+        elif char == "}":
             depth -= 1
             if depth == 0:
                 return source[start + 1:index]
     return ""
 
 
-def _external_value_transfer(body: str) -> bool:
-    return bool(re.search(
-        r"(?:\.call\s*\{\s*value\s*:|\.transfer\s*\(|\.send\s*\(|\.safeTransferETH\s*\()",
-        body,
-    ))
+def _external_interaction(body: str) -> re.Match[str] | None:
+    return _EXTERNAL_INTERACTION_RE.search(body)
 
 
-def _state_write_after_external_transfer(body: str) -> bool:
-    transfer = re.search(
-        r"(?:\.call\s*\{\s*value\s*:|\.transfer\s*\(|\.send\s*\(|\.safeTransferETH\s*\()",
-        body,
-    )
-    if not transfer:
-        return False
-    tail = body[transfer.end():]
+def _state_write_after_external_interaction(body: str, interaction: re.Match[str]) -> bool:
+    tail = body[interaction.end():]
     return bool(re.search(
         r"\b[A-Za-z_]\w*(?:\s*\[[^\]]+\])*\s*(?:=|\+=|-=|\*=|/=|%=|\+\+|--)",
         tail,
@@ -67,6 +69,38 @@ def _public_callers(function_name: str, functions: tuple[tuple[str, str, str], .
         if re.search(r"\b(?:public|external)\b", tail)
         and re.search(rf"\b{re.escape(function_name)}\s*\(", body)
     )
+
+
+def _lock_guarded(tail: str, body: str) -> bool:
+    """Return whether the callable is protected by a recognizable reentrancy guard."""
+    return bool(
+        re.search(r"\b(?:nonReentrant|reentrancyGuard|notInReentrant|notLocked)\b", tail)
+        or re.search(r"\b(?:reentrancyLock|_reentrancyGuardEntered|_locked)\b", body)
+    )
+
+
+def _modeled_lock_guarded(contract: ContractModel, function_name: str) -> bool:
+    """Use parsed function/modifier provenance when source-local regex is insufficient."""
+    for function in (*contract.functions, *contract.inherited_functions):
+        if function.name != function_name:
+            continue
+        if any(
+            re.search(r"\b(?:nonReentrant|reentrancyGuard|notInReentrant|notLocked)\b", modifier)
+            for modifier in function.modifiers
+        ):
+            return True
+    return False
+
+
+def _modeled_public_callers(contract: ContractModel, function_name: str) -> tuple[str, ...]:
+    """Resolve public/external callers from the generic function model."""
+    callers: list[str] = []
+    for function in (*contract.functions, *contract.inherited_functions):
+        if function.visibility not in {"public", "external"}:
+            continue
+        if function_name in function.internal_calls and function.name not in callers:
+            callers.append(function.name)
+    return tuple(callers)
 
 
 def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=()) -> CallbackStateOrderContribution:
@@ -88,16 +122,32 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
     seen: set[str] = set()
 
     for function_name, tail, body in parsed:
-        if not body or not _external_value_transfer(body) or not _state_write_after_external_transfer(body):
+        interaction = _external_interaction(body)
+        if not body or interaction is None or not _state_write_after_external_interaction(body, interaction):
             continue
 
         if function_name in public_names:
             target = function_name
+            target_entry = next((item for item in parsed if item[0] == target), None)
         else:
             callers = _public_callers(function_name, tuple(parsed))
             if not callers:
+                callers = _modeled_public_callers(contract, function_name)
+            if not callers:
                 continue
             target = callers[0]
+            target_entry = next((item for item in parsed if item[0] == target), None)
+
+        # A reentrant call into the selected public wrapper is not a viable
+        # experiment when that wrapper itself holds a recognizable reentrancy
+        # lock for its entire execution.  Do not turn a syntactic
+        # "external call followed by state write" into a false hypothesis.
+        # Other public entry points can still be analyzed independently.
+        if (
+            (target_entry is not None and _lock_guarded(target_entry[1], target_entry[2]))
+            or _modeled_lock_guarded(contract, target)
+        ):
+            continue
 
         hypothesis_id = f"H-CALLBACK-STATE-ORDER-{target}"
         if hypothesis_id in seen:
@@ -107,19 +157,53 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
         invariant_id = f"INV-CALLBACK-STATE-ORDER-{target}"
         invariants.append(Invariant(
             invariant_id,
-            "Security-critical state establishing a temporal or authorization condition must be updated before an externally observable value transfer can invoke attacker-controlled code.",
-            "external callback topology plus state-write ordering",
+            "Security-critical state establishing a temporal or authorization condition must be updated before an external interaction can invoke attacker-controlled code.",
+            "external interaction topology plus state-write ordering",
             0.80,
         ))
         hypotheses.append(Hypothesis(
             hypothesis_id,
-            f"{target} may expose an intermediate state during an external value transfer, allowing a reentrant caller to bypass a state-dependent condition before the condition is recorded.",
+            f"{target} may expose an intermediate state during an external interaction, allowing a reentrant caller to bypass a state-dependent condition before the condition is recorded.",
             invariant_id,
             target,
-            "a caller-controlled contract able to receive a value-transfer callback and reenter the target",
+            "a caller-controlled contract able to execute during an external interaction and reenter the target",
             f"a reentrant call can exploit the pre-update state while {function_name} is still executing",
             evidence_ids=(f"E-MODEL-{target}",),
             related_functions=(function_name,) if function_name != target else (),
         ))
+
+    # Generic fallback: recover a modeled function body when the broad signature parser misses it.
+    for modeled in (*contract.functions, *contract.inherited_functions):
+        match = re.search(rf"\bfunction\s+{re.escape(modeled.name)}\s*\(", source)
+        if match is None:
+            continue
+        brace = source.find("{", match.end())
+        if brace < 0:
+            continue
+        depth = 0
+        end = None
+        for index in range(brace, len(source)):
+            if source[index] == "{": depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = index
+                    break
+        if end is None:
+            continue
+        body = source[brace + 1:end]
+        interaction = _external_interaction(body)
+        if interaction is None or not _state_write_after_external_interaction(body, interaction):
+            continue
+        target = modeled.name if modeled.visibility in {"public", "external"} else next(iter(_modeled_public_callers(contract, modeled.name)), None)
+        if not target or _modeled_lock_guarded(contract, target):
+            continue
+        hypothesis_id = f"H-CALLBACK-STATE-ORDER-{target}"
+        if hypothesis_id in seen:
+            continue
+        seen.add(hypothesis_id)
+        invariant_id = f"INV-CALLBACK-STATE-ORDER-{target}"
+        invariants.append(Invariant(invariant_id, "Security-critical state establishing a temporal or authorization condition must be updated before an external interaction can invoke attacker-controlled code.", "external interaction topology plus state-write ordering", 0.80))
+        hypotheses.append(Hypothesis(hypothesis_id, f"{target} may expose an intermediate state during an external interaction, allowing a reentrant caller to bypass a state-dependent condition before the condition is recorded.", invariant_id, target, "a caller-controlled contract able to execute during an external interaction and reenter the target", f"a reentrant call can exploit the pre-update state while {modeled.name} is still executing", evidence_ids=(f"E-MODEL-{target}",), related_functions=(modeled.name,) if modeled.name != target else ()))
 
     return CallbackStateOrderContribution(tuple(invariants), tuple(hypotheses))

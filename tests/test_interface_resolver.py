@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cydra.interface_resolver import resolve_interface
+from cydra.interface_resolver import resolve_import, resolve_interface, resolve_struct_fields
 
 
 def _write(path: Path, content: str) -> None:
@@ -135,3 +135,178 @@ def test_preserves_top_level_types_separately_from_interface_types(tmp_path: Pat
     resolved = resolve_interface(root, root / "contracts" / "Target.sol", "IManager")
     assert resolved.declared_types == ("Nested",)
     assert resolved.top_level_types == ("SettingsParams",)
+
+
+def test_resolves_interface_through_transitive_import_graph(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "Target.sol",
+        'import "./Base.sol";\ncontract Target {}\n',
+    )
+    _write(
+        root / "contracts" / "Base.sol",
+        'import "./types/IMerkle.sol";\ncontract Base {}\n',
+    )
+    _write(
+        root / "contracts" / "types" / "IMerkle.sol",
+        "interface IMerkle {\n"
+        "    struct MerkleConstructorArgs { uint128 levels; address poseidon2; }\n"
+        "}\n",
+    )
+
+    resolved = resolve_interface(root, root / "contracts" / "Target.sol", "IMerkle")
+
+    assert resolved.name == "IMerkle"
+    assert resolved.source_path == "contracts/types/IMerkle.sol"
+    assert resolved.resolution_method == "relative_import"
+    assert resolved.declared_types == ("MerkleConstructorArgs",)
+
+
+def test_resolves_import_through_foundry_toml_remapping(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "foundry.toml",
+        '[profile.default]\nremappings = ["@oz/=lib/openzeppelin/contracts/"]\n',
+    )
+    _write(
+        root / "contracts" / "Token.sol",
+        'import "@oz/token/IERC20.sol";\ncontract Token {}\n',
+    )
+    _write(
+        root / "lib" / "openzeppelin" / "contracts" / "token" / "IERC20.sol",
+        "interface IERC20 { function decimals() external view returns (uint8); }\n",
+    )
+
+    resolved = resolve_interface(root, root / "contracts" / "Token.sol", "IERC20")
+
+    assert resolved.source_path == "lib/openzeppelin/contracts/token/IERC20.sol"
+    assert resolved.resolution_method == "remapping"
+
+
+def test_resolves_import_through_bounded_foundry_dependency_path(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "Token.sol",
+        'import "@openzeppelin/contracts/access/IAccessControl.sol";\ncontract Token {}\n',
+    )
+    _write(
+        root / "lib" / "openzeppelin-contracts" / "contracts" / "access" / "IAccessControl.sol",
+        "interface IAccessControl { function hasRole(bytes32, address) external view returns (bool); }\n",
+    )
+
+    resolved = resolve_interface(root, root / "contracts" / "Token.sol", "IAccessControl")
+
+    assert resolved.source_path == "lib/openzeppelin-contracts/contracts/access/IAccessControl.sol"
+    assert resolved.resolution_method == "dependency_path"
+
+
+def test_resolves_scoped_npm_dependency_path(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    source = root / "contracts" / "Target.sol"
+    access = root / "node_modules" / "@openzeppelin" / "contracts" / "access" / "AccessControl.sol"
+    _write(
+        source,
+        'import "@openzeppelin/contracts/access/AccessControl.sol";\ncontract Target is AccessControl {}\n',
+    )
+    _write(
+        access,
+        "abstract contract AccessControl { modifier onlyRole(bytes32 role) { _; } }\n",
+    )
+
+    resolved = resolve_import(root, source, "@openzeppelin/contracts/access/AccessControl.sol")
+
+    assert resolved is not None
+    assert resolved[0] == access
+
+
+def test_ambiguous_dependency_path_fails_closed(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    _write(
+        root / "contracts" / "Token.sol",
+        'import "@vendor/contracts/access/IAccessControl.sol";\ncontract Token {}\n',
+    )
+    for name in ("one", "two"):
+        _write(
+            root / "lib" / name / "contracts" / "access" / "IAccessControl.sol",
+            "interface IAccessControl {}\n",
+        )
+
+    with pytest.raises(FileNotFoundError):
+        resolve_interface(root, root / "contracts" / "Token.sol", "IAccessControl")
+
+
+def test_resolves_source_defined_struct_fields(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    source = root / "contracts" / "types" / "IMerkle.sol"
+    _write(
+        source,
+        "interface IMerkle {\n"
+        "    struct MerkleConstructorArgs {\n"
+        "        uint128 levels;\n"
+        "        address poseidon2;\n"
+        "        address poseidon4;\n"
+        "        address poseidon5;\n"
+        "    }\n"
+        "}\n",
+    )
+
+    fields = resolve_struct_fields(root, "contracts/types/IMerkle.sol", "MerkleConstructorArgs")
+
+    assert fields == (
+        ("levels", "uint128"),
+        ("poseidon2", "address"),
+        ("poseidon4", "address"),
+        ("poseidon5", "address"),
+    )
+
+
+def test_resolves_relative_importer_against_project_root(tmp_path):
+    root = tmp_path / "project"
+    types = root / "contracts" / "types"
+    types.mkdir(parents=True)
+    (types / "CircomData.sol").write_text(
+        'import {StealthAddressStructure} from "./StealthAddressStructure.sol";\\n'
+        "struct CircomData { StealthAddressStructure stealthAddressStructure; }\\n",
+        encoding="utf-8",
+    )
+    (types / "StealthAddressStructure.sol").write_text(
+        "struct StealthAddressStructure { uint256 H0x; uint256 H0y; }\\n",
+        encoding="utf-8",
+    )
+    from cydra.interface_resolver import resolve_named_type_source
+
+    resolved = resolve_named_type_source(
+        root, "contracts/types/CircomData.sol", "StealthAddressStructure"
+    )
+    assert resolved == (
+        "contracts/types/StealthAddressStructure.sol",
+        "declared_import",
+    )
+
+
+def test_resolves_exact_declared_nested_type_import(tmp_path: Path) -> None:
+    root = tmp_path / "target"
+    source = root / "contracts" / "types" / "CircomData.sol"
+    nested = root / "contracts" / "types" / "StealthAddressStructure.sol"
+    _write(
+        source,
+        'import {StealthAddressStructure} from "./StealthAddressStructure.sol";\n'
+        "struct CircomData { StealthAddressStructure stealthAddressStructure; }\n",
+    )
+    _write(
+        nested,
+        "struct StealthAddressStructure { uint256 H0x; uint256 H0y; uint256 H1x; uint256 H1y; uint256 stealthAddress; }\n",
+    )
+
+    from cydra.interface_resolver import resolve_named_type_source
+
+    resolved = resolve_named_type_source(
+        root,
+        "contracts/types/CircomData.sol",
+        "StealthAddressStructure",
+    )
+
+    assert resolved == (
+        "contracts/types/StealthAddressStructure.sol",
+        "declared_import",
+    )

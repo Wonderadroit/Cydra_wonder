@@ -7,12 +7,19 @@ import os
 import subprocess
 import tempfile
 import re
+import traceback
 import contextlib
 import io
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
-from run_benchmark_blind import run_source_investigation
+from run_benchmark_blind import SUPPORTED_CLASSES, run_source_investigation
+from cydra.capability_campaign import merge_campaigns
+from cydra.capability_repair import (
+    RepairRequirement,
+    build_automatic_repair_plan,
+    run_automatic_repair_controller,
+)
 
 
 REQUIRED_KEYS = {
@@ -121,6 +128,125 @@ def prepare_shared_dependencies(checkout: Path, temp_root: Path) -> dict[str, st
     return environment
 
 
+def run_automatic_repairs_for_source(
+    *,
+    source: str,
+    result: dict[str, Any],
+    spec: dict[str, Any],
+    checkout: Path,
+    output: Path,
+    child_env: dict[str, str],
+    round_number: int,
+) -> dict[str, Any]:
+    """Regress known generic capabilities and replay the exact frozen target."""
+    classification = result.get("classification") or {}
+    campaign = {
+        "capability_clusters": [
+            {
+                "capability": key,
+                "count": count,
+                "hypothesis_ids": [],
+                "experiment_ids": [],
+                "stages": [],
+                "reasons": [],
+            }
+            for key, count in (classification.get("capability_clusters") or {}).items()
+        ]
+    }
+    automatic_plan = classification.get("automatic_repair")
+    if automatic_plan is None:
+        automatic_plan = build_automatic_repair_plan(campaign)
+    if not automatic_plan.get("requirements"):
+        return {"status": "no_requirements", "attempts": []}
+    # Preserve the exact hypothesis/experiment provenance emitted by the
+    # source-level repair contract when constructing the executable controller.
+    campaign["capability_clusters"] = [
+        {
+            "capability": item["key"],
+            "count": 1,
+            "hypothesis_ids": item.get("affected_hypothesis_ids", []),
+            "experiment_ids": item.get("affected_experiment_ids", []),
+            "stages": [item.get("stage", "execution")],
+            "reasons": [item.get("reason", "")],
+        }
+        for item in automatic_plan["requirements"]
+    ]
+
+    repair_root = output / "automatic-repair" / f"round-{round_number:02d}" / f"{len(source):04d}-{Path(source).stem}"
+    repair_root.mkdir(parents=True, exist_ok=True)
+
+    def regression(provider) -> bool:
+        environment = os.environ.copy()
+        environment.update(child_env)
+        command = list(provider.regression_command)
+        completed = subprocess.run(
+            command,
+            cwd=Path(__file__).resolve().parents[1],
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        (repair_root / "regression.stdout.txt").write_text(completed.stdout, encoding="utf-8")
+        (repair_root / "regression.stderr.txt").write_text(completed.stderr, encoding="utf-8")
+        write_json(repair_root / "regression.json", {
+            "provider": provider.implementation_id,
+            "command": command,
+            "exit_code": completed.returncode,
+            "passed": completed.returncode == 0,
+        })
+        return completed.returncode == 0
+
+    def replay(requirement: RepairRequirement) -> Mapping[str, object]:
+        replay_artifact = repair_root / "replay" / f"{requirement.key.replace(':', '__')}"
+        replay_artifact.mkdir(parents=True, exist_ok=True)
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        previous_env = os.environ.copy()
+        try:
+            os.environ.update(child_env)
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = run_source_investigation(
+                    target_repo=checkout.as_uri(),
+                    target_ref=spec["target_ref"],
+                    target_path=source,
+                    target_project=spec["project_path"],
+                    classes=tuple(sorted(SUPPORTED_CLASSES)),
+                    freeze=replay_artifact / "freeze",
+                )
+        finally:
+            os.environ.clear()
+            os.environ.update(previous_env)
+        (replay_artifact / "runner.stdout.txt").write_text(stdout.getvalue(), encoding="utf-8")
+        (replay_artifact / "runner.stderr.txt").write_text(stderr.getvalue(), encoding="utf-8")
+        replay_campaign = {}
+        classification_path = replay_artifact / "freeze" / "classification.json"
+        if classification_path.is_file():
+            try:
+                replay_classification = json.loads(classification_path.read_text(encoding="utf-8"))
+                replay_campaign = {"capability_clusters": [
+                    {"capability": key, "count": count, "hypothesis_ids": [], "experiment_ids": [],
+                     "stages": ["execution"], "reasons": []}
+                    for key, count in (replay_classification.get("capability_clusters") or {}).items()
+                ]}
+            except (OSError, ValueError):
+                replay_campaign = {}
+        return {
+            "exit_code": exit_code,
+            "artifact": str(replay_artifact.relative_to(output)),
+            "target_ref": spec["target_ref"],
+            "hypothesis_ids": list(requirement.affected_hypothesis_ids),
+            "experiment_ids": list(requirement.affected_experiment_ids),
+            "campaign": replay_campaign,
+        }
+
+    return run_automatic_repair_controller(
+        campaign,
+        regression=regression,
+        rerun_target=replay,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the single canonical CYDRA live-target dogfood pipeline.")
     parser.add_argument("--target-spec", type=Path, required=True)
@@ -158,6 +284,7 @@ def main() -> int:
 
     local_repo = checkout.as_uri()
     results: list[dict[str, Any]] = []
+    automatic_repairs: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="cydra-live-run-") as temp:
         temp_root = Path(temp)
         shared_forge_std = temp_root / "forge-std"
@@ -181,12 +308,19 @@ def main() -> int:
                         target_ref=spec["target_ref"],
                         target_path=source,
                         target_project=spec["project_path"],
-                        classes=("authorization", "initialization", "arithmetic", "state", "guard_parity"),
+                        classes=tuple(sorted(SUPPORTED_CLASSES)),
                         freeze=artifact / "freeze",
                     )
             except Exception as error:
                 exit_code = 1
-                stderr.write(f"{type(error).__name__}: {error}\n")
+                # Preserve the full generic pipeline traceback so a live-target
+                # capability failure can be diagnosed from the artifact without
+                # reproducing the target locally. The source itself remains
+                # isolated; one failing source must not stop the campaign.
+                stderr.write(
+                    f"{type(error).__name__}: {error}\n"
+                    f"{traceback.format_exc()}"
+                )
             finally:
                 os.environ.clear()
                 os.environ.update(previous_env)
@@ -206,6 +340,77 @@ def main() -> int:
                     result["classification_parse_error"] = True
             results.append(result)
 
+        for result in results:
+            if not result.get("ok"):
+                continue
+            repair = run_automatic_repairs_for_source(
+                source=result["source"],
+                result=result,
+                spec=spec,
+                checkout=checkout,
+                output=output,
+                child_env=child_env,
+                round_number=1,
+            )
+            automatic_repairs.append({
+                "source": result["source"],
+                "repair": repair,
+            })
+
+    campaigns = []
+    for result in results:
+        campaign_path = output / result["artifact"] / "freeze" / "capability_failures.json"
+        blocked_path = output / result["artifact"] / "freeze" / "blocked_experiments.json"
+        graph_path = output / result["artifact"] / "freeze" / "dependency_graph.json"
+        if campaign_path.exists():
+            try:
+                failures = json.loads(campaign_path.read_text(encoding="utf-8"))
+                blocked = json.loads(blocked_path.read_text(encoding="utf-8")) if blocked_path.exists() else []
+                graph = json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {"nodes": [], "edges": []}
+                # Reconstruct the normalized campaign envelope from the immutable
+                # per-source freeze files so the target-level artifact remains
+                # independent of implementation details inside the runner.
+                campaigns.append({
+                    "summary": {
+                        "total_attempts": len(failures) + len(blocked),
+                        "by_status": {},
+                    },
+                    "capability_failures": failures,
+                    "blocked_experiments": blocked,
+                    "capability_clusters": [],
+                    "dependency_graph": graph,
+                })
+            except json.JSONDecodeError:
+                pass
+
+    # Prefer classification.json for complete per-source attempt counts and
+    # cluster metadata when available.
+    normalized_campaigns = []
+    for result in results:
+        classification_path = output / result["artifact"] / "freeze" / "classification.json"
+        failures_path = output / result["artifact"] / "freeze" / "capability_failures.json"
+        blocked_path = output / result["artifact"] / "freeze" / "blocked_experiments.json"
+        graph_path = output / result["artifact"] / "freeze" / "dependency_graph.json"
+        if not (classification_path.exists() and failures_path.exists()):
+            continue
+        try:
+            classification = json.loads(classification_path.read_text(encoding="utf-8"))
+            normalized_campaigns.append({
+                "summary": classification.get("campaign", {}),
+                "capability_failures": json.loads(failures_path.read_text(encoding="utf-8")),
+                "blocked_experiments": json.loads(blocked_path.read_text(encoding="utf-8")) if blocked_path.exists() else [],
+                "capability_clusters": [
+                    {"capability": key, "count": count, "hypothesis_ids": [], "experiment_ids": [], "stages": [], "reasons": []}
+                    for key, count in (classification.get("capability_clusters") or {}).items()
+                ],
+                "dependency_graph": json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {"edges": []},
+            })
+        except json.JSONDecodeError:
+            continue
+
+    target_campaign = merge_campaigns(normalized_campaigns or campaigns)
+    write_json(output / "capability_campaign.json", target_campaign)
+
     confirmed = []
     for result in results:
         classification = result.get("classification", {})
@@ -217,6 +422,13 @@ def main() -> int:
                     "class": hypothesis.get("class"),
                 })
 
+    write_json(output / "automatic-repair.json", {
+        "schema_version": 1,
+        "mode": "automatic_generic_repair",
+        "target_ref": frozen,
+        "repairs": automatic_repairs,
+    })
+
     summary = {
         "status": "completed",
         "target_ref": frozen,
@@ -224,6 +436,7 @@ def main() -> int:
         "sources_completed": sum(1 for item in results if item["ok"]),
         "sources_failed": sum(1 for item in results if not item["ok"]),
         "confirmed_candidates": confirmed,
+        "automatic_repairs": automatic_repairs,
         "results": results,
         "note": "A confirmed candidate still requires causal and independent human validation before submission.",
     }

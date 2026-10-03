@@ -40,13 +40,31 @@ def _body(source: str, name: str) -> str:
     return ""
 
 
-def _ignored_failure_capable_calls(body: str) -> tuple[str, ...]:
-    """Find calls whose Solidity result can directly carry failure information.
+def _failure_capable_function_names(source: str) -> set[str]:
+    """Collect explicitly boolean-returning Solidity function declarations.
 
-    A bare interface/contract call is not evidence that a failure result was
-    ignored: many external functions return nothing at all. Restrict this
-    surface to Solidity operations with an explicit failure-capable return value
-    that is syntactically discarded.
+    The declaration is the generic evidence that a discarded member call can
+    carry a success/failure result. This works for interfaces, contracts, and
+    libraries without naming a token or protocol.
+    """
+    names: set[str] = set()
+    declaration = re.compile(
+        r"\bfunction\s+(?P<name>[A-Za-z_]\w*)\s*\([^)]*\)[^{;]*?"
+        r"\breturns\s*\(\s*(?:bool|bool\s+\w+)\s*\)",
+        re.S,
+    )
+    for match in declaration.finditer(source):
+        names.add(match.group("name"))
+    return names
+
+
+def _ignored_failure_capable_calls(source: str, body: str) -> tuple[str, ...]:
+    """Find discarded external operations with an explicit failure result.
+
+    Solidity's low-level calls are always failure-capable, while ordinary
+    interface/contract calls are included only when their declaration exposes a
+    boolean result. The detector therefore remains class-neutral and does not
+    assume a token/protocol-specific method name.
     """
     patterns = (
         r"(?m)^\s*(?P<callee>[A-Za-z_]\w*)\s*\.\s*call(?:\s*\{[^;{}]*\})?\s*\([^;{}]*\)\s*;",
@@ -58,6 +76,17 @@ def _ignored_failure_capable_calls(body: str) -> tuple[str, ...]:
     for pattern in patterns:
         for match in re.finditer(pattern, body):
             calls.append(re.sub(r"\s+", "", match.group("callee")))
+
+    boolean_functions = _failure_capable_function_names(source)
+    member_call = re.compile(
+        r"(?m)^\s*(?P<receiver>[A-Za-z_]\w*)\s*\.\s*"
+        r"(?P<method>[A-Za-z_]\w*)\s*\([^;{}]*\)\s*;"
+    )
+    for match in member_call.finditer(body):
+        method = match.group("method")
+        if method in boolean_functions:
+            calls.append(re.sub(r"\s+", "", match.group("receiver")) + "." + method)
+
     return tuple(dict.fromkeys(calls))
 
 
@@ -82,7 +111,7 @@ def generate_external_outcome_hypotheses(
         if function.visibility not in {"public", "external"}:
             continue
         body = _body(source, function.name)
-        calls = _ignored_failure_capable_calls(body)
+        calls = _ignored_failure_capable_calls(source, body)
         if len(calls) < 1:
             continue
         # The structural signal is deliberately narrow: only failure-capable

@@ -1,4 +1,5 @@
 from cydra.foundry import ExecutionResult
+from cydra.models import ContractModel, FunctionModel
 from cydra.prerequisite_graph import PrerequisiteGraph, PrerequisiteNode, apply_observations, can_enter_security_experiment
 from cydra.runtime_observation import StateObservationPlan
 from cydra.runtime_observation_evidence import observations_from_execution
@@ -82,3 +83,118 @@ def test_observation_id_is_stable():
     first = observations_from_execution("SETUP-001", (plan,), _execution())[0]
     second = observations_from_execution("SETUP-001", (plan,), _execution())[0]
     assert first.evidence_id == second.evidence_id
+
+
+def test_internal_mapping_observation_traverses_nested_same_contract_calls(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        contract Target {
+            mapping(address => address) public externalActionMap;
+
+            function transact() external {
+                if (true) {
+                    _externalTransact();
+                }
+            }
+
+            function _externalTransact() internal {
+                if (true) {
+                    require(
+                        externalActionMap[msg.sender] == msg.sender &&
+                        externalActionMap[msg.sender] != address(0)
+                    );
+                }
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    target = FunctionModel(
+        name="transact",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=4,
+    )
+    callee = FunctionModel(
+        name="_externalTransact",
+        visibility="internal",
+        modifiers=(),
+        writes=(),
+        external_calls=(),
+        line=10,
+        execution_predicates=(
+            "externalActionMap[msg.sender] == msg.sender && externalActionMap[msg.sender] != address(0)",
+        ),
+    )
+    contract = ContractModel(
+        name="Target",
+        source=str(source),
+        functions=(target, callee),
+        state_variables=("externalActionMap",),
+    )
+
+    from cydra.runtime_observation import plan_public_state_observations
+
+    plans = plan_public_state_observations(contract, target)
+    assert any(
+        plan.state == "externalActionMap"
+        and plan.getter == "target.externalActionMap(msg.sender)"
+        for plan in plans
+    )
+
+def test_adapter_owned_runtime_dependency_does_not_block_experiment():
+    graph = PrerequisiteGraph((
+        PrerequisiteNode(
+            subject="helper.performSideEffects",
+            kind="runtime_dependency",
+            status="constructible",
+            source="Target.transact",
+            capability="INTERNAL_CALL_PROPAGATION",
+        ),
+        PrerequisiteNode(
+            subject="state predicate",
+            kind="state",
+            status="verified",
+            source="runtime_observation",
+            capability="STATE_OBSERVATION",
+        ),
+    ))
+    assert can_enter_security_experiment(graph)
+
+
+def test_constructible_state_setup_still_blocks_experiment():
+    graph = PrerequisiteGraph((
+        PrerequisiteNode(
+            subject="registerExternalAction",
+            kind="setup_transition",
+            status="constructible",
+            source="execution_readiness",
+            capability="STATE_SETUP",
+        ),
+    ))
+    assert not can_enter_security_experiment(graph)
+
+def _epoch_plan():
+    return StateObservationPlan(
+        state="allowedRecipient",
+        getter="target.allowedRecipient()",
+        expression="target.allowedRecipient() != address(0)",
+        predicate="allowedRecipient != address(0)",
+        polarity="must_hold",
+        source="Target.sol:10",
+    )
+
+def test_state_observation_records_matching_setup_transition():
+    from cydra.execution_readiness import SetupAction
+    setup = SetupAction("setRecipient", None, ("act", "allowedRecipient"))
+    observations = observations_from_execution("SETUP-002", (_epoch_plan(),), _execution(), (setup,))
+    assert observations[0].transition == "setRecipient"
+
+def test_state_observation_without_matching_setup_transition_has_no_transition():
+    from cydra.execution_readiness import SetupAction
+    setup = SetupAction("otherSetup", None, ("act", "otherState"))
+    observations = observations_from_execution("SETUP-003", (_epoch_plan(),), _execution(), (setup,))
+    assert observations[0].transition is None

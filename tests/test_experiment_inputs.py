@@ -1,7 +1,7 @@
 from cydra.compiler_constraints import ConstraintEvidence
 from cydra.constraint_candidates import select_parameter_candidates
-from cydra.experiment_inputs import plan_parameter_inputs
-from cydra.models import ParameterModel
+from cydra.experiment_inputs import complete_planned_inputs, plan_parameter_inputs
+from cydra.models import ContractModel, ParameterModel
 
 
 def evidence(parameter, index, predicate, function="withdraw"):
@@ -182,3 +182,163 @@ def test_revert_guard_collection_bound_selects_zero_index():
     )
     candidates = select_parameter_candidates(parameters, constraints, function_name="setItem")
     assert candidates[0].value == "0"
+
+
+def test_negative_crypto_witness_handles_structured_execution_bindings():
+    from cydra.models import FunctionModel
+
+    function = FunctionModel(
+        name="verify",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=("ecrecover",),
+        line=1,
+        parameters=(
+            ParameterModel(name="signature", type="bytes"),
+            ParameterModel(name="v", type="uint8"),
+        ),
+        execution_predicates=("!verified",),
+        execution_value_bindings=(("verified", "ECDSA.recover(hash, signature)"),),
+    )
+    contract = ContractModel(name="Target", source="", functions=(function,))
+
+    result = plan_parameter_inputs(
+        function.parameters,
+        (),
+        function_name="verify",
+        contract_model=contract,
+    )
+
+    assert result == ('bytes("")', "0")
+
+
+def test_structured_defaults_render_source_defined_structs(tmp_path):
+    from cydra.experiment_inputs import plan_parameter_inputs
+    from cydra.models import ContractModel
+
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            struct Action {
+                address recipient;
+                uint256 amount;
+                bytes payload;
+            }
+            function execute(Action calldata action, int256[] calldata deltas) external {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        name="Target",
+        source=str(source),
+        functions=(),
+    )
+    parameters = (
+        ParameterModel(name="action", type="Action"),
+        ParameterModel(name="deltas", type="int256[]"),
+    )
+    result = plan_parameter_inputs(
+        parameters,
+        (),
+        function_name="execute",
+        contract_model=model,
+    )
+    assert result == (
+        '(address(0), 0, bytes(""))',
+        "new int256[](0)",
+    )
+
+
+def test_structured_defaults_resolve_imported_structs(tmp_path):
+    from cydra.experiment_inputs import plan_parameter_inputs
+    from cydra.models import ContractModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    types = tmp_path / "Types.sol"
+    types.write_text(
+        """
+        pragma solidity ^0.8.20;
+        struct Action {
+            address recipient;
+            uint256 amount;
+            bytes payload;
+        }
+        """,
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        import {Action} from "./Types.sol";
+        contract Target {
+            function execute(Action calldata action) external {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    model = ContractModel(name="Target", source=str(source), functions=())
+    result = plan_parameter_inputs(
+        (ParameterModel(name="action", type="Action"),),
+        (),
+        function_name="execute",
+        contract_model=model,
+    )
+    assert result == ('(address(0), 0, bytes(""))',)
+
+
+def test_recursive_materialization_returns_source_provenance(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Target {
+            struct Inner { address endpoint; uint256 amount; }
+            struct Outer { Inner inner; bool enabled; }
+            function transact(Outer calldata data) external {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    from cydra.models import ContractModel, FunctionModel, ParameterModel
+    from cydra.solidity_model import parse_solidity
+    from cydra.experiment_inputs import materialize_parameter_with_provenance
+    contract = next(item for item in parse_solidity(source) if item.name == "Target")
+    function = next(item for item in contract.functions if item.name == "transact")
+    proof = materialize_parameter_with_provenance(function.parameters[0], contract)
+    assert proof is not None
+    assert proof.expression.startswith("(")
+    assert any(":type:Outer:" in item for item in proof.provenance)
+    assert any(":type:Inner:" in item for item in proof.provenance)
+    assert any("Outer.inner" in item for item in proof.provenance)
+
+
+def test_complete_planned_inputs_fills_missing_slots_from_canonical_materializer(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { "
+        "struct FeeStructure { uint256 flatFee; uint256 gasFee; uint256 maxFee; } "
+        "function use(address recipient, FeeStructure calldata fee, uint256 deadline) external {} "
+        "}",
+        encoding="utf-8",
+    )
+    contract = ContractModel("Target", str(source), ())
+    parameters = (
+        ParameterModel(name="recipient", type="address"),
+        ParameterModel(name="fee", type="FeeStructure"),
+        ParameterModel(name="deadline", type="uint256"),
+    )
+    result = complete_planned_inputs(
+        parameters,
+        ("address(0xBEEF)",),
+        contract,
+    )
+    assert result == (
+        "address(0xBEEF)",
+        "(0, 0, 0)",
+        "1",
+    )

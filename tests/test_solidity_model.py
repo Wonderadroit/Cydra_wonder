@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from cydra.interface_resolver import ResolvedInterface
+from cydra.models import ParameterModel
 from cydra.solidity_model import parse_solidity
 
 
@@ -657,3 +658,157 @@ def test_parse_solidity_resolves_inherited_state_variables_and_writes(tmp_path: 
     assert contract.state_variables == ("externalActionMap", "helper")
     register = contract.functions[0]
     assert register.writes == ("externalActionMap",)
+
+
+def test_solidity_model_excludes_builtin_member_calls_from_runtime_dependencies(tmp_path: Path):
+    source = tmp_path / "Builtins.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Builtins {
+            function execute(bytes memory data) external returns (bytes memory) {
+                bytes memory decoded = abi.decode(data, (bytes));
+                return abi.encode(decoded);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    contract = parse_solidity(source)[0]
+    function = next(item for item in contract.functions if item.name == "execute")
+    assert function.external_calls == ()
+
+
+def test_execution_value_bindings_capture_tuple_assigned_external_call_outcomes(tmp_path: Path) -> None:
+    path = tmp_path / "TupleCall.sol"
+    path.write_text("""
+    contract TupleCall {
+        function target(address endpoint, bytes memory data) external {
+            bool success;
+            bytes memory err;
+            (success, err) = endpoint.call(data);
+            if (!success) revert();
+        }
+    }
+    """, encoding="utf-8")
+    function = parse_solidity(path)[0].functions[0]
+    assert ("success", "endpoint.call(data)") in function.execution_value_bindings
+    assert ("err", "endpoint.call(data)") in function.execution_value_bindings
+
+
+
+def test_inherited_modifier_from_scoped_dependency_is_resolved(tmp_path: Path) -> None:
+    access = tmp_path / "node_modules" / "@openzeppelin" / "contracts" / "access" / "AccessControl.sol"
+    access.parent.mkdir(parents=True)
+    access.write_text(
+        """
+        abstract contract AccessControl {
+            modifier onlyRole(bytes32 role) {
+                require(hasRole(role, msg.sender));
+                _;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    base = tmp_path / "HinkalBase.sol"
+    base.write_text(
+        'import "@openzeppelin/contracts/access/AccessControl.sol";\n'
+        "contract HinkalBase is AccessControl {}\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        'import "./HinkalBase.sol";\n'
+        "contract Target is HinkalBase {\n"
+        "    function register() external onlyRole(DEFAULT_ADMIN_ROLE) {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(target)[0]
+
+    assert any(modifier.name == "onlyRole" for modifier in contract.inherited_modifiers)
+    assert any("hasRole(role, msg.sender)" in modifier.body for modifier in contract.inherited_modifiers)
+
+
+def test_modifier_definitions_and_invocation_arguments_are_preserved(tmp_path: Path) -> None:
+    path = tmp_path / "ModifierModel.sol"
+    path.write_text(
+        """
+        contract ModifierModel {
+            bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+
+            modifier onlyRole(bytes32 role) {
+                require(hasRole(role, msg.sender));
+                _;
+            }
+
+            function register(uint256 id, address action)
+                external
+                onlyRole(ADMIN_ROLE)
+            {
+                id;
+                action;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    function = contract.functions[0]
+
+    assert function.modifiers == ("onlyRole",)
+    assert function.modifier_invocations == (("onlyRole", ("ADMIN_ROLE",)),)
+    assert contract.modifiers[0].name == "onlyRole"
+    assert [(p.name, p.type) for p in contract.modifiers[0].parameters] == [("role", "bytes32")]
+    assert "hasRole(role, msg.sender)" in contract.modifiers[0].body
+
+
+def test_solidity_builtin_namespace_calls_are_not_runtime_external_calls(tmp_path: Path) -> None:
+    path = tmp_path / "BuiltinNamespaces.sol"
+    path.write_text(
+        """
+        contract BuiltinNamespaces {
+            function target(bytes memory left, bytes memory right) external pure returns (bytes memory) {
+                return bytes.concat(left, right);
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    function = parse_solidity(path)[0].functions[0]
+    assert function.external_calls == ()
+
+
+def test_parse_solidity_extracts_named_return_parameters_for_assembly_producers(tmp_path: Path) -> None:
+    path = tmp_path / "Factory.sol"
+    path.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Factory {
+            function deploy(bytes memory code) internal returns (address contractAddress) {
+                assembly {
+                    contractAddress := create(0, add(code, 0x20), mload(code))
+                }
+                if (contractAddress == address(0)) revert();
+            }
+
+            function run(bytes memory code) external returns (address) {
+                address deployed = deploy(code);
+                return deployed;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    producer = next(item for item in contract.functions if item.name == "deploy")
+    consumer = next(item for item in contract.functions if item.name == "run")
+
+    assert producer.return_parameters == (ParameterModel("contractAddress", "address"),)
+    assert producer.return_expressions == ()
+    assert ("deployed", "deploy(code)") in consumer.execution_value_bindings

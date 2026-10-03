@@ -53,7 +53,14 @@ def generate_guard_parity_hypotheses(contract: ContractModel, semantic=()) -> Gu
     functions and reports only an inconsistency. It does not name a vulnerability class,
     target, exploit, or expected impact.
     """
-    public = tuple(f for f in contract.functions if f.visibility in {"public", "external"} and f.writes)
+    # Function models may contain inherited/duplicate views of the same public
+    # transition. Guard parity reasons over callable identities, not duplicate
+    # model entries.
+    public_by_name = {}
+    for function in contract.functions:
+        if function.visibility in {"public", "external"} and function.writes:
+            public_by_name.setdefault(function.name, function)
+    public = tuple(public_by_name.values())
     guarded = tuple(f for f in public if _postcondition_calls(contract, f))
     if not guarded:
         return GuardParityContribution((), ())

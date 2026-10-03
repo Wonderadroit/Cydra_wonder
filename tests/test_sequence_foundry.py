@@ -1,3 +1,5 @@
+import pytest
+
 from pathlib import Path
 
 from cydra.models import ContractModel, Experiment, ExperimentStep, Hypothesis
@@ -14,6 +16,26 @@ def _model() -> ContractModel:
             FunctionModel("decrease", "external", (), ("counter",), (), 7, (ParameterModel("amount", "uint256"),)),
         ),
     )
+
+
+def _single_step_experiment(function_name: str) -> tuple[Hypothesis, Experiment]:
+    hypothesis = Hypothesis(
+        f"H-TEST-{function_name}",
+        "candidate",
+        f"INV-TEST-{function_name}",
+        function_name,
+        "attacker",
+        "candidate",
+    )
+    experiment = Experiment(
+        f"X-TEST-{function_name}",
+        hypothesis.hypothesis_id,
+        function_name,
+        ("violation",),
+        1.0,
+        steps=(ExperimentStep(function_name, ()),),
+    )
+    return hypothesis, experiment
 
 
 def _experiment() -> tuple[Hypothesis, Experiment]:
@@ -53,6 +75,28 @@ def test_sequence_renderer_emits_ordered_calls():
     source = output.read_text(encoding="utf-8")
     assert source.index("target.increase(7);") < source.index("target.decrease(7);")
     assert "vm.prank(attacker);" in source
+
+
+def test_sequence_renderer_ignores_unresolved_inherited_function_entries(tmp_path):
+    """An unresolved inherited placeholder must not crash sequence rendering."""
+    model = ContractModel(
+        "SequenceFixture",
+        str(tmp_path / "SequenceFixture.sol"),
+        _model().functions,
+        inherited_functions=(None,),  # type: ignore[arg-type]
+    )
+    hypothesis, experiment = _experiment()
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        "../SequenceFixture.sol",
+        "SequenceFixture",
+        tmp_path / "generated-sequence.t.sol",
+        model,
+    )
+    source = generated.read_text(encoding="utf-8")
+    assert "target.increase(7);" in source
+    assert "target.decrease(7);" in source
 
 
 def test_sequence_renderer_rejects_unknown_step():
@@ -248,6 +292,43 @@ def test_sequence_renderer_can_stop_before_target_after_observation(tmp_path):
     assert "target.seed();" in rendered
     assert 'assertTrue(target.epoch() > 0, "unverified prerequisite: epoch > 0");' in rendered
     assert "target.use();" not in rendered
+
+
+def test_sequence_renderer_escapes_multiline_prerequisite_diagnostics(tmp_path):
+    from cydra.models import FunctionModel
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { uint256 public epoch; "
+        "function seed() external { epoch = 1; } "
+        "function use() external { require(epoch > 0 && epoch < 10); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel("seed", "external", (), ("epoch",), (), 1),
+            FunctionModel(
+                "use", "external", (), (), (), 2,
+                state_predicates=("epoch > 0 &&\nepoch < 10",),
+                state_predicate_polarities=(("epoch > 0 &&\nepoch < 10", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis("H-STATE-epoch-multiline", "candidate", "INV-STATE-epoch", "use", "attacker", "candidate")
+    experiment = Experiment(
+        "X-H-STATE-epoch-multiline", hypothesis.hypothesis_id, "seed then use", ("violation",), 2.0,
+        steps=(ExperimentStep("seed", ()), ExperimentStep("use", ())),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True,
+        stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'assertTrue(target.epoch() > 0 &&\\nepoch < 10, "unverified prerequisite: epoch > 0 &&\\nepoch < 10");' in rendered
+    assert 'epoch > 0 &&\nepoch < 10' not in rendered
 
 
 def test_sequence_renderer_can_verify_source_backed_state_relation(tmp_path):
@@ -619,3 +700,603 @@ def test_sequence_renderer_refreshes_state_mapping_index_between_transitions(tmp
     assert "target.queue(7);" in rendered
     assert "target.advance();" in rendered
     assert "target.queue(9);" in rendered
+
+
+def test_sequence_renderer_constructs_namespaced_struct_constructor_type(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "IMerkle.sol").write_text(
+        "interface IMerkle { struct MerkleConstructorArgs { uint128 levels; address poseidon2; address poseidon4; address poseidon5; } }\\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        'pragma solidity ^0.8.20; import { IMerkle } from "./interfaces/IMerkle.sol"; '
+        'contract Target { constructor(IMerkle.MerkleConstructorArgs memory args) {} '
+        'function seed() external {} }\\n',
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(target),
+        (FunctionModel("seed", "external", (), (), (), 3),),
+        constructor=ConstructorModel(
+            (ParameterModel("args", "IMerkle.MerkleConstructorArgs", "memory"),), 2
+        ),
+    )
+    hypothesis, experiment = _single_step_experiment("seed")
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { IMerkle } from "../interfaces/IMerkle.sol";' in rendered
+    assert "IMerkle.MerkleConstructorArgs({levels: 1, poseidon2: address(0), poseidon4: address(0), poseidon5: address(0)})" in rendered
+
+
+def test_sequence_renderer_imports_constructor_role_address_resolver(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "constructor() {} function seed() external {} }\n", encoding="utf-8"
+    )
+    model = ContractModel(
+        "Target", str(target),
+        (FunctionModel("seed", "external", (), (), (), 3),),
+        constructor=ConstructorModel((), 2),
+    )
+    hypothesis, experiment = _single_step_experiment("seed")
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "new Target()" in rendered
+
+
+def test_sequence_renderer_uses_nonzero_unsigned_constructor_defaults(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        "pragma solidity ^0.8.20; contract Target { "
+        "constructor(uint256 levels) { uint256 minimum = levels - 1; minimum; } "
+        "function seed() external {} }\n", encoding="utf-8"
+    )
+    model = ContractModel(
+        "Target", str(target),
+        (FunctionModel("seed", "external", (), (), (), 3),),
+        constructor=ConstructorModel((ParameterModel("levels", "uint256", "memory"),), 2),
+    )
+    hypothesis, experiment = _single_step_experiment("seed")
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "new Target(1)" in rendered
+
+
+def test_sequence_renderer_binds_custom_struct_parameter_for_prerequisite_observation(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "ActionData.sol").write_text(
+        "struct ActionData { uint256 id; address target; }\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import { ActionData } from "./types/ActionData.sol"; '
+        "contract Target { mapping(uint256 => address) public actions; "
+        "function transact(ActionData calldata data) external { "
+        "require(actions[data.id] == data.target); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "transact",
+                "external",
+                (),
+                (),
+                (),
+                3,
+                parameters=(ParameterModel("data", "ActionData", "calldata"),),
+                execution_predicates=("actions[data.id] == data.target",),
+                execution_predicate_polarities=(("actions[data.id] == data.target", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-CUSTOM-STRUCT-prereq",
+        "candidate",
+        "INV-CUSTOM-STRUCT",
+        "transact",
+        "attacker",
+        "candidate",
+    )
+    experiment = Experiment(
+        "X-CUSTOM-STRUCT-prereq",
+        hypothesis.hypothesis_id,
+        "observe before transact",
+        ("violation",),
+        1.0,
+        steps=(ExperimentStep("transact", ("(7, address(0x1234))",)),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        "../Target.sol",
+        "Target",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+        verify_state_prerequisites=True,
+        stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { ActionData } from "../types/ActionData.sol";' in rendered
+    assert (
+        "ActionData memory data = "
+        "abi.decode(abi.encode(7, address(0x1234)), (ActionData));"
+    ) in rendered
+    assert "assertTrue(target.actions(data.id) == data.target" in rendered
+    assert "target.transact(" not in rendered
+
+
+def test_sequence_renderer_recursively_types_nested_custom_struct_prerequisite(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "Nested.sol").write_text(
+        "struct Inner { uint256 id; address target; }\\n"
+        "struct Outer { Inner inner; bytes metadata; }\\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import { Outer } from "./types/Nested.sol"; '
+        "contract Target { mapping(uint256 => address) public actions; "
+        "function transact(Outer calldata data) external { "
+        "require(actions[data.inner.id] == data.inner.target); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "transact", "external", (), (), (), 3,
+                parameters=(ParameterModel("data", "Outer", "calldata"),),
+                execution_predicates=("actions[data.inner.id] == data.inner.target",),
+                execution_predicate_polarities=(("actions[data.inner.id] == data.inner.target", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-NESTED-CUSTOM-STRUCT-prereq", "candidate",
+        "INV-NESTED-CUSTOM-STRUCT", "transact", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-NESTED-CUSTOM-STRUCT-prereq",
+        hypothesis.hypothesis_id,
+        "observe before transact",
+        ("violation",),
+        1.0,
+        planned_inputs=("( (7, address(0x1234)), bytes(\\\"\\\") )",),
+        target_function="transact",
+        steps=(ExperimentStep("transact", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True, stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "import { Outer } from \"../types/Nested.sol\";" in rendered
+    assert "import { Inner } from \"../types/Nested.sol\";" in rendered
+    assert 'Outer memory data = Outer(Inner(7, address(0x1234)), bytes(""));' in rendered
+    assert "target.transact(" not in rendered
+
+
+
+
+def test_sequence_renderer_resolves_nested_struct_from_plain_declared_import(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "Inner.sol").write_text(
+        "struct Inner { uint256 id; address target; }\\n", encoding="utf-8"
+    )
+    (tmp_path / "types" / "Outer.sol").write_text(
+        'import "./Inner.sol";\\n'
+        "struct Outer { Inner inner; bytes metadata; }\\n", encoding="utf-8"
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import "./types/Outer.sol"; '
+        "contract Target { mapping(uint256 => address) public actions; "
+        "function transact(Outer calldata data) external { "
+        "require(actions[data.inner.id] == data.inner.target); } }", encoding="utf-8"
+    )
+    model = ContractModel(
+        "Target", str(source),
+        (FunctionModel(
+            "transact", "external", (), (), (), 3,
+            parameters=(ParameterModel("data", "Outer", "calldata"),),
+            execution_predicates=("actions[data.inner.id] == data.inner.target",),
+            execution_predicate_polarities=(("actions[data.inner.id] == data.inner.target", "must_hold"),),
+        ),),
+    )
+    hypothesis = Hypothesis("H-PLAIN-IMPORTED-NESTED-STRUCT", "candidate",
+                            "INV-PLAIN-IMPORTED-NESTED-STRUCT", "transact", "attacker", "candidate")
+    experiment = Experiment(
+        "X-PLAIN-IMPORTED-NESTED-STRUCT", hypothesis.hypothesis_id,
+        "observe before transact", ("violation",), 1.0,
+        planned_inputs=("((7, address(0x1234)), bytes(\"\"))",),
+        target_function="transact", steps=(ExperimentStep("transact", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True, stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { Outer } from "../types/Outer.sol";' in rendered
+    assert 'import { Inner } from "../types/Inner.sol";' in rendered
+    assert "Outer memory data = Outer(Inner(7, address(0x1234)), bytes(\"\"));" in rendered
+    assert "target.transact(" not in rendered
+
+
+def test_sequence_renderer_resolves_nested_struct_from_imported_source_unit(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "Inner.sol").write_text(
+        "struct Inner { uint256 id; address target; }\\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "types" / "Outer.sol").write_text(
+        'import { Inner } from "./Inner.sol";\\n'
+        "struct Outer { Inner inner; bytes metadata; }\\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import { Outer } from "./types/Outer.sol"; '
+        "contract Target { mapping(uint256 => address) public actions; "
+        "function transact(Outer calldata data) external { "
+        "require(actions[data.inner.id] == data.inner.target); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "transact", "external", (), (), (), 3,
+                parameters=(ParameterModel("data", "Outer", "calldata"),),
+                execution_predicates=("actions[data.inner.id] == data.inner.target",),
+                execution_predicate_polarities=(("actions[data.inner.id] == data.inner.target", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-IMPORTED-NESTED-STRUCT", "candidate",
+        "INV-IMPORTED-NESTED-STRUCT", "transact", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-IMPORTED-NESTED-STRUCT", hypothesis.hypothesis_id,
+        "observe before transact", ("violation",), 1.0,
+        planned_inputs=("((7, address(0x1234)), bytes(\"\"))",),
+        target_function="transact",
+        steps=(ExperimentStep("transact", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol",
+        "Target", tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True, stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert 'import { Outer } from "../types/Outer.sol";' in rendered
+    assert 'import { Inner } from "../types/Inner.sol";' in rendered
+    assert "Outer memory data = Outer(Inner(7, address(0x1234)), bytes(\"\"));" in rendered
+    assert "target.transact(" not in rendered
+
+
+def test_sequence_renderer_resolves_nested_struct_declared_in_same_source_unit(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "Nested.sol").write_text(
+        "struct FeeStructure { address feeToken; uint256 flatFee; uint256 variableRate; }\\n"
+        "struct Outer { FeeStructure feeStructure; bytes metadata; }\\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import { Outer } from "./types/Nested.sol"; '
+        "contract Target { mapping(address => uint256) public fees; "
+        "function transact(Outer calldata data) external { "
+        "require(fees[data.feeStructure.feeToken] == data.feeStructure.flatFee); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target", str(source),
+        (
+            FunctionModel(
+                "transact", "external", (), (), (), 3,
+                parameters=(ParameterModel("data", "Outer", "calldata"),),
+                execution_predicates=("fees[data.feeStructure.feeToken] == data.feeStructure.flatFee",),
+                execution_predicate_polarities=(("fees[data.feeStructure.feeToken] == data.feeStructure.flatFee", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-SAME-SOURCE-NESTED-STRUCT", "candidate",
+        "INV-SAME-SOURCE-NESTED-STRUCT", "transact", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-SAME-SOURCE-NESTED-STRUCT", hypothesis.hypothesis_id,
+        "observe before transact", ("violation",), 1.0,
+        planned_inputs=("((address(0x1234), 7, 100), bytes(\"\"))",),
+        target_function="transact",
+        steps=(ExperimentStep("transact", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True, stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "FeeStructure(address(0x1234), 7, 100)" in rendered
+    assert "Outer memory data = Outer(FeeStructure(address(0x1234), 7, 100), bytes(\"\"));" in rendered
+    assert "target.transact(" not in rendered
+
+
+def test_sequence_renderer_uses_planned_inputs_when_prerequisite_step_has_no_arguments(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\\n", encoding="utf-8")
+    (tmp_path / "types").mkdir()
+    (tmp_path / "types" / "ActionData.sol").write_text(
+        "struct ActionData { uint256 id; address target; }\\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'pragma solidity ^0.8.20; import { ActionData } from "./types/ActionData.sol"; '
+        "contract Target { mapping(uint256 => address) public actions; "
+        "function transact(ActionData calldata data) external { require(actions[data.id] == data.target); } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "transact", "external", (), (), (), 3,
+                parameters=(ParameterModel("data", "ActionData", "calldata"),),
+                execution_predicates=("actions[data.id] == data.target",),
+                execution_predicate_polarities=(("actions[data.id] == data.target", "must_hold"),),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis("H-CUSTOM-STRUCT-planned-input", "candidate", "INV-CUSTOM-STRUCT", "transact", "attacker", "candidate")
+    experiment = Experiment(
+        "X-CUSTOM-STRUCT-planned-input", hypothesis.hypothesis_id,
+        "observe before transact", ("violation",), 1.0,
+        planned_inputs=("(7, address(0x1234))",),
+        target_function="transact",
+        steps=(ExperimentStep("transact", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+        verify_state_prerequisites=True, stop_before_target=True,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "ActionData memory data = ActionData(7, address(0x1234));" in rendered
+    assert "target.transact(" not in rendered
+
+
+def test_sequence_renderer_uses_constructor_established_default_admin_role(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        "pragma solidity ^0.8.20; "
+        "contract Target { "
+        "bytes32 internal constant DEFAULT_ADMIN_ROLE = bytes32(0); "
+        "constructor() { } "
+        "function configure() external onlyRole(DEFAULT_ADMIN_ROLE) {} "
+        "modifier onlyRole(bytes32 role) { require(role == DEFAULT_ADMIN_ROLE && msg.sender == address(0x1002)); _; } "
+        "}\n",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(target),
+        (
+            FunctionModel(
+                "configure",
+                "external",
+                ("onlyRole",),
+                (),
+                (),
+                6,
+                modifier_invocations=(("onlyRole", ("DEFAULT_ADMIN_ROLE",)),),
+            ),
+        ),
+        constructor=ConstructorModel(
+            (),
+            4,
+            role_grants=(("DEFAULT_ADMIN_ROLE", "msg.sender"),),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-ROLE-default-admin",
+        "candidate",
+        "INV-ROLE-001",
+        "configure",
+        "arbitrary caller",
+        "candidate",
+    )
+    experiment = Experiment(
+        "X-ROLE-default-admin",
+        hypothesis.hypothesis_id,
+        "configure",
+        ("violation",),
+        1.0,
+        steps=(ExperimentStep("configure", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        "../Target.sol",
+        "Target",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "vm.prank(admin);\n        target = new Target();" in rendered
+    assert "vm.prank(admin);\n        target.configure();" in rendered
+
+
+def test_sequence_renderer_lowers_complex_struct_argument_into_local(tmp_path):
+    from cydra.models import FunctionModel, ParameterModel
+
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; "
+        "contract Target { "
+        "struct Data { uint256 a; uint256 b; uint256[] values; } "
+        "function transact(uint256 x, Data calldata data) external {} "
+        "}",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "transact",
+                "external",
+                (),
+                (),
+                (),
+                2,
+                parameters=(
+                    ParameterModel("x", "uint256"),
+                    ParameterModel("data", "Target.Data"),
+                ),
+            ),
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-STACK-safe-args", "candidate", "INV-STACK-safe-args",
+        "transact", "attacker", "candidate",
+    )
+    experiment = Experiment(
+        "X-H-STACK-safe-args", hypothesis.hypothesis_id, "transact",
+        ("violation",), 1.0,
+        steps=(
+            ExperimentStep(
+                "transact",
+                ("0", "(0, 0, new uint256[](0))"),
+            ),
+        ),
+    )
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    generated = generate_sequence_test_from_experiment(
+        hypothesis, experiment, "../Target.sol", "Target",
+        tmp_path / "test" / "generated.t.sol", model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "Target.Data memory cydra_arg_0_1 = (0, 0, new uint256[](0));" in rendered
+    assert "target.transact(0, cydra_arg_0_1);" in rendered
+    assert "target.transact(0, (0, 0, new uint256[](0)))" not in rendered
+
+
+def test_sequence_renderer_materializes_dynamic_constructor_array(tmp_path):
+    from cydra.models import ConstructorModel, FunctionModel, ParameterModel
+
+    (tmp_path / "foundry.toml").write_text("[profile.default]\n", encoding="utf-8")
+    target = tmp_path / "Target.sol"
+    target.write_text(
+        "pragma solidity ^0.8.20; "
+        "contract Target { "
+        "address[] internal recipients; "
+        "constructor(address[] memory initialRecipients) { recipients = initialRecipients; } "
+        "function ping() external {} "
+        "}",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(target),
+        (FunctionModel("ping", "external", (), (), (), 4),),
+        constructor=ConstructorModel(
+            (ParameterModel("initialRecipients", "address[] memory", "memory"),),
+            3,
+        ),
+    )
+    hypothesis = Hypothesis(
+        "H-CONSTRUCTOR-array",
+        "candidate",
+        "INV-CONSTRUCTOR-array",
+        "ping",
+        "attacker",
+        "candidate",
+    )
+    experiment = Experiment(
+        "X-CONSTRUCTOR-array",
+        hypothesis.hypothesis_id,
+        "ping",
+        ("violation",),
+        1.0,
+        steps=(ExperimentStep("ping", ()),),
+    )
+    generated = generate_sequence_test_from_experiment(
+        hypothesis,
+        experiment,
+        "../Target.sol",
+        "Target",
+        tmp_path / "test" / "generated.t.sol",
+        model,
+    )
+    rendered = generated.read_text(encoding="utf-8")
+    assert "new Target(new address[](0))" in rendered
+    assert "target.ping();" in rendered
+
+
+def test_sequence_renderer_fails_closed_on_missing_step(tmp_path):
+    from cydra.models import FunctionModel
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "pragma solidity ^0.8.20; contract Target { function ping() external {} }",
+        encoding="utf-8",
+    )
+    model = ContractModel("Target", str(source), (FunctionModel("ping", "external", (), (), (), 4),))
+    hypothesis = Hypothesis("H-MISSING-STEP", "candidate", "INV-MISSING-STEP", "ping", "attacker", "candidate")
+    experiment = Experiment(
+        "X-MISSING-STEP", hypothesis.hypothesis_id, "ping", ("violation",), 1.0, steps=(None,)
+    )
+    with pytest.raises(ValueError, match="CALL_SEQUENCE: prerequisite step 0 is unavailable"):
+        generate_sequence_test_from_experiment(
+            hypothesis, experiment, "../Target.sol", "Target",
+            tmp_path / "test" / "generated.t.sol", model,
+        )

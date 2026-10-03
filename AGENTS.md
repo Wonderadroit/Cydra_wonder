@@ -58,7 +58,23 @@ Every live run is read as a pipeline:
 
 The **first demonstrated blocker** is the next engineering task. Do not jump ahead.
 
+### Recursive exploration contract
+
+The live pipeline may maintain a bounded exploration frontier around the existing investigation result. The frontier controller may select, record, and refresh questions, but it must not invent target facts, bypass readiness, or create a parallel execution engine. A selected question becomes "explored" only after the existing execution/evidence path has attempted it; blocked attempts remain explicit evidence of a capability gap. The frontier must be rebuilt from the updated model after meaningful evidence, preserving exploration history and budget.
+
 ## Agent handoff
+
+The repository is the continuity layer. Before doing any work, read:
+- `PROJECT_BIBLE.md`
+- `AGENTS.md`
+- `docs/AGENT_HANDOFF.md`
+- `docs/CONTINUE_CYDRA_PROMPT.md`
+- `docs/LIVE_DOGFOOD_STATE.md`
+
+`docs/LIVE_DOGFOOD_STATE.md` is the first place to recover the latest live run, artifact, tested CYDRA commit, blocker, repair, and next action. The canonical live workflow refreshes its machine-verifiable run metadata automatically after each run.
+
+At the end of meaningful engineering work, update the durable state with the exact tested commit, observed blocker, generic repair, validation, and next action.
+
 
 At the end of work, leave:
 - the exact live-target commit/ref;

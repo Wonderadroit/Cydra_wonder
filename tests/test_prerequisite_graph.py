@@ -145,3 +145,163 @@ def test_verified_prerequisite_still_blocks_until_verified():
     graph = build_prerequisite_graph(readiness)
     assert graph.unresolved
     assert not can_enter_security_experiment(graph)
+
+
+def test_prerequisite_nodes_expose_generic_capability_clusters():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        caller_requirements=(
+            ExecutionRequirement("caller_role", "admin", "model", "required"),
+        ),
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "balance > 0", "model", "required"),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.nodes[0].capability == "CALLER_CONSTRUCTION"
+    assert graph.nodes[1].capability == "STATE_OBSERVATION"
+    assert graph.capability_clusters == {
+        "CALLER_CONSTRUCTION": 1,
+        "STATE_OBSERVATION": 1,
+    }
+
+
+def test_predicate_category_preserves_specific_capability():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        execution_requirements=(
+            ExecutionRequirement(
+                "execution_predicate",
+                "verifyProof(...)",
+                "target:body",
+                "required",
+                category="cryptographic_witness",
+            ),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    assert graph.nodes[0].capability == "CRYPTOGRAPHIC_WITNESS"
+    assert graph.capability_clusters == {"CRYPTOGRAPHIC_WITNESS": 1}
+
+
+def test_state_observation_verifies_generic_setup_transition_postcondition():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement(
+                "state_predicate",
+                "allowedRecipient != address(0)",
+                "model",
+                "required",
+            ),
+        ),
+    )
+    action = SetupAction(
+        "setRecipient",
+        None,
+        ("Target:act:allowedRecipient",),
+    )
+    graph = build_prerequisite_graph(readiness, (action,))
+    verified = apply_observations(
+        graph,
+        (
+            PrerequisiteObservation(
+                "state",
+                "allowedRecipient != address(0)",
+                "true",
+                "true",
+                "E-OBS-STATE-1",
+                "setRecipient",
+            ),
+        ),
+    )
+    setup = next(node for node in verified.nodes if node.kind == "setup_transition")
+    assert setup.status == "verified"
+    assert setup.verification == "E-OBS-STATE-1"
+    assert can_enter_security_experiment(verified)
+
+
+def test_state_observation_does_not_verify_unrelated_setup_transition():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement(
+                "state_predicate",
+                "allowedRecipient != address(0)",
+                "model",
+                "required",
+            ),
+        ),
+    )
+    action = SetupAction("unrelated", None, ("Target:act:otherState",))
+    graph = build_prerequisite_graph(readiness, (action,))
+    verified = apply_observations(
+        graph,
+        (
+            PrerequisiteObservation(
+                "state",
+                "allowedRecipient != address(0)",
+                "true",
+                "true",
+                "E-OBS-STATE-2",
+            ),
+        ),
+    )
+    setup = next(node for node in verified.nodes if node.kind == "setup_transition")
+    assert setup.status == "constructible"
+    assert not can_enter_security_experiment(verified)
+
+
+def test_state_observation_matches_model_state_predicate_kind():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement(
+                "state_predicate",
+                "balance > 0",
+                "model",
+                "required",
+            ),
+        ),
+    )
+    graph = build_prerequisite_graph(readiness)
+    verified = apply_observations(
+        graph,
+        (
+            PrerequisiteObservation(
+                "state",
+                "balance > 0",
+                "true",
+                "true",
+                "E-OBS-STATE-3",
+            ),
+        ),
+    )
+    assert verified.nodes[0].status == "verified"
+
+def test_preexisting_state_observation_does_not_verify_setup_transition():
+    readiness = ExecutionReadiness(
+        contract="Target",
+        state_requirements=(
+            ExecutionRequirement("state_predicate", "allowedRecipient != address(0)", "model", "required"),
+        ),
+    )
+    graph = build_prerequisite_graph(
+        readiness,
+        (SetupAction("setRecipient", None, ("Target:act:allowedRecipient",)),),
+    )
+    observed = apply_observations(
+        graph,
+        (
+            PrerequisiteObservation(
+                "state",
+                "allowedRecipient != address(0)",
+                "true",
+                "true",
+                "E-OBS-PREEXISTING",
+            ),
+        ),
+    )
+    setup = next(node for node in observed.nodes if node.kind == "setup_transition")
+    assert setup.status == "constructible"
+    assert not can_enter_security_experiment(observed)

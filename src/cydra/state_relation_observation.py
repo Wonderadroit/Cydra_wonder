@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import re
 
 from .models import ContractModel, FunctionModel
+from .runtime_observation import _source_graph
 from .state_relation import StateRelation, plan_source_state_relations
 
 
@@ -93,11 +94,17 @@ def plan_state_relation_observations(
     function parameters are observable. Signed/non-numeric values, dynamic
     indexes, and ambiguous getter surfaces fail closed.
     """
-    try:
-        source = open(contract.source, encoding="utf-8").read()
-    except (OSError, UnicodeError):
+    sources = _source_graph(contract)
+    if not sources:
         return ()
 
+    # Relations may target public state declared in an imported/inherited base.
+    # Use the same bounded source graph as runtime state observation rather than
+    # restricting getter discovery to the concrete derived source file.
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sources
+    )
     getters = _public_getters(source)
     parameters = {parameter.name: _normalize_type(parameter.type.split()[0]) for parameter in function.parameters}
     plans: list[StateRelationObservationPlan] = []
