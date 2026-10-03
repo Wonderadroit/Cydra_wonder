@@ -52,7 +52,7 @@ def _function_body(source: str, match: re.Match[str]) -> str:
 
 def _modeled_function_body(source: str, function_name: str) -> tuple[str, str]:
     """Recover a function body from the modeled name when signature parsing is too strict."""
-    match = re.search(rf"\\bfunction\\s+{re.escape(function_name)}\\s*\\(", source)
+    match = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\(", source)
     if match is None:
         return "", ""
     brace = source.find("{", match.end())
