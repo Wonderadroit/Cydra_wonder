@@ -1488,3 +1488,23 @@ def test_deterministic_hash_relation_is_not_misclassified_as_cryptographic_witne
     requirement = readiness.execution_requirements[0]
     assert requirement.category != "cryptographic_witness"
     assert requirement.status == "constraint"
+
+
+def test_caller_state_principal_can_be_proven_from_inherited_writer_source(tmp_path):
+    base = tmp_path / "Base.sol"
+    base.write_text(
+        "contract Base { address internal allowedRecipient; "
+        "function setRecipient(address value) public { allowedRecipient = msg.sender; } "
+        "modifier onlyAllowedRecipient() { require(msg.sender == allowedRecipient); _; } }",
+        encoding="utf-8",
+    )
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        'import "./Base.sol"; contract Target is Base { function run() external onlyAllowedRecipient {} }',
+        encoding="utf-8",
+    )
+    functions = parse_solidity(source, include_inherited=True)
+    model = next(item for item in functions if item.name == "Target")
+    run = next(item for item in model.functions if item.name == "run")
+    requirements = _caller_requirements(run, model)
+    assert any(item.kind == "caller_state_principal" and item.subject == "allowedRecipient" for item in requirements)
