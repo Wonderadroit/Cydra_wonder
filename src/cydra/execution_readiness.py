@@ -999,6 +999,17 @@ def _execution_dataflow_requirements(
             if producer_postcondition:
                 break
 
+        if producer_postcondition and requirements:
+            prior = requirements[-1]
+            if prior.kind == "execution_dataflow" and prior.subject == f"{local} <- {expression}":
+                requirements[-1] = ExecutionRequirement(
+                    prior.kind,
+                    prior.subject,
+                    prior.source,
+                    "constraint",
+                    producer_postcondition_detail,
+                )
+
         producer_status = "constraint" if producer_postcondition else "discovered"
         producer_detail = (
             producer_postcondition_detail
