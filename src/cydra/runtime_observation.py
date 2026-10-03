@@ -305,20 +305,30 @@ def _deterministic_local_setups(
         array_name = match.group("array")
         if array_name not in dynamic_arrays:
             return None
-        count_name = f"{array_name}Count"
         if match.group("index") != "i":
             return None
-        if count_name not in scalar_getters:
-            count_declared = any(
-                re.search(
-                    rf"\b(?:uint\d*|int\d*)\s+public\s+{re.escape(count_name)}\s*;",
-                    path.read_text(encoding="utf-8"),
-                )
-                for path in sources
-                if path.exists()
+        count_candidates = [f"{array_name}Count"]
+        if array_name.endswith("s"):
+            count_candidates.append(f"{array_name[:-1]}Count")
+        count_name = next((candidate for candidate in count_candidates if candidate in scalar_getters), None)
+        if count_name is None:
+            count_name = next(
+                (
+                    candidate
+                    for candidate in count_candidates
+                    if any(
+                        re.search(
+                            rf"\b(?:uint\d*|int\d*)\s+public\s+{re.escape(candidate)}\s*;",
+                            path.read_text(encoding="utf-8"),
+                        )
+                        for path in sources
+                        if path.exists()
+                    )
+                ),
+                None,
             )
-            if not count_declared:
-                return None
+        if count_name is None:
+            return None
         setups.extend((
             f"        bytes memory {local};",
             f"        for (uint256 i = 0; i < target.{count_name}(); i++) {{",
