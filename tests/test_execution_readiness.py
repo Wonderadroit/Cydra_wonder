@@ -1547,3 +1547,44 @@ def test_execution_readiness_resolves_named_return_internal_producer_guard(tmp_p
         and item.status == "unresolved"
         for item in readiness.execution_requirements
     )
+
+
+def test_internal_named_return_guard_propagates_success_postcondition(tmp_path):
+    source = tmp_path / "Factory.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Factory {
+            function deploy(bytes memory code) internal returns (address contractAddress) {
+                assembly {
+                    contractAddress := create(0, add(code, 0x20), mload(code))
+                }
+                if (contractAddress == address(0)) revert();
+            }
+
+            function run(bytes memory code) external returns (address hinkal) {
+                hinkal = deploy(code);
+                if (hinkal == address(0)) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(source)[0]
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+
+    producer = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "execution_value_producer"
+    )
+    assert producer.status == "constraint"
+    assert "successful deploy return establishes" in producer.detail
+
+    dataflow = next(
+        item for item in readiness.execution_requirements
+        if item.kind == "execution_dataflow"
+    )
+    assert dataflow.status == "constraint"
+    assert "successful deploy return establishes" in dataflow.detail
