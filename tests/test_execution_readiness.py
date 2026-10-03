@@ -1587,3 +1587,4 @@ def test_internal_named_return_guard_propagates_success_postcondition(tmp_path):
         if item.kind == "execution_dataflow"
     )
     assert dataflow.status == "constraint"
+    assert "successful deploy return establishes" in dataflow.detail
