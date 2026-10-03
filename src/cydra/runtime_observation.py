@@ -506,7 +506,10 @@ def plan_public_state_observations(
         if current.name in visited:
             return
         visited.add(current.name)
-        for predicate in current.execution_predicates:
+        predicates = tuple(current.execution_predicates) or tuple(
+            predicate for predicate, _polarity in current.execution_predicate_polarities
+        )
+        for predicate in predicates:
             plans.extend(plan_public_mapping_state_observations(contract, predicate))
             plans.extend(scalar_plans_for_predicate(predicate))
         # Follow same-contract calls from the source with brace-aware
