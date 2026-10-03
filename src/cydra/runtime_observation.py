@@ -460,17 +460,8 @@ def plan_public_state_observations(
             candidate_states: list[str] = []
             for match in matches:
                 state = match.group("state")
-                if state not in getters:
-                    continue
-                if not re.search(
-                    rf"(?<![.\w]){re.escape(state)}\s*(?:==|!=|>=|<=|>|<)",
-                    conjunct,
-                ) and not re.search(
-                    rf"(?:==|!=|>=|<=|>|<)\s*{re.escape(state)}\b",
-                    conjunct,
-                ):
-                    continue
-                candidate_states.append(state)
+                if state in getters:
+                    candidate_states.append(state)
             if not candidate_states:
                 continue
             setup = _deterministic_local_setups(function, sources, conjunct, getters)
