@@ -150,6 +150,30 @@ def apply_patch(patch: str) -> tuple[bool, str]:
         patch_file.unlink(missing_ok=True)
 
 
+def parse_llm_json(raw: str) -> tuple[dict | None, str]:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    try:
+        value = json.loads(text)
+        return (value if isinstance(value, dict) else None), ""
+    except json.JSONDecodeError as exc:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                value = json.loads(text[start:end + 1])
+                return (value if isinstance(value, dict) else None), ""
+            except json.JSONDecodeError:
+                pass
+        return None, f"invalid JSON: {exc}"
+
+
 def main() -> int:
     if not API_KEY:
         print("No LLM API key configured for provider:", PROVIDER)
@@ -195,30 +219,50 @@ def main() -> int:
             print("Capability frontier entry has no capability name; failing closed.")
             return 0
 
-        prompt = (
+        base_prompt = (
             context(artifact, capability)
             + "\n\nRunner output:\n"
             + result.stdout[-12000:]
             + result.stderr[-12000:]
         )
-        proposal_response = api(prompt)
-        raw = output_text(proposal_response)
+        feedback = ""
+        proposal = {}
+        for repair_attempt in range(1, 4):
+            if time.time() - started >= MAX_HOURS * 3600:
+                break
+            prompt = base_prompt
+            if feedback:
+                prompt += (
+                    "\n\nPREVIOUS PROPOSAL VALIDATION FAILED. "
+                    "Correct the proposal using this exact deterministic error. "
+                    "Return JSON only; do not explain outside the JSON.\n"
+                    + feedback[:8000]
+                )
+            proposal_response = api(prompt)
+            raw = output_text(proposal_response)
+            proposal, parse_error = parse_llm_json(raw)
+            if proposal is None:
+                feedback = parse_error + "\nLLM output:\n" + raw[:6000]
+                print(f"LLM response attempt {repair_attempt} invalid:", parse_error)
+                continue
 
-        try:
-            proposal = json.loads(raw.strip())
-        except Exception:
-            print("Invalid LLM response; failing closed:", raw[:4000])
-            return 3
+            if proposal.get("decision") != "PATCH":
+                print("LLM boundary:", proposal.get("reason", ""))
+                blocked_capabilities.add(capability)
+                break
+
+            ok, message = apply_patch(str(proposal.get("patch") or ""))
+            print(f"patch attempt {repair_attempt}:", ok, message)
+            if ok:
+                break
+            feedback = "patch validation failed: " + message
+            proposal = {}
 
         if proposal.get("decision") != "PATCH":
-            print("LLM boundary:", proposal.get("reason", ""))
-            blocked_capabilities.add(capability)
             continue
-
-        ok, message = apply_patch(str(proposal.get("patch") or ""))
-        print("patch:", ok, message)
-        if not ok:
+        if not proposal.get("patch"):
             blocked_capabilities.add(capability)
+            print("PATCH decision contained no patch; failing closed.")
             continue
 
         # The model never supplies the executable test command. CYDRA owns the
