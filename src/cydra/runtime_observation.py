@@ -252,9 +252,10 @@ def _deterministic_local_setups(
         "abi", "bytes", "concat", "keccak256", "sha256", "ripemd160",
         "ecrecover", "address", "true", "false", "this",
     }
+    parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
     unresolved = {
         name for name in identifiers
-        if name not in public_states and name not in builtin_names
+        if name not in public_states and name not in builtin_names and name not in parameter_names
     }
     if not unresolved:
         return ()
@@ -263,6 +264,21 @@ def _deterministic_local_setups(
     setups: list[str] = []
     for local in sorted(unresolved):
         expression = bindings.get(local)
+        if expression is None:
+            # Keep the planner robust when a compact/generated model omitted
+            # a binding that is still source-observable.
+            for source_path in sources:
+                try:
+                    source = source_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    continue
+                source_match = re.search(
+                    rf"\b{re.escape(local)}\s*=\s*([^;]+);",
+                    source,
+                )
+                if source_match:
+                    expression = source_match.group(1).strip()
+                    break
         if expression is None:
             return None
         compact = re.sub(r"\s+", " ", expression).strip()
@@ -459,9 +475,10 @@ def plan_public_state_observations(
                 continue
             setup = _deterministic_local_setups(function, sources, conjunct, getters)
             if setup is None:
+                parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
                 unresolved = {
                     name for name in re.findall(r"\b[A-Za-z_]\w*\b", conjunct)
-                    if name not in getters and name not in {
+                    if name not in getters and name not in parameter_names and name not in {
                         "abi", "bytes", "concat", "keccak256", "sha256",
                         "ripemd160", "ecrecover", "address", "true", "false", "this",
                     }
