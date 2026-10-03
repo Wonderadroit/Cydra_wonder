@@ -184,6 +184,35 @@ def test_revert_guard_collection_bound_selects_zero_index():
     assert candidates[0].value == "0"
 
 
+def test_negative_crypto_witness_handles_structured_execution_bindings():
+    from cydra.models import FunctionModel
+
+    function = FunctionModel(
+        name="verify",
+        visibility="external",
+        modifiers=(),
+        writes=(),
+        external_calls=("ecrecover",),
+        line=1,
+        parameters=(
+            ParameterModel(name="signature", type="bytes"),
+            ParameterModel(name="v", type="uint8"),
+        ),
+        execution_predicates=("!verified",),
+        execution_value_bindings=(("verified", "ECDSA.recover(hash, signature)"),),
+    )
+    contract = ContractModel(name="Target", source="", functions=(function,))
+
+    result = plan_parameter_inputs(
+        function.parameters,
+        (),
+        function_name="verify",
+        contract_model=contract,
+    )
+
+    assert result == ('bytes("")', "0")
+
+
 def test_structured_defaults_render_source_defined_structs(tmp_path):
     from cydra.experiment_inputs import plan_parameter_inputs
     from cydra.models import ContractModel
