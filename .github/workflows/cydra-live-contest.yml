@@ -58,6 +58,8 @@ jobs:
           PYTHONPATH: src
           CYDRA_LLM_PROVIDER: ${{ vars.CYDRA_LLM_PROVIDER || 'openai' }}
           CYDRA_LLM_API_KEY: ${{ secrets.CYDRA_LLM_API_KEY || secrets.OPENAI_API_KEY }}
+          CYDRA_EMERGENCY_MAX_HOURS: "1"
+          CYDRA_LLM_MAX_ATTEMPTS: "3"
         run: |
           python scripts/run_llm_repair_campaign.py
       - name: Publish live research artifact
