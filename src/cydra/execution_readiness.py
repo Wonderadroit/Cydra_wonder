@@ -976,14 +976,43 @@ def _execution_dataflow_requirements(
                 parameter.name or "<unnamed>"
                 for parameter in producer.return_parameters
             ) or "<return expression not modeled>"
+        producer_postcondition = False
+        producer_postcondition_detail = ""
+        return_names = {
+            parameter.name
+            for parameter in producer.return_parameters
+            if parameter.name
+        }
+        producer_polarities = dict(producer.execution_predicate_polarities)
+        for return_name in return_names:
+            for predicate, polarity in producer_polarities.items():
+                if (
+                    return_name in re.findall(r"\b[A-Za-z_]\w*\b", predicate)
+                    and polarity == "must_not_hold"
+                ):
+                    producer_postcondition = True
+                    producer_postcondition_detail = (
+                        f"successful {producer.name} return establishes the named return "
+                        f"value {return_name} satisfies its guarded non-revert postcondition"
+                    )
+                    break
+            if producer_postcondition:
+                break
+
+        producer_status = "constraint" if producer_postcondition else "discovered"
+        producer_detail = (
+            producer_postcondition_detail
+            if producer_postcondition
+            else "modeled local call-result producer; its dependencies and satisfiability "
+                 "must be resolved before the consuming path is treated as reachable"
+        )
         requirements.append(
             ExecutionRequirement(
                 "execution_value_producer",
                 f"{local} <- {producer.name}({returns})",
                 f"{producer.name}:return",
-                "discovered",
-                "modeled local call-result producer; its dependencies and satisfiability "
-                "must be resolved before the consuming path is treated as reachable",
+                producer_status,
+                producer_detail,
             )
         )
         producer_reads = state_reads_for_function(semantic_effects, producer.name)
