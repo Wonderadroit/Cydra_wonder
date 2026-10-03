@@ -89,6 +89,10 @@ class FunctionModel:
     # Return expressions are syntax/data-flow evidence for functions that may produce
     # a value consumed by an execution predicate. They do not prove satisfiability.
     return_expressions: tuple[str, ...] = field(default_factory=tuple)
+    # Named return variables are local producer values even when Solidity uses
+    # a bare `return;` or assembly assignment rather than an explicit
+    # `return expression;` statement.
+    return_parameters: tuple[ParameterModel, ...] = field(default_factory=tuple)
     # Direct same-contract calls observed in this function body. These are
     # resolved only against functions declared by the same ContractModel;
     # external/member calls remain outside this relation.

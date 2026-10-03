@@ -221,6 +221,15 @@ def _parameters(parameter_text: str) -> tuple[ParameterModel, ...]:
     return tuple(_parameter_model(part) for part in _split_parameters(parameter_text))
 
 
+def _return_parameters(signature_tail: str) -> tuple[ParameterModel, ...]:
+    """Extract named Solidity return values from a function signature."""
+    match = re.search(r"\breturns\s*\(", signature_tail)
+    if match is None:
+        return ()
+    opening = signature_tail.find("(", match.start())
+    return _parameters(_balanced_parenthesized(signature_tail, opening))
+
+
 def _balanced_parenthesized(source: str, opening: int) -> str:
     depth = 0
     for index in range(opening, len(source)):
@@ -941,6 +950,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
                     execution_predicate_polarities=_execution_predicate_polarities(body, state_variables),
                     execution_value_bindings=_execution_value_bindings(body),
                     return_expressions=_return_expressions(body),
+                    return_parameters=_return_parameters(signature_tail),
                 )
             )
 

@@ -1508,3 +1508,42 @@ def test_caller_state_principal_can_be_proven_from_inherited_writer_source(tmp_p
     run = next(item for item in model.functions if item.name == "run")
     requirements = _caller_requirements(run, model)
     assert any(item.kind == "caller_state_principal" and item.subject == "allowedRecipient" for item in requirements)
+
+
+def test_execution_readiness_resolves_named_return_internal_producer_guard(tmp_path):
+    source = tmp_path / "Factory.sol"
+    source.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Factory {
+            function deploy(bytes memory code) internal returns (address contractAddress) {
+                assembly {
+                    contractAddress := create(0, add(code, 0x20), mload(code))
+                }
+                if (contractAddress == address(0)) revert();
+            }
+
+            function run(bytes memory code) external {
+                address deployed = deploy(code);
+                if (deployed == address(0)) revert();
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(source)[0]
+    run = next(item for item in contract.functions if item.name == "run")
+    readiness = inspect_execution_readiness(contract, run)
+
+    internal = next(
+        item for item in readiness.execution_requirements
+        if item.subject == "deploy: contractAddress == address(0)"
+    )
+    assert internal.status == "constraint"
+    assert internal.category == "input_construction"
+    assert not any(
+        item.kind in {"execution_value_dependency", "execution_value_runtime_dependency"}
+        and item.status == "unresolved"
+        for item in readiness.execution_requirements
+    )

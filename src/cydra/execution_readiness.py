@@ -970,7 +970,12 @@ def _execution_dataflow_requirements(
             )
             continue
 
-        returns = ", ".join(producer.return_expressions) if producer.return_expressions else "<return expression not modeled>"
+        returns = ", ".join(producer.return_expressions)
+        if not returns:
+            returns = ", ".join(
+                parameter.name or "<unnamed>"
+                for parameter in producer.return_parameters
+            ) or "<return expression not modeled>"
         requirements.append(
             ExecutionRequirement(
                 "execution_value_producer",
@@ -1064,7 +1069,10 @@ def _is_experiment_constraint(
     identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", predicate))
     state_names = set(contract.state_variables)
     parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
-    local_names = {name for name, _ in function.execution_value_bindings}
+    local_names = {
+        *{name for name, _ in function.execution_value_bindings},
+        *(parameter.name for parameter in function.return_parameters if parameter.name),
+    }
     ambient = {"msg", "tx", "block", "now"}
     # A one-sided numeric comparison between an ABI input and modeled state
     # can be satisfied by a conservative extremal input (for example
@@ -1549,7 +1557,10 @@ def _internal_execution_requirements(
                     direct_source = ""
                 unary_state = re.findall(r"\b!\s*([A-Za-z_]\w*)\b", predicate)
                 parameter_names = {parameter.name for parameter in callee.parameters if parameter.name}
-                local_names = set(dict(callee.execution_value_bindings))
+                local_names = {
+                    *dict(callee.execution_value_bindings),
+                    *(parameter.name for parameter in callee.return_parameters if parameter.name),
+                }
                 simple_boolean_state = re.fullmatch(r"!?[A-Za-z_]\w*", predicate.strip())
                 if unary_state and any(
                     name not in parameter_names and name not in local_names
