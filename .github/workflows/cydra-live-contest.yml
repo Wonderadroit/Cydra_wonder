@@ -56,7 +56,8 @@ jobs:
       - name: Run CYDRA against the complete in-scope surface
         env:
           PYTHONPATH: src
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CYDRA_LLM_PROVIDER: ${{ vars.CYDRA_LLM_PROVIDER || 'openai' }}
+          CYDRA_LLM_API_KEY: ${{ secrets.CYDRA_LLM_API_KEY || secrets.OPENAI_API_KEY }}
         run: |
           python scripts/run_llm_repair_campaign.py
       - name: Publish live research artifact
