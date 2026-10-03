@@ -780,3 +780,34 @@ def test_solidity_builtin_namespace_calls_are_not_runtime_external_calls(tmp_pat
 
     function = parse_solidity(path)[0].functions[0]
     assert function.external_calls == ()
+
+
+def test_parse_solidity_extracts_named_return_parameters_for_assembly_producers(tmp_path: Path) -> None:
+    path = tmp_path / "Factory.sol"
+    path.write_text(
+        """
+        pragma solidity ^0.8.20;
+        contract Factory {
+            function deploy(bytes memory code) internal returns (address contractAddress) {
+                assembly {
+                    contractAddress := create(0, add(code, 0x20), mload(code))
+                }
+                if (contractAddress == address(0)) revert();
+            }
+
+            function run(bytes memory code) external returns (address) {
+                address deployed = deploy(code);
+                return deployed;
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    contract = parse_solidity(path)[0]
+    producer = next(item for item in contract.functions if item.name == "deploy")
+    consumer = next(item for item in contract.functions if item.name == "run")
+
+    assert producer.return_parameters == (ParameterModel("contractAddress", "address"),)
+    assert producer.return_expressions == ()
+    assert ("deployed", "deploy(code)") in consumer.execution_value_bindings
