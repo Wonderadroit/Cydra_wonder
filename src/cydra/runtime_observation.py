@@ -174,7 +174,13 @@ def plan_public_mapping_state_observations(
                 if len(params) != 1:
                     continue
                 parameter_name = params[0].split()[-1]
-                if observed_key != parameter_name:
+                # The predicate's symbolic mapping key and the view's formal
+                # parameter may legitimately use different names across an
+                # internal call boundary. The source structure already proves
+                # that this view indexes the same mapping with its sole
+                # parameter, so bind the predicate key positionally rather
+                # than requiring lexical parameter-name equality.
+                if observed_key != parameter_name and len(params) != 1:
                     continue
                 return (StateObservationPlan(
                     state=state,
