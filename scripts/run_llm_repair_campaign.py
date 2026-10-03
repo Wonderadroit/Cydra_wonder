@@ -240,11 +240,13 @@ def main() -> int:
                 )
             proposal_response = api(prompt)
             raw = output_text(proposal_response)
-            proposal, parse_error = parse_llm_json(raw)
-            if proposal is None:
+            parsed, parse_error = parse_llm_json(raw)
+            if parsed is None:
+                proposal = {}
                 feedback = parse_error + "\nLLM output:\n" + raw[:6000]
                 print(f"LLM response attempt {repair_attempt} invalid:", parse_error)
                 continue
+            proposal = parsed
 
             if proposal.get("decision") != "PATCH":
                 print("LLM boundary:", proposal.get("reason", ""))
