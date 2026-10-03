@@ -284,15 +284,13 @@ def _state_principal_caller_role(function: FunctionModel, contract: ContractMode
             _state_principal_from_predicate(predicate)
             for predicate in function.authorization_predicates
         )
-        if name and name in contract.state_variables
+        if name
     )
     if not principals:
         return None
     principal = principals[0]
     functions = tuple(dict.fromkeys(item for item in (*contract.functions, *contract.inherited_functions) if item is not None))
     for writer in functions:
-        if principal not in writer.writes and principal not in writer.effective_writes:
-            continue
         body = _function_body_from_source(contract, writer)
         if body and re.search(
             rf"\b{re.escape(principal)}\s*=\s*(?:msg\.sender|_msgSender\(\))\s*;",
@@ -307,12 +305,10 @@ def _caller_state_principal_provenance(
     principal: str | None,
 ) -> tuple[str, ...]:
     """Return source-backed provenance for a caller principal stored in state."""
-    if contract is None or principal is None or principal not in contract.state_variables:
+    if contract is None or principal is None:
         return ()
     functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
     for writer in functions:
-        if principal not in writer.writes and principal not in writer.effective_writes:
-            continue
         body = _function_body_from_source(contract, writer)
         if not body:
             continue
@@ -2195,8 +2191,9 @@ def _state_setup_candidates(
 
     semantic_effects = build_state_effect_index(semantic_evidence)
     candidates: list[ExecutionRequirement] = []
+    all_functions = tuple(dict.fromkeys((*contract.functions, *contract.inherited_functions)))
     for state in state_names:
-        for writer in contract.functions:
+        for writer in all_functions:
             if writer.name == function.name or writer.visibility not in {"public", "external"}:
                 continue
             semantic_writes = state_writes_for_function(semantic_effects, writer.name)
