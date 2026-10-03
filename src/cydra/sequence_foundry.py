@@ -9,7 +9,7 @@ from .interface_resolver import resolve_interface, resolve_named_type_source, re
 from .execution_readiness import _address_role, _constructor_role_grants, caller_role, role_address_expression, constructible_state_setup_plan
 from .runtime_observation import plan_public_state_observations
 from .state_relation_observation import plan_state_relation_observations
-from .experiment_inputs import _type_source
+from .experiment_inputs import _type_source, complete_planned_inputs
 from .planned_call import conservative_argument
 
 
@@ -664,7 +664,9 @@ def generate_sequence_test_from_experiment(
                 planned_functions.add(action.function)
 
     for index, step in enumerate(experiment.steps):
-        if not step.function.strip():
+        if step is None:
+            raise ValueError(f"CALL_SEQUENCE: prerequisite step {index} is unavailable")
+        if not getattr(step, "function", None):
             raise ValueError(f"sequence step {index} has no function")
         function = functions.get(step.function)
         if function is None:
@@ -676,12 +678,14 @@ def generate_sequence_test_from_experiment(
         # argument materialization/arity must not block observation of setup
         # transitions for targets with complex or custom parameter types.
         effective_arguments = step.arguments
-        if (
-            not effective_arguments
-            and function.name == hypothesis.target_function
-            and experiment.planned_inputs
-        ):
-            effective_arguments = experiment.planned_inputs
+        if function.name == hypothesis.target_function and (experiment.planned_inputs or effective_arguments):
+            planned_vector = experiment.planned_inputs or effective_arguments
+            completed = complete_planned_inputs(function.parameters, planned_vector, contract_model)
+            if completed is None:
+                raise ValueError(
+                    f"CALL_SEQUENCE: unable to canonically materialize inputs for {function.name}"
+                )
+            effective_arguments = completed
         if verify_state_prerequisites and function.name == hypothesis.target_function:
             observations = plan_public_state_observations(contract_model, function)
             if not observations:
