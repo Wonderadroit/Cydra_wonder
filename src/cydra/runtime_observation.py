@@ -223,6 +223,19 @@ def _public_scalar_getters(source: str) -> set[str]:
     return {match.group("name") for match in _PUBLIC_SCALAR_RE.finditer(source)}
 
 
+def _public_state_names_from_sources(sources: tuple[Path, ...]) -> set[str]:
+    """Return source-declared public state names without assuming their ABI type."""
+    names: set[str] = set()
+    pattern = re.compile(r"\bpublic\s+(?P<name>[A-Za-z_]\w*)\s*(?:=[^;]*)?;")
+    for path in sources:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        names.update(match.group("name") for match in pattern.finditer(source))
+    return names
+
+
 def _public_dynamic_array_getters(sources: tuple[Path, ...]) -> set[str]:
     """Return public dynamic-array state names across the bounded source graph."""
     getters: set[str] = set()
@@ -333,7 +346,7 @@ def plan_public_state_observations(
     # State may be inherited from a base contract or declared in an imported
     # source unit. The observation surface is the bounded target source graph,
     # not just the concrete contract file.
-    getters = _public_scalar_getters_from_sources(sources)
+    getters = _public_scalar_getters_from_sources(sources) | _public_state_names_from_sources(sources)
     polarities = dict(function.state_predicate_polarities)
     plans: list[StateObservationPlan] = []
 
