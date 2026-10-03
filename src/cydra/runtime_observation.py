@@ -17,6 +17,7 @@ class StateObservationPlan:
     predicate: str
     polarity: str
     source: str
+    setup: tuple[str, ...] = ()
 
 
 def _public_mapping_getters(sources: tuple[str, ...]) -> set[str]:
@@ -222,6 +223,121 @@ def _public_scalar_getters(source: str) -> set[str]:
     return {match.group("name") for match in _PUBLIC_SCALAR_RE.finditer(source)}
 
 
+def _public_state_names_from_sources(sources: tuple[Path, ...]) -> set[str]:
+    """Return source-declared public state names without assuming their ABI type."""
+    names: set[str] = set()
+    pattern = re.compile(r"\bpublic\s+(?P<name>[A-Za-z_]\w*)\s*(?:=[^;]*)?;")
+    for path in sources:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        names.update(match.group("name") for match in pattern.finditer(source))
+    return names
+
+
+def _public_dynamic_array_getters(sources: tuple[Path, ...]) -> set[str]:
+    """Return public dynamic-array state names across the bounded source graph."""
+    getters: set[str] = set()
+    pattern = re.compile(
+        r"\b(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?|bytes(?:\d*)?|string|uint\d*|int\d*|address|bool)\s*\[\s*\]\s+"
+        r"public\s+(?P<name>[A-Za-z_]\w*)\s*(?:=[^;]*)?;"
+    )
+    for path in sources:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        getters.update(match.group("name") for match in pattern.finditer(source))
+    return getters
+
+
+def _deterministic_local_setups(
+    function: FunctionModel,
+    sources: tuple[Path, ...],
+    predicate: str,
+    public_states: set[str],
+) -> tuple[str, ...] | None:
+    """Materialize a bounded self-accumulating local from public target state."""
+    bindings = dict(function.execution_value_bindings)
+    identifiers = set(re.findall(r"(?<![.\w])[A-Za-z_]\w*\b", predicate))
+    builtin_names = {
+        "abi", "bytes", "concat", "keccak256", "sha256", "ripemd160",
+        "ecrecover", "address", "true", "false", "this",
+    }
+    parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
+    unresolved = {
+        name for name in identifiers
+        if name not in public_states and name not in builtin_names and name not in parameter_names
+    }
+    if not unresolved:
+        return ()
+    dynamic_arrays = _public_dynamic_array_getters(sources)
+    scalar_getters = _public_scalar_getters_from_sources(sources)
+    setups: list[str] = []
+    for local in sorted(unresolved):
+        expression = bindings.get(local)
+        if expression is None:
+            # Keep the planner robust when a compact/generated model omitted
+            # a binding that is still source-observable.
+            for source_path in sources:
+                try:
+                    source = source_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    continue
+                source_match = re.search(
+                    rf"\b{re.escape(local)}\s*=\s*([^;]+);",
+                    source,
+                )
+                if source_match:
+                    expression = source_match.group(1).strip()
+                    break
+        if expression is None:
+            return None
+        compact = re.sub(r"\s+", " ", expression).strip()
+        match = re.fullmatch(
+            rf"bytes\.concat\(\s*{re.escape(local)}\s*,\s*"
+            rf"(?P<array>[A-Za-z_]\w*)\s*\[\s*(?P<index>[A-Za-z_]\w*)\s*\]\s*\)",
+            compact,
+        )
+        if match is None:
+            return None
+        array_name = match.group("array")
+        if array_name not in dynamic_arrays:
+            return None
+        if match.group("index") != "i":
+            return None
+        count_candidates = [f"{array_name}Count"]
+        if array_name.endswith("s"):
+            count_candidates.append(f"{array_name[:-1]}Count")
+        count_name = next((candidate for candidate in count_candidates if candidate in scalar_getters), None)
+        if count_name is None:
+            count_name = next(
+                (
+                    candidate
+                    for candidate in count_candidates
+                    if any(
+                        re.search(
+                            rf"\b(?:uint\d*|int\d*)\s+public\s+{re.escape(candidate)}\s*;",
+                            path.read_text(encoding="utf-8"),
+                        )
+                        for path in sources
+                        if path.exists()
+                    )
+                ),
+                None,
+            )
+        if count_name is None:
+            return None
+        setups.extend((
+            f"        bytes memory {local};",
+            f"        for (uint256 i = 0; i < target.{count_name}(); i++) {{",
+            f"            {local} = bytes.concat({local}, target.{array_name}(i));",
+            "        }",
+        ))
+    return tuple(setups)
+
+
 def _public_scalar_getters_from_sources(sources: tuple[Path, ...]) -> set[str]:
     """Collect public scalar getters across the bounded target source graph."""
     getters: set[str] = set()
@@ -375,36 +491,51 @@ def plan_public_state_observations(
         plans: list[StateObservationPlan] = []
         for conjunct in conjuncts:
             matches = list(re.finditer(r"(?<![.\w])(?P<state>[A-Za-z_]\w*)\b", conjunct))
+            candidate_states: list[str] = []
             for match in matches:
                 state = match.group("state")
-                if state not in getters:
+                if state in getters:
+                    candidate_states.append(state)
+            setup = _deterministic_local_setups(function, sources, conjunct, getters)
+            if not candidate_states:
+                continue
+            if setup is None:
+                parameter_names = {parameter.name for parameter in function.parameters if parameter.name}
+                unresolved = {
+                    name for name in re.findall(r"\b[A-Za-z_]\w*\b", conjunct)
+                    if name not in getters and name not in parameter_names and name not in {
+                        "abi", "bytes", "concat", "keccak256", "sha256",
+                        "ripemd160", "ecrecover", "address", "true", "false", "this",
+                    }
+                }
+                if unresolved:
                     continue
-                # Only expose a state identifier when it is actually used as an
-                # operand in a comparison. This avoids treating struct fields or
-                # local variables as target storage observations.
-                if not re.search(
-                    rf"(?<![.\w]){re.escape(state)}\s*(?:==|!=|>=|<=|>|<)",
-                    conjunct,
-                ) and not re.search(
-                    rf"(?:==|!=|>=|<=|>|<)\s*{re.escape(state)}\b",
-                    conjunct,
-                ):
-                    continue
+                setup = ()
+            expression = conjunct
+            for state in candidate_states:
                 expression = re.sub(
                     rf"(?<![.\w]){re.escape(state)}\b",
                     f"target.{state}()",
-                    conjunct,
+                    expression,
                     count=1,
                 )
-                plans.append(StateObservationPlan(
-                    state=state,
-                    getter=f"target.{state}()",
-                    expression=expression if polarity == "must_hold" else f"!({expression})",
-                    predicate=predicate,
-                    polarity=polarity,
-                    source=f"{contract.source}:execution-predicate",
-                ))
+            plans.append(StateObservationPlan(
+                state=candidate_states[0],
+                getter=f"target.{candidate_states[0]}()",
+                expression=expression if polarity == "must_hold" else f"!({expression})",
+                predicate=predicate,
+                polarity=polarity,
+                source=f"{contract.source}:execution-predicate",
+                setup=setup,
+            ))
         return plans
+
+    # Top-level execution predicates are first-class observation surfaces.
+    # Resolve them directly here so compact models do not depend on call-graph traversal.
+    for predicate in function.execution_predicates:
+        polarity = dict(function.execution_predicate_polarities).get(predicate, "must_hold")
+        plans.extend(plan_public_mapping_state_observations(contract, predicate))
+        plans.extend(scalar_plans_for_predicate(predicate, polarity))
 
     # Internal execution predicates are part of the target-derived state model.
     # Reuse the generic public-mapping observer for predicates reached through
@@ -416,9 +547,17 @@ def plan_public_state_observations(
         if current.name in visited:
             return
         visited.add(current.name)
-        for predicate in current.execution_predicates:
+        predicates = tuple(current.execution_predicates) or tuple(
+            predicate for predicate, _polarity in current.execution_predicate_polarities
+        )
+        for predicate in predicates:
             plans.extend(plan_public_mapping_state_observations(contract, predicate))
-            plans.extend(scalar_plans_for_predicate(predicate))
+            plans.extend(
+                scalar_plans_for_predicate(
+                    predicate,
+                    dict(current.execution_predicate_polarities).get(predicate, "must_hold"),
+                )
+            )
         # Follow same-contract calls from the source with brace-aware
         # function-body extraction. This mirrors the target model's provenance
         # without relying on a regex that terminates at an inner closing brace.
