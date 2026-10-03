@@ -719,6 +719,7 @@ def generate_sequence_test_from_experiment(
             prerequisite_imports.extend(binding_imports)
             rendered.extend(bindings)
             for observation in observations:
+                rendered.extend(observation.setup)
                 expression = observation.expression.replace("\r", "").replace("\n", "\\n")
                 message = _solidity_string_literal(f"unverified prerequisite: {observation.predicate}")
                 rendered.append(f"        assertTrue({expression}, {message});")
