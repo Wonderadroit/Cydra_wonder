@@ -579,6 +579,13 @@ def generate_sequence_test_from_experiment(
     if not experiment.steps:
         raise ValueError("sequence experiment has no structured steps")
 
+    # Validate the structured envelope before dereferencing any step. A
+    # missing/placeholder prerequisite must fail closed with a stable,
+    # actionable CALL_SEQUENCE error rather than leaking an AttributeError.
+    for step_index, step in enumerate(experiment.steps):
+        if step is None or not getattr(step, "function", None):
+            raise ValueError(f"CALL_SEQUENCE: prerequisite step {step_index} is unavailable")
+
     # Inherited models can legitimately contain unresolved/placeholder entries
     # while the extractor is still establishing provenance. The sequence
     # renderer must never let one unresolved entry crash the whole experiment
