@@ -678,7 +678,7 @@ def generate_sequence_test_from_experiment(
         # argument materialization/arity must not block observation of setup
         # transitions for targets with complex or custom parameter types.
         effective_arguments = step.arguments
-        if function.name == hypothesis.target_function and (experiment.planned_inputs or effective_arguments):
+        if function.name == hypothesis.target_function and (experiment.planned_inputs or effective_arguments or verify_state_prerequisites):
             planned_vector = experiment.planned_inputs or effective_arguments
             completed = complete_planned_inputs(function.parameters, planned_vector, contract_model)
             if completed is None:
