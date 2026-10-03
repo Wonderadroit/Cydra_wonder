@@ -1880,7 +1880,7 @@ def _execution_requirements(
             # source-backed type materializer; do not infer this from names alone.
             negative_crypto = bool(
                 re.fullmatch(
-                    r"!\s*[A-Za-z_]\\w*|[A-Za-z_]\\w*\\s*==\\s*false",
+                    r"!\s*[A-Za-z_]\w*|[A-Za-z_]\w*\s*==\s*false",
                     predicate.strip(),
                 )
             )
@@ -1903,7 +1903,7 @@ def _execution_requirements(
                         has_empty_witness = (
                             'bytes("")' in expression
                             or "bytes32(0)" in expression
-                            or re.search(r"\\bv\\s*[:=].*?0", expression) is not None
+                            or re.search(r"\bv\s*[:=].*?0", expression) is not None
                         )
                         negative_witness = has_crypto_field and has_empty_witness
                 except (OSError, ValueError, TypeError):
