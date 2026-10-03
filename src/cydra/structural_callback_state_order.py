@@ -172,4 +172,38 @@ def generate_callback_state_order_hypotheses(contract: ContractModel, semantic=(
             related_functions=(function_name,) if function_name != target else (),
         ))
 
+    # Generic fallback: recover a modeled function body when the broad signature parser misses it.
+    for modeled in (*contract.functions, *contract.inherited_functions):
+        match = re.search(rf"\bfunction\s+{re.escape(modeled.name)}\s*\(", source)
+        if match is None:
+            continue
+        brace = source.find("{", match.end())
+        if brace < 0:
+            continue
+        depth = 0
+        end = None
+        for index in range(brace, len(source)):
+            if source[index] == "{": depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = index
+                    break
+        if end is None:
+            continue
+        body = source[brace + 1:end]
+        interaction = _external_interaction(body)
+        if interaction is None or not _state_write_after_external_interaction(body, interaction):
+            continue
+        target = modeled.name if modeled.visibility in {"public", "external"} else next(iter(_modeled_public_callers(contract, modeled.name)), None)
+        if not target or _modeled_lock_guarded(contract, target):
+            continue
+        hypothesis_id = f"H-CALLBACK-STATE-ORDER-{target}"
+        if hypothesis_id in seen:
+            continue
+        seen.add(hypothesis_id)
+        invariant_id = f"INV-CALLBACK-STATE-ORDER-{target}"
+        invariants.append(Invariant(invariant_id, "Security-critical state establishing a temporal or authorization condition must be updated before an external interaction can invoke attacker-controlled code.", "external interaction topology plus state-write ordering", 0.80))
+        hypotheses.append(Hypothesis(hypothesis_id, f"{target} may expose an intermediate state during an external interaction, allowing a reentrant caller to bypass a state-dependent condition before the condition is recorded.", invariant_id, target, "a caller-controlled contract able to execute during an external interaction and reenter the target", f"a reentrant call can exploit the pre-update state while {modeled.name} is still executing", evidence_ids=(f"E-MODEL-{target}",), related_functions=(modeled.name,) if modeled.name != target else ()))
+
     return CallbackStateOrderContribution(tuple(invariants), tuple(hypotheses))
