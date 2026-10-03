@@ -537,7 +537,7 @@ def plan_parameter_inputs(
         function = functions.get(function_name)
         if function is not None:
             negative_crypto = any(
-                re.fullmatch(r"!\s*[A-Za-z_]\\w*|[A-Za-z_]\\w*\\s*==\\s*false", predicate.strip())
+                re.fullmatch(r"!\s*[A-Za-z_]\w*|[A-Za-z_]\w*\s*==\s*false", predicate.strip())
                 and any(
                     term in " ".join(function.execution_value_bindings).lower()
                     for term in ("ecdsa", "ecrecover", "recover")
