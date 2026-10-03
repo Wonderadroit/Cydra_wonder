@@ -509,6 +509,13 @@ def plan_public_state_observations(
             ))
         return plans
 
+    # Top-level execution predicates are first-class observation surfaces.
+    # Resolve them directly here so compact models do not depend on call-graph traversal.
+    for predicate in function.execution_predicates:
+        polarity = dict(function.execution_predicate_polarities).get(predicate, "must_hold")
+        plans.extend(plan_public_mapping_state_observations(contract, predicate))
+        plans.extend(scalar_plans_for_predicate(predicate, polarity))
+
     # Internal execution predicates are part of the target-derived state model.
     # Reuse the generic public-mapping observer for predicates reached through
     # the modeled same-contract call graph; never name a target-specific state.
