@@ -1282,6 +1282,7 @@ def test_sequence_renderer_materializes_dynamic_constructor_array(tmp_path):
 
 
 def test_sequence_renderer_fails_closed_on_missing_step(tmp_path):
+    from cydra.models import FunctionModel
     source = tmp_path / "Target.sol"
     source.write_text(
         "pragma solidity ^0.8.20; contract Target { function ping() external {} }",
