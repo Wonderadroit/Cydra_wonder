@@ -13,16 +13,16 @@ Live-target dogfooding only. Pinned target: Hinkal public-code target.
 
 ## Current CYDRA branch
 
-- Branch: `dogfood-readiness-expression-provenance`
+- Branch: `feature/embedded-llm-repair-controller`
 - Current engineering head: `0d1280c383910f20d9e72ea16ad8ed352259e94f`
 
 ## Latest validated live run
 
 - Workflow: `CYDRA canonical live-target dogfood`
-- Run: `37136701913`
-- Artifact: `11279435462` (cydra-live-hinkal-87286949ba56c2e006620de7abca90b6e6104fcd)
-- Artifact URL: https://api.github.com/repos/Wonderadroit/Cydra_wonder/actions/artifacts/11279435462/zip
-- Artifact digest: `sha256:00c97aac01c16b1f4ef3dc3d5637a7fd45d68a323e98cb4fb46d9cd854cdc49d`
+- Run: `37155610505`
+- Artifact: `11286051206` (cydra-live-hinkal-c96a598c868390867e4ff20917086fedc6707aca)
+- Artifact URL: https://api.github.com/repos/Wonderadroit/Cydra_wonder/actions/artifacts/11286051206/zip
+- Artifact digest: `sha256:14a8a16ae2164ce01a8aa764b1f36ae96164173e20e557522bf7f6fa01994cff`
 
 ## Last observed pipeline boundary
 

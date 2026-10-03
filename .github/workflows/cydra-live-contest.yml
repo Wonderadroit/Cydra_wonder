@@ -19,7 +19,7 @@ jobs:
       - name: Checkout CYDRA
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -56,11 +56,12 @@ jobs:
       - name: Run CYDRA against the complete in-scope surface
         env:
           PYTHONPATH: src
+          CYDRA_LLM_PROVIDER: ${{ vars.CYDRA_LLM_PROVIDER || 'openai' }}
+          CYDRA_LLM_API_KEY: ${{ secrets.CYDRA_LLM_API_KEY || secrets.OPENAI_API_KEY }}
+          CYDRA_EMERGENCY_MAX_HOURS: "1"
+          CYDRA_LLM_MAX_ATTEMPTS: "3"
         run: |
-          python scripts/run_live_contest.py \
-            --target-spec targets/live-contest.json \
-            --target-checkout .cydra-live-target \
-            --output live-artifacts
+          python scripts/run_llm_repair_campaign.py
       - name: Publish live research artifact
         if: always()
         uses: actions/upload-artifact@v4
