@@ -204,3 +204,44 @@ def test_compound_state_predicate_can_use_source_backed_boolean_view(tmp_path):
     assert len(plans) == 1
     assert plans[0].getter == "target.ready()"
     assert plans[0].expression == "target.ready()"
+
+
+def test_execution_predicate_materializes_deterministic_local_accumulator(tmp_path):
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { "
+        "bytes32 public bytecodeHash; "
+        "bytes[] public bytecodeChunks; "
+        "uint256 public bytecodeChunkCount; "
+        "function use() external { "
+        "bytes memory fullBytecode; "
+        "for (uint256 i = 0; i < bytecodeChunkCount; i++) "
+        "fullBytecode = bytes.concat(fullBytecode, bytecodeChunks[i]); "
+        "if (keccak256(fullBytecode) != bytecodeHash) revert(); "
+        "} }",
+        encoding="utf-8",
+    )
+    predicate = "keccak256(fullBytecode) != bytecodeHash"
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "use", "external", (), (), (), 1,
+                execution_predicates=(predicate,),
+                execution_predicate_polarities=((predicate, "must_not_hold"),),
+                execution_value_bindings=(
+                    ("fullBytecode", "bytes.concat(fullBytecode, bytecodeChunks[i])"),
+                ),
+            ),
+        ),
+    )
+    plans = plan_public_state_observations(model, model.functions[0])
+    assert len(plans) == 1
+    assert plans[0].expression == "!(keccak256(fullBytecode) != target.bytecodeHash())"
+    assert plans[0].setup == (
+        "        bytes memory fullBytecode;",
+        "        for (uint256 i = 0; i < target.bytecodeChunkCount(); i++) {",
+        "            fullBytecode = bytes.concat(fullBytecode, target.bytecodeChunks(i));",
+        "        }",
+    )
