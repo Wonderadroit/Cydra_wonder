@@ -105,12 +105,6 @@ def _execution_context_warp(contract_model: ContractModel, function) -> str | No
             if polarity == "must_not_hold":
                 # Extremal time values make a guarded revert predicate false.
                 modes.add("low" if operator in {">", ">="} else "high")
-            elif polarity == "must_hold":
-                # Extremal time values can also satisfy a normal-path
-                # prerequisite such as block.timestamp <= deadline or
-                # block.timestamp >= activationTime. This is still an
-                # execution-context construction, not a target-specific fact.
-                modes.add("low" if operator in {"<=", "<"} else "high")
 
         try:
             source = Path(contract_model.source).read_text(encoding="utf-8")
