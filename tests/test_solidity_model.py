@@ -2,7 +2,7 @@ from pathlib import Path
 
 from cydra.interface_resolver import ResolvedInterface
 from cydra.models import ParameterModel
-    from cydra.solidity_model import parse_solidity
+from cydra.solidity_model import parse_solidity
 
 
 def test_enrichment_is_additive_and_extracts_constructor_parameters_and_auth(tmp_path: Path) -> None:
