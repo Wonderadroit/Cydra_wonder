@@ -680,12 +680,15 @@ def generate_sequence_test_from_experiment(
         effective_arguments = step.arguments
         if function.name == hypothesis.target_function and (experiment.planned_inputs or effective_arguments or verify_state_prerequisites):
             planned_vector = experiment.planned_inputs or effective_arguments
-            completed = complete_planned_inputs(function.parameters, planned_vector, contract_model)
-            if completed is None:
-                raise ValueError(
-                    f"CALL_SEQUENCE: unable to canonically materialize inputs for {function.name}"
-                )
-            effective_arguments = completed
+            if len(planned_vector) == len(function.parameters):
+                effective_arguments = tuple(planned_vector)
+            else:
+                completed = complete_planned_inputs(function.parameters, planned_vector, contract_model)
+                if completed is None:
+                    raise ValueError(
+                        f"CALL_SEQUENCE: unable to canonically materialize inputs for {function.name}"
+                    )
+                effective_arguments = completed
         if verify_state_prerequisites and function.name == hypothesis.target_function:
             observations = plan_public_state_observations(contract_model, function)
             if not observations:
