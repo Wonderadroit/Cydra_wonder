@@ -539,7 +539,7 @@ def plan_parameter_inputs(
             negative_crypto = any(
                 re.fullmatch(r"!\s*[A-Za-z_]\w*|[A-Za-z_]\w*\s*==\s*false", predicate.strip())
                 and any(
-                    term in " ".join(function.execution_value_bindings).lower()
+                    term in " ".join(f"{local} {expression}" for local, expression in function.execution_value_bindings).lower()
                     for term in ("ecdsa", "ecrecover", "recover")
                 )
                 for predicate in function.execution_predicates
