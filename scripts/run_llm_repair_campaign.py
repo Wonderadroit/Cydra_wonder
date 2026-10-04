@@ -312,9 +312,34 @@ def parse_llm_json(raw: str) -> tuple[dict | None, str]:
         return None, f"invalid JSON: {exc}"
 
 
+def write_llm_artifact(attempt: int, name: str, value: object) -> None:
+    root = ROOT / "live-artifacts" / "llm-repair" / f"cycle-{attempt:03d}"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / name).write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def frontier_counts(campaign: dict) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for cluster in campaign.get("capability_clusters") or []:
+        if not isinstance(cluster, dict):
+            continue
+        key = str(cluster.get("capability") or "")
+        if key:
+            counts[key] = counts.get(key, 0) + int(cluster.get("count") or 1)
+    return counts
+
+
 def main() -> int:
     if not API_KEY:
         print("No LLM API key configured for provider:", PROVIDER)
+        write_llm_artifact(0, "status.json", {
+            "status": "llm_unconfigured",
+            "provider": PROVIDER,
+            "message": "Deterministic CYDRA repair/replay remains authoritative; LLM handoff was not attempted.",
+        })
         return 0
 
     started = time.time()
@@ -342,6 +367,7 @@ def main() -> int:
         result = run(target)
         campaign_path = artifact / "capability_campaign.json"
         campaign = json.loads(campaign_path.read_text()) if campaign_path.exists() else {}
+        write_llm_artifact(attempt, "frontier-before.json", campaign)
         clusters = campaign.get("capability_clusters") or []
 
         if not clusters:
@@ -381,15 +407,27 @@ def main() -> int:
                 )
             proposal_response = api(prompt)
             raw = output_text(proposal_response)
+            write_llm_artifact(attempt, f"llm-response-{repair_attempt}.txt", raw)
             parsed, parse_error = parse_llm_json(raw)
             if parsed is None:
                 proposal = {}
                 feedback = parse_error + "\nLLM output:\n" + raw[:6000]
+                write_llm_artifact(attempt, f"validation-{repair_attempt}.json", {
+                    "status": "invalid_response",
+                    "error": parse_error,
+                })
                 print(f"LLM response attempt {repair_attempt} invalid:", parse_error)
                 continue
             proposal = parsed
+            write_llm_artifact(attempt, "proposal.json", proposal)
 
             if proposal.get("decision") != "PATCH":
+                write_llm_artifact(attempt, "proposal.json", proposal)
+                write_llm_artifact(attempt, "validation.json", {
+                    "status": "boundary",
+                    "capability": capability,
+                    "reason": proposal.get("reason", ""),
+                })
                 print("LLM boundary:", proposal.get("reason", ""))
                 blocked_capabilities.add(capability)
                 break
@@ -398,9 +436,17 @@ def main() -> int:
             if not proposal_safe:
                 feedback = "proposal validation failed: " + proposal_error
                 proposal = {}
+                write_llm_artifact(attempt, f"validation-{repair_attempt}.json", {
+                    "status": "invalid_proposal",
+                    "error": proposal_error,
+                })
                 print(f"proposal attempt {repair_attempt} invalid:", proposal_error)
                 continue
             ok, message = apply_patch(str(proposal.get("patch") or ""))
+            write_llm_artifact(attempt, f"patch-validation-{repair_attempt}.json", {
+                "status": "applied" if ok else "rejected",
+                "message": message,
+            })
             print(f"patch attempt {repair_attempt}:", ok, message)
             if ok:
                 touched = set(patch_paths_from_text(str(proposal.get("patch") or "")))
@@ -426,13 +472,26 @@ def main() -> int:
         # deterministic regression command so the model cannot turn validation
         # into arbitrary CI command execution.
         regression = run(["python", "-m", "pytest"])
+        write_llm_artifact(attempt, "regression.json", {
+            "exit_code": regression.returncode,
+            "passed": regression.returncode == 0,
+            "stdout": regression.stdout[-12000:],
+            "stderr": regression.stderr[-12000:],
+        })
         if regression.returncode != 0:
             print("regression failed; reverting patch and continuing")
             run(["git", "reset", "--hard", "HEAD"])
             blocked_capabilities.add(capability)
             continue
 
-        print("regression passed; replaying exact frozen target on next cycle.")
+        write_llm_artifact(attempt, "handoff.json", {
+            "status": "REPAIR_ACCEPTED_FOR_EXACT_REPLAY",
+            "capability": capability,
+            "required_files": proposal.get("required_files", []),
+            "expected_tests": proposal.get("expected_tests", []),
+            "next_action": "run_live_contest.py on the same pinned target and refresh capability_campaign.json",
+        })
+        print("regression passed; handing the repaired workspace back to the exact frozen-target replay.")
 
     print("Emergency autonomous repair ceiling reached.")
     return 0
