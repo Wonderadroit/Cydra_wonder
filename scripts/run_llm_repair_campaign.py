@@ -357,8 +357,11 @@ def main() -> int:
             print("Capability frontier entry has no capability name; failing closed.")
             return 0
 
+        editable_surface = capability_source_files(capability)
         base_prompt = (
             context(artifact, capability)
+            + "\n\nEDITABLE IMPLEMENTATION SURFACE (deterministic scan):\n"
+            + ("\n".join(editable_surface) if editable_surface else "NONE — do not invent a source file; return BOUNDARY if no generic repair surface exists.")
             + "\n\nRunner output:\n"
             + result.stdout[-12000:]
             + result.stderr[-12000:]
@@ -386,7 +389,7 @@ def main() -> int:
                 continue
             proposal = parsed
 
-                if proposal.get("decision") != "PATCH":
+            if proposal.get("decision") != "PATCH":
                 print("LLM boundary:", proposal.get("reason", ""))
                 blocked_capabilities.add(capability)
                 break
