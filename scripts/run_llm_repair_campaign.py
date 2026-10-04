@@ -16,6 +16,7 @@ BASE_URL = os.getenv("CYDRA_LLM_BASE_URL", "https://openrouter.ai/api/v1" if PRO
 API_KEY = os.getenv("CYDRA_LLM_API_KEY", "").strip() or os.getenv("OPENROUTER_API_KEY" if PROVIDER == "openrouter" else "OPENAI_API_KEY", "").strip()
 MAX_HOURS = float(os.getenv("CYDRA_EMERGENCY_MAX_HOURS", "6"))
 MAX_ATTEMPTS = int(os.getenv("CYDRA_LLM_MAX_ATTEMPTS", "20"))
+LLM_REPAIR_ATTEMPTS = int(os.getenv("CYDRA_LLM_REPAIR_ATTEMPTS", "3"))
 ALLOWED_PATCH_ROOTS = ("src/cydra/", "tests/", "scripts/")
 FORBIDDEN_PATCH_ROOTS = (".github/", "targets/", ".git/", "scripts/run_llm_repair_campaign.py")
 
@@ -28,39 +29,57 @@ def api(prompt: str):
     key = API_KEY
     if not key:
         return None
-    body = {
-        "model": MODEL,
-        "instructions": (
-            "You are CYDRA's autonomous generic repair engineer. "
-            "LLMs propose; deterministic tools test; evidence decides. "
-            "Repair CYDRA only, never the target. "
-            "No target-specific detectors, fake evidence, weakened fail-closed behavior, "
-            "workflow/secrets changes, or bounty conclusions. "
-            "Return JSON only with decision PATCH or BOUNDARY, reason, patch. "
-            "The patch must be a unified git diff. Do not return commands."
-        ),
-        "input": prompt,
-        "max_output_tokens": 14000,
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "cydra_repair_proposal",
-                "strict": True,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "decision": {"type": "string", "enum": ["PATCH", "BOUNDARY"]},
-                        "reason": {"type": "string"},
-                        "patch": {"type": "string"},
-                    },
-                    "required": ["decision", "reason", "patch"],
-                    "additionalProperties": False,
+
+    system_prompt = (
+        "You are CYDRA's autonomous generic repair engineer. "
+        "LLMs propose; deterministic tools test; evidence decides. "
+        "Repair CYDRA only, never the target. "
+        "No target-specific detectors, fake evidence, weakened fail-closed behavior, "
+        "workflow/secrets changes, or bounty conclusions. "
+        "Return exactly one JSON object with decision PATCH or BOUNDARY, reason, and patch. "
+        "The patch must be a unified git diff. Do not return commands."
+    )
+    schema = {
+        "type": "object",
+        "properties": {
+            "decision": {"type": "string", "enum": ["PATCH", "BOUNDARY"]},
+            "reason": {"type": "string"},
+            "patch": {"type": "string"},
+        },
+        "required": ["decision", "reason", "patch"],
+        "additionalProperties": False,
+    }
+
+    if PROVIDER == "openrouter":
+        body = {
+            "model": MODEL,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": 14000,
+            "response_format": {"type": "json_object"},
+        }
+        endpoint = f"{BASE_URL}/chat/completions"
+    else:
+        body = {
+            "model": MODEL,
+            "instructions": system_prompt,
+            "input": prompt,
+            "max_output_tokens": 14000,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "cydra_repair_proposal",
+                    "strict": True,
+                    "schema": schema,
                 },
             },
-        },
-    }
+        }
+        endpoint = f"{BASE_URL}/responses"
+
     req = urllib.request.Request(
-        f"{BASE_URL}/responses",
+        endpoint,
         data=json.dumps(body).encode(),
         headers={
             "Authorization": "Bearer " + key,
@@ -280,7 +299,7 @@ def main() -> int:
         )
         feedback = ""
         proposal = {}
-        for repair_attempt in range(1, 4):
+        for repair_attempt in range(1, LLM_REPAIR_ATTEMPTS + 1):
             if time.time() - started >= MAX_HOURS * 3600:
                 break
             prompt = base_prompt
