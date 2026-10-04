@@ -36,17 +36,20 @@ def api(prompt: str):
         "Repair CYDRA only, never the target. "
         "No target-specific detectors, fake evidence, weakened fail-closed behavior, "
         "workflow/secrets changes, or bounty conclusions. "
-        "Return exactly one JSON object with decision PATCH or BOUNDARY, reason, and patch. "
-        "The patch must be a unified git diff. Do not return commands."
+        "Return exactly one JSON object with decision PATCH or BOUNDARY, reason, required_files, expected_tests, and patch. "
+        "For PATCH, required_files must list the CYDRA source files you intend to change and expected_tests must list deterministic test names or commands that CYDRA can verify. "
+        "The patch must be a complete unified git diff whose hunks can be applied to the supplied checkout. Do not return commands."
     )
     schema = {
         "type": "object",
         "properties": {
             "decision": {"type": "string", "enum": ["PATCH", "BOUNDARY"]},
             "reason": {"type": "string"},
+            "required_files": {"type": "array", "items": {"type": "string"}},
+            "expected_tests": {"type": "array", "items": {"type": "string"}},
             "patch": {"type": "string"},
         },
-        "required": ["decision", "reason", "patch"],
+        "required": ["decision", "reason", "required_files", "expected_tests", "patch"],
         "additionalProperties": False,
     }
 
@@ -182,6 +185,68 @@ def context(artifact: Path, capability: str) -> str:
     return "\n".join(parts)
 
 
+def capability_source_files(capability: str) -> list[str]:
+    """Return editable CYDRA implementation files that actually mention a capability."""
+    matches: list[str] = []
+    for path in (ROOT / "src" / "cydra").rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if capability in text:
+            matches.append(path.relative_to(ROOT).as_posix())
+    return sorted(matches)
+
+
+def proposal_paths_are_safe(proposal: dict) -> tuple[bool, str]:
+    """Validate the proposal contract before attempting to apply model output."""
+    required = proposal.get("required_files")
+    if not isinstance(required, list) or not required:
+        return False, "PATCH proposal must declare non-empty required_files"
+    if not all(isinstance(path, str) and path for path in required):
+        return False, "required_files must contain only non-empty strings"
+    unsafe = [
+        path for path in required
+        if path.startswith(FORBIDDEN_PATCH_ROOTS) or not path.startswith(ALLOWED_PATCH_ROOTS)
+    ]
+    if unsafe:
+        return False, "forbidden required_files: " + ", ".join(unsafe)
+    missing = [path for path in required if not (ROOT / path).is_file()]
+    if missing:
+        return False, "required_files do not exist: " + ", ".join(missing)
+    tests = proposal.get("expected_tests")
+    if not isinstance(tests, list) or not all(isinstance(item, str) for item in tests):
+        return False, "expected_tests must be a list of strings"
+    return True, ""
+
+
+def patch_paths_from_text(patch: str) -> list[str]:
+    paths: list[str] = []
+    for line in patch.splitlines():
+        if line.startswith("diff --git a/") and " b/" in line:
+            paths.append(line[len("diff --git a/"):].split(" b/", 1)[0])
+    return list(dict.fromkeys(paths))
+
+
+def patch_is_structurally_valid(patch: str) -> tuple[bool, str]:
+    if not patch.strip():
+        return False, "empty patch"
+    paths = patch_paths_from_text(patch)
+    if not paths:
+        return False, "patch is not a unified git diff (missing diff --git headers)"
+    if "--- " not in patch or "+++ " not in patch or "@@" not in patch:
+        return False, "patch is structurally incomplete: expected ---/+++/@@ hunks"
+    unsafe = [
+        path for path in paths
+        if path.startswith(FORBIDDEN_PATCH_ROOTS) or not path.startswith(ALLOWED_PATCH_ROOTS)
+    ]
+    if unsafe:
+        return False, "forbidden patch paths: " + ", ".join(unsafe)
+    return True, ""
+
+
 def patch_paths_are_safe() -> tuple[bool, str]:
     diff = run(["git", "diff", "--name-only", "--diff-filter=ACDMRT"])
     if diff.returncode != 0:
@@ -202,8 +267,9 @@ def patch_paths_are_safe() -> tuple[bool, str]:
 
 
 def apply_patch(patch: str) -> tuple[bool, str]:
-    if not patch.strip():
-        return False, "empty patch"
+    structurally_valid, structural_reason = patch_is_structurally_valid(patch)
+    if not structurally_valid:
+        return False, structural_reason
     patch_file = ROOT / ".cydra-llm.patch"
     patch_file.write_text(patch)
     try:
@@ -291,8 +357,11 @@ def main() -> int:
             print("Capability frontier entry has no capability name; failing closed.")
             return 0
 
+        editable_surface = capability_source_files(capability)
         base_prompt = (
             context(artifact, capability)
+            + "\n\nEDITABLE IMPLEMENTATION SURFACE (deterministic scan):\n"
+            + ("\n".join(editable_surface) if editable_surface else "NONE — do not invent a source file; return BOUNDARY if no generic repair surface exists.")
             + "\n\nRunner output:\n"
             + result.stdout[-12000:]
             + result.stderr[-12000:]
@@ -325,9 +394,23 @@ def main() -> int:
                 blocked_capabilities.add(capability)
                 break
 
+            proposal_safe, proposal_error = proposal_paths_are_safe(proposal)
+            if not proposal_safe:
+                feedback = "proposal validation failed: " + proposal_error
+                proposal = {}
+                print(f"proposal attempt {repair_attempt} invalid:", proposal_error)
+                continue
             ok, message = apply_patch(str(proposal.get("patch") or ""))
             print(f"patch attempt {repair_attempt}:", ok, message)
             if ok:
+                touched = set(patch_paths_from_text(str(proposal.get("patch") or "")))
+                required = set(proposal.get("required_files") or [])
+                if not touched & required:
+                    run(["git", "reset", "--hard", "HEAD"])
+                    feedback = "patch validation failed: patch does not touch any declared required_file"
+                    proposal = {}
+                    print(f"patch attempt {repair_attempt} rejected:", feedback)
+                    continue
                 break
             feedback = "patch validation failed: " + message
             proposal = {}
