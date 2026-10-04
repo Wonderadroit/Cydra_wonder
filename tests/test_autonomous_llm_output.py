@@ -18,6 +18,6 @@ def test_output_text_reads_responses_content_text_variant():
 
 
 def test_parse_llm_json_accepts_fenced_json():
-    parsed, error = parse_llm_json('```json\\n{\"decision\":\"BOUNDARY\",\"reason\":\"x\",\"patch\":\"\"}\\n```')
+    parsed, error = parse_llm_json('```json\n{\"decision\":\"BOUNDARY\",\"reason\":\"x\",\"patch\":\"\"}\n```')
     assert error == ""
     assert parsed["decision"] == "BOUNDARY"
