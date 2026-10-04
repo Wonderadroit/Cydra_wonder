@@ -61,3 +61,57 @@ def test_patch_paths_stay_fail_closed():
     assert module.ALLOWED_PATCH_ROOTS == ("src/cydra/", "tests/", "scripts/")
     assert "targets/" in module.FORBIDDEN_PATCH_ROOTS
     assert "scripts/run_llm_repair_campaign.py" in module.FORBIDDEN_PATCH_ROOTS
+
+
+def test_proposal_contract_requires_existing_allowed_files():
+    module = load_module()
+    ok, error = module.proposal_paths_are_safe({
+        "decision": "PATCH",
+        "reason": "generic fix",
+        "required_files": ["src/cydra/capability_repair.py"],
+        "expected_tests": ["python -m pytest"],
+        "patch": "diff --git a/src/cydra/capability_repair.py b/src/cydra/capability_repair.py\n--- a/src/cydra/capability_repair.py\n+++ b/src/cydra/capability_repair.py\n@@ -1 +1 @@\n-x\n+y\n",
+    })
+    assert ok
+    assert error == ""
+
+
+def test_proposal_contract_rejects_unsafe_or_missing_files():
+    module = load_module()
+    ok, error = module.proposal_paths_are_safe({
+        "required_files": ["targets/live-contest.json"],
+        "expected_tests": [],
+    })
+    assert not ok
+    assert "forbidden required_files" in error
+
+    ok, error = module.proposal_paths_are_safe({
+        "required_files": ["src/cydra/does_not_exist.py"],
+        "expected_tests": [],
+    })
+    assert not ok
+    assert "do not exist" in error
+
+
+def test_patch_structure_rejects_plain_text_and_incomplete_hunks():
+    module = load_module()
+    ok, error = module.patch_is_structurally_valid("please edit this file")
+    assert not ok
+    assert "unified git diff" in error
+
+    ok, error = module.patch_is_structurally_valid(
+        "diff --git a/src/cydra/x.py b/src/cydra/x.py\n--- a/src/cydra/x.py\n+++ b/src/cydra/x.py\n"
+    )
+    assert not ok
+    assert "incomplete" in error
+
+
+def test_patch_structure_rejects_forbidden_paths():
+    module = load_module()
+    ok, error = module.patch_is_structurally_valid(
+        "diff --git a/.github/workflows/x.yml b/.github/workflows/x.yml\n"
+        "--- a/.github/workflows/x.yml\n+++ b/.github/workflows/x.yml\n"
+        "@@ -1 +1 @@\n-x\n+y\n"
+    )
+    assert not ok
+    assert "forbidden patch paths" in error
