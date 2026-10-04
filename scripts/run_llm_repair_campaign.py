@@ -174,10 +174,46 @@ def files_for(capability: str) -> list[str]:
         )
     )
 
+def live_evidence_context(artifact: Path, capability: str) -> str:
+    """Collect bounded target-derived evidence that explains why a capability is blocked."""
+    candidates = []
+    for path in artifact.rglob("*.json"):
+        if "llm-repair" in path.parts:
+            continue
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if capability not in text:
+            continue
+        name = path.name
+        priority = 0
+        if name == "execution-readiness.json":
+            priority += 4
+        elif name in {"capability_repair.json", "capability_failures.json"}:
+            priority += 3
+        elif name in {"execution.json", "blocked_experiments.json", "classification.json"}:
+            priority += 1
+        candidates.append((priority, len(text), path, text))
+    candidates.sort(key=lambda item: (-item[0], str(item[2])))
+    parts = []
+    total = 0
+    for _, _, path, text in candidates[:16]:
+        snippet = text[:12000]
+        if total + len(snippet) > 70000:
+            break
+        parts.append(f"\nLIVE EVIDENCE {path.relative_to(artifact)}\n{snippet}")
+        total += len(snippet)
+    return "\n".join(parts) if parts else "\nLIVE EVIDENCE: no matching target-derived JSON artifact found."
+
 def context(artifact: Path, capability: str) -> str:
     campaign_path = artifact / "capability_campaign.json"
     campaign = campaign_path.read_text() if campaign_path.exists() else "{}"
-    parts = [f"CAPABILITY: {capability}", "CAMPAIGN:\n" + campaign[:50000]]
+    parts = [
+        f"CAPABILITY: {capability}",
+        "CAMPAIGN:\n" + campaign[:50000],
+        live_evidence_context(artifact, capability),
+    ]
     for relative in files_for(capability):
         path = ROOT / relative
         if path.is_file():
