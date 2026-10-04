@@ -36,6 +36,7 @@ def api(prompt: str):
         "No target-specific detectors, fake evidence, weakened fail-closed behavior, "
         "workflow/secrets changes, or bounty conclusions. "
         "Return exactly one JSON object with decision PATCH or BOUNDARY, reason, required_files, expected_tests, and patch. "
+        "For PATCH, make the smallest generic change supported by the supplied live artifact; never invent file contents, line numbers, blob hashes, or context lines. If evidence is insufficient, return BOUNDARY. "
         "For PATCH, required_files must list the CYDRA source files you intend to change and expected_tests must list deterministic test names or commands that CYDRA can verify. "
         "The patch must be a complete unified git diff whose hunks can be applied to the supplied checkout. Do not return commands."
     )
@@ -459,9 +460,9 @@ def main() -> int:
             if ok:
                 touched = set(patch_paths_from_text(str(proposal.get("patch") or "")))
                 required = set(proposal.get("required_files") or [])
-                if not touched & required:
+                if touched != required:
                     run(["git", "reset", "--hard", "HEAD"])
-                    feedback = "patch validation failed: patch does not touch any declared required_file"
+                    feedback = "patch validation failed: patch paths must exactly equal required_files"
                     proposal = {}
                     print(f"patch attempt {repair_attempt} rejected:", feedback)
                     continue
