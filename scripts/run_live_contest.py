@@ -408,7 +408,39 @@ def main() -> int:
         except json.JSONDecodeError:
             continue
 
-    target_campaign = merge_campaigns(normalized_campaigns or campaigns)
+    # The deterministic repair controller is part of the capability frontier.
+    # Its exact-target replays are newer evidence than the source's initial
+    # classification. Feed the residual replay frontier forward so the next
+    # autonomous layer does not repeatedly diagnose capabilities already repaired.
+    residual_campaigns: list[dict[str, Any]] = []
+    repair_by_source = {item["source"]: item["repair"] for item in automatic_repairs}
+    for result in results:
+        source = result["source"]
+        repair = repair_by_source.get(source) or {}
+        attempts = repair.get("attempts") or []
+        latest_replays = [
+            attempt.get("replay", {}).get("campaign")
+            for attempt in attempts
+            if isinstance(attempt, dict)
+            and isinstance(attempt.get("replay"), dict)
+            and isinstance(attempt.get("replay", {}).get("campaign"), dict)
+        ]
+        if latest_replays:
+            latest = latest_replays[-1]
+            residual_campaigns.append({
+                "summary": latest.get("summary", {}),
+                "capability_failures": latest.get("capability_failures", []),
+                "blocked_experiments": latest.get("blocked_experiments", []),
+                "capability_clusters": latest.get("capability_clusters", []),
+                "dependency_graph": latest.get("dependency_graph", {"edges": []}),
+            })
+        else:
+            # No replay means no deterministic repair was applicable; preserve
+            # this source's original campaign as the residual frontier.
+            original = next((item for item in normalized_campaigns if item is not None), None)
+            residual_campaigns.append(original or {})
+
+    target_campaign = merge_campaigns(residual_campaigns or normalized_campaigns or campaigns)
     write_json(output / "capability_campaign.json", target_campaign)
 
     confirmed = []
