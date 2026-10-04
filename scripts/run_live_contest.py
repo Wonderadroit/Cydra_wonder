@@ -396,6 +396,7 @@ def main() -> int:
         try:
             classification = json.loads(classification_path.read_text(encoding="utf-8"))
             normalized_campaigns.append({
+                "source": result["source"],
                 "summary": classification.get("campaign", {}),
                 "capability_failures": json.loads(failures_path.read_text(encoding="utf-8")),
                 "blocked_experiments": json.loads(blocked_path.read_text(encoding="utf-8")) if blocked_path.exists() else [],
@@ -437,7 +438,10 @@ def main() -> int:
         else:
             # No replay means no deterministic repair was applicable; preserve
             # this source's original campaign as the residual frontier.
-            original = next((item for item in normalized_campaigns if item is not None), None)
+            original = next(
+                (item for item in normalized_campaigns if item.get("source") == source),
+                None,
+            )
             residual_campaigns.append(original or {})
 
     target_campaign = merge_campaigns(residual_campaigns or normalized_campaigns or campaigns)
