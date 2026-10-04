@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import time
 import urllib.error
@@ -361,9 +360,18 @@ def main() -> int:
 
         print(f"=== autonomous repair/replay cycle {attempt} ===")
         artifact = ROOT / "live-artifacts"
-        if artifact.exists():
-            shutil.rmtree(artifact)
         artifact.mkdir(parents=True, exist_ok=True)
+        # Preserve the LLM campaign ledger while refreshing the runner snapshot.
+        llm_ledger = artifact / "llm-repair"
+        for child in list(artifact.iterdir()):
+            if child == llm_ledger:
+                continue
+            if child.is_dir():
+                import shutil
+                shutil.rmtree(child)
+            else:
+                child.unlink(missing_ok=True)
+        llm_ledger.mkdir(parents=True, exist_ok=True)
         result = run(target)
         campaign_path = artifact / "capability_campaign.json"
         campaign = json.loads(campaign_path.read_text()) if campaign_path.exists() else {}
