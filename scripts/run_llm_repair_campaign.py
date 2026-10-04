@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROVIDER = os.getenv("CYDRA_LLM_PROVIDER", "openai").strip().lower()
-MODEL = os.getenv("CYDRA_LLM_MODEL", "openrouter/free" if PROVIDER == "openrouter" else "gpt-5.6-sol")
+MODEL = os.getenv("CYDRA_LLM_MODEL", "qwen/qwen3-coder:free" if PROVIDER == "openrouter" else "gpt-5.6-sol")
 BASE_URL = os.getenv("CYDRA_LLM_BASE_URL", "https://openrouter.ai/api/v1" if PROVIDER == "openrouter" else "https://api.openai.com/v1").rstrip("/")
 API_KEY = os.getenv("CYDRA_LLM_API_KEY", "").strip() or os.getenv("OPENROUTER_API_KEY" if PROVIDER == "openrouter" else "OPENAI_API_KEY", "").strip()
 MAX_HOURS = float(os.getenv("CYDRA_EMERGENCY_MAX_HOURS", "6"))
@@ -41,6 +41,23 @@ def api(prompt: str):
         ),
         "input": prompt,
         "max_output_tokens": 14000,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "cydra_repair_proposal",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "decision": {"type": "string", "enum": ["PATCH", "BOUNDARY"]},
+                        "reason": {"type": "string"},
+                        "patch": {"type": "string"},
+                    },
+                    "required": ["decision", "reason", "patch"],
+                    "additionalProperties": False,
+                },
+            },
+        },
     }
     req = urllib.request.Request(
         f"{BASE_URL}/responses",
@@ -53,7 +70,14 @@ def api(prompt: str):
     try:
         with urllib.request.urlopen(req, timeout=300) as response:
             return json.loads(response.read().decode())
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read().decode(errors="replace")
+        except Exception:
+            detail = ""
+        print("LLM request failed:", exc, detail[:4000])
+        return None
+    except (urllib.error.URLError, TimeoutError) as exc:
         print("LLM request failed:", exc)
         return None
 
@@ -61,14 +85,43 @@ def api(prompt: str):
 def output_text(response) -> str:
     if not response:
         return ""
-    if isinstance(response.get("output_text"), str):
-        return response["output_text"]
-    return "\n".join(
-        str(part.get("text", ""))
-        for item in response.get("output", []) or []
-        for part in item.get("content", []) or []
-        if part.get("type") == "output_text"
-    )
+
+    direct = response.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct
+
+    choices = response.get("choices") or []
+    if choices:
+        message = choices[0].get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, str):
+                    parts.append(part)
+                elif isinstance(part, dict):
+                    text = part.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            if parts:
+                return "\n".join(parts)
+
+    parts = []
+    for item in response.get("output", []) or []:
+        for part in item.get("content", []) or []:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                elif part.get("type") in {"output_text", "text"}:
+                    value = part.get("value")
+                    if isinstance(value, str):
+                        parts.append(value)
+    return "\n".join(parts)
 
 
 def files_for(capability: str) -> list[str]:
