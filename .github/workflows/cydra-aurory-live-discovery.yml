@@ -1,0 +1,48 @@
+name: CYDRA authorized Aurory live discovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Relative seed path on app.aurory.io"
+        required: true
+        default: "/"
+      max_paths:
+        description: "Maximum GET paths (1-50)"
+        required: true
+        default: "20"
+
+permissions:
+  contents: read
+
+jobs:
+  live-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CYDRA
+        run: python -m pip install -e .
+
+      - name: Run bounded authorized discovery
+        env:
+          AURORY_BUG_BOUNTY_USERNAME: cyberwonder
+          AURORY_OWNER_AUTHORIZATION: ${{ secrets.AURORY_OWNER_AUTHORIZATION }}
+        run: |
+          python scripts/aurory_live_discovery.py \
+            --seed "${{ inputs.seed }}" \
+            --max-paths "${{ inputs.max_paths }}"
+
+      - name: Publish sanitized discovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurory-live-discovery
+          path: artifacts/aurory-discovery.json
+          if-no-files-found: error
