@@ -16,6 +16,15 @@ class Hypothesis:
     belief: float = 0.5
     state: HypothesisState = HypothesisState.UNRESOLVED
     planning_predictions: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    invariant_id: str | None = None
+    target_function: str | None = None
+    attacker_capability: str | None = None
+    expected_impact: str | None = None
+
+    @property
+    def status(self) -> str:
+        """Legacy planning alias; canonical lifecycle is represented by state."""
+        return "proposed" if self.state == HypothesisState.UNRESOLVED else self.state.value
     def __post_init__(self) -> None:
         if not self.hypothesis_id.strip(): raise ValueError("hypothesis_id must not be empty")
         if not self.statement.strip(): raise ValueError("statement must not be empty")
@@ -43,5 +52,5 @@ def update_hypothesis(hypothesis: Hypothesis, verification: CandidateVerificatio
         strength = max(e.confidence for e in relevant); posterior = hypothesis.belief * (1.0 - strength * 0.5); state = HypothesisState.CONTRADICTED; rationale = "contradicting verification evidence decreased belief"
     else:
         posterior = hypothesis.belief; state = HypothesisState.UNRESOLVED; rationale = "verification remained unresolved; belief unchanged"
-    updated = Hypothesis(hypothesis.hypothesis_id, hypothesis.statement, _clamp(posterior), state, dict(hypothesis.planning_predictions))
+    updated = Hypothesis(hypothesis.hypothesis_id, hypothesis.statement, _clamp(posterior), state, dict(hypothesis.planning_predictions), hypothesis.invariant_id, hypothesis.target_function, hypothesis.attacker_capability, hypothesis.expected_impact)
     return updated, BeliefUpdate(hypothesis.hypothesis_id, hypothesis.belief, updated.belief, hypothesis.state, updated.state, verification.evidence_ids, rationale)
