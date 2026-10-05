@@ -5,6 +5,9 @@ on:
     branches:
       - feature/web2-adapter
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 jobs:
   web2-adapter:
