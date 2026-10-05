@@ -13,7 +13,7 @@ from cydra.execution_adapter import (
     AdapterRequest,
     AdapterStatus,
 )
-from cydra.models import Hypothesis
+from cydra.hypotheses import Hypothesis
 
 
 @dataclass
@@ -46,7 +46,7 @@ class BlockingAdapter:
 def hypothesis() -> Hypothesis:
     return Hypothesis(
         hypothesis_id="H-WEB2-AUTH-1",
-        claim="identity B must not access identity A's private resource",
+        statement="identity B must not access identity A's private resource",
         invariant_id="I-AUTH",
         target_function="resource",
         attacker_capability="authenticated second identity",
