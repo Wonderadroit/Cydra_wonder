@@ -10,7 +10,7 @@ are explicit in the target model.
 from dataclasses import dataclass
 
 from .adapter_experiment import AdapterExperiment, ExperimentAction, bind_adapter_experiment
-from .models import Hypothesis
+from .hypotheses import Hypothesis
 from .web2_model import Web2TargetModel
 
 
@@ -44,7 +44,7 @@ def plan_ownership_differential(
 
     hypothesis = Hypothesis(
         hypothesis_id=f"web2-auth:{resource_id}:{endpoint_id}",
-        claim=(
+        statement=(
             f"{endpoint.method} {endpoint.path} should authorize {owner_identity_id} "
             f"and apply a distinct authorization outcome to {other_identity_id} "
             f"for resource {resource_id}"
