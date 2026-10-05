@@ -80,8 +80,8 @@ def verify_reproducible_authorization_bypass(
         )
 
     return Web2CausalVerification(
-        HypothesisState.CONTRADICTED,
+        HypothesisState.UNRESOLVED,
         0.9,
-        "reproducible causal replay did not show the modeled unauthorized resource access",
+        "reproducible causal replay did not establish the modeled unauthorized resource access",
         tuple(x.action_id for x in observations),
     )
