@@ -11,7 +11,7 @@ from typing import Sequence
 
 from .execution_adapter import AdapterObservation, AdapterStatus
 from .invariants import VerificationEvidence, VerificationRole
-from .models import Hypothesis
+from .hypotheses import Hypothesis
 
 
 def authorization_differential_evidence(
