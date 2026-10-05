@@ -37,6 +37,8 @@ def api(prompt: str):
         "workflow/secrets changes, or bounty conclusions. "
         "Return exactly one JSON object with decision PATCH or BOUNDARY, reason, required_files, expected_tests, and patch. "
         "For PATCH, make the smallest generic change supported by the supplied live artifact; never invent file contents, line numbers, blob hashes, or context lines. If evidence is insufficient, return BOUNDARY. "
+        "The prompt is intentionally bounded: use only the supplied repair packet and do not assume omitted files exist. "
+        "When a complete unified diff cannot be constructed from the supplied source text, return BOUNDARY rather than a partial hunk. "
         "For PATCH, required_files must list the CYDRA source files you intend to change and expected_tests must list deterministic test names or commands that CYDRA can verify. "
         "The patch must be a complete unified git diff whose hunks can be applied to the supplied checkout. Do not return commands."
     )
@@ -147,9 +149,9 @@ def output_text(response) -> str:
 
 
 def files_for(capability: str) -> list[str]:
-    """Find relevant source files without relying on an external search binary."""
+    """Find a small, capability-focused source/test set for the repair packet."""
     matches: list[str] = []
-    for root_name in ("src", "tests", "scripts"):
+    for root_name in ("src", "tests"):
         root = ROOT / root_name
         if not root.exists():
             continue
@@ -162,17 +164,16 @@ def files_for(capability: str) -> list[str]:
                 continue
             if capability in text:
                 matches.append(path.relative_to(ROOT).as_posix())
-    return list(
-        dict.fromkeys(
-            [
-                "AGENTS.md",
-                "PROJECT_BIBLE.md",
-                "src/cydra/capability_repair.py",
-                "scripts/run_live_contest.py",
-            ]
-            + sorted(matches)[:25]
-        )
-    )
+    priority = {
+        "src/cydra/execution_readiness.py": 0,
+        "src/cydra/sequence_foundry.py": 1,
+        "src/cydra/capability_repair.py": 2,
+        "tests/test_execution_readiness.py": 3,
+        "tests/test_sequence_foundry.py": 4,
+    }
+    matches.sort(key=lambda p: (priority.get(p, 10), p))
+    return matches[:12]
+
 
 def live_evidence_context(artifact: Path, capability: str) -> str:
     """Collect bounded target-derived evidence that explains why a capability is blocked."""
@@ -198,28 +199,34 @@ def live_evidence_context(artifact: Path, capability: str) -> str:
     candidates.sort(key=lambda item: (-item[0], str(item[2])))
     parts = []
     total = 0
-    for _, _, path, text in candidates[:16]:
-        snippet = text[:12000]
-        if total + len(snippet) > 70000:
+    for _, _, path, text in candidates[:10]:
+        snippet = text[:9000]
+        if total + len(snippet) > 36000:
             break
         parts.append(f"\nLIVE EVIDENCE {path.relative_to(artifact)}\n{snippet}")
         total += len(snippet)
     return "\n".join(parts) if parts else "\nLIVE EVIDENCE: no matching target-derived JSON artifact found."
+
 
 def context(artifact: Path, capability: str) -> str:
     campaign_path = artifact / "capability_campaign.json"
     campaign = campaign_path.read_text() if campaign_path.exists() else "{}"
     parts = [
         f"CAPABILITY: {capability}",
-        "CAMPAIGN:\n" + campaign[:50000],
+        "CAMPAIGN:\n" + campaign[:18000],
         live_evidence_context(artifact, capability),
     ]
+    total = 0
     for relative in files_for(capability):
         path = ROOT / relative
-        if path.is_file():
-            parts.append(f"\nFILE {relative}\n{path.read_text(errors='replace')[:30000]}")
+        if not path.is_file():
+            continue
+        source = path.read_text(errors="replace")[:9000]
+        if total + len(source) > 50000:
+            break
+        parts.append(f"\nSOURCE {relative}\n{source}")
+        total += len(source)
     return "\n".join(parts)
-
 
 def capability_source_files(capability: str) -> list[str]:
     """Return editable CYDRA implementation files that actually mention a capability."""
