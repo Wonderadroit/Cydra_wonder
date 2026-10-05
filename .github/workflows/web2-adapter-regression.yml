@@ -1,0 +1,26 @@
+name: CYDRA Web2 adapter regression
+
+on:
+  push:
+    branches:
+      - feature/web2-adapter
+  workflow_dispatch:
+
+jobs:
+  web2-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Install pytest
+        run: python -m pip install pytest
+      - name: Run Web2 adapter regressions
+        env:
+          PYTHONPATH: src
+        run: python -m pytest -q tests/test_web2_adapter.py
