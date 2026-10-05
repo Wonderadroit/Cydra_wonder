@@ -28,3 +28,26 @@ def plan_ownership_differential(model: Web2TargetModel, *, owner_identity_id: st
     )
     return AuthorizationExperimentPlan(hypothesis, bind_adapter_experiment(hypothesis,target=model.target,actions=actions,discriminates=("owner_vs_non_owner_authorization_outcome","owner_vs_non_owner_response_observation")))
 
+
+
+def generate_ownership_differential_plans(model: Web2TargetModel) -> tuple[AuthorizationExperimentPlan, ...]:
+    """Generate only ownership-backed owner/non-owner plans from the model.
+
+    Every generated plan is a hypothesis and experiment proposal, never a finding.
+    The model must contain explicit ownership, identities, and endpoint/resource
+    relationships; nothing is inferred from endpoint names or HTTP status codes.
+    """
+    plans: list[AuthorizationExperimentPlan] = []
+    for owner_identity_id, other_identity_id, resource_id in model.candidate_cross_identity_pairs():
+        resource = model.resources[resource_id]
+        for endpoint_id, endpoint in sorted(model.endpoints.items()):
+            if resource_id not in endpoint.resource_ids:
+                continue
+            plans.append(plan_ownership_differential(
+                model,
+                owner_identity_id=owner_identity_id,
+                other_identity_id=other_identity_id,
+                resource_id=resource_id,
+                endpoint_id=endpoint_id,
+            ))
+    return tuple(plans)
