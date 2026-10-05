@@ -13,25 +13,38 @@ class FakeAdapter:
         return AdapterObservation(AdapterStatus.EXECUTED, request.action_id, value=value, evidence=(value,))
 
 
-def test_discovery_follows_same_host_html_links():
+def test_discovery_follows_same_host_html_links_and_scripts():
     adapter = FakeAdapter({
         "/": {
             "status_code": 200,
             "headers": {"Content-Type": "text/html"},
-            "body": '<a href="/account">account</a><a href="https://evil.example/x">bad</a>',
+            "body": (
+                '<a href="/account">account</a>'
+                '<script src="/static/app.js"></script>'
+                '<a href="https://evil.example/x">bad</a>'
+            ),
         },
         "/account": {
             "status_code": 200,
             "headers": {"Content-Type": "text/html"},
             "body": "<h1>account</h1>",
         },
+        "/static/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'fetch("/api/users/me"); fetch("https://evil.example/secret");',
+        },
+        "/api/users/me": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
     })
 
-    result = discover_web2_surface(adapter, target="https://app.example", max_paths=5)
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=10)
 
-    assert result.discovered_paths == ("/", "/account")
-    assert "GET /" in result.model.endpoints
-    assert "GET /account" in result.model.endpoints
+    assert result.discovered_paths == ("/", "/account", "/static/app.js", "/api/users/me")
+    assert "GET /api/users/me" in result.model.endpoints
 
 
 def test_discovery_extracts_openapi_paths_without_treating_them_as_findings():
