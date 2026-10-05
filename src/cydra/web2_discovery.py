@@ -9,6 +9,7 @@ output as a security finding.
 
 from dataclasses import dataclass
 import json
+import re
 from typing import Any, Iterable
 from urllib.parse import urljoin, urlparse
 from html.parser import HTMLParser
@@ -30,12 +31,18 @@ class _LinkParser(HTMLParser):
         self.links: set[str] = set()
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() not in {"a", "link", "form"}:
+        tag_name = tag.lower()
+        if tag_name not in {"a", "link", "form", "script"}:
             return
         for key, value in attrs:
-            if key.lower() == "href" and value:
+            if not value:
+                continue
+            key_name = key.lower()
+            if key_name == "href" and tag_name in {"a", "link"}:
                 self.links.add(value)
-            elif tag.lower() == "form" and key.lower() == "action" and value:
+            elif key_name == "action" and tag_name == "form":
+                self.links.add(value)
+            elif key_name == "src" and tag_name == "script":
                 self.links.add(value)
 
 
@@ -93,8 +100,10 @@ def discover_web2_surface(
         links: set[str] = set()
         if "json" in content_type:
             links.update(_openapi_paths(body))
-        if "html" in content_type or "<a" in body.lower() or "<form" in body.lower():
+        if "html" in content_type or "<a" in body.lower() or "<form" in body.lower() or "<script" in body.lower():
             links.update(_html_paths(body))
+        if _looks_like_javascript(path, content_type):
+            links.update(_javascript_paths(body))
 
         for candidate in sorted(links):
             normalized = _same_host_path(candidate, target)
@@ -147,6 +156,37 @@ def _openapi_paths(body: str) -> set[str]:
     if not isinstance(paths, dict):
         return set()
     return {str(path) for path in paths if str(path).startswith("/")}
+
+
+def _looks_like_javascript(path: str, content_type: str) -> bool:
+    lowered = path.lower()
+    return (
+        "javascript" in content_type
+        or lowered.endswith(".js")
+        or lowered.endswith(".mjs")
+        or ".js?" in lowered
+        or ".mjs?" in lowered
+    )
+
+
+def _javascript_paths(body: str) -> set[str]:
+    """Extract only explicit URL-like path literals from downloaded JS.
+
+    This is intentionally lexical rather than a JS interpreter: no execution,
+    no guessing, and no path enumeration. Relative API/resource references
+    are retained; absolute URLs are later constrained by _same_host_path().
+    """
+    candidates: set[str] = set()
+    patterns = (
+        r"""["'](/(?:api|graphql|rpc|v[0-9]+|auth|account|accounts|user|users|profile|profiles|inventory|shop|shops|player|players|resource|resources)(?:/[^"'\\s]*)?)["']""",
+        r"""["'](/[A-Za-z0-9._~-]+/[A-Za-z0-9._~{}-]+(?:/[A-Za-z0-9._~{}-]+)*)["']""",
+    )
+    for pattern in patterns:
+        for match in re.finditer(pattern, body):
+            value = match.group(1)
+            if value.startswith("/") and not value.startswith("//"):
+                candidates.add(value)
+    return candidates
 
 
 def build_discovery_requests(
