@@ -90,7 +90,7 @@ class Web2Adapter:
 
         identity = self._identities.get(identity_id) if identity_id else None
         jar = self._jars.setdefault(identity_id or "__anonymous__", http.cookiejar.CookieJar())
-        opener = urllib.request.build_opener(http.cookiejar.HTTPCookieProcessor(jar))
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
         merged_headers = {"User-Agent": "CYDRA-Web2-Adapter/1.0"}
         if identity:
@@ -114,6 +114,7 @@ class Web2Adapter:
             method=method.upper(),
         )
 
+        final_url = url
         try:
             response = opener.open(request_obj, timeout=self.target.timeout_seconds)
             final_url = response.geturl()
@@ -122,7 +123,8 @@ class Web2Adapter:
             response_headers = dict(response.headers.items())
             raw_body = response.read()
         except urllib.error.HTTPError as error:
-            self._validate_final_host(error.geturl())
+            final_url = error.geturl()
+            self._validate_final_host(final_url)
             status = error.code
             response_headers = dict(error.headers.items())
             raw_body = error.read()
@@ -132,7 +134,7 @@ class Web2Adapter:
         body_text = raw_body.decode("utf-8", errors="replace")
         return {
             "url": url,
-            "final_url": final_url if "final_url" in locals() else error.geturl(),
+            "final_url": final_url,
             "method": method.upper(),
             "identity_id": identity_id,
             "status_code": status,
