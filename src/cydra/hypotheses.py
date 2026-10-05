@@ -20,6 +20,11 @@ class Hypothesis:
     target_function: str | None = None
     attacker_capability: str | None = None
     expected_impact: str | None = None
+
+    @property
+    def status(self) -> str:
+        """Legacy planning alias; canonical lifecycle is represented by state."""
+        return "proposed" if self.state == HypothesisState.UNRESOLVED else self.state.value
     def __post_init__(self) -> None:
         if not self.hypothesis_id.strip(): raise ValueError("hypothesis_id must not be empty")
         if not self.statement.strip(): raise ValueError("statement must not be empty")
