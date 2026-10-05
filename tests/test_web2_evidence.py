@@ -1,13 +1,13 @@
 from cydra.execution_adapter import AdapterObservation, AdapterStatus
 from cydra.invariants import VerificationRole
-from cydra.models import Hypothesis
+from cydra.hypotheses import Hypothesis
 from cydra.web2_evidence import authorization_differential_evidence
 
 
 def hypothesis() -> Hypothesis:
     return Hypothesis(
         hypothesis_id="H-WEB2-AUTH-EVIDENCE",
-        claim="owner and non-owner should have distinct authorization outcomes",
+        statement="owner and non-owner should have distinct authorization outcomes",
         invariant_id="I-AUTH",
         target_function="GET /records/1",
         attacker_capability="authenticated non-owner",
