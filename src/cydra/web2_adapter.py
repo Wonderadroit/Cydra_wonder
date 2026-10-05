@@ -80,12 +80,15 @@ class Web2Adapter:
         jar = self._jars.setdefault(identity_id or "__anonymous__", http.cookiejar.CookieJar())
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
         merged_headers = {"User-Agent": "CYDRA-Web2-Adapter/1.0"}
-        if identity: merged_headers.update(identity.headers)
+        if identity:
+            merged_headers.update(identity.headers)
         merged_headers.update(dict(headers or {}))
         payload = None
         if body is not None:
-            if isinstance(body, bytes): payload = body
-            elif isinstance(body, str): payload = body.encode("utf-8")
+            if isinstance(body, bytes):
+                payload = body
+            elif isinstance(body, str):
+                payload = body.encode("utf-8")
             else:
                 payload = json.dumps(body, separators=(",", ":")).encode("utf-8")
                 merged_headers.setdefault("Content-Type", "application/json")
@@ -102,13 +105,21 @@ class Web2Adapter:
         except urllib.error.URLError as error:
             raise OSError(f"HTTP transport failed: {error.reason}") from error
         body_text = raw_body.decode("utf-8", errors="replace")
-        return {"url": url, "method": method.upper(), "identity_id": identity_id,
-                "status_code": status, "headers": response_headers, "body": body_text,
-                "body_sha256": hashlib.sha256(raw_body).hexdigest()}
+        return {
+            "url": url,
+            "method": method.upper(),
+            "identity_id": identity_id,
+            "status_code": status,
+            "headers": response_headers,
+            "body": body_text,
+            "body_sha256": hashlib.sha256(raw_body).hexdigest(),
+        }
 
     def export_state(self, path: str | Path) -> None:
         destination = Path(path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(json.dumps({"adapter": self.adapter_id, "target": self.target.base_url,
-                                           "identities": sorted(self._identities)}, indent=2) + "
-", encoding="utf-8")
+        payload = json.dumps(
+            {"adapter": self.adapter_id, "target": self.target.base_url, "identities": sorted(self._identities)},
+            indent=2,
+        ) + "\n"
+        destination.write_text(payload, encoding="utf-8")
