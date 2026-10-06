@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/web2-adapter
+      - feature/web2-hypothesis-generation
   pull_request:
     branches:
       - main
