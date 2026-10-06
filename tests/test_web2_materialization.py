@@ -93,3 +93,16 @@ def test_endpoint_resource_relation_materializes_generic_id():
     assert plan.executable
     assert plan.materialized_path == "/records/record-42"
     assert plan.requirements[0].resource_id == "resource:1"
+
+
+def test_extracts_resource_identifiers_from_observed_json_script_state():
+    endpoint = Web2EndpointModel("GET /", "GET", "/")
+    observed = (
+        '<html><script id="__NEXT_DATA__" type="application/json">'
+        '{"props":{"pageProps":{"items":[{"itemId":"item-99"}]}}}'
+        '</script></html>'
+    )
+    found = extract_resource_identifiers(endpoint, observed, "obs-html")
+    assert [item[0].identifier for item in found] == ["item-99"]
+    assert found[0][1].field_path == "props.pageProps.items[0].itemId"
+    assert found[0][1].source_observation_id == "obs-html"
