@@ -290,6 +290,17 @@ def discover_web2_surface(
                 )
             sequence += 1
 
+    # Statically observed methods are planned surfaces; discovery remains
+    # read-only GET execution and never turns method extraction into evidence.
+    for analysis in bundle_analyses:
+        for method, candidate in analysis.request_endpoints:
+            normalized = _same_host_path(candidate, target)
+            if normalized is None or method == "GET":
+                continue
+            model.add_endpoint(
+                Web2EndpointModel(f"{method} {normalized}", method, normalized)
+            )
+
     materialization_plans = tuple(
         materialize_endpoint(endpoint, model.resources.values(), resource_provenance)
         for endpoint in sorted(model.endpoints.values(), key=lambda item: item.endpoint_id)
