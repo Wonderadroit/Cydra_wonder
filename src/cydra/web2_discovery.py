@@ -332,7 +332,7 @@ def _path_priority(path: str) -> int:
     ):
         score = 95
     elif re.search(r"/(?:chunks/app|chunks/pages|app|pages)(?:/|$)", lowered):
-        score = 90
+        score = 110
 
     if re.search(r"(?:\{|\}|:id|:user|:wallet|:player|:account)", lowered):
         score += 12
