@@ -420,3 +420,28 @@ def test_bundle_analysis_keeps_runtime_env_origin_unresolved():
     assert analysis.service_origins == ()
     assert analysis.unauthorized_origins == ()
     assert analysis.unresolved_request_templates
+
+
+def test_html_bootstrap_service_origin_is_evidence_but_not_execution_authorization():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": (
+                '<script id="__NEXT_DATA__" type="application/json">'
+                '{"apiBaseUrl":"https://api.example.net"}'
+                '</script>'
+            ),
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        max_paths=1,
+        max_js_bundles=1,
+    )
+    runtime = [item for item in result.bundle_analyses if item.path == "/#runtime-config"]
+    assert runtime
+    assert runtime[0].service_origins == ("https://api.example.net",)
+    assert runtime[0].unauthorized_origins == ("https://api.example.net",)
+    assert [o.action_id for o in result.observations] == ["discover:1"]
