@@ -199,7 +199,7 @@ def _canonicalize_discovery_candidate(value: str) -> str:
     malformed executable path. Preserve only the explicit path literal.
     """
     candidate = value.strip()
-    replace_marker = re.search(r"[\\\"']\\.replace\\(\\s*[\\\"']", candidate)
+    replace_marker = re.search(r'''[\"']\.replace\(\s*[\"']''', candidate)
     if replace_marker:
         candidate = candidate[:replace_marker.start()]
     return candidate.rstrip()
