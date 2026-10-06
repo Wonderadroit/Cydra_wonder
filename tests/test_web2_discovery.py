@@ -740,3 +740,24 @@ def test_negative_response_downgrades_later_candidates_without_deleting_them():
     result = discover_web2_surface(adapter, target="https://app.example", max_paths=3)
     assert "/v1/missing" in result.discovered_paths
     assert "/v1/account" in result.discovered_paths
+
+
+def test_discovery_models_non_get_request_methods_as_planned_endpoints():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'api.get("/v1/items"); api.post("/v1/items"); api.delete("/v1/items/{id}");',
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=1,
+        max_js_bundles=1,
+    )
+    endpoints = {(item.method, item.path) for item in result.model.endpoints.values()}
+    assert ("GET", "/v1/items") in endpoints
+    assert ("POST", "/v1/items") in endpoints
+    assert ("DELETE", "/v1/items/{id}") in endpoints
