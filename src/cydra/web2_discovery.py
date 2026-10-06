@@ -100,6 +100,7 @@ def discover_web2_surface(
     target: str,
     seeds: Iterable[str] = ("/",),
     identity_id: str | None = None,
+    identity_authenticated: bool = False,
     max_paths: int = 50,
     max_js_bundles: int = 16,
 ) -> Web2DiscoveryResult:
@@ -124,7 +125,7 @@ def discover_web2_surface(
         # Preserve the caller identity in the target model so downstream
         # reasoning can distinguish an observed actor from an unmodeled one.
         # This records identity provenance only; it never infers ownership.
-        model.add_identity(Web2IdentityModel(identity_id, identity_id, authenticated=True))
+        model.add_identity(Web2IdentityModel(identity_id, identity_id, authenticated=identity_authenticated))
     queue: list[tuple[int, int, str]] = []
     queued: set[str] = set()
     seen: set[str] = set()
@@ -352,6 +353,10 @@ def discover_web2_surface(
         response_fingerprints=response_fingerprints,
         model=model,
     )
+    capability_gaps = tuple(dict.fromkeys((*capability_gaps, *_detect_resource_state_acquisition_gaps(
+        response_fingerprints=response_fingerprints,
+        model=model,
+    ))))
     return Web2DiscoveryResult(
         model=model,
         observations=tuple(observations),
@@ -368,6 +373,32 @@ def discover_web2_surface(
         ),
         capability_gaps=capability_gaps,
     )
+
+
+def _detect_resource_state_acquisition_gaps(
+    *,
+    response_fingerprints: dict[str, Web2ResponseFingerprint],
+    model: Web2TargetModel,
+) -> tuple[str, ...]:
+    """Surface a generic resource-state boundary without inventing auth or IDs.
+
+    Static API discovery can establish that resource-shaped endpoints exist, but
+    repeated generic negative responses do not prove why the target returned
+    them. When no resource identifiers are actually observed, preserve that
+    boundary as a capability gap so planning does not silently stop with an
+    empty model. Authentication state is intentionally not inferred here.
+    """
+    if model.resources:
+        return ()
+    api_paths = tuple(
+        path for path, fingerprint in response_fingerprints.items()
+        if fingerprint.generic_negative and _looks_like_api_surface(path)
+    )
+    if len(api_paths) < 2:
+        return ()
+    if not any(_looks_like_api_surface(endpoint.path) for endpoint in model.endpoints.values()):
+        return ()
+    return ("RESOURCE_STATE_ACQUISITION",)
 
 
 def _detect_service_origin_resolution_gaps(
