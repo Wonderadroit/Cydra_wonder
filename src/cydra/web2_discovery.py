@@ -31,6 +31,8 @@ class Web2BundleAnalysis:
     path: str
     classification: str
     base_urls: tuple[str, ...] = ()
+    service_origins: tuple[str, ...] = ()
+    unauthorized_origins: tuple[str, ...] = ()
     request_methods: tuple[str, ...] = ()
     endpoint_candidates: tuple[str, ...] = ()
     unresolved_request_templates: tuple[str, ...] = ()
@@ -470,18 +472,48 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
     """Recover statically-resolvable request construction without JS execution."""
     constants = _javascript_constants(body)
     base_urls: set[str] = set()
+    service_origins: set[str] = set()
+    unauthorized_origins: set[str] = set()
     methods: set[str] = set()
     candidates: set[str] = set()
     unresolved: set[str] = set()
 
+    # Resolve service origins only from application/config evidence. A URL is
+    # not trusted merely because a route looks API-like: the surrounding config
+    # key/property must establish that it is a service origin.
+    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL)"
     for match in re.finditer(
-        rf"\b(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE)\s*[:=]\s*({_JS_STRING}|{_IDENT})",
-        body,
+        rf"\b{origin_key}\s*[:=]\s*({_JS_STRING}|{_IDENT})", body
     ):
         value = _resolve_js_expression(match.group(1), constants)
         if value is not None:
             base_urls.add(value)
+            parsed = urlparse(value)
+            if parsed.scheme in {"http", "https"} and parsed.hostname:
+                service_origins.add(f"{parsed.scheme}://{parsed.netloc}")
 
+    # Common runtime/bootstrap configuration shapes. These are intentionally
+    # lexical: CYDRA records the origin only when the application itself
+    # supplies a concrete URL. process.env/import.meta.env references remain
+    # unresolved because their runtime value is not evidence in the bundle.
+    config_property = rf"(?:window|globalThis|self)\s*(?:\.[A-Za-z_$][A-Za-z0-9_$]*|\[['\"][^'\"]+['\"]\])*\s*[.]?\s*{origin_key}"
+    for match in re.finditer(rf"{config_property}\s*[:=]\s*({_JS_STRING})", body):
+        value = _decode_js_string(match.group(1))
+        if value:
+            parsed = urlparse(value)
+            if parsed.scheme in {"http", "https"} and parsed.hostname:
+                service_origins.add(f"{parsed.scheme}://{parsed.netloc}")
+
+    # Object/bootstrap literals such as { API_URL: "https://service.example" }
+    # are also application-provided configuration evidence.
+    for match in re.finditer(rf"\b{origin_key}\s*:\s*({_JS_STRING})", body):
+        value = _decode_js_string(match.group(1))
+        if value:
+            parsed = urlparse(value)
+            if parsed.scheme in {"http", "https"} and parsed.hostname:
+                service_origins.add(f"{parsed.scheme}://{parsed.netloc}")
+
+    target_host = urlparse(path).hostname  # path is relative; retained for type symmetry
     patterns = (
         (rf"\bfetch\s*\(\s*([^,\)]+)([^\)]*)\)", "fetch"),
         (rf"\baxios\.(get|post|put|patch|delete|head|options)\s*\(\s*([^,\)]+)([^\)]*)\)", "axios"),
@@ -532,11 +564,19 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
     if "$" + "{" in body and re.search(r"\b(?:fetch|Request|axios\.[A-Za-z]+)|\.open", body):
         unresolved.add("<dynamic-request-template>")
     candidates = {_canonicalize_discovery_candidate(candidate) for candidate in candidates if candidate}
-    classification = "application" if candidates or base_urls or unresolved else "static_or_vendor"
+    target_host = None
+    # Authorization is deliberately checked later by _same_host_path(). Here we
+    # expose concrete service origins so the planner can distinguish "resolved"
+    # from "authorized for active execution".
+    # No external origin is promoted into the executable frontier.
+    unauthorized_origins = set(service_origins)
+    classification = "application" if candidates or base_urls or service_origins or unresolved else "static_or_vendor"
     return Web2BundleAnalysis(
         path=path,
         classification=classification,
         base_urls=tuple(sorted(base_urls)),
+        service_origins=tuple(sorted(service_origins)),
+        unauthorized_origins=tuple(sorted(unauthorized_origins)),
         request_methods=tuple(sorted(methods)),
         endpoint_candidates=tuple(sorted(candidates)),
         unresolved_request_templates=tuple(sorted(unresolved)),
