@@ -500,7 +500,8 @@ def _request_method_from_context(context: str, default: str = "GET") -> str:
 
 def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleAnalysis:
     """Recover statically-resolvable request construction without JS execution."""
-    runtime_aliases = _javascript_runtime_config_aliases(body)\n    constants = _javascript_constants(body, runtime_aliases)
+    runtime_aliases = _javascript_runtime_config_aliases(body)
+    constants = _javascript_constants(body, runtime_aliases)
     base_urls: set[str] = set()
     service_origins: set[str] = set()
     unauthorized_origins: set[str] = set()
@@ -515,7 +516,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
     for match in re.finditer(
         rf"\b{origin_key}\s*[:=]\s*({_JS_STRING}|{_IDENT})", body
     ):
-        value = _resolve_js_expression(match.group(1), constants)
+        value = _resolve_js_expression(match.group(1), constants, runtime_aliases)
         if value is not None:
             base_urls.add(value)
             parsed = urlparse(value)
