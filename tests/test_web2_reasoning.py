@@ -110,3 +110,15 @@ def test_resource_state_repair_waits_for_frontier_when_incomplete():
     assert plan.state == "INCOMPLETE_FRONTIER"
     assert plan.required_capabilities == ("javascript_frontier",)
     assert "Do not patch resource extraction" in plan.reason
+
+
+def test_selector_expands_incomplete_frontier_instead_of_repairing():
+    h = Hypothesis("h1", "authorization must separate identities")
+    decision = select_next_web2_experiment(
+        h,
+        has_differential_support=False,
+        has_causal_verification=False,
+        capability_gap=True,
+        capability_state="INCOMPLETE_FRONTIER",
+    )
+    assert decision.kind == "MODEL_EXPANSION"
