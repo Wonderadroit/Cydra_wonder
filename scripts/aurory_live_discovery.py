@@ -117,14 +117,7 @@ def main() -> int:
             "plans": [{"hypothesis_id": plan.hypothesis.hypothesis_id, "statement": plan.hypothesis.statement, "target_function": plan.hypothesis.target_function, "expected_impact": plan.hypothesis.expected_impact} for plan in hypothesis_planning.plans],
             "capability_gaps": list(hypothesis_planning.capability_gaps),
         },
-        "discovered_paths": list(result.discovered_paths),
-        "authorized_execution": True,
-        "mode": "authenticated" if token else "anonymous_with_bugcrowd_header",
-        "bug_bounty_username": username,
-        "max_paths": args.max_paths,
-        "max_js_bundles": args.max_js_bundles,
-        "discovered_paths": list(result.discovered_paths),
-        "bundle_analyses": [
+        "discovered_paths": list(result.discovered_paths),        "bundle_analyses": [
             {
                 "path": bundle.path,
                 "classification": bundle.classification,
@@ -142,6 +135,8 @@ def main() -> int:
                 "endpoint_id": endpoint_id,
                 "method": endpoint.method,
                 "path": endpoint.path,
+                "resource_ids": list(endpoint.resource_ids),
+                "action": endpoint.action,
             }
             for endpoint_id, endpoint in sorted(result.model.endpoints.items())
         ],
