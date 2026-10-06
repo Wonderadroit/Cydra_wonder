@@ -109,6 +109,8 @@ def main() -> int:
                 "path": bundle.path,
                 "classification": bundle.classification,
                 "base_urls": list(bundle.base_urls),
+                "service_origins": list(bundle.service_origins),
+                "unauthorized_origins": list(bundle.unauthorized_origins),
                 "request_methods": list(bundle.request_methods),
                 "endpoint_candidates": list(bundle.endpoint_candidates),
                 "unresolved_request_templates": list(bundle.unresolved_request_templates),
