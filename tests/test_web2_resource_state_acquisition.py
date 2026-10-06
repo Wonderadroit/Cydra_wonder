@@ -167,3 +167,52 @@ def test_resource_state_capability_is_classified_instead_of_repaired_blindly():
     state = next(item for item in result.capability_states if item.capability == "RESOURCE_STATE_ACQUISITION")
     assert state.status in {"BLOCKED_CONTEXT", "INCOMPLETE_FRONTIER", "EXHAUSTED"}
     assert state.status != "RESOLVED"
+
+
+def test_nextjs_serialized_response_state_provides_resource_provenance():
+    class NextJsAdapter:
+        def execute(self, request):
+            path = request.inputs["path"]
+            if path == "/":
+                body = (
+                    '<script>self.__next_f.push([1,"{\\"items\\":[{\\"id\\":\\"next-item-7\\"}]}"])</script>'
+                    '<a href="/v1/items/{id}">item</a>'
+                )
+            elif path == "/v1/items/next-item-7":
+                body = '{"id":"next-item-7","state":"ready"}'
+            else:
+                body = "{}"
+            return AdapterObservation(
+                AdapterStatus.EXECUTED,
+                request.action_id,
+                value={
+                    "status_code": 200,
+                    "body": body,
+                    "headers": {"Content-Type": "text/html"},
+                },
+                evidence=(body,),
+            )
+
+    result = discover_web2_surface(
+        NextJsAdapter(),
+        target="https://authorized.example",
+        seeds=("/",),
+        identity_id="authorized-owner",
+        identity_authenticated=True,
+        max_paths=2,
+        max_js_bundles=0,
+    )
+
+    resource = next(iter(result.model.resources.values()))
+    assert resource.identifier == "next-item-7"
+    provenance = next(
+        item for item in result.resource_provenance
+        if item.resource_id == resource.resource_id
+    )
+    assert provenance.field_path == "items[0].id"
+    dependent = next(
+        plan for plan in result.materialization_plans
+        if plan.template == "/v1/items/{id}"
+    )
+    assert dependent.executable
+    assert dependent.materialized_path == "/v1/items/next-item-7"
