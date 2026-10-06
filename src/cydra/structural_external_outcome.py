@@ -61,6 +61,32 @@ def _ignored_failure_capable_calls(body: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(calls))
 
 
+
+def _declared_bool_return_calls(source: str) -> set[str]:
+    """Return function names locally declared as explicit boolean producers."""
+    return {
+        match.group("name")
+        for match in re.finditer(
+            r"\bfunction\s+(?P<name>[A-Za-z_]\w*)\s*\([^)]*\)[^{;]*\breturns\s*\(\s*bool\s*\)",
+            source,
+        )
+    }
+
+
+def _ignored_declared_failure_calls(source: str, body: str) -> tuple[str, ...]:
+    """Find discarded calls to locally modeled functions that explicitly return bool."""
+    producers = _declared_bool_return_calls(source)
+    if not producers:
+        return ()
+    calls: list[str] = []
+    for match in re.finditer(
+        r"(?m)^\s*(?P<callee>[A-Za-z_]\w*)\s*\.\s*(?P<method>[A-Za-z_]\w*)\s*\([^;{}]*\)\s*;",
+        body,
+    ):
+        if match.group("method") in producers:
+            calls.append(re.sub(r"\s+", "", match.group("callee")))
+    return tuple(dict.fromkeys(calls))
+
 def generate_external_outcome_hypotheses(
     contract: ContractModel, semantic=()
 ) -> ExternalOutcomeContribution:
@@ -82,7 +108,7 @@ def generate_external_outcome_hypotheses(
         if function.visibility not in {"public", "external"}:
             continue
         body = _body(source, function.name)
-        calls = _ignored_failure_capable_calls(body)
+        calls = tuple(dict.fromkeys((*_ignored_failure_capable_calls(body), *_ignored_declared_failure_calls(source, body))))
         if len(calls) < 1:
             continue
         # The structural signal is deliberately narrow: only failure-capable
