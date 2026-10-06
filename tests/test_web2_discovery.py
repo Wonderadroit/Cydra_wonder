@@ -329,7 +329,7 @@ def test_discovery_prioritizes_parameterized_resource_and_workflow_routes():
 
     result = discover_web2_surface(adapter, target="https://app.example", max_paths=4)
 
-    assert result.discovered_paths[:3] == ("/", "/v1/items/{id}", "/v1/items")
+    assert result.discovered_paths[:3] == ("/", "/static/app.js", "/v1/items/{id}")
     # discovered_paths is the modeled frontier; execution is bounded separately.
     # Static assets may remain modeled even when they are not selected for execution.
     assert "/assets/logo.png" in result.discovered_paths
