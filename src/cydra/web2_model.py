@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 class Web2IdentityModel:
     identity_id: str
     label: str
-    authenticated: bool = True
+    authenticated: bool = False
 
 
 @dataclass(frozen=True)
