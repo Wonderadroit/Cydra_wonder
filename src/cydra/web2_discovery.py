@@ -70,6 +70,7 @@ class Web2DiscoveryResult:
     materialization_plans: tuple[Web2MaterializationPlan, ...] = ()
     service_origin_relations: tuple[Web2ServiceOriginRelation, ...] = ()
     response_fingerprints: tuple[tuple[str, Web2ResponseFingerprint], ...] = ()
+    capability_gaps: tuple[str, ...] = ()
 
 
 class _LinkParser(HTMLParser):
@@ -345,6 +346,12 @@ def discover_web2_surface(
                     authorized_for_execution=urlparse(origin).hostname == authorized_host,
                 )
             )
+    capability_gaps = _detect_service_origin_resolution_gaps(
+        target=target,
+        bundle_analyses=bundle_analyses,
+        response_fingerprints=response_fingerprints,
+        model=model,
+    )
     return Web2DiscoveryResult(
         model=model,
         observations=tuple(observations),
@@ -359,7 +366,78 @@ def discover_web2_surface(
                 key=lambda item: (item.source, item.origin, item.relation),
             )
         ),
+        capability_gaps=capability_gaps,
     )
+
+
+def _detect_service_origin_resolution_gaps(
+    *,
+    target: str,
+    bundle_analyses: list[Web2BundleAnalysis],
+    response_fingerprints: dict[str, Web2ResponseFingerprint],
+    model: Web2TargetModel,
+) -> tuple[str, ...]:
+    """Identify an execution-readiness boundary without treating it as a finding.
+
+    A service-origin gap is raised only when the application exposes API-like
+    request construction, multiple same-origin API candidates return generic
+    negative responses, and the bundle evidence does not establish an
+    authorized service origin that explains those requests. External origins
+    remain evidence only; CYDRA never probes them merely because they were
+    recovered from JavaScript.
+    """
+    api_negative_paths = tuple(
+        path for path, fingerprint in response_fingerprints.items()
+        if fingerprint.generic_negative and _looks_like_api_surface(path)
+    )
+    if len(api_negative_paths) < 2:
+        return ()
+
+    application_analyses = [
+        analysis for analysis in bundle_analyses
+        if analysis.classification == "application"
+    ]
+    if not application_analyses:
+        return ()
+
+    has_request_construction = any(
+        analysis.request_methods or analysis.endpoint_candidates or analysis.unresolved_request_templates
+        for analysis in application_analyses
+    )
+    if not has_request_construction:
+        return ()
+
+    authorized_origins = {
+        origin for analysis in application_analyses
+        for origin in analysis.service_origins
+        if urlparse(origin).hostname == urlparse(target).hostname
+    }
+    unauthorized_origins = {
+        origin for analysis in application_analyses
+        for origin in analysis.unauthorized_origins
+    }
+    unresolved_templates = any(
+        analysis.unresolved_request_templates for analysis in application_analyses
+    )
+
+    # A same-origin service declaration explains the negative responses, so it
+    # is not an origin-resolution gap. Otherwise the combination of repeated
+    # API negatives and unresolved/external origin evidence means the current
+    # execution target cannot yet be causally connected to the recovered API
+    # surface.
+    if authorized_origins:
+        return ()
+    if not unauthorized_origins and not unresolved_templates:
+        return ()
+
+    return (
+        "SERVICE_ORIGIN_RESOLUTION",
+    )
+
+
+def _looks_like_api_surface(path: str) -> bool:
+    lowered = path.lower().split("?", 1)[0]
+    return bool(re.search(r"/(?:api|graphql|rpc|v[0-9]+)(?:/|$)", lowered))
 
 
 def _origin_for_path(path: str, target: str) -> str:
