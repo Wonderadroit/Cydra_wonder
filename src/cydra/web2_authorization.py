@@ -10,7 +10,7 @@ class AuthorizationExperimentPlan:
     hypothesis: Hypothesis
     experiment: AdapterExperiment
 
-def plan_ownership_differential(model: Web2TargetModel, *, owner_identity_id: str, other_identity_id: str, resource_id: str, endpoint_id: str) -> AuthorizationExperimentPlan:
+def plan_ownership_differential(model: Web2TargetModel, *, owner_identity_id: str, other_identity_id: str, resource_id: str, endpoint_id: str, provenance: tuple[Web2ResourceProvenance, ...] = ()) -> AuthorizationExperimentPlan:
     resource, endpoint = model.resources.get(resource_id), model.endpoints.get(endpoint_id)
     if resource is None: raise ValueError(f"unknown resource: {resource_id}")
     if endpoint is None: raise ValueError(f"unknown endpoint: {endpoint_id}")
@@ -22,7 +22,7 @@ def plan_ownership_differential(model: Web2TargetModel, *, owner_identity_id: st
         statement=f"{endpoint.method} {endpoint.path} should authorize {owner_identity_id} and apply a distinct authorization outcome to {other_identity_id} for resource {resource_id}",
         invariant_id=f"ownership:{resource_id}", target_function=f"{endpoint.method} {endpoint.path}",
         attacker_capability="authenticated_non_owner_identity", expected_impact="UNAUTHORIZED_RESOURCE_ACCESS")
-    materialization = materialize_endpoint(endpoint, (resource,), ())
+    materialization = materialize_endpoint(endpoint, (resource,), provenance)
     if not materialization.executable or materialization.materialized_path is None:
         raise ValueError(
             f"materialization capability gap for {endpoint_id}: "
