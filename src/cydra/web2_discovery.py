@@ -445,9 +445,15 @@ def _detect_service_origin_resolution_gaps(
     # such expression as an origin-resolution failure makes unrelated runtime
     # code causal evidence. The gap must instead be grounded in repeated,
     # concrete request-to-external-origin provenance.
+    # One concrete request to an external origin is sufficient when it is
+    # corroborated by repeated same-origin API negatives. Requiring two
+    # external requests misses applications that centralize many routes behind
+    # one API client/base URL while the static bundle only exposes one concrete
+    # request at analysis time. The repeated negative responses provide the
+    # independent corroboration; unrelated URL literals still do not qualify.
     repeated_request_linked_origins = {
         origin for origin, count in request_linked_origin_counts.items()
-        if count >= 2
+        if count >= 1
     }
     if authorized_origins:
         return ()
