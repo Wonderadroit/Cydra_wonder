@@ -20,11 +20,14 @@ def main() -> int:
     )
     parser.add_argument("--seed", action="append", default=["/"], help="Relative seed path; repeatable.")
     parser.add_argument("--max-paths", type=int, default=20)
+    parser.add_argument("--max-js-bundles", type=int, default=16)
     parser.add_argument("--output", default="artifacts/aurory-discovery.json")
     args = parser.parse_args()
 
     if args.max_paths < 1 or args.max_paths > 50:
         raise SystemExit("--max-paths must be between 1 and 50")
+    if args.max_js_bundles < 0 or args.max_js_bundles > args.max_paths:
+        raise SystemExit("--max-js-bundles must be between 0 and max-paths")
 
     username = os.environ.get("AURORY_BUG_BOUNTY_USERNAME", DEFAULT_BUG_BOUNTY_USERNAME).strip()
     if not username or any(char.isspace() for char in username):
@@ -58,6 +61,7 @@ def main() -> int:
         seeds=args.seed,
         identity_id=identity_id,
         max_paths=args.max_paths,
+        max_js_bundles=args.max_js_bundles,
     )
 
     report = {
@@ -66,7 +70,19 @@ def main() -> int:
         "mode": "authenticated" if token else "anonymous_with_bugcrowd_header",
         "bug_bounty_username": username,
         "max_paths": args.max_paths,
+        "max_js_bundles": args.max_js_bundles,
         "discovered_paths": list(result.discovered_paths),
+        "bundle_analyses": [
+            {
+                "path": bundle.path,
+                "classification": bundle.classification,
+                "base_urls": list(bundle.base_urls),
+                "request_methods": list(bundle.request_methods),
+                "endpoint_candidates": list(bundle.endpoint_candidates),
+                "unresolved_request_templates": list(bundle.unresolved_request_templates),
+            }
+            for bundle in result.bundle_analyses
+        ],
         "endpoints": [
             {
                 "endpoint_id": endpoint_id,
