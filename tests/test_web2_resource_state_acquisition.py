@@ -125,3 +125,45 @@ def test_missing_anonymous_resource_state_stays_fail_closed():
     assert not dependent.executable
     assert dependent.materialized_path is None
     assert dependent.requirements[0].resource_id is None
+
+
+def test_resource_state_capability_is_classified_instead_of_repaired_blindly():
+    class FrontierAdapter(AuthorizedStateAdapter):
+        def execute(self, request):
+            path = request.inputs["path"]
+            self.requests.append((request.inputs.get("identity_id"), path))
+            if path == "/":
+                body = (
+                    '<script src="/app.js"></script>'
+                    '<a href="/v1/items">items</a>'
+                    '<a href="/v1/items/{id}">item</a>'
+                )
+            elif path == "/app.js":
+                body = 'fetch("/v1/items");'
+            elif path == "/v1/items":
+                body = "Not Found"
+            else:
+                body = "{}"
+            return AdapterObservation(
+                AdapterStatus.EXECUTED,
+                request.action_id,
+                value={
+                    "status_code": 404 if path == "/v1/items" else 200,
+                    "body": body,
+                    "headers": {"Content-Type": "application/javascript" if path == "/app.js" else "text/html"},
+                },
+                evidence=(body,),
+            )
+
+    result = discover_web2_surface(
+        FrontierAdapter(),
+        target="https://authorized.example",
+        seeds=("/",),
+        identity_id="anonymous-owner",
+        identity_authenticated=False,
+        max_paths=10,
+        max_js_bundles=0,
+    )
+    state = next(item for item in result.capability_states if item.capability == "RESOURCE_STATE_ACQUISITION")
+    assert state.status in {"BLOCKED_CONTEXT", "INCOMPLETE_FRONTIER", "EXHAUSTED"}
+    assert state.status != "RESOLVED"
