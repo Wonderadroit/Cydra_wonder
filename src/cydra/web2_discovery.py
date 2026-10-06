@@ -266,8 +266,18 @@ def discover_web2_surface(
                 analyzed_bundles.add(path)
                 # Endpoints recovered from an already-executed application
                 # bundle outrank API/resource links that were merely present
-                # in the surrounding HTML.
+                # in the surrounding HTML. Collection surfaces receive an
+                # additional generic readiness boost because their observed
+                # identifiers can unlock many dependent parameterized routes.
                 add_links(analysis.endpoint_candidates, boost=20)
+                add_links(
+                    (
+                        candidate
+                        for candidate in analysis.endpoint_candidates
+                        if _looks_like_resource_collection(candidate)
+                    ),
+                    boost=70,
+                )
             add_links(_javascript_paths(body), boost=20)
 
         for candidate, priority in sorted(links.items()):
@@ -426,6 +436,29 @@ def _same_host_path(value: str, target: str) -> str | None:
         return None
     path = parsed.path or "/"
     return path + (f"?{parsed.query}" if parsed.query else "")
+
+
+def _looks_like_resource_collection(path: str) -> bool:
+    """Recognize read-only collection surfaces that can yield concrete IDs.
+
+    This is scheduling metadata only. The heuristic does not assert that a
+    route is sensitive or exploitable; it only moves explicit collection-like
+    GET surfaces ahead of unrelated static work so their observed identifiers
+    can unlock dependent templates.
+    """
+    lowered = path.lower().split("?", 1)[0]
+    if not lowered.startswith("/") or extract_template_parameters(lowered):
+        return False
+    segments = [segment for segment in lowered.split("/") if segment]
+    if len(segments) < 2:
+        return False
+    terminal = segments[-1]
+    if terminal in {
+        "search", "stats", "status", "latest", "upcoming", "succeeded",
+        "config", "limits", "metadata", "images", "index",
+    }:
+        return False
+    return terminal.endswith("s")
 
 
 def _path_priority(path: str) -> int:
