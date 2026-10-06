@@ -40,6 +40,7 @@ class Web2BundleAnalysis:
     # Concrete request -> service-origin provenance. This preserves the
     # relationship even when the origin is not authorized for execution.
     request_origins: tuple[tuple[str, str], ...] = ()
+    request_endpoints: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -669,6 +670,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
     candidates: set[str] = set()
     unresolved: set[str] = set()
     request_origins: dict[str, str] = {}
+    request_endpoints: set[tuple[str, str]] = set()
 
     # First pass: recover literal declarations with a normalized key set.
     # This intentionally does not depend on the general expression resolver;
@@ -813,6 +815,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
                         service_origins.add(origin)
                         request_origins[value] = origin
                 candidates.add(value)
+                request_endpoints.add((method, value))
 
     for match in re.finditer(
         rf"\b(?:url|endpoint)\s*:\s*({_JS_STRING}|{_IDENT})", body, re.IGNORECASE
@@ -871,6 +874,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
         endpoint_candidates=tuple(sorted(candidates)),
         unresolved_request_templates=tuple(sorted(unresolved)),
         request_origins=tuple(sorted(request_origins.items())),
+        request_endpoints=tuple(sorted(request_endpoints)),
     )
 
 def build_discovery_requests(
