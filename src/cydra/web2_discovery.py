@@ -154,6 +154,18 @@ def discover_web2_surface(
             # enough to reveal higher-priority API candidates.
             heapq.heappush(queue, (-priority, sequence, normalized))
             queued.add(normalized)
+            # Preserve explicit application/API candidates in the target model
+            # as planned surfaces even before execution. This separates
+            # discovered/planned state from observed state: a missing response
+            # must not erase a statically recovered endpoint.
+            if priority >= 90:
+                model.add_endpoint(
+                    Web2EndpointModel(
+                        f"GET {normalized}",
+                        "GET",
+                        normalized,
+                    )
+                )
             sequence += 1
 
     return Web2DiscoveryResult(
@@ -283,12 +295,26 @@ def _decode_js_string(token: str) -> str | None:
 
 
 def _javascript_constants(body: str) -> dict[str, str]:
-    constants: dict[str, str] = {}
-    pattern = re.compile(rf"\b(?:const|let|var)\s+({_IDENT})\s*=\s*({_JS_STRING})")
+    """Resolve simple JS constants, including references to earlier constants."""
+    expressions: dict[str, str] = {}
+    pattern = re.compile(rf"\b(?:const|let|var)\s+({_IDENT})\s*=\s*([^;\n]+)")
     for match in pattern.finditer(body):
-        value = _decode_js_string(match.group(2))
-        if value is not None:
-            constants[match.group(1)] = value
+        expressions[match.group(1)] = match.group(2).strip()
+
+    constants: dict[str, str] = {}
+    # Resolve in declaration order; a few passes also handle forward references
+    # without attempting general JavaScript evaluation.
+    for _ in range(max(1, len(expressions))):
+        changed = False
+        for name, expression in expressions.items():
+            if name in constants:
+                continue
+            value = _resolve_js_expression(expression, constants)
+            if value is not None:
+                constants[name] = value
+                changed = True
+        if not changed:
+            break
     return constants
 
 
