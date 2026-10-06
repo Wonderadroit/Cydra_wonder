@@ -117,9 +117,10 @@ def discover_web2_surface(
         if extract_template_parameters(path):
             plan = materialize_endpoint(template_endpoint, model.resources.values(), resource_provenance)
             if not plan.executable:
-                # A discovered template is planning state, not an executable
-                # request. Defer it until an observed resource supplies a
-                # concrete identifier; it therefore consumes no request slot.
+                # Keep the template in the modeled discovery surface, but do
+                # not execute it or consume an execution slot.
+                if path not in discovered:
+                    discovered.append(path)
                 deferred_templates.add(path)
                 continue
         seen.add(path)
