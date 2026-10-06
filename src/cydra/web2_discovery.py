@@ -397,6 +397,7 @@ def _runtime_configuration_origins(body: str) -> tuple[str, ...]:
         if parsed.hostname:
             origins.add(f"{parsed.scheme}://{parsed.netloc}")
     return tuple(sorted(origins))
+
 def _javascript_paths(body: str) -> set[str]:
     """Extract explicit URL-like path literals from downloaded JS.
 
