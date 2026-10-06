@@ -60,7 +60,7 @@ def main() -> int:
     parser.add_argument(
         "--require-authenticated",
         action="store_true",
-        help="Fail closed when the configured authenticated authorization is absent.",
+        help="Require an optional authenticated session credential; omit for Bugcrowd-header authorization.",
     )
     parser.add_argument("--output", default="artifacts/aurory-discovery.json")
     args = parser.parse_args()
@@ -80,8 +80,8 @@ def main() -> int:
     token = os.environ.get("AURORY_OWNER_AUTHORIZATION", "").strip()
     if args.require_authenticated and not token:
         raise SystemExit(
-            "Authenticated discovery was requested, but AURORY_OWNER_AUTHORIZATION is missing. "
-            "Refusing to run as anonymous discovery."
+            "Authenticated discovery was requested, but no authenticated session credential "
+            "was supplied. Bugcrowd header authorization is available without this flag."
         )
     if token:
         identity_headers["Authorization"] = token
