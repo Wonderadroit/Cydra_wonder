@@ -17,7 +17,7 @@ from urllib.parse import urljoin, urlparse
 from html.parser import HTMLParser
 
 from .execution_adapter import AdapterObservation, AdapterRequest, AdapterStatus
-from .web2_model import Web2EndpointModel, Web2TargetModel
+from .web2_model import Web2EndpointModel, Web2IdentityModel, Web2TargetModel
 from .web2_materialization import (
     Web2MaterializationPlan,
     Web2ResourceProvenance,
@@ -119,6 +119,11 @@ def discover_web2_surface(
         raise ValueError("max_js_bundles must not be negative")
 
     model = Web2TargetModel(target=target)
+    if identity_id is not None:
+        # Preserve the caller identity in the target model so downstream
+        # reasoning can distinguish an observed actor from an unmodeled one.
+        # This records identity provenance only; it never infers ownership.
+        model.add_identity(Web2IdentityModel(identity_id, identity_id, authenticated=True))
     queue: list[tuple[int, int, str]] = []
     queued: set[str] = set()
     seen: set[str] = set()
