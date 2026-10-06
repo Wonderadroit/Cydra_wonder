@@ -567,6 +567,21 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
             parsed = urlparse(value)
             if parsed.scheme in {"http", "https"} and parsed.hostname:
                 service_origins.add(f"{parsed.scheme}://{parsed.netloc}")
+    # Also retain literal origin/base declarations directly. This defensive
+    # lexical pass makes provenance independent of the small constant resolver
+    # when bundles are minified or declaration formatting changes.
+    for match in re.finditer(
+        rf"\b(?:const|let|var)\s+({origin_key})\s*=\s*({_JS_STRING})",
+        body,
+        re.IGNORECASE,
+    ):
+        value = _decode_js_string(match.group(2))
+        if value is None:
+            continue
+        base_urls.add(value)
+        parsed = urlparse(value)
+        if parsed.scheme in {"http", "https"} and parsed.hostname:
+            service_origins.add(f"{parsed.scheme}://{parsed.netloc}")
     for match in re.finditer(
         rf"\b{origin_key}\s*[:=]\s*({_JS_STRING}|{_IDENT})", body
     ):
