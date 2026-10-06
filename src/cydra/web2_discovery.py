@@ -115,6 +115,10 @@ def discover_web2_surface(
             links.update(_openapi_paths(body))
         if "html" in content_type or "<a" in body.lower() or "<form" in body.lower() or "<script" in body.lower():
             links.update(_html_paths(body))
+            # Modern SPA/Next.js pages often embed route/API literals in inline
+            # bootstrap JavaScript. Extract those before spending the bounded
+            # request budget on static bundles.
+            links.update(_javascript_paths(body))
         if _looks_like_javascript(path, content_type):
             links.update(_javascript_paths(body))
 
