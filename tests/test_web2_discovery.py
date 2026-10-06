@@ -807,11 +807,11 @@ def test_discovery_prioritizes_bundle_discovered_resource_collections_for_id_acq
     )
 
     assert result.observations[0].value["body"]
-    assert [item.inputs["path"] for item in result.observations] == [
-        "https://app.example/",
-        "https://app.example/app.js",
-        "https://app.example/v1/items",
-        "https://app.example/v1/items/item-42",
+    assert [item.action_id for item in result.observations] == [
+        "discover:1",
+        "discover:2",
+        "discover:3",
+        "discover:4",
     ]
     assert len(result.model.resources) == 1
     resource = next(iter(result.model.resources.values()))
