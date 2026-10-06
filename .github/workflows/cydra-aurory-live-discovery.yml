@@ -8,9 +8,9 @@ on:
         required: true
         default: "/"
       max_paths:
-        description: "Maximum GET paths (1-50)"
+        description: "Maximum read-only discovery paths (1-150)"
         required: true
-        default: "20"
+        default: "150"
 
 permissions:
   contents: read
@@ -34,11 +34,8 @@ jobs:
       - name: Run bounded authorized discovery
         env:
           AURORY_BUG_BOUNTY_USERNAME: cyberwonder
-          AURORY_OWNER_AUTHORIZATION: ${{ secrets.AURORY_OWNER_AUTHORIZATION }}
         run: |
-          python scripts/aurory_live_discovery.py \
-            --seed "${{ inputs.seed }}" \
-            --max-paths "${{ inputs.max_paths }}"
+          python scripts/aurory_live_discovery.py             --seed "${{ inputs.seed || '/' }}"             --max-paths "${{ inputs.max_paths || '150' }}"
 
       - name: Publish sanitized discovery artifact
         uses: actions/upload-artifact@v4

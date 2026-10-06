@@ -36,6 +36,7 @@ from cydra.prerequisite_graph import apply_observations, build_prerequisite_grap
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
 from cydra.state_relation_observation import plan_state_relation_observations
+from cydra.transfer_accounting_execution import generate_transfer_accounting_test
 from cydra.state_relation_evidence import (
     evidence_records_from_relation_execution,
     violation_records_from_relation_execution,
@@ -48,6 +49,15 @@ from cydra.guard_parity_execution import generate_guard_parity_test
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
 
 CLASS_CAPABILITIES = {
+    "transfer_accounting": {
+        "extract": True,
+        "generate_hypothesis": True,
+        "plan_experiment": True,
+        "generate_foundry": True,
+        "execute_blind": True,
+        "classify_blind": False,
+        "classify_block_reason": "transfer-accounting differential classification requires a patched counterpart",
+    },
     "guard_parity": {
         "extract": True,
         "generate_hypothesis": True,
@@ -507,7 +517,7 @@ def _run_state_relation_verification(
         step_function = functions.get(step.function)
         if step_function is None:
             raise ValueError(f"state relation step is not modeled: {step.function}")
-        step_plans = plan_state_relation_observations(contract, step_function)
+        step_plans = plan_state_relation_observations(contract, step_function, project)
         if step_function.writes and not step_plans:
             raise ValueError(
                 f"state transition {step_function.name} has no deterministic "
@@ -519,7 +529,7 @@ def _run_state_relation_verification(
     plans = tuple(relation_plans_by_step)
     if not plans:
         raise ValueError(
-            "state experiment has no deterministic public unsigned-integer relation observation"
+            "state experiment has no deterministic source-backed numeric relation observation"
         )
     output = test_path_for(
         project, f"generated/{hypothesis.hypothesis_id}-relation.t.sol"
@@ -537,6 +547,7 @@ def _run_state_relation_verification(
         contract,
         verify_state_relations=True,
         verify_state_relations_all_steps=True,
+        state_observation_project=project,
     )
     execution = run_foundry_test(
         project, generated, relation_experiment.experiment_id, "relation"
@@ -613,6 +624,27 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
+def _run_transfer_accounting(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+    """Execute the canonical transfer-accounting adapter for supported target shapes."""
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+    if contract.constructor is None or len(contract.constructor.parameters) != 1:
+        raise ValueError("transfer-accounting adapter requires a single constructor dependency")
+    generated = generate_transfer_accounting_test(
+        hypothesis, contract, _target_import(contract, project), contract.name,
+        "FeeTransferToken", output, experiment=experiment,
+    )
+    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    return {
+        "generated_path": str(generated),
+        "execution": execution,
+        "classification": "NOT_REACHED",
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
+        "classification_blocked_reason": "transfer-accounting requires causal differential verification",
+    }
+
 def _execution_adapter(class_name: str):
     """Return the generic runtime adapter for an executable capability class.
 
@@ -625,6 +657,7 @@ def _execution_adapter(class_name: str):
         "state": _run_state,
         "initialization": _run_initialization,
         "guard_parity": _run_guard_parity,
+        "transfer_accounting": _run_transfer_accounting,
     }.get(class_name)
 
 
@@ -663,10 +696,12 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
             class_name = "guard_parity"
         experiment = experiments[hypothesis.hypothesis_id]
+        if class_name is None and hypothesis.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-"):
+            class_name = "transfer_accounting"
         if class_name is None:
             statuses.append(_unknown_reasoning_status(hypothesis, experiment))
             continue
-        if class_name not in classes:
+        if class_name not in classes and class_name != "transfer_accounting":
             continue
         capability = CLASS_CAPABILITIES[class_name]
         contract = _contract_for_hypothesis(result, hypothesis)
@@ -957,7 +992,7 @@ def run_source_investigation(
         unexecuted_reasoning_surfaces = []
         for hypothesis in result.hypotheses:
             class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
-            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-")):
+            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-", "INV-TRANSFER-ACCOUNTING-")):
                 continue
             if class_name is None:
                 experiment = next(
@@ -981,6 +1016,8 @@ def run_source_investigation(
                 class_name = "state"
             if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
                 class_name = "guard_parity"
+            if class_name is None and hypothesis.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-"):
+                class_name = "transfer_accounting"
             if class_name is None:
                 class_name = "reasoning_surface"
             elif class_name not in classes:

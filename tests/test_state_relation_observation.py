@@ -206,3 +206,48 @@ def test_relation_observation_records_state_backed_index_type(tmp_path: Path):
     plans = plan_state_relation_observations(model, model.functions[0])
     assert len(plans) == 1
     assert plans[0].index_state_types == (("epoch", "uint128"),)
+
+
+def test_relation_observation_falls_back_to_compiler_storage_for_private_mapping(tmp_path, monkeypatch):
+    from cydra import state_relation_observation as module
+
+    source = tmp_path / "Target.sol"
+    source.write_text(
+        "contract Target { "
+        "mapping(address => mapping(uint256 => uint128)) private queued; "
+        "function execute(uint256 epoch, uint128 amount) external { "
+        "queued[msg.sender][epoch] += amount; } }",
+        encoding="utf-8",
+    )
+    model = ContractModel(
+        "Target",
+        str(source),
+        (
+            FunctionModel(
+                "execute", "external", (), ("queued",), (), 2,
+                parameters=(
+                    ParameterModel("epoch", "uint256"),
+                    ParameterModel("amount", "uint128"),
+                ),
+            ),
+        ),
+        state_variables=("queued",),
+    )
+    monkeypatch.setattr(
+        module,
+        "_forge_storage_layout",
+        lambda project, contract: {
+            "storage": [{"label": "queued", "slot": "3", "offset": 0, "type": "t_mapping"}],
+            "types": {
+                "t_mapping": {"encoding": "mapping", "key": "t_address", "value": "t_mapping2"},
+                "t_address": {"label": "address"},
+                "t_mapping2": {"encoding": "mapping", "key": "t_uint256", "value": "t_uint128"},
+                "t_uint256": {"label": "uint256"},
+                "t_uint128": {"label": "uint128", "encoding": "inplace", "numberOfBytes": 16},
+            },
+        },
+    )
+    plans = plan_state_relation_observations(model, model.functions[0], tmp_path)
+    assert len(plans) == 1
+    assert plans[0].observation_kind == "compiler_storage"
+    assert "vm.load(address(target)" in plans[0].getter

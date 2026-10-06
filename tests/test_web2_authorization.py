@@ -11,3 +11,40 @@ def test_planner_requires_explicit_ownership():
     try: plan_ownership_differential(m,owner_identity_id="bob",other_identity_id="alice",resource_id="resource:1",endpoint_id="endpoint:get")
     except ValueError as e: assert "ownership" in str(e)
     else: raise AssertionError("planner must reject unsupported ownership")
+
+
+def test_generator_creates_all_explicit_cross_identity_plans():
+    from cydra.web2_authorization import generate_ownership_differential_plans
+    m=Web2TargetModel("https://authorized.example")
+    m.add_identity(Web2IdentityModel("alice","Alice"))
+    m.add_identity(Web2IdentityModel("bob","Bob"))
+    m.add_identity(Web2IdentityModel("carol","Carol"))
+    m.add_resource(Web2ResourceModel("resource:1","Alice record","alice","1"))
+    m.add_endpoint(Web2EndpointModel("endpoint:get","GET","/records/{id}",("resource:1",),"read"))
+    plans=generate_ownership_differential_plans(m)
+    assert len(plans)==2
+    assert {p.experiment.actions[1].inputs["identity_id"] for p in plans}=={"bob","carol"}
+    assert all(p.hypothesis.expected_impact=="UNAUTHORIZED_RESOURCE_ACCESS" for p in plans)
+
+
+def test_generator_ignores_endpoints_without_explicit_resource_relation():
+    from cydra.web2_authorization import generate_ownership_differential_plans
+    m=Web2TargetModel("https://authorized.example")
+    m.add_identity(Web2IdentityModel("alice","Alice"))
+    m.add_identity(Web2IdentityModel("bob","Bob"))
+    m.add_resource(Web2ResourceModel("resource:1","record","alice","1"))
+    m.add_endpoint(Web2EndpointModel("endpoint:unrelated","GET","/health"))
+    assert generate_ownership_differential_plans(m) == ()
+
+
+def test_executable_generator_surfaces_materialization_gap():
+    from cydra.web2_authorization import generate_executable_ownership_differential_plans
+    m=Web2TargetModel("https://authorized.example")
+    m.add_identity(Web2IdentityModel("alice","Alice"))
+    m.add_identity(Web2IdentityModel("bob","Bob"))
+    m.add_resource(Web2ResourceModel("resource:unknown","record","alice",None))
+    m.add_endpoint(Web2EndpointModel("endpoint:get","GET","/records/{id}",("resource:unknown",)))
+    result=generate_executable_ownership_differential_plans(m)
+    assert result.plans == ()
+    assert result.capability_gaps
+    assert "materialization capability gap" in result.capability_gaps[0]
