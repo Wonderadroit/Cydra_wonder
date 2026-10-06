@@ -538,6 +538,7 @@ def _run_state_relation_verification(
         contract,
         verify_state_relations=True,
         verify_state_relations_all_steps=True,
+        state_observation_project=project,
     )
     execution = run_foundry_test(
         project, generated, relation_experiment.experiment_id, "relation"
