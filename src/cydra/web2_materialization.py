@@ -131,6 +131,20 @@ def materialize_endpoint(
     segments = [segment for segment in path_prefix.split("/") if segment]
     for parameter in parameters:
         candidates = resources_by_field.get(parameter.lower(), [])
+
+        # The endpoint/resource relation is stronger than a naming guess.
+        # For generic `{id}` routes, use the explicitly related resource only
+        # when that relation identifies exactly one concrete resource.
+        if not candidates and parameter.lower() == "id":
+            related = [
+                resource
+                for resource in resources
+                if resource.resource_id in endpoint.resource_ids
+                and resource.identifier is not None
+            ]
+            if len({item.resource_id for item in related}) == 1:
+                candidates = related
+
         if parameter.lower() == "id" and not candidates:
             previous = segments[segments.index("{" + parameter + "}") - 1] if "{" + parameter + "}" in segments and segments.index("{" + parameter + "}") > 0 else None
             if previous:
