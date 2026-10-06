@@ -340,3 +340,83 @@ def test_discovery_prioritizes_parameterized_resource_and_workflow_routes():
         "discover:4",
     ]
 
+
+
+def test_bundle_analysis_resolves_runtime_service_origin_but_does_not_authorize_it():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'window.__RUNTIME_CONFIG__ = { API_URL: "https://api.example.net" };'
+                'const endpoint = window.__RUNTIME_CONFIG__.API_URL + "/v1/profile";'
+                'fetch(endpoint);'
+            ),
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=2,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert analysis.service_origins == ("https://api.example.net",)
+    assert analysis.unauthorized_origins == ("https://api.example.net",)
+    assert "/v1/profile" not in result.discovered_paths
+    assert "https://api.example.net/v1/profile" not in analysis.endpoint_candidates
+
+
+def test_bundle_analysis_authorizes_same_host_runtime_service_origin():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'window.__RUNTIME_CONFIG__ = { API_URL: "https://app.example" };'
+                'const endpoint = window.__RUNTIME_CONFIG__.API_URL + "/v1/profile";'
+                'fetch(endpoint);'
+            ),
+        },
+        "/v1/profile": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=2,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert analysis.service_origins == ("https://app.example",)
+    assert analysis.unauthorized_origins == ()
+    assert "/v1/profile" in result.discovered_paths
+
+
+def test_bundle_analysis_keeps_runtime_env_origin_unresolved():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'const API_URL = import.meta.env.VITE_API_URL;'
+                'fetch(API_URL + "/v1/profile");'
+            ),
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=1,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert analysis.service_origins == ()
+    assert analysis.unauthorized_origins == ()
+    assert analysis.unresolved_request_templates
