@@ -221,13 +221,17 @@ def materialize_endpoint(
             continue
         values[parameter] = selected.identifier  # type: ignore[assignment]
         provenance_candidates = provenance_by_resource.get(selected.resource_id, [])
-        if len(provenance_candidates) == 1:
-            selected_provenance.append(provenance_candidates[0])
-        elif len(provenance_candidates) == 0:
-            # A resource may already carry an identifier observed on the model
-            # itself. Preserve executable provenance only when it is actually
-            # available; never synthesize a source observation from the model.
-            pass
+        unique_provenance = {
+            (
+                item.identifier,
+                item.source_endpoint_id,
+                item.source_observation_id,
+                item.field_path,
+            ): item
+            for item in provenance_candidates
+        }
+        if len(unique_provenance) == 1:
+            selected_provenance.append(next(iter(unique_provenance.values())))
 
     if len(values) != len(parameters):
         return Web2MaterializationPlan(
