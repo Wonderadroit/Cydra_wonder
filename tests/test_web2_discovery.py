@@ -610,3 +610,45 @@ def test_discovery_prioritizes_runtime_config_before_hashed_application_bundles(
     assert runtime
     assert runtime[0].service_origins == ("https://api.example.net",)
     assert runtime[0].unauthorized_origins == ("https://api.example.net",)
+
+
+def test_bundle_analysis_records_request_to_origin_relationship_for_relative_request():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'fetch("/v1/profile");',
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=1,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert ("/v1/profile", "https://app.example") in analysis.request_origins
+
+
+def test_bundle_analysis_preserves_external_request_origin_relationship_without_authorizing_execution():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'fetch("https://api.example.net/v1/profile");',
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=1,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert (
+        "https://api.example.net/v1/profile",
+        "https://api.example.net",
+    ) in analysis.request_origins
+    assert "https://api.example.net/v1/profile" not in result.discovered_paths
