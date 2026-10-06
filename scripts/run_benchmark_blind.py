@@ -520,7 +520,7 @@ def _run_state_relation_verification(
     plans = tuple(relation_plans_by_step)
     if not plans:
         raise ValueError(
-            "state experiment has no deterministic public unsigned-integer relation observation"
+            "state experiment has no deterministic source-backed numeric relation observation"
         )
     output = test_path_for(
         project, f"generated/{hypothesis.hypothesis_id}-relation.t.sol"
