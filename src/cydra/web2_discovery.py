@@ -375,7 +375,7 @@ def _looks_like_javascript(path: str, content_type: str) -> bool:
 def _inline_javascript_bodies(body: str) -> tuple[str, ...]:
     return tuple(
         match.group(1)
-        for match in re.finditer(r"<script\\b[^>]*>(.*?)</script\\s*>", body, re.IGNORECASE | re.DOTALL)
+        for match in re.finditer(r"<script\b[^>]*>(.*?)</script\s*>", body, re.IGNORECASE | re.DOTALL)
     )
 
 
@@ -391,7 +391,7 @@ def _runtime_configuration_origins(body: str) -> tuple[str, ...]:
     """Recover explicit service origins from HTML bootstrap/runtime config."""
     origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL)"
     origins: set[str] = set()
-    pattern = re.compile(r"[\"'`]?" + origin_key + r"[\"'`]?\\s*[:=]\\s*[\"'`](https?://[^\"'`\\s]+)", re.IGNORECASE)
+    pattern = re.compile(r"[\"'`]?" + origin_key + r"[\"'`]?\s*[:=]\s*[\"'`](https?://[^\"'`\s]+)", re.IGNORECASE)
     for match in pattern.finditer(body):
         parsed = urlparse(match.group(1))
         if parsed.hostname:
