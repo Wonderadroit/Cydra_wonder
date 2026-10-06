@@ -639,7 +639,7 @@ def _is_placeholder_service_origin(origin: str) -> bool:
         "localhost", "invalid", "test", "local",
     }:
         return True
-    if hostname.endswith(".example") or hostname.endswith(".invalid") or hostname.endswith(".test"):
+    if hostname.endswith(".invalid") or hostname.endswith(".test"):
         return True
     # A one-label, one-character host such as https://a is not credible
     # service-origin evidence from a production application bundle.
