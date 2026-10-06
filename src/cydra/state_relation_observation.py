@@ -128,7 +128,7 @@ def _storage_observation(project: Path, contract: ContractModel, state: str,
     value_info = types.get(type_id, {})
     label = str(value_info.get("label", ""))
     size = value_info.get("numberOfBytes")
-    if value_info.get("encoding") != "inplace" or not isinstance(size, int) or not re.search(r"\b(?:u?int)(?:[0-9]+)?\b", label): return None
+    if value_info.get("encoding") != "inplace" or not isinstance(size, int) or not re.search(r"\buint(?:[0-9]+)?\b", label): return None
     offset = int(entry.get("offset", 0)); bits = size * 8
     if bits > 256: return None
     mask = "" if bits == 256 else f" & {hex((1 << bits) - 1)}"
@@ -156,7 +156,7 @@ def plan_state_relation_observations(
         getter_info = getters.get(relation.state)
         observation_kind = "public_getter"
         storage = None
-        if getter_info is None or not getter_info[0].startswith(("uint", "int")):
+        if getter_info is None or not getter_info[0].startswith("uint"):
             if project is None: continue
             storage = _storage_observation(project, contract, relation.state, relation.index_expressions, parameters)
             if storage is None: continue
@@ -167,7 +167,7 @@ def plan_state_relation_observations(
 
         if relation.rhs_expression is not None:
             rhs_type = parameters.get(relation.rhs_expression)
-            if rhs_type is None or not rhs_type.startswith(("uint", "int")):
+            if rhs_type is None or not rhs_type.startswith("uint"):
                 continue
 
         indexes = relation.index_expressions
