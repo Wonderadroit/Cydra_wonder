@@ -8,6 +8,7 @@ output as a security finding.
 """
 
 from dataclasses import dataclass
+import hashlib
 import heapq
 import json
 import re
@@ -42,6 +43,15 @@ class Web2BundleAnalysis:
 
 
 @dataclass(frozen=True)
+class Web2ResponseFingerprint:
+    status_code: int | None
+    content_type: str
+    body_sha256: str
+    body_length: int
+    generic_negative: bool
+
+
+@dataclass(frozen=True)
 class Web2ServiceOriginRelation:
     source: str
     origin: str
@@ -58,6 +68,7 @@ class Web2DiscoveryResult:
     resource_provenance: tuple[Web2ResourceProvenance, ...] = ()
     materialization_plans: tuple[Web2MaterializationPlan, ...] = ()
     service_origin_relations: tuple[Web2ServiceOriginRelation, ...] = ()
+    response_fingerprints: tuple[tuple[str, Web2ResponseFingerprint], ...] = ()
 
 
 class _LinkParser(HTMLParser):
@@ -123,6 +134,8 @@ def discover_web2_surface(
     bundle_analyses: list[Web2BundleAnalysis] = []
     resource_provenance: list[Web2ResourceProvenance] = []
     analyzed_bundles: set[str] = set()
+    response_fingerprints: dict[str, Web2ResponseFingerprint] = {}
+    generic_negative_origins: set[str] = set()
 
     while queue and len(seen) < max_paths:
         _, _, path = heapq.heappop(queue)
@@ -161,6 +174,11 @@ def discover_web2_surface(
         payload = observation.value
         if not isinstance(payload, dict):
             continue
+        fingerprint = _response_fingerprint(payload)
+        if fingerprint is not None:
+            response_fingerprints[path] = fingerprint
+            if fingerprint.generic_negative:
+                generic_negative_origins.add(_origin_for_path(path, target))
         body = payload.get("body", "")
         if not isinstance(body, str):
             continue
@@ -303,6 +321,7 @@ def discover_web2_surface(
         bundle_analyses=tuple(bundle_analyses),
         resource_provenance=tuple(resource_provenance),
         materialization_plans=materialization_plans,
+        response_fingerprints=tuple(sorted(response_fingerprints.items(), key=lambda item: item[0])),
         service_origin_relations=tuple(
             sorted(
                 origin_relations,
@@ -310,6 +329,31 @@ def discover_web2_surface(
             )
         ),
     )
+
+
+def _origin_for_path(path: str, target: str) -> str:
+    parsed = urlparse(urljoin(target.rstrip("/") + "/", path))
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _response_fingerprint(payload: dict[str, Any]) -> Web2ResponseFingerprint | None:
+    raw_body = payload.get("body", "")
+    if not isinstance(raw_body, str):
+        return None
+    headers = payload.get("headers") or {}
+    if not isinstance(headers, dict):
+        headers = {}
+    content_type = str(headers.get("Content-Type", headers.get("content-type", ""))).split(";", 1)[0].strip().lower()
+    status_raw = payload.get("status_code")
+    try:
+        status_code = int(status_raw) if status_raw is not None else None
+    except (TypeError, ValueError):
+        status_code = None
+    normalized = re.sub(r"\s+", " ", raw_body).strip()
+    normalized = re.sub(r"\b(?:request[-_ ]?id|trace[-_ ]?id)\s*[:=]\s*[^\s<]+", "", normalized, flags=re.I)
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    generic_negative = status_code in {400,401,403,404,405,410,422,429,500,502,503,504} and len(normalized) <= 8192
+    return Web2ResponseFingerprint(status_code, content_type, digest, len(raw_body), generic_negative)
 
 
 def _normalize_seeds(seeds: Iterable[str]) -> list[str]:
