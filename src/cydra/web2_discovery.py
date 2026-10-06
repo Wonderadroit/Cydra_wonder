@@ -367,8 +367,22 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
     for match in re.finditer(
         rf"\bnew\s+URL\s*\(\s*([^,\)]+)\s*,\s*([^\)]+)\)", body
     ):
-        first = _resolve_js_expression(match.group(1), constants)
-        second = _resolve_js_expression(match.group(2), constants)
+        first_expression = match.group(1).strip()
+        second_expression = match.group(2).strip()
+        first = _resolve_js_expression(first_expression, constants)
+        second = _resolve_js_expression(second_expression, constants)
+
+        # Bundled clients commonly construct routes as
+        # new URL("/v1/resource", apiBase), where apiBase is supplied by an
+        # imported/runtime value that cannot be resolved lexically. The route
+        # literal is still concrete enough to materialize as a same-host
+        # discovery path without guessing the base URL.
+        if first is not None and first.startswith("/"):
+            candidates.add(first)
+            if second is None:
+                unresolved.add(match.group(0)[:200])
+                continue
+
         if first is not None and second is not None:
             candidates.add(urljoin(second.rstrip("/") + "/", first))
         else:
