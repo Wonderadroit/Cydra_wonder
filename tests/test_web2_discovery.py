@@ -932,3 +932,37 @@ def test_unrelated_external_service_declaration_does_not_trigger_service_origin_
     })
     result = discover_web2_surface(adapter, target="https://app.example", max_paths=4, max_js_bundles=1)
     assert result.capability_gaps == ()
+
+
+def test_unresolved_vendor_request_expressions_do_not_trigger_service_origin_gap():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script src="/vendor.js"></script><a href="/v1/items">items</a><a href="/v1/inventories">inventories</a>',
+        },
+        "/vendor.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            # Framework-style dynamic request expressions are not enough to
+            # establish a concrete external service origin.
+            "body": 'fetch(e); fetch(t); new URL(e,t);',
+        },
+        "/v1/items": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+        "/v1/inventories": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        max_paths=4,
+        max_js_bundles=1,
+    )
+    assert result.capability_gaps == ()
