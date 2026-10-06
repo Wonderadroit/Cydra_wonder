@@ -49,6 +49,15 @@ from cydra.guard_parity_execution import generate_guard_parity_test
 SUPPORTED_CLASSES = {"authorization", "initialization", "arithmetic", "state", "guard_parity"}
 
 CLASS_CAPABILITIES = {
+    "transfer_accounting": {
+        "extract": True,
+        "generate_hypothesis": True,
+        "plan_experiment": True,
+        "generate_foundry": True,
+        "execute_blind": True,
+        "classify_blind": False,
+        "classify_block_reason": "transfer-accounting differential classification requires a patched counterpart",
+    },
     "guard_parity": {
         "extract": True,
         "generate_hypothesis": True,
@@ -692,7 +701,7 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         if class_name is None:
             statuses.append(_unknown_reasoning_status(hypothesis, experiment))
             continue
-        if class_name not in classes:
+        if class_name not in classes and class_name != "transfer_accounting":
             continue
         capability = CLASS_CAPABILITIES[class_name]
         contract = _contract_for_hypothesis(result, hypothesis)
@@ -983,7 +992,7 @@ def run_source_investigation(
         unexecuted_reasoning_surfaces = []
         for hypothesis in result.hypotheses:
             class_name = INVARIANT_CLASS.get(hypothesis.invariant_id)
-            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-")):
+            if class_name is None and hypothesis.invariant_id.startswith(("INV-STATE-", "INV-GUARD-PARITY-", "INV-TRANSFER-ACCOUNTING-")):
                 continue
             if class_name is None:
                 experiment = next(
@@ -1007,6 +1016,8 @@ def run_source_investigation(
                 class_name = "state"
             if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
                 class_name = "guard_parity"
+            if class_name is None and hypothesis.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-"):
+                class_name = "transfer_accounting"
             if class_name is None:
                 class_name = "reasoning_surface"
             elif class_name not in classes:
