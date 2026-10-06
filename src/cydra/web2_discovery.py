@@ -17,6 +17,13 @@ from html.parser import HTMLParser
 
 from .execution_adapter import AdapterObservation, AdapterRequest, AdapterStatus
 from .web2_model import Web2EndpointModel, Web2TargetModel
+from .web2_materialization import (
+    Web2MaterializationPlan,
+    Web2ResourceProvenance,
+    extract_resource_identifiers,
+    extract_template_parameters,
+    materialize_endpoint,
+)
 
 
 @dataclass(frozen=True)
@@ -35,6 +42,8 @@ class Web2DiscoveryResult:
     observations: tuple[AdapterObservation, ...]
     discovered_paths: tuple[str, ...]
     bundle_analyses: tuple[Web2BundleAnalysis, ...] = ()
+    resource_provenance: tuple[Web2ResourceProvenance, ...] = ()
+    materialization_plans: tuple[Web2MaterializationPlan, ...] = ()
 
 
 class _LinkParser(HTMLParser):
@@ -86,6 +95,7 @@ def discover_web2_surface(
     queue: list[tuple[int, int, str]] = []
     queued: set[str] = set()
     seen: set[str] = set()
+    deferred_templates: set[str] = set()
     sequence = 0
 
     for seed in _normalize_seeds(seeds):
@@ -96,12 +106,22 @@ def discover_web2_surface(
     observations: list[AdapterObservation] = []
     discovered: list[str] = []
     bundle_analyses: list[Web2BundleAnalysis] = []
+    resource_provenance: list[Web2ResourceProvenance] = []
     analyzed_bundles: set[str] = set()
 
     while queue and len(seen) < max_paths:
         _, _, path = heapq.heappop(queue)
         if path in seen:
             continue
+        template_endpoint = Web2EndpointModel(f"GET {path}", "GET", path)
+        if extract_template_parameters(path):
+            plan = materialize_endpoint(template_endpoint, model.resources.values(), resource_provenance)
+            if not plan.executable:
+                # A discovered template is planning state, not an executable
+                # request. Defer it until an observed resource supplies a
+                # concrete identifier; it therefore consumes no request slot.
+                deferred_templates.add(path)
+                continue
         seen.add(path)
         request = AdapterRequest(
             action_id=f"discover:{len(seen)}",
@@ -122,8 +142,40 @@ def discover_web2_surface(
             continue
 
         endpoint_id = f"GET {path}"
-        model.add_endpoint(Web2EndpointModel(endpoint_id, "GET", path))
+        endpoint = Web2EndpointModel(endpoint_id, "GET", path)
+        model.add_endpoint(endpoint)
         discovered.append(path)
+
+        discovered_resources = extract_resource_identifiers(
+            endpoint, body, observation.action_id
+        )
+        endpoint_resource_ids: list[str] = []
+        for resource, provenance in discovered_resources:
+            model.add_resource(resource)
+            endpoint_resource_ids.append(resource.resource_id)
+            resource_provenance.append(provenance)
+        if endpoint_resource_ids:
+            model.endpoints.pop(endpoint_id, None)
+            endpoint = Web2EndpointModel(
+                endpoint_id, "GET", path, tuple(dict.fromkeys(endpoint_resource_ids))
+            )
+            model.add_endpoint(endpoint)
+
+        # A newly observed resource may make deferred templates executable.
+        for deferred_path in tuple(deferred_templates):
+            deferred_endpoint = Web2EndpointModel(
+                f"GET {deferred_path}", "GET", deferred_path
+            )
+            deferred_plan = materialize_endpoint(
+                deferred_endpoint, model.resources.values(), resource_provenance
+            )
+            if deferred_plan.executable:
+                heapq.heappush(
+                    queue,
+                    (-_path_priority(deferred_path), sequence, deferred_path),
+                )
+                sequence += 1
+                deferred_templates.remove(deferred_path)
 
         content_type = str((payload.get("headers") or {}).get("Content-Type", "")).lower()
         links: set[str] = set()
@@ -168,11 +220,17 @@ def discover_web2_surface(
                 )
             sequence += 1
 
+    materialization_plans = tuple(
+        materialize_endpoint(endpoint, model.resources.values(), resource_provenance)
+        for endpoint in sorted(model.endpoints.values(), key=lambda item: item.endpoint_id)
+    )
     return Web2DiscoveryResult(
         model=model,
         observations=tuple(observations),
         discovered_paths=tuple(discovered),
         bundle_analyses=tuple(bundle_analyses),
+        resource_provenance=tuple(resource_provenance),
+        materialization_plans=materialization_plans,
     )
 
 
