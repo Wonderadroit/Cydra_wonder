@@ -433,24 +433,38 @@ def _detect_service_origin_resolution_gaps(
     # literals from vendor/dependency code (for example documentation URLs or
     # test fixtures) must not turn repeated same-origin API 404s into a false
     # execution-readiness gap.
-    request_linked_origins = {
-        origin
-        for analysis in application_analyses
-        for _, origin in analysis.request_origins
-        if urlparse(origin).hostname != urlparse(target).hostname
-    }
+    request_linked_origin_counts: dict[str, int] = {}
+    explicit_external_origins: set[str] = set()
+    for analysis in application_analyses:
+        for origin in analysis.base_urls:
+            parsed = urlparse(origin)
+            if parsed.scheme in {"http", "https"} and parsed.hostname != urlparse(target).hostname:
+                explicit_external_origins.add(f"{parsed.scheme}://{parsed.netloc}")
+        for _, origin in analysis.request_origins:
+            if urlparse(origin).hostname != urlparse(target).hostname:
+                request_linked_origin_counts[origin] = request_linked_origin_counts.get(origin, 0) + 1
     unresolved_templates = any(
         analysis.unresolved_request_templates for analysis in application_analyses
     )
 
     # A same-origin service declaration explains the negative responses, so it
-    # is not an origin-resolution gap. Otherwise repeated API negatives plus
-    # either a request-linked external origin or an unresolved request
-    # construction boundary means the current execution target cannot yet be
-    # causally connected to the recovered API surface.
+    # is not an origin-resolution gap. For an external origin recovered only
+    # from an individual request, require repeated request construction to the
+    # same origin before treating it as a causal service boundary. This avoids
+    # promoting isolated vendor/test/example URLs into service-origin gaps while
+    # preserving explicit API_BASE/baseURL declarations and repeated external
+    # request clients as actionable readiness evidence.
+    repeated_request_linked_origins = {
+        origin for origin, count in request_linked_origin_counts.items()
+        if count >= 2
+    }
     if authorized_origins:
         return ()
-    if not request_linked_origins and not unresolved_templates:
+    if (
+        not explicit_external_origins
+        and not repeated_request_linked_origins
+        and not unresolved_templates
+    ):
         return ()
 
     return (
