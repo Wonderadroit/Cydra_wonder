@@ -438,27 +438,20 @@ def _detect_service_origin_resolution_gaps(
         for _, origin in analysis.request_origins:
             if urlparse(origin).hostname != urlparse(target).hostname:
                 request_linked_origin_counts[origin] = request_linked_origin_counts.get(origin, 0) + 1
-    unresolved_templates = any(
-        analysis.unresolved_request_templates for analysis in application_analyses
-    )
-
-    # A same-origin service declaration explains the negative responses, so it
-    # is not an origin-resolution gap. For an external origin recovered only
-    # from an individual request, require repeated request construction to the
-    # same origin before treating it as a causal service boundary. This avoids
-    # promoting isolated vendor/test/example URLs into service-origin gaps while
-    # preserving explicit API_BASE/baseURL declarations and repeated external
-    # request clients as actionable readiness evidence.
+    # Unresolved request expressions are intentionally not sufficient to
+    # establish a service-origin gap. Bundled frameworks and vendor libraries
+    # routinely contain dynamic URL construction that cannot be resolved
+    # statically (often with one-character minified expressions). Treating any
+    # such expression as an origin-resolution failure makes unrelated runtime
+    # code causal evidence. The gap must instead be grounded in repeated,
+    # concrete request-to-external-origin provenance.
     repeated_request_linked_origins = {
         origin for origin, count in request_linked_origin_counts.items()
         if count >= 2
     }
     if authorized_origins:
         return ()
-    if (
-        not repeated_request_linked_origins
-        and not unresolved_templates
-    ):
+    if not repeated_request_linked_origins:
         return ()
 
     return (
