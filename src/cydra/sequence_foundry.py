@@ -23,6 +23,7 @@ def generate_sequence_test_from_experiment(
     stop_before_target: bool = False,
     verify_state_relations: bool = False,
     verify_state_relations_all_steps: bool = False,
+    state_observation_project: Path | None = None,
 ) -> Path:
     """Render a structured ordered experiment into an executable Foundry test.
 
@@ -68,7 +69,7 @@ def generate_sequence_test_from_experiment(
             # Reuse a state-backed mapping key only within this transition.
             # A later transition may legitimately advance the index state.
             relation_index_snapshots: dict[str, str] = {}
-            relation_plans = plan_state_relation_observations(contract_model, function)
+            relation_plans = plan_state_relation_observations(contract_model, function, state_observation_project)
             if function.writes and not relation_plans:
                 raise ValueError(
                     "state transition has no deterministic source-backed relation observation; "
