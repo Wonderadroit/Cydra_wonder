@@ -322,6 +322,22 @@ def _resolve_js_expression(expression: str, constants: dict[str, str]) -> str | 
     expression = expression.strip()
     if not expression:
         return None
+
+    # Minified application bundles commonly construct parameterized endpoints
+    # as `"/v1/items/{id}".replace("{id}", id)`. The endpoint template is
+    # already explicit in the first literal; the replacement merely fills its
+    # placeholder at runtime. Preserve the canonical template rather than
+    # leaking the JavaScript `.replace(...)` expression into the path model.
+    replace_match = re.fullmatch(
+        rf"({_JS_STRING})\.replace\(\s*({_JS_STRING})\s*,\s*{_IDENT}\s*\)",
+        expression,
+    )
+    if replace_match:
+        base = _decode_js_string(replace_match.group(1))
+        marker = _decode_js_string(replace_match.group(2))
+        if base is not None and marker is not None and marker.startswith("{") and marker.endswith("}") and marker in base:
+            return base
+
     literal = _decode_js_string(expression)
     if literal is not None:
         return literal
