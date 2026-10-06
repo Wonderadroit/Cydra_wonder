@@ -84,12 +84,14 @@ def test_missing_anonymous_resource_state_stays_fail_closed():
             path = request.inputs["path"]
             self.requests.append((request.inputs.get("identity_id"), path))
             body = (
-                '<a href="/v1/items">items</a><a href="/v1/items/{id}">item</a>'
+                '<a href="/v1/items">items</a>'
+                '<a href="/v1/inventories">inventories</a>'
+                '<a href="/v1/items/{id}">item</a>'
                 if path == "/"
                 else "{}"
             )
             status = 200
-            if path == "/v1/items":
+            if path in {"/v1/items", "/v1/inventories"}:
                 status = 404
                 body = "Not Found"
             return AdapterObservation(
