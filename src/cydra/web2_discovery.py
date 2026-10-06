@@ -20,10 +20,21 @@ from .web2_model import Web2EndpointModel, Web2TargetModel
 
 
 @dataclass(frozen=True)
+class Web2BundleAnalysis:
+    path: str
+    classification: str
+    base_urls: tuple[str, ...] = ()
+    request_methods: tuple[str, ...] = ()
+    endpoint_candidates: tuple[str, ...] = ()
+    unresolved_request_templates: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Web2DiscoveryResult:
     model: Web2TargetModel
     observations: tuple[AdapterObservation, ...]
     discovered_paths: tuple[str, ...]
+    bundle_analyses: tuple[Web2BundleAnalysis, ...] = ()
 
 
 class _LinkParser(HTMLParser):
@@ -54,6 +65,7 @@ def discover_web2_surface(
     seeds: Iterable[str] = ("/",),
     identity_id: str | None = None,
     max_paths: int = 50,
+    max_js_bundles: int = 8,
 ) -> Web2DiscoveryResult:
     """Collect a bounded, read-only surface from explicit seed paths.
 
@@ -67,6 +79,8 @@ def discover_web2_surface(
     """
     if max_paths < 1:
         raise ValueError("max_paths must be positive")
+    if max_js_bundles < 0:
+        raise ValueError("max_js_bundles must not be negative")
 
     model = Web2TargetModel(target=target)
     queue: list[tuple[int, int, str]] = []
@@ -81,6 +95,8 @@ def discover_web2_surface(
 
     observations: list[AdapterObservation] = []
     discovered: list[str] = []
+    bundle_analyses: list[Web2BundleAnalysis] = []
+    analyzed_bundles: set[str] = set()
 
     while queue and len(seen) < max_paths:
         _, _, path = heapq.heappop(queue)
@@ -120,6 +136,11 @@ def discover_web2_surface(
             # request budget on static bundles.
             links.update(_inline_javascript_paths(body))
         if _looks_like_javascript(path, content_type):
+            if path not in analyzed_bundles and len(analyzed_bundles) < max_js_bundles:
+                analysis = _analyze_javascript_bundle(path, body)
+                bundle_analyses.append(analysis)
+                analyzed_bundles.add(path)
+                links.update(analysis.endpoint_candidates)
             links.update(_javascript_paths(body))
 
         for candidate in sorted(links):
@@ -136,6 +157,7 @@ def discover_web2_surface(
         model=model,
         observations=tuple(observations),
         discovered_paths=tuple(discovered),
+        bundle_analyses=tuple(bundle_analyses),
     )
 
 
@@ -235,6 +257,133 @@ def _javascript_paths(body: str) -> set[str]:
             candidates.add(value)
     return candidates
 
+
+
+_JS_STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\\x60(?:\\.|[^\\x60\\])*\\x60)"""
+_IDENT = r"[A-Za-z_$][A-Za-z0-9_$]*"
+
+
+def _decode_js_string(token: str) -> str | None:
+    if len(token) < 2 or token[0] not in "\"'" + chr(96) or token[-1] != token[0]:
+        return None
+    value = token[1:-1]
+    if token[0] == chr(96) and "$" + "{" in value:
+        return None
+    try:
+        return bytes(value, "utf-8").decode("unicode_escape")
+    except UnicodeDecodeError:
+        return value
+
+
+def _javascript_constants(body: str) -> dict[str, str]:
+    constants: dict[str, str] = {}
+    pattern = re.compile(rf"\b(?:const|let|var)\s+({_IDENT})\s*=\s*({_JS_STRING})")
+    for match in pattern.finditer(body):
+        value = _decode_js_string(match.group(2))
+        if value is not None:
+            constants[match.group(1)] = value
+    return constants
+
+
+def _resolve_js_expression(expression: str, constants: dict[str, str]) -> str | None:
+    expression = expression.strip()
+    if not expression:
+        return None
+    literal = _decode_js_string(expression)
+    if literal is not None:
+        return literal
+    if re.fullmatch(_IDENT, expression):
+        return constants.get(expression)
+    parts = [part.strip() for part in re.split(r"\s*\+\s*", expression)]
+    if len(parts) > 1:
+        resolved = []
+        for part in parts:
+            value = _resolve_js_expression(part, constants)
+            if value is None:
+                return None
+            resolved.append(value)
+        return "".join(resolved)
+    return None
+
+
+def _request_method_from_context(context: str, default: str = "GET") -> str:
+    match = re.search(r"""\bmethod\s*:\s*["']([A-Za-z]+)["']""", context, re.IGNORECASE)
+    return match.group(1).upper() if match else default
+
+
+def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
+    """Recover statically-resolvable request construction without JS execution."""
+    constants = _javascript_constants(body)
+    base_urls: set[str] = set()
+    methods: set[str] = set()
+    candidates: set[str] = set()
+    unresolved: set[str] = set()
+
+    for match in re.finditer(
+        rf"\b(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL)\s*[:=]\s*({_JS_STRING}|{_IDENT})",
+        body,
+    ):
+        value = _resolve_js_expression(match.group(1), constants)
+        if value is not None:
+            base_urls.add(value)
+
+    patterns = (
+        (rf"\bfetch\s*\(\s*([^,\)]+)([^\)]*)\)", "fetch"),
+        (rf"\baxios\.(get|post|put|patch|delete|head|options)\s*\(\s*([^,\)]+)([^\)]*)\)", "axios"),
+        (rf"\bnew\s+Request\s*\(\s*([^,\)]+)([^\)]*)\)", "request"),
+        (rf"\.open\s*\(\s*['\"]([A-Za-z]+)['\"]\s*,\s*([^,\)]+)", "xhr"),
+    )
+    for pattern, kind in patterns:
+        for match in re.finditer(pattern, body, re.IGNORECASE | re.DOTALL):
+            if kind == "axios":
+                method = match.group(1).upper()
+                expression = match.group(2)
+            elif kind == "xhr":
+                method = match.group(1).upper()
+                expression = match.group(2)
+            else:
+                expression = match.group(1)
+                method = _request_method_from_context(match.group(0))
+            methods.add(method)
+            value = _resolve_js_expression(expression, constants)
+            if value is None:
+                unresolved.add(expression.strip()[:200])
+            else:
+                candidates.add(value)
+
+    for match in re.finditer(
+        rf"\b(?:url|endpoint)\s*:\s*({_JS_STRING}|{_IDENT})", body, re.IGNORECASE
+    ):
+        value = _resolve_js_expression(match.group(1), constants)
+        if value is not None:
+            candidates.add(value)
+        else:
+            unresolved.add(match.group(1)[:200])
+
+    for match in re.finditer(
+        rf"\bnew\s+URL\s*\(\s*([^,\)]+)\s*,\s*([^\)]+)\)", body
+    ):
+        first = _resolve_js_expression(match.group(1), constants)
+        second = _resolve_js_expression(match.group(2), constants)
+        if first is not None and second is not None:
+            candidates.add(urljoin(second.rstrip("/") + "/", first))
+        else:
+            unresolved.add(match.group(0)[:200])
+
+    dynamic_templates = re.findall(
+        r"""(?:fetch|Request|axios\.[A-Za-z]+|\.open)\s*\(\s*(?:\\x60[^\\x60]*\$\{[^\\x60]*\\x60|["'][^"']*\$\{[^"']*["'])""",
+        body,
+    )
+    unresolved.update(item[:200] for item in dynamic_templates)
+    classification = "application" if candidates or base_urls or unresolved else "static_or_vendor"
+    return Web2BundleAnalysis(
+        path=path,
+        classification=classification,
+        base_urls=tuple(sorted(base_urls)),
+        request_methods=tuple(sorted(methods)),
+        endpoint_candidates=tuple(sorted(candidates)),
+        unresolved_request_templates=tuple(sorted(unresolved)),
+    )
 
 def build_discovery_requests(
     paths: Iterable[str],
