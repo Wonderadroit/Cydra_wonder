@@ -28,3 +28,10 @@ jobs:
         run: python -m pytest -q tests/test_research_loop.py tests/test_impact_priority.py
       - name: Post-maturity discovery batch
         run: PYTHONPATH=src python scripts/run_benchmark_050_post_maturity_discovery_batch.py
+      - name: Upload discovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-050-discovery-evidence
+          path: backtest-artifacts/benchmark-050
+          if-no-files-found: warn
