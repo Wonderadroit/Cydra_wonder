@@ -68,3 +68,20 @@ def test_discovery_capability_gaps_are_published_into_hypothesis_planning():
     result=generate_web2_hypotheses_from_discovery(discovery)
     assert result.plans==()
     assert result.capability_gaps==("SERVICE_ORIGIN_RESOLUTION",)
+
+
+def test_resource_state_gap_creates_non_executable_repair_plan():
+    from cydra.web2_discovery import Web2DiscoveryResult
+    from cydra.web2_reasoning import generate_web2_capability_repair_plans
+    from cydra.web2_model import Web2TargetModel
+    discovery=Web2DiscoveryResult(
+        model=Web2TargetModel("https://authorized.example"),
+        observations=(),
+        discovered_paths=(),
+        capability_gaps=("RESOURCE_STATE_ACQUISITION",),
+    )
+    plans=generate_web2_capability_repair_plans(discovery)
+    assert len(plans)==1
+    assert plans[0].capability=="RESOURCE_STATE_ACQUISITION"
+    assert not plans[0].executable
+    assert "resource_identifier_observation" in plans[0].required_capabilities
