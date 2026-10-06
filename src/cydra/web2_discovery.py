@@ -194,10 +194,23 @@ def discover_web2_surface(
             links.update(_openapi_paths(body))
         if "html" in content_type or "<a" in body.lower() or "<form" in body.lower() or "<script" in body.lower():
             links.update(_html_paths(body))
-            # Modern SPA/Next.js pages often embed route/API literals in inline
-            # bootstrap JavaScript. Extract those before spending the bounded
-            # request budget on static bundles.
+            # Analyze inline/bootstrap request construction and service-origin
+            # configuration before spending the bounded request budget.
             links.update(_inline_javascript_paths(body))
+            for inline_index, inline_body in enumerate(_inline_javascript_bodies(body), start=1):
+                bundle_analyses.append(
+                    _analyze_javascript_bundle(f"{path}#inline-script-{inline_index}", inline_body, target)
+                )
+            for origin in _runtime_configuration_origins(body):
+                authorized_host = urlparse(target).hostname
+                bundle_analyses.append(
+                    Web2BundleAnalysis(
+                        path=f"{path}#runtime-config",
+                        classification="application",
+                        service_origins=(origin,),
+                        unauthorized_origins=(() if urlparse(origin).hostname == authorized_host else (origin,)),
+                    )
+                )
         if _looks_like_javascript(path, content_type):
             if path not in analyzed_bundles and len(analyzed_bundles) < max_js_bundles:
                 analysis = _analyze_javascript_bundle(path, body, target)
@@ -359,14 +372,31 @@ def _looks_like_javascript(path: str, content_type: str) -> bool:
     )
 
 
+def _inline_javascript_bodies(body: str) -> tuple[str, ...]:
+    return tuple(
+        match.group(1)
+        for match in re.finditer(r"<script\\b[^>]*>(.*?)</script\\s*>", body, re.IGNORECASE | re.DOTALL)
+    )
+
+
 def _inline_javascript_paths(body: str) -> set[str]:
     """Extract URL-like literals only from inline ``<script>`` contents."""
     candidates: set[str] = set()
-    for match in re.finditer(r"<script\b[^>]*>(.*?)</script\s*>", body, re.IGNORECASE | re.DOTALL):
-        candidates.update(_javascript_paths(match.group(1)))
+    for script in _inline_javascript_bodies(body):
+        candidates.update(_javascript_paths(script))
     return candidates
 
 
+def _runtime_configuration_origins(body: str) -> tuple[str, ...]:
+    """Recover explicit service origins from HTML bootstrap/runtime config."""
+    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL)"
+    origins: set[str] = set()
+    pattern = re.compile(r"[\"'`]?" + origin_key + r"[\"'`]?\\s*[:=]\\s*[\"'`](https?://[^\"'`\\s]+)", re.IGNORECASE)
+    for match in pattern.finditer(body):
+        parsed = urlparse(match.group(1))
+        if parsed.hostname:
+            origins.add(f"{parsed.scheme}://{parsed.netloc}")
+    return tuple(sorted(origins))
 def _javascript_paths(body: str) -> set[str]:
     """Extract explicit URL-like path literals from downloaded JS.
 
