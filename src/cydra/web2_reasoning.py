@@ -41,7 +41,7 @@ def generate_web2_security_hypotheses(
     generic error fingerprints never create an authorization hypothesis.
     """
     result: Web2AuthorizationPlanningResult = generate_executable_ownership_differential_plans(model)
-    return Web2HypothesisPlanningResult(result.plans, result.capability_gaps)
+    return Web2HypothesisPlanningResult(result.plans, tuple(dict.fromkeys((*result.capability_gaps, *discovery.capability_gaps))))
 
 def generate_web2_hypotheses_from_discovery(
     discovery: Web2DiscoveryResult,
