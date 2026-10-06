@@ -762,6 +762,37 @@ def test_discovery_models_non_get_request_methods_as_planned_endpoints():
     assert ("POST", "/v1/items") in endpoints
     assert ("DELETE", "/v1/items/{id}") in endpoints
 
+def test_discovery_extracts_camelcase_resource_identifiers():
+    adapter = FakeAdapter({
+        "/v1/items": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": '{"items":[{"itemId":"item-42","displayName":"example"}]}',
+        },
+        "/v1/items/{id}": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": '{"itemId":"item-42"}',
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/v1/items", "/v1/items/{id}"),
+        max_paths=2,
+    )
+    assert len(result.model.resources) == 1
+    resource = next(iter(result.model.resources.values()))
+    assert resource.identifier == "item-42"
+    assert resource.label == "itemId"
+    assert any(
+        plan.template == "/v1/items/{id}"
+        and plan.materialized_path == "/v1/items/item-42"
+        and plan.executable
+        for plan in result.materialization_plans
+    )
+
+
 def test_discovery_prioritizes_bundle_discovered_resource_collections_for_id_acquisition():
     adapter = FakeAdapter({
         "/": {
