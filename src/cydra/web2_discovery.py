@@ -244,7 +244,7 @@ def _looks_like_javascript(path: str, content_type: str) -> bool:
 def _inline_javascript_paths(body: str) -> set[str]:
     """Extract URL-like literals only from inline ``<script>`` contents."""
     candidates: set[str] = set()
-    for match in re.finditer(r"<script\\b[^>]*>(.*?)</script\\s*>", body, re.IGNORECASE | re.DOTALL):
+    for match in re.finditer(r"<script\b[^>]*>(.*?)</script\s*>", body, re.IGNORECASE | re.DOTALL):
         candidates.update(_javascript_paths(match.group(1)))
     return candidates
 
@@ -268,7 +268,7 @@ def _javascript_paths(body: str) -> set[str]:
 
 
 
-_JS_STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\\x60(?:\\.|[^\\x60\\])*\\x60)"""
+_JS_STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
 _IDENT = r"[A-Za-z_$][A-Za-z0-9_$]*"
 
 
