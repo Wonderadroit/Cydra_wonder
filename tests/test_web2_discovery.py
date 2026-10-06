@@ -119,9 +119,9 @@ def test_api_candidates_survive_bounded_queue_pressure():
         },
     })
 
-    result = discover_web2_surface(adapter, target="https://app.example", max_paths=3)
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=4)
 
-    assert result.discovered_paths == ("/", "/v1/items", "/v1/inventories")
+    assert result.discovered_paths == ("/", "/v1/items", "/app.js", "/v1/inventories")
     assert not any(path.endswith(".png") for path in result.discovered_paths)
 
 
