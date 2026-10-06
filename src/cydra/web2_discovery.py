@@ -450,10 +450,16 @@ def _javascript_constants(body: str, aliases: dict[str, str] | None = None) -> d
     return constants
 
 
-def _resolve_js_expression(\n    expression: str,\n    constants: dict[str, str],\n    aliases: dict[str, str] | None = None,\n) -> str | None:
+def _resolve_js_expression(
+    expression: str,
+    constants: dict[str, str],
+    aliases: dict[str, str] | None = None,
+) -> str | None:
     expression = expression.strip()
     if not expression:
         return None
+    if aliases and expression in aliases:
+        return aliases[expression]
 
     # Minified application bundles commonly construct parameterized endpoints
     # as `"/v1/items/{id}".replace("{id}", id)`. The endpoint template is
