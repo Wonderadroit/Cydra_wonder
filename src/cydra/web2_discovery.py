@@ -114,8 +114,11 @@ def discover_web2_surface(
         if path in seen:
             continue
         template_endpoint = Web2EndpointModel(f"GET {path}", "GET", path)
+        execution_path = path
         if extract_template_parameters(path):
-            plan = materialize_endpoint(template_endpoint, model.resources.values(), resource_provenance)
+            plan = materialize_endpoint(
+                template_endpoint, model.resources.values(), resource_provenance
+            )
             if not plan.executable:
                 # Keep the template in the modeled discovery surface, but do
                 # not execute it or consume an execution slot.
@@ -123,11 +126,16 @@ def discover_web2_surface(
                     discovered.append(path)
                 deferred_templates.add(path)
                 continue
+            # The template is modeled separately from the concrete request.
+            # Only the provenance-backed materialized path is executable.
+            execution_path = plan.materialized_path
+            if execution_path is None:
+                raise RuntimeError("executable materialization must provide a concrete path")
         seen.add(path)
         request = AdapterRequest(
             action_id=f"discover:{len(seen)}",
             operation="http_request",
-            inputs={"method": "GET", "path": path, "identity_id": identity_id},
+            inputs={"method": "GET", "path": execution_path, "identity_id": identity_id},
             metadata={"purpose": "surface_discovery"},
         )
         observation = adapter.execute(request)
