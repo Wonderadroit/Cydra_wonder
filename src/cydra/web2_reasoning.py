@@ -2,6 +2,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from .hypotheses import Hypothesis, HypothesisState
 from .web2_causal import Web2CausalVerification
+from .web2_authorization import Web2AuthorizationPlanningResult, generate_executable_ownership_differential_plans
+from .web2_model import Web2TargetModel
 
 @dataclass(frozen=True)
 class NextWeb2Experiment:
@@ -20,3 +22,22 @@ def select_next_web2_experiment(hypothesis: Hypothesis, *, has_differential_supp
     if has_differential_support and not has_causal_verification: return NextWeb2Experiment("CAUSAL_REPLAY","differential evidence exists but has not yet been reproduced causally")
     if hypothesis.state==HypothesisState.CAUSALLY_ESTABLISHED: return NextWeb2Experiment("IMPACT_VERIFICATION","causal behavior is established; independently verify security impact before reporting a finding")
     return NextWeb2Experiment("MODEL_EXPANSION","no decisive evidence exists; expand the target model to choose the highest-information experiment")
+
+
+@dataclass(frozen=True)
+class Web2HypothesisPlanningResult:
+    """Model-derived hypotheses and executable experiments, kept evidence-free."""
+    plans: tuple
+    capability_gaps: tuple[str, ...]
+
+
+def generate_web2_security_hypotheses(
+    model: Web2TargetModel,
+) -> Web2HypothesisPlanningResult:
+    """Turn explicit model relationships into executable, capability-gated plans.
+
+    This is deliberately conservative: endpoint names, HTTP status codes, and
+    generic error fingerprints never create an authorization hypothesis.
+    """
+    result: Web2AuthorizationPlanningResult = generate_executable_ownership_differential_plans(model)
+    return Web2HypothesisPlanningResult(result.plans, result.capability_gaps)
