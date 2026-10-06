@@ -112,7 +112,7 @@ def discover_web2_surface(
     seeds: Iterable[str] = ("/",),
     identity_id: str | None = None,
     identity_authenticated: bool = False,
-    max_paths: int = 50,
+    max_paths: int = 150,
     max_js_bundles: int = 50,
 ) -> Web2DiscoveryResult:
     """Collect a bounded, read-only surface from explicit seed paths.
@@ -779,7 +779,7 @@ def _path_priority(path: str) -> int:
         r"/(?:auth|account|accounts|user|users|profile|profiles|inventory|shop|shops|player|players|resource|resources|wallet|wallets|token|tokens|item|items|pack|packs|exchange|exchanges)(?:/|$)",
         lowered,
     ):
-        score = 95
+        score = 105
 
     if re.search(r"(?:\{|\}|:id|:user|:wallet|:player|:account)", lowered):
         score += 12
