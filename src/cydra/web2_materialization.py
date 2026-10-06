@@ -183,9 +183,9 @@ def materialize_endpoint(
         if selected is None:
             continue
         values[parameter] = selected.identifier  # type: ignore[assignment]
-        item = provenance_by_resource.get(selected.resource_id)
-        if item is not None:
-            selected_provenance.append(item)
+        provenance_candidates = provenance_by_resource.get(selected.resource_id, [])
+        if len(provenance_candidates) == 1:
+            selected_provenance.append(provenance_candidates[0])
 
     if len(values) != len(parameters):
         return Web2MaterializationPlan(
