@@ -12,6 +12,7 @@ on:
     branches:
       - feature/web2-adapter
       - feature/web2-hypothesis-generation
+      - feature/web2-resource-readiness
   workflow_dispatch:
 
 jobs:
