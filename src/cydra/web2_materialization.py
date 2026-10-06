@@ -158,7 +158,7 @@ def materialize_endpoint(
     materialized = endpoint.path
     for parameter, value in values.items():
         materialized = re.sub(
-            r"{" + re.escape(parameter) + r"}|:" + re.escape(parameter) + r"\\b",
+            r"{" + re.escape(parameter) + r"}|:" + re.escape(parameter) + r"\b",
             value,
             materialized,
         )
