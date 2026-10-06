@@ -92,3 +92,31 @@ def test_build_requests_is_read_only_and_explicit():
     requests = build_discovery_requests(("/", "/account"), identity_id="owner")
     assert [r.inputs["method"] for r in requests] == ["GET", "GET"]
     assert all(r.metadata["purpose"] == "surface_discovery" for r in requests)
+
+
+def test_discovery_extracts_inline_javascript_before_bundle_budget():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script>fetch("/api/session");</script><script src="/_next/static/chunks/app.js"></script>',
+        },
+        "/api/session": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+        "/_next/static/chunks/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": "fetch('/api/from-bundle');",
+        },
+    })
+
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        max_paths=2,
+    )
+
+    assert result.discovered_paths == ("/", "/api/session")
