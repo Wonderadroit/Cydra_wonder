@@ -553,6 +553,29 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
     candidates: set[str] = set()
     unresolved: set[str] = set()
 
+    # First pass: recover literal declarations with a normalized key set.
+    # This intentionally does not depend on the general expression resolver;
+    # service-origin provenance must survive harmless bundle/minifier changes.
+    service_key_names = {
+        "baseurl", "apibase", "apibaseurl", "api_base_url", "api_base",
+        "apiurl", "backendurl", "backend_url", "serviceurl", "service_url",
+        "graphqlurl", "graphql_url", "endpointurl", "endpoint_url",
+    }
+    for match in re.finditer(
+        rf"\b(?:const|let|var)\s+({_IDENT})\s*=\s*({_JS_STRING})",
+        body,
+    ):
+        name = match.group(1)
+        if name.lower() not in service_key_names:
+            continue
+        value = _decode_js_string(match.group(2))
+        if value is None:
+            continue
+        base_urls.add(value)
+        parsed = urlparse(value)
+        if parsed.scheme in {"http", "https"} and parsed.hostname:
+            service_origins.add(f"{parsed.scheme}://{parsed.netloc}")
+
     # Resolve service origins only from application/config evidence. A URL is
     # not trusted merely because a route looks API-like: the surrounding config
     # key/property must establish that it is a service origin.
