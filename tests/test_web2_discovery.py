@@ -652,3 +652,43 @@ def test_bundle_analysis_preserves_external_request_origin_relationship_without_
         "https://api.example.net",
     ) in analysis.request_origins
     assert "https://api.example.net/v1/profile" not in result.discovered_paths
+
+
+def test_discovery_builds_service_origin_relation_graph_with_authorization_boundary():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script src="/app.js"></script>',
+        },
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'fetch("/v1/profile");'
+                'fetch("https://api.example.net/v1/private");'
+            ),
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        max_paths=2,
+        max_js_bundles=1,
+    )
+    relations = {
+        (item.source, item.origin, item.relation, item.authorized_for_execution)
+        for item in result.service_origin_relations
+    }
+    assert (
+        "/app.js:/v1/profile",
+        "https://app.example",
+        "request_targets_service_origin",
+        True,
+    ) in relations
+    assert (
+        "/app.js:https://api.example.net/v1/private",
+        "https://api.example.net",
+        "request_targets_service_origin",
+        False,
+    ) in relations
