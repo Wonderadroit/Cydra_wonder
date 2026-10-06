@@ -32,6 +32,11 @@ class Web2HypothesisPlanningResult:
     capability_gaps: tuple[str, ...]
 
 
+def _merge_capability_gaps(*gap_sets: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """Preserve capability failures from every stage of the planning pipeline."""
+    return tuple(dict.fromkeys(gap for gaps in gap_sets for gap in gaps))
+
+
 def generate_web2_security_hypotheses(
     model: Web2TargetModel,
 ) -> Web2HypothesisPlanningResult:
@@ -41,7 +46,8 @@ def generate_web2_security_hypotheses(
     generic error fingerprints never create an authorization hypothesis.
     """
     result: Web2AuthorizationPlanningResult = generate_executable_ownership_differential_plans(model)
-    return Web2HypothesisPlanningResult(result.plans, tuple(dict.fromkeys((*result.capability_gaps, *discovery.capability_gaps))))
+    return Web2HypothesisPlanningResult(result.plans, _merge_capability_gaps(tuple(result.capability_gaps)))
+
 
 def generate_web2_hypotheses_from_discovery(
     discovery: Web2DiscoveryResult,
@@ -52,9 +58,18 @@ def generate_web2_hypotheses_from_discovery(
     Only explicit model relationships and provenance-backed materialization may
     produce executable hypotheses. External service origins never authorize
     execution.
+
+    Capability gaps discovered upstream are planning inputs too: they must
+    survive publication even when the model planner cannot produce a plan yet.
     """
     result = generate_executable_ownership_differential_plans(
         discovery.model,
         provenance=discovery.resource_provenance,
     )
-    return Web2HypothesisPlanningResult(result.plans, result.capability_gaps)
+    return Web2HypothesisPlanningResult(
+        result.plans,
+        _merge_capability_gaps(
+            tuple(result.capability_gaps),
+            tuple(discovery.capability_gaps),
+        ),
+    )
