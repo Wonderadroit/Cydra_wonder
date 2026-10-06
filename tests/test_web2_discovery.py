@@ -575,3 +575,38 @@ def test_generic_http_client_wrapper_does_not_authorize_external_origin():
     assert analysis.unauthorized_origins == ("https://api.example.net",)
     assert "https://api.example.net/v1/profile" not in analysis.endpoint_candidates
 
+
+
+
+def test_discovery_prioritizes_runtime_config_before_hashed_application_bundles():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": (
+                '<script src="/_next/static/chunks/app.js"></script>'
+                '<script src="/config.js"></script>'
+                '<a href="/v1/items">items</a>'
+            ),
+        },
+        "/config.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'window.__RUNTIME_CONFIG__ = { API_URL: "https://api.example.net" };',
+        },
+        "/_next/static/chunks/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'fetch("/v1/from-bundle");',
+        },
+        "/v1/items": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+        "/v1/from-bundle": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+    })
+
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=3)
+
+    assert result.discovered_paths[:2] == ("/", "/config.js")
+    runtime = [item for item in result.bundle_analyses if item.path == "/config.js"]
+    assert runtime
+    assert runtime[0].service_origins == ("https://api.example.net",)
+    assert runtime[0].unauthorized_origins == ("https://api.example.net",)
