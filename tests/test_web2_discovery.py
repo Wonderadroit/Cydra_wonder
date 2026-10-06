@@ -522,3 +522,56 @@ def test_discovery_prioritizes_hashed_next_application_chunks_over_api_candidate
         "/_next/static/chunks/0abc123.js",
         "/v1/from-bundle",
     )
+
+def test_bundle_analysis_recovers_generic_http_client_wrappers():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'const api = client;'
+                'api.get("/v1/items");'
+                'api.post("/v1/items");'
+                'http.request("/v1/profile");'
+                'request("/v1/session");'
+            ),
+        },
+        "/v1/items": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+        "/v1/profile": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+        "/v1/session": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=5,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert analysis.service_origins == ("https://app.example",)
+    assert set(analysis.request_methods) >= {"GET", "POST"}
+    assert "/v1/items" in analysis.endpoint_candidates
+    assert "/v1/profile" in analysis.endpoint_candidates
+    assert "/v1/session" in analysis.endpoint_candidates
+
+
+def test_generic_http_client_wrapper_does_not_authorize_external_origin():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'api.get("https://api.example.net/v1/profile");',
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=1,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert analysis.service_origins == ("https://api.example.net",)
+    assert analysis.unauthorized_origins == ("https://api.example.net",)
+    assert "https://api.example.net/v1/profile" not in analysis.endpoint_candidates
+
