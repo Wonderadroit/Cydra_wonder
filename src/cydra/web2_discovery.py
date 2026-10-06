@@ -156,6 +156,7 @@ def discover_web2_surface(
     known_js_paths: set[str] = set()
     response_fingerprints: dict[str, Web2ResponseFingerprint] = {}
     generic_negative_origins: set[str] = set()
+    response_csp_origins: dict[str, tuple[str, ...]] = {}
 
     while queue and len(seen) < max_paths:
         _, _, path = heapq.heappop(queue)
@@ -195,6 +196,9 @@ def discover_web2_surface(
         if not isinstance(payload, dict):
             continue
         fingerprint = _response_fingerprint(payload)
+        csp_origins = _response_csp_service_origins(payload)
+        if csp_origins:
+            response_csp_origins[path] = csp_origins
         if fingerprint is not None:
             response_fingerprints[path] = fingerprint
             if fingerprint.generic_negative:
