@@ -658,6 +658,25 @@ def _origin_for_path(path: str, target: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+def _response_csp_service_origins(payload: dict[str, Any]) -> tuple[str, ...]:
+    """Recover connect-src service origins from response CSP without executing them."""
+    headers = payload.get("headers") or {}
+    if not isinstance(headers, dict):
+        return ()
+    csp = str(headers.get("Content-Security-Policy", headers.get("content-security-policy", "")))
+    origins: set[str] = set()
+    for directive in re.split(r";", csp):
+        parts = directive.strip().split()
+        if not parts or parts[0].lower() != "connect-src":
+            continue
+        for value in parts[1:]:
+            if value in {"'self'", "'none'", "*"} or value.startswith("'"):
+                continue
+            parsed = urlparse(value)
+            if parsed.scheme in {"http", "https"} and parsed.hostname:
+                origins.add(f"{parsed.scheme}://{parsed.netloc}")
+    return tuple(sorted(origins))
+
 def _response_fingerprint(payload: dict[str, Any]) -> Web2ResponseFingerprint | None:
     raw_body = payload.get("body", "")
     if not isinstance(raw_body, str):
