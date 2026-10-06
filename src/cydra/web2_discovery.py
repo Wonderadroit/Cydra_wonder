@@ -434,12 +434,7 @@ def _detect_service_origin_resolution_gaps(
     # test fixtures) must not turn repeated same-origin API 404s into a false
     # execution-readiness gap.
     request_linked_origin_counts: dict[str, int] = {}
-    explicit_external_origins: set[str] = set()
     for analysis in application_analyses:
-        for origin in analysis.base_urls:
-            parsed = urlparse(origin)
-            if parsed.scheme in {"http", "https"} and parsed.hostname != urlparse(target).hostname:
-                explicit_external_origins.add(f"{parsed.scheme}://{parsed.netloc}")
         for _, origin in analysis.request_origins:
             if urlparse(origin).hostname != urlparse(target).hostname:
                 request_linked_origin_counts[origin] = request_linked_origin_counts.get(origin, 0) + 1
@@ -461,8 +456,7 @@ def _detect_service_origin_resolution_gaps(
     if authorized_origins:
         return ()
     if (
-        not explicit_external_origins
-        and not repeated_request_linked_origins
+        not repeated_request_linked_origins
         and not unresolved_templates
     ):
         return ()
