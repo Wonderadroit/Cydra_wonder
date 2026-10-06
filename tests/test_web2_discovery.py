@@ -43,7 +43,7 @@ def test_discovery_follows_same_host_html_links_and_scripts():
 
     result = discover_web2_surface(adapter, target="https://app.example", max_paths=10)
 
-    assert result.discovered_paths == ("/", "/account", "/static/app.js", "/api/users/me")
+    assert result.discovered_paths == ("/", "/static/app.js", "/api/users/me", "/account")
     assert "GET /api/users/me" in result.model.endpoints
     assert "GET /api/profile/me" in result.model.endpoints
 
