@@ -77,7 +77,7 @@ def extract_resource_identifiers(
                     identifier = str(child).strip()
                     if identifier:
                         digest = hashlib.sha256(
-                            f"{endpoint.endpoint_id}|{child_path}|{identifier}".encode()
+                            f"{key_text.lower()}|{identifier}".encode()
                         ).hexdigest()[:16]
                         resource_id = f"resource:{digest}"
                         resource = Web2ResourceModel(
