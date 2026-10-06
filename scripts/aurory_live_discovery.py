@@ -65,8 +65,8 @@ def main() -> int:
     parser.add_argument("--output", default="artifacts/aurory-discovery.json")
     args = parser.parse_args()
 
-    if args.max_paths < 1 or args.max_paths > 50:
-        raise SystemExit("--max-paths must be between 1 and 50")
+    if args.max_paths < 1 or args.max_paths > 150:
+        raise SystemExit("--max-paths must be between 1 and 150")
     if args.max_js_bundles < 0 or args.max_js_bundles > args.max_paths:
         raise SystemExit("--max-js-bundles must be between 0 and max-paths")
 
