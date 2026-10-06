@@ -287,6 +287,19 @@ def _canonicalize_discovery_candidate(value: str) -> str:
     return candidate.rstrip()
 
 
+def _candidate_is_authorized(value: str, target: str) -> bool:
+    """Return whether a concrete request candidate is already target-authorized.
+
+    Relative paths are same-origin by construction. Absolute URLs must match
+    the target host; discovering an external service origin is evidence only,
+    not permission to execute or expose a concrete endpoint candidate.
+    """
+    parsed = urlparse(value)
+    if not parsed.scheme and not parsed.netloc:
+        return value.startswith("/")
+    return parsed.scheme in {"http", "https"} and parsed.hostname == urlparse(target).hostname
+
+
 def _same_host_path(value: str, target: str) -> str | None:
     value = _canonicalize_discovery_candidate(value)
     if not value:
@@ -624,11 +637,18 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
 
     if "$" + "{" in body and re.search(r"\b(?:fetch|Request|axios\.[A-Za-z]+)|\.open", body):
         unresolved.add("<dynamic-request-template>")
-    candidates = {_canonicalize_discovery_candidate(candidate) for candidate in candidates if candidate}
+    candidates = {
+        _canonicalize_discovery_candidate(candidate)
+        for candidate in candidates
+        if candidate and _candidate_is_authorized(candidate, target)
+    }
     authorized_host = urlparse(target).hostname
     # Concrete service origins are evidence, not authorization. Only an origin
     # whose host is already the target host may enter the executable frontier;
-    # external origins remain planned and explicitly unauthorized.
+    # external origins remain planned and explicitly unauthorized. In
+    # particular, a resolved external base URL must not leak its concrete
+    # request path into endpoint_candidates: the origin is evidence, while the
+    # request remains non-executable until authorization exists.
     unauthorized_origins = {
         origin for origin in service_origins
         if urlparse(origin).hostname != authorized_host
