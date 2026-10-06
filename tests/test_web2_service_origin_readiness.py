@@ -6,13 +6,14 @@ from cydra.web2_discovery import (
 from cydra.web2_model import Web2TargetModel
 
 
-def make_analysis(path, endpoints):
+def make_analysis(path, endpoints, *, request_origins=()):
     return Web2BundleAnalysis(
         path=path,
         classification="application",
         endpoint_candidates=tuple(endpoints),
         request_methods=("GET",),
         unresolved_request_templates=("<dynamic-request-template>",),
+        request_origins=tuple(request_origins),
     )
 
 
@@ -29,7 +30,53 @@ def make_negatives(paths):
     }
 
 
-def test_service_origin_gap_requires_corroborated_application_surface():
+def test_service_origin_gap_requires_concrete_external_request_provenance():
+    analyses = [
+        make_analysis(
+            "bundle-a.js",
+            ["/v1/items", "/v1/items/{id}", "/v1/inventories"],
+            request_origins=(("https://api.example/v1/items", "https://api.example"),),
+        ),
+        make_analysis("bundle-b.js", ["/v1/matches", "/v1/matches/{match_id}", "/v2/items"]),
+    ]
+    negatives = make_negatives(
+        ["/v1/items", "/v1/inventories", "/v1/matches", "/v2/items", "/v1/packs"]
+    )
+
+    gaps = _detect_service_origin_resolution_gaps(
+        target="https://app.example",
+        bundle_analyses=analyses,
+        response_fingerprints=negatives,
+        model=Web2TargetModel("https://app.example"),
+    )
+
+    assert gaps == ("SERVICE_ORIGIN_RESOLUTION",)
+
+
+def test_service_origin_gap_ignores_placeholder_external_origins():
+    analyses = [
+        make_analysis(
+            "bundle-a.js",
+            ["/v1/items", "/v1/inventories", "/v1/packs"],
+            request_origins=(("https://example.com/v1/items", "https://example.com"),),
+        ),
+        make_analysis("bundle-b.js", ["/v1/matches", "/v2/items", "/v1/challenges"]),
+    ]
+    negatives = make_negatives(
+        ["/v1/items", "/v1/inventories", "/v1/packs", "/v1/matches", "/v2/items"]
+    )
+
+    gaps = _detect_service_origin_resolution_gaps(
+        target="https://app.example",
+        bundle_analyses=analyses,
+        response_fingerprints=negatives,
+        model=Web2TargetModel("https://app.example"),
+    )
+
+    assert gaps == ()
+
+
+def test_service_origin_gap_does_not_trigger_for_large_relative_surface():
     analyses = [
         make_analysis("bundle-a.js", ["/v1/items", "/v1/items/{id}", "/v1/inventories"]),
         make_analysis("bundle-b.js", ["/v1/matches", "/v1/matches/{match_id}", "/v2/items"]),
@@ -45,7 +92,7 @@ def test_service_origin_gap_requires_corroborated_application_surface():
         model=Web2TargetModel("https://app.example"),
     )
 
-    assert gaps == ("SERVICE_ORIGIN_RESOLUTION",)
+    assert gaps == ()
 
 
 def test_service_origin_gap_does_not_trigger_for_small_surface():
