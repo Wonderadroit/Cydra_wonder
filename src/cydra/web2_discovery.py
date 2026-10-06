@@ -219,27 +219,48 @@ def _same_host_path(value: str, target: str) -> str | None:
 
 
 def _path_priority(path: str) -> int:
-    """Rank known application surfaces without guessing new paths."""
+    """Rank discovered surfaces by expected security value without guessing paths.
+
+    The execution budget is finite, so candidates that expose object identity,
+    account state, transactions, ownership, or mutable workflows outrank
+    generic application/static resources. This is only scheduling metadata:
+    it never turns a path into a finding.
+    """
     lowered = path.lower().split("?", 1)[0]
+    score = 50
+
     if re.search(r"/(?:api|graphql|rpc|v[0-9]+)(?:/|$)", lowered):
-        return 100
-    if re.search(
-        r"/(?:auth|account|accounts|user|users|profile|profiles|inventory|shop|shops|player|players|resource|resources)(?:/|$)",
+        score = 100
+    elif re.search(
+        r"/(?:auth|account|accounts|user|users|profile|profiles|inventory|shop|shops|player|players|resource|resources|wallet|wallets|token|tokens|item|items|pack|packs|exchange|exchanges)(?:/|$)",
         lowered,
     ):
-        return 95
-    if re.search(r"/(?:chunks/app|chunks/pages|app|pages)(?:/|$)", lowered):
-        return 90
-    if re.search(r"/(?:framework|webpack|polyfills|vendor)(?:[-_/]|\.|$)", lowered):
-        return 65
-    if lowered.endswith((".js", ".mjs")) or ".js/" in lowered or ".js?" in lowered:
-        return 80
-    if lowered.endswith((".json", ".yaml", ".yml")):
-        return 70
-    if lowered.endswith((".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".css", ".woff", ".woff2")):
-        return 10
-    return 50
+        score = 95
+    elif re.search(r"/(?:chunks/app|chunks/pages|app|pages)(?:/|$)", lowered):
+        score = 90
 
+    if re.search(r"(?:\{|\}|:id|:user|:wallet|:player|:account)", lowered):
+        score += 12
+
+    if re.search(
+        r"/(?:admin|delete|remove|update|edit|create|purchase|purchases|buy|sell|transfer|trade|exchange|claim|redeem|favorite|favorites|equip|withdraw|deposit)(?:/|$)",
+        lowered,
+    ):
+        score += 8
+
+    if re.search(r"/(?:wallet|token|inventory|item|pack|order|payment|transaction|transactions)(?:/|$)", lowered):
+        score += 5
+
+    if re.search(r"/(?:framework|webpack|polyfills|vendor)(?:[-_/]|\.|$)", lowered):
+        score = min(score, 65)
+    elif lowered.endswith((".js", ".mjs")) or ".js/" in lowered or ".js?" in lowered:
+        score = max(score, 80)
+    elif lowered.endswith((".json", ".yaml", ".yml")):
+        score = max(score, 70)
+    elif lowered.endswith((".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".css", ".woff", ".woff2")):
+        score = 10
+
+    return score
 
 def _html_paths(body: str) -> set[str]:
     parser = _LinkParser()
