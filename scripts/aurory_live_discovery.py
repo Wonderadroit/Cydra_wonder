@@ -7,6 +7,7 @@ from pathlib import Path
 
 from cydra.web2_adapter import Web2Adapter, Web2Identity, Web2Target
 from cydra.web2_discovery import discover_web2_surface
+from cydra.web2_reasoning import generate_web2_hypotheses_from_discovery
 
 
 TARGET = "https://app.aurory.io"
@@ -96,8 +97,44 @@ def main() -> int:
         max_js_bundles=args.max_js_bundles,
     )
 
+    hypothesis_planning = generate_web2_hypotheses_from_discovery(result)
     report = {
-        "target": TARGET,
+        "model": {
+            "identities": [
+                {"identity_id": identity.identity_id, "label": identity.label, "authenticated": identity.authenticated}
+                for identity in sorted(result.model.identities.values(), key=lambda item: item.identity_id)
+            ],
+            "resources": [
+                {"resource_id": resource.resource_id, "label": resource.label, "owner_identity_id": resource.owner_identity_id, "identifier": resource.identifier}
+                for resource in sorted(result.model.resources.values(), key=lambda item: item.resource_id)
+            ],
+        },
+        "resource_provenance": [
+            {"resource_id": item.resource_id, "identifier": item.identifier, "source_endpoint_id": item.source_endpoint_id, "source_observation_id": item.source_observation_id, "field_path": item.field_path}
+            for item in result.resource_provenance
+        ],
+        "materialization_plans": [
+            {
+                "endpoint_id": plan.endpoint_id, "template": plan.template,
+                "requirements": [{"parameter": requirement.parameter, "resource_id": requirement.resource_id} for requirement in plan.requirements],
+                "materialized_path": plan.materialized_path, "executable": plan.executable,
+            }
+            for plan in result.materialization_plans
+        ],
+        "service_origin_relations": [
+            {"source": relation.source, "origin": relation.origin, "relation": relation.relation, "authorized_for_execution": relation.authorized_for_execution}
+            for relation in result.service_origin_relations
+        ],
+        "hypothesis_planning": {
+            "plan_count": len(hypothesis_planning.plans),
+            "plans": [
+                {"hypothesis_id": plan.hypothesis.hypothesis_id, "statement": plan.hypothesis.statement, "target_function": plan.hypothesis.target_function, "expected_impact": plan.hypothesis.expected_impact}
+                for plan in hypothesis_planning.plans
+            ],
+            "capability_gaps": list(hypothesis_planning.capability_gaps),
+        },
+    },
+    report = {        "target": TARGET,
         "authorized_execution": True,
         "mode": "authenticated" if token else "anonymous_with_bugcrowd_header",
         "bug_bounty_username": username,
