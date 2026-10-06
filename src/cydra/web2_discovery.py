@@ -417,24 +417,6 @@ def _detect_service_origin_resolution_gaps(
     # experiments. The thresholds deliberately require corroboration across
     # bundles/routes so framework/vendor URL parsing does not recreate the old
     # false-positive path.
-    application_endpoint_candidates = {
-        candidate
-        for analysis in application_analyses
-        for candidate in analysis.endpoint_candidates
-        if _looks_like_api_surface(candidate)
-    }
-    application_endpoint_bundles = {
-        analysis.path
-        for analysis in application_analyses
-        if any(_looks_like_api_surface(candidate) for candidate in analysis.endpoint_candidates)
-    }
-    if (
-        len(api_negative_paths) < 5
-        or len(application_endpoint_candidates) < 5
-        or len(application_endpoint_bundles) < 2
-    ):
-        return ()
-
     # Distinguish an explicitly declared target service from a relative request
     # that merely defaults to the current web origin. Relative request primitives
     # are useful provenance, but they must not mask an external service-origin
@@ -488,7 +470,38 @@ def _detect_service_origin_resolution_gaps(
     }
     if authorized_origins:
         return ()
-    if not repeated_request_linked_origins:
+
+    # Preserve the strong pre-existing signal: one concrete, non-placeholder
+    # request to an external origin is enough when repeated same-origin API
+    # negatives corroborate it. This path is deliberately evaluated before the
+    # broader multi-bundle fallback below so existing precise provenance remains
+    # as sensitive as before.
+    if repeated_request_linked_origins:
+        return (
+            "SERVICE_ORIGIN_RESOLUTION",
+        )
+
+    # When no concrete external origin survived static resolution, a broad
+    # application API surface plus repeated same-origin negatives is still
+    # sufficient to identify the same capability boundary. Require independent
+    # corroboration across bundles/routes so framework/vendor URL expressions do
+    # not recreate the historical false-positive path.
+    application_endpoint_candidates = {
+        candidate
+        for analysis in application_analyses
+        for candidate in analysis.endpoint_candidates
+        if _looks_like_api_surface(candidate)
+    }
+    application_endpoint_bundles = {
+        analysis.path
+        for analysis in application_analyses
+        if any(_looks_like_api_surface(candidate) for candidate in analysis.endpoint_candidates)
+    }
+    if (
+        len(api_negative_paths) < 5
+        or len(application_endpoint_candidates) < 5
+        or len(application_endpoint_bundles) < 2
+    ):
         return ()
 
     return (
