@@ -14,3 +14,13 @@ def test_model_rejects_unknown_resource_owner():
     try: m.add_resource(Web2ResourceModel("resource:1","record","missing"))
     except ValueError as e: assert "owner" in str(e)
     else: raise AssertionError("unknown owner should be rejected")
+
+
+def test_identity_is_not_authenticated_by_default():
+    identity = Web2IdentityModel("anonymous", "anonymous")
+    assert identity.authenticated is False
+
+
+def test_identity_can_explicitly_record_authenticated_state():
+    identity = Web2IdentityModel("owner", "owner", authenticated=True)
+    assert identity.authenticated is True
