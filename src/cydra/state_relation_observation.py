@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import re
+import subprocess
+from pathlib import Path
 
 from .models import ContractModel, FunctionModel
 from .state_relation import StateRelation, plan_source_state_relations
@@ -20,6 +23,7 @@ class StateRelationObservationPlan:
     # This prevents a transition that changes its own index state from comparing
     # different mapping keys before vs. after execution.
     index_state_types: tuple[tuple[str, str], ...] = ()
+    observation_kind: str = "public_getter"
 
 
 _PUBLIC_SCALAR_RE = re.compile(
@@ -84,8 +88,54 @@ def _normalize_type(type_name: str) -> str:
     return "uint256" if type_name == "uint" else type_name
 
 
+def _forge_storage_layout(project: Path, contract: ContractModel) -> dict:
+    try:
+        completed = subprocess.run((
+            "forge", "inspect", contract.name, "storage-layout", "--json"),
+            cwd=project, text=True, capture_output=True, check=False,
+        )
+        value = json.loads(completed.stdout) if completed.returncode == 0 else {}
+        return value if isinstance(value, dict) else {}
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}
+
+def _storage_observation(project: Path, contract: ContractModel, state: str,
+                         indexes: tuple[str, ...], parameters: dict[str, str]):
+    layout = _forge_storage_layout(project, contract)
+    entries, types = layout.get("storage"), layout.get("types")
+    if not isinstance(entries, list) or not isinstance(types, dict): return None
+    entry = next((item for item in entries if item.get("label") == state), None)
+    if not isinstance(entry, dict): return None
+    type_id = str(entry.get("type", "")); mapping_keys = []
+    while True:
+        info = types.get(type_id, {})
+        if info.get("encoding") != "mapping": break
+        key_id, value_id = info.get("key"), info.get("value")
+        if not key_id or not value_id: return None
+        mapping_keys.append(str(types.get(str(key_id), {}).get("label", key_id)))
+        type_id = str(value_id)
+    if len(mapping_keys) != len(indexes): return None
+    args = []
+    for expr, key_label in zip(indexes, mapping_keys):
+        if expr == "msg.sender":
+            if "address" not in key_label: return None
+            args.append(expr)
+        elif expr in parameters:
+            args.append(expr)
+        else: return None
+    slot = f"bytes32(uint256({entry.get('slot', '0')}))"
+    for arg in args: slot = f"keccak256(abi.encode({arg}, {slot}))"
+    value_info = types.get(type_id, {})
+    label = str(value_info.get("label", ""))
+    size = value_info.get("numberOfBytes")
+    if value_info.get("encoding") != "inplace" or not isinstance(size, int) or not re.search(r"\\b(?:u?int)(?:[0-9]+)?\\b", label): return None
+    offset = int(entry.get("offset", 0)); bits = size * 8
+    if bits > 256: return None
+    mask = "" if bits == 256 else f" & {hex((1 << bits) - 1)}"
+    getter = f"(uint256(vm.load(address(target), {slot})) >> {offset * 8}){mask}"
+    return getter, label
 def plan_state_relation_observations(
-    contract: ContractModel, function: FunctionModel
+    contract: ContractModel, function: FunctionModel, project: Path | None = None
 ) -> tuple[StateRelationObservationPlan, ...]:
     """Bind source-backed relations to deterministic Solidity getters.
 
@@ -104,11 +154,16 @@ def plan_state_relation_observations(
 
     for relation in plan_source_state_relations(contract, function):
         getter_info = getters.get(relation.state)
-        if getter_info is None:
-            continue
-        state_type, key_types = getter_info
-        if not state_type.startswith("uint"):
-            continue
+        observation_kind = "public_getter"
+        storage = None
+        if getter_info is None or not getter_info[0].startswith(("uint", "int")):
+            if project is None: continue
+            storage = _storage_observation(project, contract, relation.state, relation.index_expressions, parameters)
+            if storage is None: continue
+            state_type, key_types = storage[1], ()
+            observation_kind = "compiler_storage"
+        else:
+            state_type, key_types = getter_info
 
         if relation.rhs_expression is not None:
             rhs_type = parameters.get(relation.rhs_expression)
@@ -116,6 +171,9 @@ def plan_state_relation_observations(
                 continue
 
         indexes = relation.index_expressions
+        if observation_kind == "compiler_storage":
+            plans.append(StateRelationObservationPlan(state=relation.state, state_type=state_type, getter=storage[0], relation=relation, source=f"{contract.source}:{function.line}", observation_kind=observation_kind))
+            continue
         if len(indexes) != len(key_types):
             if indexes:
                 continue
