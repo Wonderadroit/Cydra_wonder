@@ -35,3 +35,16 @@ def test_generator_ignores_endpoints_without_explicit_resource_relation():
     m.add_resource(Web2ResourceModel("resource:1","record","alice","1"))
     m.add_endpoint(Web2EndpointModel("endpoint:unrelated","GET","/health"))
     assert generate_ownership_differential_plans(m) == ()
+
+
+def test_executable_generator_surfaces_materialization_gap():
+    from cydra.web2_authorization import generate_executable_ownership_differential_plans
+    m=Web2TargetModel("https://authorized.example")
+    m.add_identity(Web2IdentityModel("alice","Alice"))
+    m.add_identity(Web2IdentityModel("bob","Bob"))
+    m.add_resource(Web2ResourceModel("resource:unknown","record","alice",None))
+    m.add_endpoint(Web2EndpointModel("endpoint:get","GET","/records/{id}",("resource:unknown",)))
+    result=generate_executable_ownership_differential_plans(m)
+    assert result.plans == ()
+    assert result.capability_gaps
+    assert "materialization capability gap" in result.capability_gaps[0]
