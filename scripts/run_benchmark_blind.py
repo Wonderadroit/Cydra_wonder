@@ -36,6 +36,7 @@ from cydra.prerequisite_graph import apply_observations, build_prerequisite_grap
 from cydra.runtime_observation import plan_public_state_observations
 from cydra.runtime_observation_evidence import evidence_records_from_execution, observations_from_execution
 from cydra.state_relation_observation import plan_state_relation_observations
+from cydra.transfer_accounting_execution import generate_transfer_accounting_test
 from cydra.state_relation_evidence import (
     evidence_records_from_relation_execution,
     violation_records_from_relation_execution,
@@ -613,6 +614,27 @@ def _run_guard_parity(project: Path, hypothesis, experiment, contract) -> dict[s
         "classification_blocked_reason": CLASS_CAPABILITIES["guard_parity"]["classify_block_reason"],
     }
 
+def _run_transfer_accounting(project: Path, hypothesis, experiment, contract) -> dict[str, Any]:
+    """Execute the canonical transfer-accounting adapter for supported target shapes."""
+    output = test_path_for(project, f"generated/{hypothesis.hypothesis_id}.t.sol")
+    if contract.constructor is None or len(contract.constructor.parameters) != 1:
+        raise ValueError("transfer-accounting adapter requires a single constructor dependency")
+    generated = generate_transfer_accounting_test(
+        hypothesis, contract, _target_import(contract, project), contract.name,
+        "FeeTransferToken", output, experiment=experiment,
+    )
+    execution = run_foundry_test(project, generated, experiment.experiment_id, "blind")
+    return {
+        "generated_path": str(generated),
+        "execution": execution,
+        "classification": "NOT_REACHED",
+        "execution_status": execution.status,
+        "execution_executed": execution.executed,
+        "tests_run": execution.tests_run,
+        "tests_failed": execution.tests_failed,
+        "classification_blocked_reason": "transfer-accounting requires causal differential verification",
+    }
+
 def _execution_adapter(class_name: str):
     """Return the generic runtime adapter for an executable capability class.
 
@@ -625,6 +647,7 @@ def _execution_adapter(class_name: str):
         "state": _run_state,
         "initialization": _run_initialization,
         "guard_parity": _run_guard_parity,
+        "transfer_accounting": _run_transfer_accounting,
     }.get(class_name)
 
 
@@ -663,6 +686,8 @@ def run_layers(result, project: Path, classes: tuple[str, ...], compiler_evidenc
         if class_name is None and hypothesis.invariant_id.startswith("INV-GUARD-PARITY-"):
             class_name = "guard_parity"
         experiment = experiments[hypothesis.hypothesis_id]
+        if class_name is None and hypothesis.invariant_id.startswith("INV-TRANSFER-ACCOUNTING-"):
+            class_name = "transfer_accounting"
         if class_name is None:
             statuses.append(_unknown_reasoning_status(hypothesis, experiment))
             continue
