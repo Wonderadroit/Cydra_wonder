@@ -148,12 +148,10 @@ def discover_web2_surface(
             if not normalized or normalized in seen or normalized in queued:
                 continue
             priority = _path_priority(normalized)
-            # The execution budget is a budget on work performed, not on the
-            # number of candidates CYDRA is allowed to remember. Explicit
-            # application/API candidates must survive queue pressure so that
-            # static assets cannot crowd them out.
-            if priority < 90 and len(queue) >= max_paths:
-                continue
+            # Keep the frontier complete. max_paths bounds execution, while
+            # priority decides which discovered work executes first. A queue
+            # cap here would prevent an application bundle from running long
+            # enough to reveal higher-priority API candidates.
             heapq.heappush(queue, (-priority, sequence, normalized))
             queued.add(normalized)
             sequence += 1
@@ -329,7 +327,7 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
     unresolved: set[str] = set()
 
     for match in re.finditer(
-        rf"\b(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL)\s*[:=]\s*({_JS_STRING}|{_IDENT})",
+        rf"\b(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE)\s*[:=]\s*({_JS_STRING}|{_IDENT})",
         body,
     ):
         value = _resolve_js_expression(match.group(1), constants)
