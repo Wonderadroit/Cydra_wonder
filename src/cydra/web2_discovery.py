@@ -678,15 +678,24 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
         (rf"\baxios\.(get|post|put|patch|delete|head|options)\s*\(\s*([^,\)]+)([^\)]*)\)", "axios"),
         (rf"\bnew\s+Request\s*\(\s*([^,\)]+)([^\)]*)\)", "request"),
         (rf"\.open\s*\(\s*['\"]([A-Za-z]+)['\"]\s*,\s*([^,\)]+)", "xhr"),
+        # Minified clients commonly hide transport behind member methods such
+        # as api.get("/v1/items") or client.post("/v1/..."). Recover only
+        # concrete URL/path arguments; this is lexical evidence.
+        (rf"\.\s*(get|post|put|patch|delete|head|options)\s*\(\s*([^,\)]+)([^\)]*)\)", "member_http"),
+        (rf"\.\s*request\s*\(\s*([^,\)]+)([^\)]*)\)", "member_request"),
+        (rf"\b(?:request|httpRequest)\s*\(\s*([^,\)]+)([^\)]*)\)", "request_function"),
     )
     for pattern, kind in patterns:
         for match in re.finditer(pattern, body, re.IGNORECASE | re.DOTALL):
-            if kind == "axios":
+            if kind in {"axios", "member_http"}:
                 method = match.group(1).upper()
                 expression = match.group(2)
             elif kind == "xhr":
                 method = match.group(1).upper()
                 expression = match.group(2)
+            elif kind in {"member_request", "request_function"}:
+                expression = match.group(1)
+                method = _request_method_from_context(match.group(0))
             else:
                 expression = match.group(1)
                 method = _request_method_from_context(match.group(0))
