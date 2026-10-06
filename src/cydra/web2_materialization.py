@@ -12,7 +12,7 @@ from .web2_model import Web2EndpointModel, Web2ResourceModel
 
 
 _TEMPLATE_PARAMETER = re.compile(r"{([A-Za-z_][A-Za-z0-9_-]*)}|:([A-Za-z_][A-Za-z0-9_-]*)")
-_IDENTIFIER_FIELD = re.compile(r"^(?:id|uuid|address|[A-Za-z][A-Za-z0-9]*(?:_id|_uuid|_address))$", re.I)
+_IDENTIFIER_FIELD = re.compile(r"^(?:id|uuid|address|[A-Za-z][A-Za-z0-9]*(?:_id|_uuid|_address|Id|ID|Uuid|UUID|Address))$", re.I)
 
 
 @dataclass(frozen=True)
