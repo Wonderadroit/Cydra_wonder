@@ -147,9 +147,14 @@ def discover_web2_surface(
             normalized = _same_host_path(candidate, target)
             if not normalized or normalized in seen or normalized in queued:
                 continue
-            if len(seen) + len(queue) >= max_paths:
+            priority = _path_priority(normalized)
+            # The execution budget is a budget on work performed, not on the
+            # number of candidates CYDRA is allowed to remember. Explicit
+            # application/API candidates must survive queue pressure so that
+            # static assets cannot crowd them out.
+            if priority < 90 and len(queue) >= max_paths:
                 continue
-            heapq.heappush(queue, (-_path_priority(normalized), sequence, normalized))
+            heapq.heappush(queue, (-priority, sequence, normalized))
             queued.add(normalized)
             sequence += 1
 
