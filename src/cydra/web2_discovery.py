@@ -343,7 +343,7 @@ def _path_priority(path: str) -> int:
     # Prioritize it under the bounded execution budget; this is scheduling metadata only.
     if re.search(r"/(?:config|runtime-config|configuration)\.(?:js|json)(?:$|\?)", lowered) or lowered in {"/config.js", "/config.json"}:
         score = 145
-   elif re.search(r"/_next/static/chunks/[^/]+\.(?:js|mjs)(?:$|\?)", lowered) or re.search(r"/(?:static|assets?)/[^/]*(?:app|main|index)[^/]*\.(?:js|mjs)(?:$|\?)", lowered) or re.search(r"/(?:chunks/app|chunks/pages|app|pages)(?:/|$)", lowered):
+    elif re.search(r"/_next/static/chunks/[^/]+\.(?:js|mjs)(?:$|\?)", lowered) or re.search(r"/(?:static|assets?)/[^/]*(?:app|main|index)[^/]*\.(?:js|mjs)(?:$|\?)", lowered) or re.search(r"/(?:chunks/app|chunks/pages|app|pages)(?:/|$)", lowered):
         score = 130
     elif re.search(r"/(?:api|graphql|rpc|v[0-9]+)(?:/|$)", lowered):
         score = 100
