@@ -74,12 +74,32 @@ def _observed_json_documents(body: str) -> tuple[Any, ...]:
         attributes, source = match.group(1), match.group(2).strip()
         type_match = type_pattern.search(attributes)
         script_type = type_match.group(1).split(';', 1)[0].strip().lower() if type_match else ''
-        if script_type not in {'application/json', 'application/ld+json', 'text/json'}:
+        if script_type in {'application/json', 'application/ld+json', 'text/json'}:
+            try:
+                documents.append(json.loads(source))
+            except (TypeError, json.JSONDecodeError):
+                pass
             continue
-        try:
-            documents.append(json.loads(source))
-        except (TypeError, json.JSONDecodeError):
+
+        # Next.js App Router pages can serialize server state through
+        # self.__next_f.push([..., "escaped JSON payload"]) without using
+        # an application/json script type. Treat only the quoted payload as
+        # observed data: decode the string and then require it to be valid JSON.
+        # This is lexical parsing, never JavaScript execution, and therefore
+        # cannot manufacture identifiers from executable code.
+        if 'self.__next_f.push' not in source:
             continue
+        for payload_match in re.finditer(
+            r'self\.__next_f\.push\(\s*\[\s*\d+\s*,\s*(["' + "'" + r'])(.*?)\1\s*\]\s*\)',
+            source,
+            re.DOTALL,
+        ):
+            encoded = payload_match.group(2)
+            try:
+                decoded = bytes(encoded, 'utf-8').decode('unicode_escape')
+                documents.append(json.loads(decoded))
+            except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
+                continue
     return tuple(documents)
 
 def extract_resource_identifiers(
