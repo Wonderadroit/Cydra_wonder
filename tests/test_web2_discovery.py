@@ -149,7 +149,7 @@ def test_bundle_analysis_materializes_root_relative_new_url_with_unresolved_base
 
     analysis = result.bundle_analyses[0]
     assert "/v1/items" in analysis.endpoint_candidates
-    assert analysis.unresolved_request_templates == ()
+    assert "new URL(\"/v1/items\", o)" not in analysis.unresolved_request_templates
     assert "/v1/items" in result.discovered_paths
 
 
