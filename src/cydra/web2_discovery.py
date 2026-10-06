@@ -561,10 +561,14 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
         "apiurl", "backendurl", "backend_url", "serviceurl", "service_url",
         "graphqlurl", "graphql_url", "endpointurl", "endpoint_url",
     }
-    for match in re.finditer(
-        rf"\b(?:const|let|var)\s+({_IDENT})\s*=\s*({_JS_STRING})",
-        body,
-    ):
+    # Service declarations are provenance-bearing evidence. Recover them with
+    # a dedicated lexical parser so complex bundle expressions cannot hide the
+    # application's declared origin.
+    declaration_pattern = re.compile(
+        rf"(?<![A-Za-z0-9_$])(?:const|let|var)\\s+({_IDENT})\\s*=\\s*({_JS_STRING})",
+        re.IGNORECASE,
+    )
+    for match in declaration_pattern.finditer(body):
         name = match.group(1)
         if name.lower() not in service_key_names:
             continue
