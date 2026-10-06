@@ -568,7 +568,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
         # Service-origin evidence is deliberately parsed with a small lexical
         # grammar: identifier + quoted literal. Do not make origin recovery
         # depend on the broader JavaScript expression resolver.
-        rf"(?<![A-Za-z0-9_$])(?:const|let|var)\s+({_IDENT})\s*=\s*((?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'))",
+        rf"(?<![A-Za-z0-9_$])(?:const|let|var)\s+({_IDENT})\s*=\s*({_JS_STRING})",
         re.IGNORECASE,
     )
     for match in declaration_pattern.finditer(body):
