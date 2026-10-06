@@ -4,6 +4,7 @@ from .hypotheses import Hypothesis, HypothesisState
 from .web2_causal import Web2CausalVerification
 from .web2_authorization import Web2AuthorizationPlanningResult, generate_executable_ownership_differential_plans
 from .web2_model import Web2TargetModel
+from .web2_discovery import Web2DiscoveryResult
 
 @dataclass(frozen=True)
 class NextWeb2Experiment:
@@ -40,4 +41,20 @@ def generate_web2_security_hypotheses(
     generic error fingerprints never create an authorization hypothesis.
     """
     result: Web2AuthorizationPlanningResult = generate_executable_ownership_differential_plans(model)
+    return Web2HypothesisPlanningResult(result.plans, result.capability_gaps)
+
+def generate_web2_hypotheses_from_discovery(
+    discovery: Web2DiscoveryResult,
+) -> Web2HypothesisPlanningResult:
+    """Project a completed discovery model into executable security plans.
+
+    Discovery observations and response fingerprints remain evidence-free inputs.
+    Only explicit model relationships and provenance-backed materialization may
+    produce executable hypotheses. External service origins never authorize
+    execution.
+    """
+    result = generate_executable_ownership_differential_plans(
+        discovery.model,
+        provenance=discovery.resource_provenance,
+    )
     return Web2HypothesisPlanningResult(result.plans, result.capability_gaps)
