@@ -1,0 +1,26 @@
+name: CYDRA main regression smoke
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: oven-sh/setup-bun@v2
+      - name: Install CYDRA
+        run: python -m pip install -e .
+      - name: Full Python regression
+        run: python -m pytest -q
