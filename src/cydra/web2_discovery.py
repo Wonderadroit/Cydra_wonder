@@ -443,6 +443,7 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
 
     if "$" + "{" in body and re.search(r"\b(?:fetch|Request|axios\.[A-Za-z]+)|\.open", body):
         unresolved.add("<dynamic-request-template>")
+    candidates = {_canonicalize_discovery_candidate(candidate) for candidate in candidates if candidate}
     classification = "application" if candidates or base_urls or unresolved else "static_or_vendor"
     return Web2BundleAnalysis(
         path=path,
