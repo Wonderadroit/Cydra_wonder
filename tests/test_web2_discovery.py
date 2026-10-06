@@ -834,7 +834,7 @@ def test_repeated_api_negatives_surface_service_origin_resolution_gap():
         "/app.js": {
             "status_code": 200,
             "headers": {"Content-Type": "application/javascript"},
-            "body": 'const API_BASE = "https://api.example.net"; fetch("/v1/items"); fetch("/v1/inventories");',
+            "body": 'const API_BASE = "https://api.example.net"; fetch(API_BASE + "/v1/items"); fetch(API_BASE + "/v1/inventories");',
         },
         "/v1/items": {
             "status_code": 404,
