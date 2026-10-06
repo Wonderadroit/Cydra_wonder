@@ -370,11 +370,8 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
         else:
             unresolved.add(match.group(0)[:200])
 
-    dynamic_templates = re.findall(
-        r"""(?:fetch|Request|axios\.[A-Za-z]+|\.open)\s*\(\s*(?:\\x60[^\\x60]*\$\{[^\\x60]*\\x60|["'][^"']*\$\{[^"']*["'])""",
-        body,
-    )
-    unresolved.update(item[:200] for item in dynamic_templates)
+    if "$" + "{" in body and re.search(r"\b(?:fetch|Request|axios\.[A-Za-z]+)|\.open", body):
+        unresolved.add("<dynamic-request-template>")
     classification = "application" if candidates or base_urls or unresolved else "static_or_vendor"
     return Web2BundleAnalysis(
         path=path,
