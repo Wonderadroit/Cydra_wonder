@@ -14,6 +14,38 @@ ALLOWED_HOSTS = ("app.aurory.io",)
 DEFAULT_BUG_BOUNTY_USERNAME = "cyberwonder"
 
 
+
+def _safe_observation_record(observation) -> dict[str, object]:
+    """Serialize non-secret HTTP observation metadata for downstream modeling.
+
+    The adapter already computes response metadata; preserve only fields that
+    are useful for planning/differential reasoning without copying response
+    bodies, cookies, credentials, or headers into the artifact.
+    """
+    record: dict[str, object] = {
+        "action_id": observation.action_id,
+        "status": observation.status.value,
+        "error": observation.error,
+    }
+    payload = observation.value
+    if observation.status.value != "executed" or not isinstance(payload, dict):
+        return record
+
+    body = payload.get("body")
+    record.update(
+        {
+            "method": payload.get("method"),
+            "path": payload.get("url"),
+            "final_url": payload.get("final_url"),
+            "identity_id": payload.get("identity_id"),
+            "status_code": payload.get("status_code"),
+            "body_length": len(body.encode("utf-8")) if isinstance(body, str) else None,
+            "body_sha256": payload.get("body_sha256"),
+        }
+    )
+    return record
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Bounded, read-only CYDRA live discovery for the authorized Aurory target."
@@ -92,16 +124,14 @@ def main() -> int:
             for endpoint_id, endpoint in sorted(result.model.endpoints.items())
         ],
         "observations": [
-            {
-                "action_id": observation.action_id,
-                "status": observation.status.value,
-                "error": observation.error,
-            }
+            _safe_observation_record(observation)
             for observation in result.observations
         ],
         "note": (
-            "Bodies, cookies, authorization values, and response headers are intentionally "
-            "excluded from the artifact. The Bugcrowd username is non-secret."
+            "Response bodies, cookies, authorization values, and response headers are intentionally "
+            "excluded from the artifact. Safe observation metadata includes request/final URL, "
+            "HTTP method/status, body length, and body SHA-256 so downstream reasoning can compare "
+            "responses without retaining response content. The Bugcrowd username is non-secret."
         ),
     }
 
