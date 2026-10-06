@@ -260,3 +260,20 @@ def discover_web2_surface(
             sequence += 1
 
 
+
+
+def build_discovery_requests(
+    paths: Iterable[str],
+    *,
+    identity_id: str | None = None,
+) -> tuple[AdapterRequest, ...]:
+    """Create explicit read-only requests without executing them."""
+    return tuple(
+        AdapterRequest(
+            action_id=f"discover:{index}",
+            operation="http_request",
+            inputs={"method": "GET", "path": path, "identity_id": identity_id},
+            metadata={"purpose": "surface_discovery"},
+        )
+        for index, path in enumerate(paths, start=1)
+    )
