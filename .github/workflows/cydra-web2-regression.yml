@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - feature/web2-adapter
+      - feature/web2-hypothesis-generation
   workflow_dispatch:
 
 jobs:
