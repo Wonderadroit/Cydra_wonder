@@ -48,7 +48,7 @@ def test_discovery_result_flows_into_security_hypothesis_planning():
     m.add_resource(Web2ResourceModel("resource:1","record","alice",None))
     m.add_endpoint(Web2EndpointModel("endpoint:get","GET","/records/{id}",("resource:1",)))
     discovery=Web2DiscoveryResult(model=m, observations=(), discovered_paths=(), resource_provenance=(
-        Web2ResourceProvenance("resource:1","id","1","test-observation"),
+        Web2ResourceProvenance("resource:1","1","endpoint:get","test-observation","id"),
     ))
     result=generate_web2_hypotheses_from_discovery(discovery)
     assert len(result.plans)==1
