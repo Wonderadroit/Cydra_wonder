@@ -1,6 +1,9 @@
 name: CYDRA authorized Aurory live discovery
 
 on:
+  push:
+    branches:
+      - fix/aurory-bugcrowd-auth
   workflow_dispatch:
     inputs:
       seed:
