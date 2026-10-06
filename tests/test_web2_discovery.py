@@ -692,3 +692,51 @@ def test_discovery_builds_service_origin_relation_graph_with_authorization_bound
         "request_targets_service_origin",
         False,
     ) in relations
+
+
+def test_discovery_fingerprints_generic_negative_responses():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<a href="/v1/missing-a">a</a><a href="/v1/missing-b">b</a>',
+        },
+        "/v1/missing-a": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "<html><body>Not Found</body></html>",
+        },
+        "/v1/missing-b": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "<html><body>Not Found</body></html>",
+        },
+    })
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=3)
+    fingerprint = dict(result.response_fingerprints)["/v1/missing-a"]
+    assert fingerprint.status_code == 404
+    assert fingerprint.generic_negative is True
+    assert fingerprint.body_sha256 == dict(result.response_fingerprints)["/v1/missing-b"].body_sha256
+
+
+def test_negative_response_downgrades_later_candidates_without_deleting_them():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<a href="/v1/missing">missing</a><a href="/v1/account">account</a>',
+        },
+        "/v1/missing": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+        "/v1/account": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+    })
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=3)
+    assert "/v1/missing" in result.discovered_paths
+    assert "/v1/account" in result.discovered_paths
