@@ -1064,3 +1064,62 @@ def test_placeholder_external_request_origins_do_not_trigger_service_origin_gap(
     relations = {(item.origin, item.authorized_for_execution) for item in result.service_origin_relations}
     assert ("https://example.com", False) in relations
     assert ("https://a", False) in relations
+
+
+def test_discovery_preserves_anonymous_identity_state_and_surfaces_resource_state_gap():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<a href="/v1/items">items</a><a href="/v1/inventories">inventories</a>',
+        },
+        "/v1/items": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+        "/v1/inventories": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        identity_id="owner",
+        identity_authenticated=False,
+        max_paths=3,
+    )
+    assert result.model.identities["owner"].authenticated is False
+    assert "RESOURCE_STATE_ACQUISITION" in result.capability_gaps
+    assert not result.model.resources
+
+
+def test_discovery_does_not_surface_resource_state_gap_for_authenticated_identity():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<a href="/v1/items">items</a><a href="/v1/inventories">inventories</a>',
+        },
+        "/v1/items": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+        "/v1/inventories": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        identity_id="owner",
+        identity_authenticated=True,
+        max_paths=3,
+    )
+    assert result.model.identities["owner"].authenticated is True
+    assert "RESOURCE_STATE_ACQUISITION" not in result.capability_gaps
