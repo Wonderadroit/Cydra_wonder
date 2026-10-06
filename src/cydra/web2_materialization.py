@@ -1,0 +1,284 @@
+from __future__ import annotations
+
+"""Generic Web2 resource-identifier provenance and request materialization."""
+
+from dataclasses import dataclass
+import hashlib
+import json
+import re
+from typing import Any, Iterable, Mapping
+
+from .web2_model import Web2EndpointModel, Web2ResourceModel
+
+
+_TEMPLATE_PARAMETER = re.compile(r"{([A-Za-z_][A-Za-z0-9_-]*)}|:([A-Za-z_][A-Za-z0-9_-]*)")
+_IDENTIFIER_FIELD = re.compile(r"^(?:id|uuid|address|[A-Za-z][A-Za-z0-9]*(?:_id|_uuid|_address|Id|ID|Uuid|UUID|Address))$", re.I)
+
+
+@dataclass(frozen=True)
+class Web2ResourceProvenance:
+    resource_id: str
+    identifier: str
+    source_endpoint_id: str
+    source_observation_id: str
+    field_path: str
+
+
+@dataclass(frozen=True)
+class Web2ParameterRequirement:
+    endpoint_id: str
+    parameter: str
+    resource_id: str | None
+
+
+@dataclass(frozen=True)
+class Web2MaterializationPlan:
+    endpoint_id: str
+    template: str
+    requirements: tuple[Web2ParameterRequirement, ...]
+    materialized_path: str | None
+    provenance: tuple[Web2ResourceProvenance, ...]
+    executable: bool
+
+
+def extract_template_parameters(path: str) -> tuple[str, ...]:
+    """Return explicit path parameters without inventing values."""
+    result: list[str] = []
+    for match in _TEMPLATE_PARAMETER.finditer(path):
+        name = match.group(1) or match.group(2)
+        if name not in result:
+            result.append(name)
+    return tuple(result)
+
+
+def _observed_json_documents(body: str) -> tuple[Any, ...]:
+    """Return JSON documents directly observed in a response body.
+
+    Public application state is sometimes embedded in HTML as a JSON script
+    block (for example framework bootstrap state). Parsing those blocks is
+    observation of the response, not JavaScript execution or identifier
+    synthesis. Other script blocks remain opaque.
+    """
+    documents: list[Any] = []
+    try:
+        documents.append(json.loads(body))
+    except (TypeError, json.JSONDecodeError):
+        pass
+
+    script_pattern = re.compile(
+        r'<script\b([^>]*)>(.*?)</script\s*>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    type_pattern = re.compile(r'\btype\s*=\s*["\\\']([^"\\\']+)["\\\']', re.IGNORECASE)
+    for match in script_pattern.finditer(body):
+        attributes, source = match.group(1), match.group(2).strip()
+        type_match = type_pattern.search(attributes)
+        script_type = type_match.group(1).split(';', 1)[0].strip().lower() if type_match else ''
+        if script_type in {'application/json', 'application/ld+json', 'text/json'}:
+            try:
+                documents.append(json.loads(source))
+            except (TypeError, json.JSONDecodeError):
+                pass
+            continue
+
+        # Next.js App Router pages can serialize server state through
+        # self.__next_f.push([..., "escaped JSON payload"]) without using
+        # an application/json script type. Treat only the quoted payload as
+        # observed data: decode the string and then require it to be valid JSON.
+        # This is lexical parsing, never JavaScript execution, and therefore
+        # cannot manufacture identifiers from executable code.
+        if 'self.__next_f.push' not in source:
+            continue
+        for payload_match in re.finditer(
+            r'self\.__next_f\.push\(\s*\[\s*\d+\s*,\s*(["' + "'" + r'])(.*?)\1\s*\]\s*\)',
+            source,
+            re.DOTALL,
+        ):
+            encoded = payload_match.group(2)
+            try:
+                decoded = bytes(encoded, 'utf-8').decode('unicode_escape')
+                documents.append(json.loads(decoded))
+            except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
+                continue
+    return tuple(documents)
+
+def extract_resource_identifiers(
+    endpoint: Web2EndpointModel,
+    body: str,
+    observation_id: str,
+) -> tuple[tuple[Web2ResourceModel, Web2ResourceProvenance], ...]:
+    """Extract concrete identifiers from observed JSON with explicit provenance.
+
+    Only identifier-shaped fields are accepted. Values are never guessed and
+    the source endpoint/observation/field path is retained for replay.
+    """
+    documents = _observed_json_documents(body)
+    if not documents:
+        return ()
+
+    found: list[tuple[Web2ResourceModel, Web2ResourceProvenance]] = []
+
+    def visit(value: Any, field_path: str = "") -> None:
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                key_text = str(key)
+                child_path = f"{field_path}.{key_text}" if field_path else key_text
+                if _IDENTIFIER_FIELD.fullmatch(key_text) and isinstance(child, (str, int)):
+                    identifier = str(child).strip()
+                    if identifier:
+                        digest = hashlib.sha256(
+                            f"{key_text.lower()}|{identifier}".encode()
+                        ).hexdigest()[:16]
+                        resource_id = f"resource:{digest}"
+                        resource = Web2ResourceModel(
+                            resource_id=resource_id,
+                            label=key_text,
+                            identifier=identifier,
+                        )
+                        provenance = Web2ResourceProvenance(
+                            resource_id=resource_id,
+                            identifier=identifier,
+                            source_endpoint_id=endpoint.endpoint_id,
+                            source_observation_id=observation_id,
+                            field_path=child_path,
+                        )
+                        found.append((resource, provenance))
+                visit(child, child_path)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, f"{field_path}[{index}]")
+
+    for document in documents:
+        visit(document)
+    return tuple(found)
+
+
+def materialize_endpoint(
+    endpoint: Web2EndpointModel,
+    resources: Iterable[Web2ResourceModel],
+    provenance: Iterable[Web2ResourceProvenance] = (),
+) -> Web2MaterializationPlan:
+    """Turn a template into an executable path only when provenance is sufficient.
+
+    Ambiguous or missing identifiers remain unresolved. No synthetic values are
+    ever inserted.
+    """
+    parameters = extract_template_parameters(endpoint.path)
+    if not parameters:
+        return Web2MaterializationPlan(
+            endpoint.endpoint_id, endpoint.path, (), endpoint.path, (), True
+        )
+
+    # Discovery may model the resource before its concrete identifier is
+    # attached. When explicit provenance later supplies exactly one identifier
+    # for that resource, use it for materialization without mutating the target
+    # model. Conflicting provenance remains ambiguous and therefore unresolved.
+    provenance_by_resource: dict[str, list[Web2ResourceProvenance]] = {}
+    for item in provenance:
+        provenance_by_resource.setdefault(item.resource_id, []).append(item)
+
+    materializable_resources: list[Web2ResourceModel] = []
+    for resource in resources:
+        if resource.identifier is not None:
+            materializable_resources.append(resource)
+            continue
+        candidates = {
+            item.identifier
+            for item in provenance_by_resource.get(resource.resource_id, ())
+            if item.identifier
+        }
+        if len(candidates) == 1:
+            materializable_resources.append(
+                Web2ResourceModel(
+                    resource.resource_id,
+                    resource.label,
+                    resource.owner_identity_id,
+                    next(iter(candidates)),
+                )
+            )
+        else:
+            materializable_resources.append(resource)
+
+    resources_by_field: dict[str, list[Web2ResourceModel]] = {}
+    for resource in materializable_resources:
+        resources_by_field.setdefault(resource.label.lower(), []).append(resource)
+    values: dict[str, str] = {}
+    requirements: list[Web2ParameterRequirement] = []
+    selected_provenance: list[Web2ResourceProvenance] = []
+
+    path_prefix = endpoint.path.split("?", 1)[0]
+    segments = [segment for segment in path_prefix.split("/") if segment]
+    for parameter in parameters:
+        candidates = resources_by_field.get(parameter.lower(), [])
+
+        # The endpoint/resource relation is stronger than a naming guess.
+        # For generic `{id}` routes, use the explicitly related resource only
+        # when that relation identifies exactly one concrete resource.
+        if not candidates and parameter.lower() == "id":
+            related = [
+                resource
+                for resource in materializable_resources
+                if resource.resource_id in endpoint.resource_ids
+                and resource.identifier is not None
+            ]
+            if len({item.resource_id for item in related}) == 1:
+                candidates = related
+
+        if parameter.lower() == "id" and not candidates:
+            candidates = [
+                resource
+                for resource in materializable_resources
+                if re.search(r"(?:_id|Id|ID)$", resource.label)
+            ]
+        if parameter.lower() == "id" and not candidates:
+            previous = segments[segments.index("{" + parameter + "}") - 1] if "{" + parameter + "}" in segments and segments.index("{" + parameter + "}") > 0 else None
+            if previous:
+                candidates = resources_by_field.get(previous.rstrip("s").lower() + "_id", [])
+        unique = {item.resource_id: item for item in candidates if item.identifier is not None}
+        selected = next(iter(unique.values())) if len(unique) == 1 else None
+        requirements.append(Web2ParameterRequirement(endpoint.endpoint_id, parameter, selected.resource_id if selected else None))
+        if selected is None:
+            continue
+        values[parameter] = selected.identifier  # type: ignore[assignment]
+        provenance_candidates = provenance_by_resource.get(selected.resource_id, [])
+        identifiers = {item.identifier for item in provenance_candidates if item.identifier}
+        if len(identifiers) == 1:
+            # Repeated observations of the same concrete identifier are
+            # corroboration, not ambiguity. Preserve the earliest observation
+            # as the stable provenance anchor for deterministic replay.
+            selected_provenance.append(
+                sorted(
+                    provenance_candidates,
+                    key=lambda item: (
+                        item.source_observation_id,
+                        item.source_endpoint_id,
+                        item.field_path,
+                    ),
+                )[0]
+            )
+
+    if len(values) != len(parameters):
+        return Web2MaterializationPlan(
+            endpoint.endpoint_id,
+            endpoint.path,
+            tuple(requirements),
+            None,
+            tuple(selected_provenance),
+            False,
+        )
+
+    materialized = endpoint.path
+    for parameter, value in values.items():
+        materialized = re.sub(
+            r"{" + re.escape(parameter) + r"}|:" + re.escape(parameter) + r"\b",
+            value,
+            materialized,
+        )
+    return Web2MaterializationPlan(
+        endpoint.endpoint_id,
+        endpoint.path,
+        tuple(requirements),
+        materialized,
+        tuple(selected_provenance),
+        True,
+    )
