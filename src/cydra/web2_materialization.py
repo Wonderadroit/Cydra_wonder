@@ -51,6 +51,37 @@ def extract_template_parameters(path: str) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _observed_json_documents(body: str) -> tuple[Any, ...]:
+    """Return JSON documents directly observed in a response body.
+
+    Public application state is sometimes embedded in HTML as a JSON script
+    block (for example framework bootstrap state). Parsing those blocks is
+    observation of the response, not JavaScript execution or identifier
+    synthesis. Other script blocks remain opaque.
+    """
+    documents: list[Any] = []
+    try:
+        documents.append(json.loads(body))
+    except (TypeError, json.JSONDecodeError):
+        pass
+
+    script_pattern = re.compile(
+        r'<script\\b([^>]*)>(.*?)</script\\s*>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    type_pattern = re.compile(r'\\btype\\s*=\\s*["\\\']([^"\\\']+)["\\\']', re.IGNORECASE)
+    for match in script_pattern.finditer(body):
+        attributes, source = match.group(1), match.group(2).strip()
+        type_match = type_pattern.search(attributes)
+        script_type = type_match.group(1).split(';', 1)[0].strip().lower() if type_match else ''
+        if script_type not in {'application/json', 'application/ld+json', 'text/json'}:
+            continue
+        try:
+            documents.append(json.loads(source))
+        except (TypeError, json.JSONDecodeError):
+            continue
+    return tuple(documents)
+
 def extract_resource_identifiers(
     endpoint: Web2EndpointModel,
     body: str,
@@ -61,9 +92,8 @@ def extract_resource_identifiers(
     Only identifier-shaped fields are accepted. Values are never guessed and
     the source endpoint/observation/field path is retained for replay.
     """
-    try:
-        payload = json.loads(body)
-    except (TypeError, json.JSONDecodeError):
+    documents = _observed_json_documents(body)
+    if not documents:
         return ()
 
     found: list[tuple[Web2ResourceModel, Web2ResourceProvenance]] = []
@@ -98,7 +128,8 @@ def extract_resource_identifiers(
             for index, child in enumerate(value):
                 visit(child, f"{field_path}[{index}]")
 
-    visit(payload)
+    for document in documents:
+        visit(document)
     return tuple(found)
 
 
