@@ -703,6 +703,14 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
                 parsed_value = urlparse(value)
                 if parsed_value.scheme in {"http", "https"} and parsed_value.hostname:
                     service_origins.add(f"{parsed_value.scheme}://{parsed_value.netloc}")
+                elif value.startswith("/") and not value.startswith("//"):
+                    # A root-relative request primitive is resolved by the browser
+                    # against the application's current origin. Record that
+                    # origin as service-origin provenance even when the bundle
+                    # does not expose an explicit API_BASE/API_URL declaration.
+                    target_parsed = urlparse(target)
+                    if target_parsed.scheme in {"http", "https"} and target_parsed.hostname:
+                        service_origins.add(f"{target_parsed.scheme}://{target_parsed.netloc}")
                 candidates.add(value)
 
     for match in re.finditer(
