@@ -221,17 +221,21 @@ def materialize_endpoint(
             continue
         values[parameter] = selected.identifier  # type: ignore[assignment]
         provenance_candidates = provenance_by_resource.get(selected.resource_id, [])
-        unique_provenance = {
-            (
-                item.identifier,
-                item.source_endpoint_id,
-                item.source_observation_id,
-                item.field_path,
-            ): item
-            for item in provenance_candidates
-        }
-        if len(unique_provenance) == 1:
-            selected_provenance.append(next(iter(unique_provenance.values())))
+        identifiers = {item.identifier for item in provenance_candidates if item.identifier}
+        if len(identifiers) == 1:
+            # Repeated observations of the same concrete identifier are
+            # corroboration, not ambiguity. Preserve the earliest observation
+            # as the stable provenance anchor for deterministic replay.
+            selected_provenance.append(
+                sorted(
+                    provenance_candidates,
+                    key=lambda item: (
+                        item.source_observation_id,
+                        item.source_endpoint_id,
+                        item.field_path,
+                    ),
+                )[0]
+            )
 
     if len(values) != len(parameters):
         return Web2MaterializationPlan(
