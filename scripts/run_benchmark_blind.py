@@ -508,7 +508,7 @@ def _run_state_relation_verification(
         step_function = functions.get(step.function)
         if step_function is None:
             raise ValueError(f"state relation step is not modeled: {step.function}")
-        step_plans = plan_state_relation_observations(contract, step_function)
+        step_plans = plan_state_relation_observations(contract, step_function, project)
         if step_function.writes and not step_plans:
             raise ValueError(
                 f"state transition {step_function.name} has no deterministic "
