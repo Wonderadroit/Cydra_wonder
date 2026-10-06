@@ -621,7 +621,7 @@ def parse_solidity(path: str | Path, *, include_inherited: bool = True) -> tuple
 
         contract_opening = contract_source.find("{")
         contract_body = _body(contract_source, contract_opening) if contract_opening >= 0 else contract_source
-        state_variables = tuple(dict.fromkeys((*_state_variables(contract_body), *_inherited_state_variables(root, path, inherits))))
+        state_variables = tuple(dict.fromkeys((*_state_variables(contract_body), *(_inherited_state_variables(root, path, inherits) if include_inherited else ()))))
         declared_types = _declared_types(contract_body)
         inherited_resolved_interfaces: list[ResolvedInterface] = []
         for inherited_name in inherits:
