@@ -565,17 +565,18 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
     # a dedicated lexical parser so complex bundle expressions cannot hide the
     # application's declared origin.
     declaration_pattern = re.compile(
-        # Service-origin evidence is deliberately parsed with a small lexical
-        # grammar: identifier + quoted literal. Do not make origin recovery
-        # depend on the broader JavaScript expression resolver.
-        rf"(?<![A-Za-z0-9_$])(?:const|let|var)\s+({_IDENT})\s*=\s*({_JS_STRING})",
+        # Keep this lexer deliberately simpler than the general JS-string
+        # grammar. Service-origin declarations only need a concrete quoted
+        # literal; using the literal capture directly makes provenance
+        # independent of nested regex escaping in minified bundles.
+        rf"(?<![A-Za-z0-9_$])(?:const|let|var)\s+({_IDENT})\s*=\s*(?:\"([^\"\\\\\r\\n]*)\"|'([^'\\\\\r\\n]*)'|\\x60([^\\x60\\\\\\r\\n]*)\\x60)",
         re.IGNORECASE,
     )
     for match in declaration_pattern.finditer(body):
         name = match.group(1)
         if name.lower() not in service_key_names:
             continue
-        value = _decode_js_string(match.group(2))
+        value = next((item for item in match.groups()[1:] if item is not None), None)
         if value is None:
             continue
         base_urls.add(value)
