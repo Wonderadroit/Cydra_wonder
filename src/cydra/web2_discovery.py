@@ -36,6 +36,9 @@ class Web2BundleAnalysis:
     request_methods: tuple[str, ...] = ()
     endpoint_candidates: tuple[str, ...] = ()
     unresolved_request_templates: tuple[str, ...] = ()
+    # Concrete request -> service-origin provenance. This preserves the
+    # relationship even when the origin is not authorized for execution.
+    request_origins: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -585,6 +588,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
     methods: set[str] = set()
     candidates: set[str] = set()
     unresolved: set[str] = set()
+    request_origins: dict[str, str] = {}
 
     # First pass: recover literal declarations with a normalized key set.
     # This intentionally does not depend on the general expression resolver;
@@ -715,7 +719,9 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
                 # request may enter the executable frontier.
                 parsed_value = urlparse(value)
                 if parsed_value.scheme in {"http", "https"} and parsed_value.hostname:
-                    service_origins.add(f"{parsed_value.scheme}://{parsed_value.netloc}")
+                    origin = f"{parsed_value.scheme}://{parsed_value.netloc}"
+                    service_origins.add(origin)
+                    request_origins[value] = origin
                 elif value.startswith("/") and not value.startswith("//"):
                     # A root-relative request primitive is resolved by the browser
                     # against the application's current origin. Record that
@@ -723,7 +729,9 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
                     # does not expose an explicit API_BASE/API_URL declaration.
                     target_parsed = urlparse(target)
                     if target_parsed.scheme in {"http", "https"} and target_parsed.hostname:
-                        service_origins.add(f"{target_parsed.scheme}://{target_parsed.netloc}")
+                        origin = f"{target_parsed.scheme}://{target_parsed.netloc}"
+                        service_origins.add(origin)
+                        request_origins[value] = origin
                 candidates.add(value)
 
     for match in re.finditer(
@@ -741,7 +749,12 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
         first = _resolve_js_expression(match.group(1), constants)
         second = _resolve_js_expression(match.group(2), constants)
         if first is not None and second is not None:
-            candidates.add(urljoin(second.rstrip("/") + "/", first))
+            resolved = urljoin(second.rstrip("/") + "/", first)
+            candidates.add(resolved)
+            parsed_resolved = urlparse(resolved)
+            if parsed_resolved.scheme in {"http", "https"} and parsed_resolved.hostname:
+                request_origins[resolved] = f"{parsed_resolved.scheme}://{parsed_resolved.netloc}"
+                service_origins.add(f"{parsed_resolved.scheme}://{parsed_resolved.netloc}")
         elif first is not None and first.startswith("/") and not first.startswith("//"):
             # The path literal is explicitly root-relative. Its meaning is
             # same-origin regardless of whether the base expression resolves.
@@ -777,6 +790,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
         request_methods=tuple(sorted(methods)),
         endpoint_candidates=tuple(sorted(candidates)),
         unresolved_request_templates=tuple(sorted(unresolved)),
+        request_origins=tuple(sorted(request_origins.items())),
     )
 
 def build_discovery_requests(
