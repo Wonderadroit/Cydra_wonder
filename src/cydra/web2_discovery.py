@@ -501,6 +501,23 @@ def _detect_service_origin_resolution_gaps(
         origin for origin, count in request_linked_origin_counts.items()
         if count >= 1
     }
+
+    # Some HTTP clients keep the service origin in a configured base URL while
+    # passing only relative paths to fetch/axios/member methods. In that shape
+    # request_origins cannot be recovered by lexical expression resolution, but
+    # the bundle still provides two independent pieces of application evidence:
+    # an explicit non-placeholder service-origin declaration and concrete API
+    # request construction. Correlate those signals without treating the
+    # external origin as executable authorization.
+    declared_request_linked_origins = {
+        origin
+        for analysis in application_analyses
+        if analysis.request_methods
+        and any(_looks_like_api_surface(candidate) for candidate in analysis.endpoint_candidates)
+        for origin in analysis.service_origins
+        if urlparse(origin).hostname != urlparse(target).hostname
+        and not _is_placeholder_service_origin(origin)
+    }
     if authorized_origins:
         return ()
 
@@ -509,7 +526,7 @@ def _detect_service_origin_resolution_gaps(
     # negatives corroborate it. This path is deliberately evaluated before the
     # broader multi-bundle fallback below so existing precise provenance remains
     # as sensitive as before.
-    if repeated_request_linked_origins:
+    if repeated_request_linked_origins or declared_request_linked_origins:
         return (
             "SERVICE_ORIGIN_RESOLUTION",
         )
