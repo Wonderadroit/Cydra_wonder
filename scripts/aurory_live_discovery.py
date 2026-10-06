@@ -56,7 +56,7 @@ def main() -> int:
     )
     parser.add_argument("--seed", action="append", default=["/"], help="Relative seed path; repeatable.")
     parser.add_argument("--max-paths", type=int, default=20)
-    parser.add_argument("--max-js-bundles", type=int, default=16)
+    parser.add_argument("--max-js-bundles", type=int, default=50)
     parser.add_argument(
         "--require-authenticated",
         action="store_true",
