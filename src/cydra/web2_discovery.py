@@ -190,7 +190,25 @@ def _normalize_seeds(seeds: Iterable[str]) -> list[str]:
     return result
 
 
+def _canonicalize_discovery_candidate(value: str) -> str:
+    """Normalize JS expression fragments before they enter the discovery frontier.
+
+    Lexical extraction can see the literal prefix of a JavaScript expression such as
+    `"/v1/items/{id}".replace("{id}", id)`. If the full request-construction
+    expression was not statically resolvable, the fragment must not become a
+    malformed executable path. Preserve only the explicit path literal.
+    """
+    candidate = value.strip()
+    replace_marker = re.search(r'''[\"']\.replace\(\s*[\"']''', candidate)
+    if replace_marker:
+        candidate = candidate[:replace_marker.start()]
+    return candidate.rstrip()
+
+
 def _same_host_path(value: str, target: str) -> str | None:
+    value = _canonicalize_discovery_candidate(value)
+    if not value:
+        return None
     absolute = urljoin(target.rstrip("/") + "/", value)
     parsed = urlparse(absolute)
     target_parsed = urlparse(target)
