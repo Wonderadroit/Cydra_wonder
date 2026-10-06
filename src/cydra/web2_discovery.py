@@ -557,6 +557,16 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
     # not trusted merely because a route looks API-like: the surrounding config
     # key/property must establish that it is a service origin.
     origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL)"
+    # Preserve resolved constant values directly. This is deliberately separate
+    # from the lexical property matcher below so minified declarations such as
+    # const API_BASE = "https://api.example" cannot be lost merely because
+    # the declaration has no object/property syntax.
+    for name, value in constants.items():
+        if re.fullmatch(origin_key, name, re.IGNORECASE):
+            base_urls.add(value)
+            parsed = urlparse(value)
+            if parsed.scheme in {"http", "https"} and parsed.hostname:
+                service_origins.add(f"{parsed.scheme}://{parsed.netloc}")
     for match in re.finditer(
         rf"\b{origin_key}\s*[:=]\s*({_JS_STRING}|{_IDENT})", body
     ):
