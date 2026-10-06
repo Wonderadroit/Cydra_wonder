@@ -32,7 +32,7 @@ def test_discovery_follows_same_host_html_links_and_scripts():
         "/static/app.js": {
             "status_code": 200,
             "headers": {"Content-Type": "application/javascript"},
-            "body": 'fetch("/api/users/me"); fetch("https://evil.example/secret");',
+            "body": 'fetch("/api/users/me"); fetch("https://app.example/api/profile/me"); fetch("https://evil.example/secret");',
         },
         "/api/users/me": {
             "status_code": 200,
@@ -43,8 +43,9 @@ def test_discovery_follows_same_host_html_links_and_scripts():
 
     result = discover_web2_surface(adapter, target="https://app.example", max_paths=10)
 
-    assert result.discovered_paths == ("/", "/account", "/static/app.js", "/api/users/me")
+    assert result.discovered_paths == ("/", "/api/users/me", "/static/app.js", "/account")
     assert "GET /api/users/me" in result.model.endpoints
+    assert "GET /api/profile/me" in result.model.endpoints
 
 
 def test_discovery_extracts_openapi_paths_without_treating_them_as_findings():
