@@ -84,9 +84,10 @@ def discover_web2_surface(
     as the adapter's configured target. Discovery metadata is planning input,
     never security evidence.
 
-    The queue is priority-based: explicit application/API references are
-    preferred over code bundles, and code bundles over static assets. This
-    makes the bounded budget useful without guessing or brute-forcing paths.
+    The queue is priority-based: application bundles are scheduled before
+    derived API/resource candidates so they can reveal service origins and
+    request construction before the bounded request budget is consumed.
+    Generic static assets remain low priority.
     """
     if max_paths < 1:
         raise ValueError("max_paths must be positive")
@@ -324,15 +325,15 @@ def _path_priority(path: str) -> int:
     lowered = path.lower().split("?", 1)[0]
     score = 50
 
-    if re.search(r"/(?:api|graphql|rpc|v[0-9]+)(?:/|$)", lowered):
+    if re.search(r"/(?:static|assets?)/[^/]*(?:app|main|index)[^/]*\.(?:js|mjs)(?:$|\?)", lowered) or re.search(r"/(?:chunks/app|chunks/pages|app|pages)(?:/|$)", lowered):
+        score = 130
+    elif re.search(r"/(?:api|graphql|rpc|v[0-9]+)(?:/|$)", lowered):
         score = 100
     elif re.search(
         r"/(?:auth|account|accounts|user|users|profile|profiles|inventory|shop|shops|player|players|resource|resources|wallet|wallets|token|tokens|item|items|pack|packs|exchange|exchanges)(?:/|$)",
         lowered,
     ):
         score = 95
-    elif re.search(r"/(?:chunks/app|chunks/pages|app|pages)(?:/|$)", lowered) or re.search(r"/(?:static|assets?)/[^/]*(?:app|main|index)[^/]*\.(?:js|mjs)(?:$|\?)", lowered):
-        score = 110
 
     if re.search(r"(?:\{|\}|:id|:user|:wallet|:player|:account)", lowered):
         score += 12
