@@ -822,3 +822,57 @@ def test_discovery_prioritizes_bundle_discovered_resource_collections_for_id_acq
         and plan.executable
         for plan in result.materialization_plans
     )
+
+
+def test_repeated_api_negatives_surface_service_origin_resolution_gap():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script src="/app.js"></script><a href="/v1/items">items</a><a href="/v1/inventories">inventories</a>',
+        },
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'const API_BASE = "https://api.example.net"; fetch("/v1/items"); fetch("/v1/inventories");',
+        },
+        "/v1/items": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+        "/v1/inventories": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+    })
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=4, max_js_bundles=1)
+    assert result.capability_gaps == ("SERVICE_ORIGIN_RESOLUTION",)
+
+
+def test_service_origin_gap_does_not_trigger_when_same_origin_service_is_explicitly_declared():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script src="/app.js"></script><a href="/v1/items">items</a><a href="/v1/inventories">inventories</a>',
+        },
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'const API_BASE = "https://app.example"; fetch("/v1/items"); fetch("/v1/inventories");',
+        },
+        "/v1/items": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+        "/v1/inventories": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+    })
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=4, max_js_bundles=1)
+    assert result.capability_gaps == ()
