@@ -18,8 +18,21 @@ def apply_causal_verification(hypothesis: Hypothesis, verification: Web2CausalVe
         return Hypothesis(hypothesis.hypothesis_id,hypothesis.statement,min(hypothesis.belief,1.0-verification.confidence),HypothesisState.CONTRADICTED,dict(hypothesis.planning_predictions))
     return hypothesis
 
-def select_next_web2_experiment(hypothesis: Hypothesis, *, has_differential_support: bool, has_causal_verification: bool, capability_gap: bool) -> NextWeb2Experiment:
-    if capability_gap: return NextWeb2Experiment("CAPABILITY_REPAIR","execution capability is missing; repair or materialize the required adapter capability before drawing security conclusions")
+def select_next_web2_experiment(
+    hypothesis: Hypothesis,
+    *,
+    has_differential_support: bool,
+    has_causal_verification: bool,
+    capability_gap: bool,
+    capability_state: str | None = None,
+) -> NextWeb2Experiment:
+    if capability_gap and capability_state == "INCOMPLETE_FRONTIER":
+        return NextWeb2Experiment(
+            "MODEL_EXPANSION",
+            "the capability boundary is incomplete; expand the generic evidence frontier before implementing a repair",
+        )
+    if capability_gap:
+        return NextWeb2Experiment("CAPABILITY_REPAIR","execution capability is missing; repair or materialize the required adapter capability before drawing security conclusions")
     if has_differential_support and not has_causal_verification: return NextWeb2Experiment("CAUSAL_REPLAY","differential evidence exists but has not yet been reproduced causally")
     if hypothesis.state==HypothesisState.CAUSALLY_ESTABLISHED: return NextWeb2Experiment("IMPACT_VERIFICATION","causal behavior is established; independently verify security impact before reporting a finding")
     return NextWeb2Experiment("MODEL_EXPANSION","no decisive evidence exists; expand the target model to choose the highest-information experiment")
