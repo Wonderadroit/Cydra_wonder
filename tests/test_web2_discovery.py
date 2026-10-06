@@ -268,3 +268,41 @@ def test_bundle_analysis_does_not_authorize_external_hosts():
     result = discover_web2_surface(adapter, target="https://app.example", max_paths=2, max_js_bundles=1)
     assert "/private" not in result.discovered_paths
     assert any(item == "https://api.example.net" for item in result.bundle_analyses[0].base_urls)
+
+
+def test_bundle_analysis_normalizes_replace_built_endpoint_templates():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'fetch("/v1/items/{id}".replace("{id}", id));'
+                'fetch("/v1/wallets/{wallet}/tokens".replace("{wallet}", wallet));'
+            ),
+        },
+        "/v1/items/{id}": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+        "/v1/wallets/{wallet}/tokens": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+    })
+
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=3,
+        max_js_bundles=1,
+    )
+
+    analysis = result.bundle_analyses[0]
+    assert "/v1/items/{id}" in analysis.endpoint_candidates
+    assert "/v1/wallets/{wallet}/tokens" in analysis.endpoint_candidates
+    assert not any(".replace(" in candidate for candidate in analysis.endpoint_candidates)
+    assert "/v1/items/{id}" in result.discovered_paths
+    assert "/v1/wallets/{wallet}/tokens" in result.discovered_paths
