@@ -376,6 +376,10 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
         second = _resolve_js_expression(match.group(2), constants)
         if first is not None and second is not None:
             candidates.add(urljoin(second.rstrip("/") + "/", first))
+        elif first is not None and first.startswith("/") and not first.startswith("//"):
+            # The path literal is explicitly root-relative. Its meaning is
+            # same-origin regardless of whether the base expression resolves.
+            candidates.add(first)
         else:
             unresolved.add(match.group(0)[:200])
 
