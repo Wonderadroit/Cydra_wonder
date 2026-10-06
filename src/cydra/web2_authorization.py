@@ -92,6 +92,7 @@ def generate_executable_ownership_differential_plans(
                         other_identity_id=other_identity_id,
                         resource_id=resource_id,
                         endpoint_id=endpoint_id,
+                        provenance=provenance,
                     )
                 )
             except ValueError as error:
