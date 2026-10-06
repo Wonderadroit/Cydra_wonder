@@ -481,33 +481,14 @@ def _detect_service_origin_resolution_gaps(
             "SERVICE_ORIGIN_RESOLUTION",
         )
 
-    # When no concrete external origin survived static resolution, a broad
-    # application API surface plus repeated same-origin negatives is still
-    # sufficient to identify the same capability boundary. Require independent
-    # corroboration across bundles/routes so framework/vendor URL expressions do
-    # not recreate the historical false-positive path.
-    application_endpoint_candidates = {
-        candidate
-        for analysis in application_analyses
-        for candidate in analysis.endpoint_candidates
-        if _looks_like_api_surface(candidate)
-    }
-    application_endpoint_bundles = {
-        analysis.path
-        for analysis in application_analyses
-        if any(_looks_like_api_surface(candidate) for candidate in analysis.endpoint_candidates)
-    }
-    if (
-        len(api_negative_paths) < 5
-        or len(application_endpoint_candidates) < 5
-        or len(application_endpoint_bundles) < 2
-    ):
-        return ()
-
-    return (
-        "SERVICE_ORIGIN_RESOLUTION",
-    )
-
+    # Without concrete, non-placeholder request-to-external-origin provenance,
+    # there is no evidence that the API service is distinct from the target web
+    # origin. A large set of relative API routes returning 404s is not enough:
+    # those routes may simply be stale, versioned, or protected application
+    # paths. Do not manufacture a SERVICE_ORIGIN_RESOLUTION capability gap from
+    # that absence of evidence. The gap is reserved for a concrete external
+    # service dependency that CYDRA can name but is not authorized to execute.
+    return ()
 
 def _is_placeholder_service_origin(origin: str) -> bool:
     """Return whether an external origin is clearly a placeholder/non-service literal.
