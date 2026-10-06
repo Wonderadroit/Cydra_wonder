@@ -93,6 +93,7 @@ def main() -> int:
         target=TARGET,
         seeds=args.seed,
         identity_id=identity_id,
+        identity_authenticated=bool(token),
         max_paths=args.max_paths,
         max_js_bundles=args.max_js_bundles,
     )
