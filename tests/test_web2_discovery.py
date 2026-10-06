@@ -774,6 +774,11 @@ def test_discovery_extracts_camelcase_resource_identifiers():
             "headers": {"Content-Type": "application/json"},
             "body": '{"itemId":"item-42"}',
         },
+        "/v1/items/item-42": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": '{"itemId":"item-42"}',
+        },
     })
     result = discover_web2_surface(
         adapter,
