@@ -94,6 +94,65 @@ def test_build_requests_is_read_only_and_explicit():
     assert all(r.metadata["purpose"] == "surface_discovery" for r in requests)
 
 
+def test_api_candidates_survive_bounded_queue_pressure():
+    static_links = "".join(f'<img src="/assets/icon-{index}.png">' for index in range(80))
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": static_links + '<script src="/app.js"></script><a href="/v1/items">items</a>',
+        },
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'fetch("/v1/inventories");',
+        },
+        "/v1/items": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+        "/v1/inventories": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+    })
+
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=3)
+
+    assert result.discovered_paths == ("/", "/v1/items", "/v1/inventories")
+    assert not any(path.endswith(".png") for path in result.discovered_paths)
+
+
+def test_bundle_analysis_materializes_root_relative_new_url_with_unresolved_base():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'const endpoint = new URL("/v1/items", o); fetch(endpoint);',
+        },
+        "/v1/items": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+    })
+
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=2,
+        max_js_bundles=1,
+    )
+
+    analysis = result.bundle_analyses[0]
+    assert "/v1/items" in analysis.endpoint_candidates
+    assert analysis.unresolved_request_templates == ()
+    assert "/v1/items" in result.discovered_paths
+
+
 def test_discovery_extracts_inline_javascript_before_bundle_budget():
     adapter = FakeAdapter({
         "/": {
