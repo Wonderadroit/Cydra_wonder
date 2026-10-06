@@ -65,7 +65,7 @@ def discover_web2_surface(
     seeds: Iterable[str] = ("/",),
     identity_id: str | None = None,
     max_paths: int = 50,
-    max_js_bundles: int = 8,
+    max_js_bundles: int = 16,
 ) -> Web2DiscoveryResult:
     """Collect a bounded, read-only surface from explicit seed paths.
 
@@ -195,6 +195,10 @@ def _path_priority(path: str) -> int:
         lowered,
     ):
         return 95
+    if re.search(r"/(?:chunks/app|chunks/pages|app|pages)(?:/|$)", lowered):
+        return 90
+    if re.search(r"/(?:framework|webpack|polyfills|vendor)(?:[-_/]|\.|$)", lowered):
+        return 65
     if lowered.endswith((".js", ".mjs")) or ".js/" in lowered or ".js?" in lowered:
         return 80
     if lowered.endswith((".json", ".yaml", ".yml")):
