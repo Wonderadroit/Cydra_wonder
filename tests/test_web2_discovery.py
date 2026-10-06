@@ -306,3 +306,5 @@ def test_bundle_analysis_normalizes_replace_built_endpoint_templates():
     assert not any(".replace(" in candidate for candidate in analysis.endpoint_candidates)
     assert "/v1/items/{id}" in result.discovered_paths
     assert "/v1/wallets/{wallet}/tokens" in result.discovered_paths
+    assert not any('.replace(' in path for path in result.discovered_paths)
+    assert not any('.replace(' in endpoint for endpoint in result.model.endpoints)
