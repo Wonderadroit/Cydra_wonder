@@ -123,7 +123,3 @@ def test_missing_anonymous_resource_state_stays_fail_closed():
     assert not dependent.executable
     assert dependent.materialized_path is None
     assert dependent.requirements[0].resource_id is None
-
-
-def test_regression_covers_both_authorized_and_fail_closed_paths():
-    assert True
