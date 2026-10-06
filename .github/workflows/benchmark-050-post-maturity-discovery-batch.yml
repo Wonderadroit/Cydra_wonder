@@ -33,5 +33,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-050-discovery-evidence
-          path: backtest-artifacts/benchmark-050
+          path: |
+            backtest-artifacts/benchmark-050
+            backtest-artifacts/benchmark-040
+            backtest-artifacts/benchmark-043
+            backtest-artifacts/benchmark-044
           if-no-files-found: warn
