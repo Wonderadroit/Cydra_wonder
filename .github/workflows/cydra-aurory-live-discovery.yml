@@ -38,7 +38,8 @@ jobs:
         run: |
           python scripts/aurory_live_discovery.py \
             --seed "${{ inputs.seed }}" \
-            --max-paths "${{ inputs.max_paths }}"
+            --max-paths "${{ inputs.max_paths }}" \
+            --require-authenticated
 
       - name: Publish sanitized discovery artifact
         uses: actions/upload-artifact@v4
