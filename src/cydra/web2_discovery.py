@@ -370,6 +370,7 @@ def discover_web2_surface(
         bundle_analyses=bundle_analyses,
         response_fingerprints=response_fingerprints,
         model=model,
+        runtime_service_origins=tuple(sorted({origin for origins in response_csp_origins.values() for origin in origins})),
     )
     resource_state_gap = _detect_resource_state_acquisition_gaps(
         response_fingerprints=response_fingerprints,
@@ -496,6 +497,7 @@ def _detect_service_origin_resolution_gaps(
     bundle_analyses: list[Web2BundleAnalysis],
     response_fingerprints: dict[str, Web2ResponseFingerprint],
     model: Web2TargetModel,
+    runtime_service_origins: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Identify an execution-readiness boundary without treating it as a finding.
 
@@ -613,6 +615,10 @@ def _detect_service_origin_resolution_gaps(
     # negatives corroborate it. This path is deliberately evaluated before the
     # broader multi-bundle fallback below so existing precise provenance remains
     # as sensitive as before.
+    runtime_external_origins = {origin for origin in runtime_service_origins if urlparse(origin).hostname != urlparse(target).hostname and not _is_placeholder_service_origin(origin)}
+    if runtime_external_origins:
+        return ("SERVICE_ORIGIN_RESOLUTION",)
+
     if repeated_request_linked_origins or declared_request_linked_origins:
         return (
             "SERVICE_ORIGIN_RESOLUTION",
