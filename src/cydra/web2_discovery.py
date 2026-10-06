@@ -218,9 +218,13 @@ def discover_web2_surface(
                 deferred_endpoint, model.resources.values(), resource_provenance
             )
             if deferred_plan.executable:
+                # A concrete resource has just unlocked this template.
+                # Give the materialized dependent request a bounded readiness
+                # boost so the capability chain completes before unrelated
+                # frontier work consumes the execution budget.
                 heapq.heappush(
                     queue,
-                    (-_path_priority(deferred_path), sequence, deferred_path),
+                    (-(_path_priority(deferred_path) + 80), sequence, deferred_path),
                 )
                 sequence += 1
                 deferred_templates.remove(deferred_path)
