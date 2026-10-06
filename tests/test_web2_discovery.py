@@ -761,3 +761,64 @@ def test_discovery_models_non_get_request_methods_as_planned_endpoints():
     assert ("GET", "/v1/items") in endpoints
     assert ("POST", "/v1/items") in endpoints
     assert ("DELETE", "/v1/items/{id}") in endpoints
+
+def test_discovery_prioritizes_bundle_discovered_resource_collections_for_id_acquisition():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script src="/app.js"></script><script src="/vendor.js"></script>',
+        },
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'fetch("/v1/items");'
+                'fetch("/v1/items/{id}");'
+            ),
+        },
+        "/vendor.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'fetch("/v1/vendor-endpoint");',
+        },
+        "/v1/items": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": '{"items":[{"id":"item-42"}]}',
+        },
+        "/v1/items/item-42": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": '{"id":"item-42","name":"example"}',
+        },
+        "/v1/vendor-endpoint": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": "{}",
+        },
+    })
+
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        max_paths=4,
+        max_js_bundles=2,
+    )
+
+    assert result.observations[0].value["body"]
+    assert [item.inputs["path"] for item in result.observations] == [
+        "https://app.example/",
+        "https://app.example/app.js",
+        "https://app.example/v1/items",
+        "https://app.example/v1/items/item-42",
+    ]
+    assert len(result.model.resources) == 1
+    resource = next(iter(result.model.resources.values()))
+    assert resource.identifier == "item-42"
+    assert any(
+        plan.template == "/v1/items/{id}"
+        and plan.materialized_path == "/v1/items/item-42"
+        and plan.executable
+        for plan in result.materialization_plans
+    )
