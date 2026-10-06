@@ -42,6 +42,14 @@ class Web2BundleAnalysis:
 
 
 @dataclass(frozen=True)
+class Web2ServiceOriginRelation:
+    source: str
+    origin: str
+    relation: str
+    authorized_for_execution: bool
+
+
+@dataclass(frozen=True)
 class Web2DiscoveryResult:
     model: Web2TargetModel
     observations: tuple[AdapterObservation, ...]
@@ -49,6 +57,7 @@ class Web2DiscoveryResult:
     bundle_analyses: tuple[Web2BundleAnalysis, ...] = ()
     resource_provenance: tuple[Web2ResourceProvenance, ...] = ()
     materialization_plans: tuple[Web2MaterializationPlan, ...] = ()
+    service_origin_relations: tuple[Web2ServiceOriginRelation, ...] = ()
 
 
 class _LinkParser(HTMLParser):
@@ -266,6 +275,27 @@ def discover_web2_surface(
         materialize_endpoint(endpoint, model.resources.values(), resource_provenance)
         for endpoint in sorted(model.endpoints.values(), key=lambda item: item.endpoint_id)
     )
+    authorized_host = urlparse(target).hostname
+    origin_relations: set[Web2ServiceOriginRelation] = set()
+    for analysis in bundle_analyses:
+        for origin in analysis.service_origins:
+            origin_relations.add(
+                Web2ServiceOriginRelation(
+                    source=analysis.path,
+                    origin=origin,
+                    relation="bundle_declares_service_origin",
+                    authorized_for_execution=urlparse(origin).hostname == authorized_host,
+                )
+            )
+        for request, origin in analysis.request_origins:
+            origin_relations.add(
+                Web2ServiceOriginRelation(
+                    source=f"{analysis.path}:{request}",
+                    origin=origin,
+                    relation="request_targets_service_origin",
+                    authorized_for_execution=urlparse(origin).hostname == authorized_host,
+                )
+            )
     return Web2DiscoveryResult(
         model=model,
         observations=tuple(observations),
@@ -273,6 +303,12 @@ def discover_web2_surface(
         bundle_analyses=tuple(bundle_analyses),
         resource_provenance=tuple(resource_provenance),
         materialization_plans=materialization_plans,
+        service_origin_relations=tuple(
+            sorted(
+                origin_relations,
+                key=lambda item: (item.source, item.origin, item.relation),
+            )
+        ),
     )
 
 
