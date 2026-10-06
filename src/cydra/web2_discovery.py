@@ -436,7 +436,10 @@ def _detect_service_origin_resolution_gaps(
     request_linked_origin_counts: dict[str, int] = {}
     for analysis in application_analyses:
         for _, origin in analysis.request_origins:
-            if urlparse(origin).hostname != urlparse(target).hostname:
+            if (
+                urlparse(origin).hostname != urlparse(target).hostname
+                and not _is_placeholder_service_origin(origin)
+            ):
                 request_linked_origin_counts[origin] = request_linked_origin_counts.get(origin, 0) + 1
     # Unresolved request expressions are intentionally not sufficient to
     # establish a service-origin gap. Bundled frameworks and vendor libraries
@@ -463,6 +466,31 @@ def _detect_service_origin_resolution_gaps(
     return (
         "SERVICE_ORIGIN_RESOLUTION",
     )
+
+
+def _is_placeholder_service_origin(origin: str) -> bool:
+    """Return whether an external origin is clearly a placeholder/non-service literal.
+
+    Minified/vendor bundles frequently contain reserved example domains or tiny
+    host literals as fixtures, documentation links, parser tests, or framework
+    probes. They are useful lexical evidence, but cannot corroborate a real
+    application service-origin resolution gap.
+    """
+    hostname = (urlparse(origin).hostname or "").lower().rstrip(".")
+    if not hostname:
+        return True
+    if hostname in {
+        "example.com", "example.net", "example.org",
+        "localhost", "invalid", "test", "local",
+    }:
+        return True
+    if hostname.endswith(".example") or hostname.endswith(".invalid") or hostname.endswith(".test"):
+        return True
+    # A one-label, one-character host such as https://a is not credible
+    # service-origin evidence from a production application bundle.
+    if re.fullmatch(r"[a-z]", hostname):
+        return True
+    return False
 
 
 def _looks_like_api_surface(path: str) -> bool:

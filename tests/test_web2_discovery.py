@@ -1005,7 +1005,7 @@ def test_unresolved_vendor_request_expressions_do_not_trigger_service_origin_gap
 
 
 
-def test_single_request_linked_external_origin_plus_repeated_api_negatives_surfaces_gap():
+def test_single_request_linked_realistic_external_origin_plus_repeated_api_negatives_surfaces_gap():
     adapter = FakeAdapter({
         "/": {
             "status_code": 200,
@@ -1015,7 +1015,7 @@ def test_single_request_linked_external_origin_plus_repeated_api_negatives_surfa
         "/app.js": {
             "status_code": 200,
             "headers": {"Content-Type": "application/javascript"},
-            "body": 'fetch("https://api.example.net/bootstrap"); fetch("/v1/items"); fetch("/v1/inventories");',
+            "body": 'fetch("https://api.service.internal/bootstrap"); fetch("/v1/items"); fetch("/v1/inventories");',
         },
         "/v1/items": {
             "status_code": 404,
@@ -1030,3 +1030,37 @@ def test_single_request_linked_external_origin_plus_repeated_api_negatives_surfa
     })
     result = discover_web2_surface(adapter, target="https://app.example", max_paths=4, max_js_bundles=1)
     assert result.capability_gaps == ("SERVICE_ORIGIN_RESOLUTION",)
+
+
+def test_placeholder_external_request_origins_do_not_trigger_service_origin_gap():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script src="/app.js"></script><a href="/v1/items">items</a><a href="/v1/inventories">inventories</a>',
+        },
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'fetch("https://example.com/v1/bootstrap");'
+                'fetch("https://a/v1/health");'
+                'fetch("/v1/items"); fetch("/v1/inventories");'
+            ),
+        },
+        "/v1/items": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+        "/v1/inventories": {
+            "status_code": 404,
+            "headers": {"Content-Type": "text/html"},
+            "body": "Not Found",
+        },
+    })
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=4, max_js_bundles=1)
+    assert result.capability_gaps == ()
+    relations = {(item.origin, item.authorized_for_execution) for item in result.service_origin_relations}
+    assert ("https://example.com", False) in relations
+    assert ("https://a", False) in relations
