@@ -80,3 +80,16 @@ def test_unresolved_templates_do_not_consume_discovery_budget():
     assert adapter.paths == ["/", "/v1/items", "/v1/items/item-42"]
     assert all("{id}" not in path for path in adapter.paths)
     assert any(plan.materialized_path == "/v1/items/item-42" for plan in result.materialization_plans)
+
+
+def test_endpoint_resource_relation_materializes_generic_id():
+    from cydra.web2_model import Web2ResourceModel
+
+    resource = Web2ResourceModel("resource:1", "Alice record", "alice", "record-42")
+    endpoint = Web2EndpointModel(
+        "endpoint:get-record", "GET", "/records/{id}", ("resource:1",)
+    )
+    plan = materialize_endpoint(endpoint, (resource,), ())
+    assert plan.executable
+    assert plan.materialized_path == "/records/record-42"
+    assert plan.requirements[0].resource_id == "resource:1"
