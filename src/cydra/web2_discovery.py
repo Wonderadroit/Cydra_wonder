@@ -402,7 +402,31 @@ def _decode_js_string(token: str) -> str | None:
         return value
 
 
-def _javascript_constants(body: str) -> dict[str, str]:
+def _javascript_runtime_config_aliases(body: str) -> dict[str, str]:
+    """Resolve explicit URL values exposed through common runtime config objects."""
+    aliases: dict[str, str] = {}
+    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL)"
+    object_assignment = re.compile(
+        rf"(?P<prefix>(?:window|globalThis|self)(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\s*=\s*\{{(?P<body>[^{{}}]*)\}}",
+        re.DOTALL,
+    )
+    for match in object_assignment.finditer(body):
+        prefix = match.group("prefix")
+        for item in re.finditer(rf"\b({origin_key})\s*:\s*({_JS_STRING})", match.group("body")):
+            value = _decode_js_string(item.group(2))
+            if value:
+                aliases[f"{prefix}.{item.group(1)}"] = value
+    direct_assignment = re.compile(
+        rf"(?P<name>(?:window|globalThis|self)(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\.{origin_key})\s*=\s*({_JS_STRING})"
+    )
+    for match in direct_assignment.finditer(body):
+        value = _decode_js_string(match.group(2))
+        if value:
+            aliases[match.group("name")] = value
+    return aliases
+
+
+def _javascript_constants(body: str, aliases: dict[str, str] | None = None) -> dict[str, str]:
     """Resolve simple JS constants, including references to earlier constants."""
     expressions: dict[str, str] = {}
     pattern = re.compile(rf"\b(?:const|let|var)\s+({_IDENT})\s*=\s*([^;\n]+)")
@@ -417,7 +441,7 @@ def _javascript_constants(body: str) -> dict[str, str]:
         for name, expression in expressions.items():
             if name in constants:
                 continue
-            value = _resolve_js_expression(expression, constants)
+            value = _resolve_js_expression(expression, constants, aliases)
             if value is not None:
                 constants[name] = value
                 changed = True
@@ -426,7 +450,7 @@ def _javascript_constants(body: str) -> dict[str, str]:
     return constants
 
 
-def _resolve_js_expression(expression: str, constants: dict[str, str]) -> str | None:
+def _resolve_js_expression(\n    expression: str,\n    constants: dict[str, str],\n    aliases: dict[str, str] | None = None,\n) -> str | None:
     expression = expression.strip()
     if not expression:
         return None
@@ -455,7 +479,7 @@ def _resolve_js_expression(expression: str, constants: dict[str, str]) -> str | 
     if len(parts) > 1:
         resolved = []
         for part in parts:
-            value = _resolve_js_expression(part, constants)
+            value = _resolve_js_expression(part, constants, aliases)
             if value is None:
                 return None
             resolved.append(value)
@@ -470,7 +494,7 @@ def _request_method_from_context(context: str, default: str = "GET") -> str:
 
 def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleAnalysis:
     """Recover statically-resolvable request construction without JS execution."""
-    constants = _javascript_constants(body)
+    runtime_aliases = _javascript_runtime_config_aliases(body)\n    constants = _javascript_constants(body, runtime_aliases)
     base_urls: set[str] = set()
     service_origins: set[str] = set()
     unauthorized_origins: set[str] = set()
