@@ -10,3 +10,29 @@ def test_selector_prefers_causal_replay():
 
 def test_selector_repairs_capability_first():
     h=Hypothesis("h1","authorization must separate identities"); d=select_next_web2_experiment(h,has_differential_support=True,has_causal_verification=False,capability_gap=True); assert d.kind=="CAPABILITY_REPAIR"
+
+
+def test_security_hypothesis_planner_uses_only_explicit_model_relations():
+    from cydra.web2_reasoning import generate_web2_security_hypotheses
+    from cydra.web2_model import Web2EndpointModel, Web2IdentityModel, Web2ResourceModel, Web2TargetModel
+    m=Web2TargetModel("https://authorized.example")
+    m.add_identity(Web2IdentityModel("alice","Alice"))
+    m.add_identity(Web2IdentityModel("bob","Bob"))
+    m.add_resource(Web2ResourceModel("resource:1","record","alice","1"))
+    m.add_endpoint(Web2EndpointModel("endpoint:get","GET","/records/{id}",("resource:1",)))
+    result=generate_web2_security_hypotheses(m)
+    assert len(result.plans)==1
+    assert result.plans[0].hypothesis.expected_impact=="UNAUTHORIZED_RESOURCE_ACCESS"
+    assert result.capability_gaps==()
+
+def test_security_hypothesis_planner_reports_missing_capability():
+    from cydra.web2_reasoning import generate_web2_security_hypotheses
+    from cydra.web2_model import Web2EndpointModel, Web2IdentityModel, Web2ResourceModel, Web2TargetModel
+    m=Web2TargetModel("https://authorized.example")
+    m.add_identity(Web2IdentityModel("alice","Alice"))
+    m.add_identity(Web2IdentityModel("bob","Bob"))
+    m.add_resource(Web2ResourceModel("resource:1","record","alice",None))
+    m.add_endpoint(Web2EndpointModel("endpoint:get","GET","/records/{id}",("resource:1",)))
+    result=generate_web2_security_hypotheses(m)
+    assert result.plans==()
+    assert result.capability_gaps
