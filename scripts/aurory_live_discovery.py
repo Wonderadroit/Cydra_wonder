@@ -57,6 +57,11 @@ def main() -> int:
     parser.add_argument("--seed", action="append", default=["/"], help="Relative seed path; repeatable.")
     parser.add_argument("--max-paths", type=int, default=20)
     parser.add_argument("--max-js-bundles", type=int, default=16)
+    parser.add_argument(
+        "--require-authenticated",
+        action="store_true",
+        help="Fail closed when the configured authenticated authorization is absent.",
+    )
     parser.add_argument("--output", default="artifacts/aurory-discovery.json")
     args = parser.parse_args()
 
@@ -73,6 +78,11 @@ def main() -> int:
     # credential. Keep it separate from the optional authenticated session.
     identity_headers = {"X-Bug-Bounty": f"Bugcrowd-{username}"}
     token = os.environ.get("AURORY_OWNER_AUTHORIZATION", "").strip()
+    if args.require_authenticated and not token:
+        raise SystemExit(
+            "Authenticated discovery was requested, but AURORY_OWNER_AUTHORIZATION is missing. "
+            "Refusing to run as anonymous discovery."
+        )
     if token:
         identity_headers["Authorization"] = token
 
