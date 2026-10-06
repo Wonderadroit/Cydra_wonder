@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from .adapter_experiment import AdapterExperiment, ExperimentAction, bind_adapter_experiment
 from .hypotheses import Hypothesis
 from .web2_model import Web2TargetModel
+from .web2_materialization import Web2ResourceProvenance, materialize_endpoint
 
 @dataclass(frozen=True)
 class AuthorizationExperimentPlan:
@@ -21,7 +22,13 @@ def plan_ownership_differential(model: Web2TargetModel, *, owner_identity_id: st
         statement=f"{endpoint.method} {endpoint.path} should authorize {owner_identity_id} and apply a distinct authorization outcome to {other_identity_id} for resource {resource_id}",
         invariant_id=f"ownership:{resource_id}", target_function=f"{endpoint.method} {endpoint.path}",
         attacker_capability="authenticated_non_owner_identity", expected_impact="UNAUTHORIZED_RESOURCE_ACCESS")
-    path = endpoint.path.replace("{id}", resource.identifier) if resource.identifier is not None else endpoint.path
+    materialization = materialize_endpoint(endpoint, (resource,), ())
+    if not materialization.executable or materialization.materialized_path is None:
+        raise ValueError(
+            f"materialization capability gap for {endpoint_id}: "
+            "required resource identifier is unresolved"
+        )
+    path = materialization.materialized_path
     actions = (
         ExperimentAction(f"{hypothesis.hypothesis_id}:owner","http_request",{"method":endpoint.method,"path":path,"identity_id":owner_identity_id},{"role":"owner","resource_id":resource_id,"endpoint_id":endpoint_id}),
         ExperimentAction(f"{hypothesis.hypothesis_id}:comparison","http_request",{"method":endpoint.method,"path":path,"identity_id":other_identity_id},{"role":"comparison","resource_id":resource_id,"endpoint_id":endpoint_id}),
@@ -51,3 +58,42 @@ def generate_ownership_differential_plans(model: Web2TargetModel) -> tuple[Autho
                 endpoint_id=endpoint_id,
             ))
     return tuple(plans)
+
+
+
+@dataclass(frozen=True)
+class Web2AuthorizationPlanningResult:
+    """Executable authorization plans plus explicit capability gaps."""
+    plans: tuple[AuthorizationExperimentPlan, ...]
+    capability_gaps: tuple[str, ...]
+
+
+def generate_executable_ownership_differential_plans(
+    model: Web2TargetModel,
+    *,
+    provenance: tuple[Web2ResourceProvenance, ...] = (),
+) -> Web2AuthorizationPlanningResult:
+    """Materialize ownership-backed experiments without guessing identifiers.
+
+    Missing or ambiguous identifiers become capability gaps, never security
+    evidence and never executable requests.
+    """
+    plans: list[AuthorizationExperimentPlan] = []
+    gaps: list[str] = []
+    for owner_identity_id, other_identity_id, resource_id in model.candidate_cross_identity_pairs():
+        for endpoint_id, endpoint in sorted(model.endpoints.items()):
+            if resource_id not in endpoint.resource_ids:
+                continue
+            try:
+                plans.append(
+                    plan_ownership_differential(
+                        model,
+                        owner_identity_id=owner_identity_id,
+                        other_identity_id=other_identity_id,
+                        resource_id=resource_id,
+                        endpoint_id=endpoint_id,
+                    )
+                )
+            except ValueError as error:
+                gaps.append(f"{endpoint_id}: {error}")
+    return Web2AuthorizationPlanningResult(tuple(plans), tuple(sorted(set(gaps))))
