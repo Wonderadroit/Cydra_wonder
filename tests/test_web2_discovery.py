@@ -446,6 +446,27 @@ def test_html_bootstrap_service_origin_is_evidence_but_not_execution_authorizati
     assert runtime[0].unauthorized_origins == ("https://api.example.net",)
     assert [o.action_id for o in result.observations] == ["discover:1"]
 
+def test_bundle_analysis_records_same_origin_for_relative_request_primitive():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'fetch("/v1/profile");',
+        },
+    })
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=1,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert analysis.service_origins == ("https://app.example",)
+    assert analysis.unauthorized_origins == ()
+    assert "/v1/profile" in analysis.endpoint_candidates
+
+
 def test_bundle_analysis_records_absolute_request_origin_without_config_key():
     adapter = FakeAdapter({
         "/app.js": {
