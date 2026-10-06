@@ -36,4 +36,4 @@ jobs:
       - name: Run Web2 regressions
         env:
           PYTHONPATH: src
-        run: python -m pytest -q tests/test_web2_adapter.py tests/test_adapter_experiment.py tests/test_web2_model.py tests/test_web2_authorization.py tests/test_web2_evidence.py tests/test_web2_cycle.py tests/test_web2_causal.py tests/test_web2_reasoning.py tests/test_web2_replay.py tests/test_web2_discovery.py tests/test_web2_materialization.py tests/test_web2_discovery.py
+        run: python -m pytest -q tests/test_web2_adapter.py tests/test_adapter_experiment.py tests/test_web2_model.py tests/test_web2_authorization.py tests/test_web2_evidence.py tests/test_web2_cycle.py tests/test_web2_causal.py tests/test_web2_reasoning.py tests/test_web2_replay.py tests/test_web2_discovery.py tests/test_web2_materialization.py tests/test_web2_discovery.py tests/test_web2_resource_state_acquisition.py
