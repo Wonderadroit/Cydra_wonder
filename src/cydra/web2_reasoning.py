@@ -32,6 +32,45 @@ class Web2HypothesisPlanningResult:
     capability_gaps: tuple[str, ...]
 
 
+
+
+@dataclass(frozen=True)
+class Web2CapabilityRepairPlan:
+    """Non-security repair work required before executable hypotheses can run."""
+    capability: str
+    required_capabilities: tuple[str, ...]
+    executable: bool
+    reason: str
+
+
+def generate_web2_capability_repair_plans(
+    discovery: Web2DiscoveryResult,
+) -> tuple[Web2CapabilityRepairPlan, ...]:
+    """Translate discovery capability gaps into explicit, non-security repair plans.
+
+    These plans never authorize requests and never create vulnerability hypotheses.
+    They separate capability repair from the executable security-experiment budget.
+    """
+    plans: list[Web2CapabilityRepairPlan] = []
+    if "RESOURCE_STATE_ACQUISITION" in discovery.capability_gaps:
+        plans.append(Web2CapabilityRepairPlan(
+            capability="RESOURCE_STATE_ACQUISITION",
+            required_capabilities=(
+                "authorized_identity_or_public_resource_state_source",
+                "resource_identifier_observation",
+                "resource_provenance",
+                "dependent_endpoint_materialization",
+            ),
+            executable=False,
+            reason=(
+                "No concrete resource identifier was observed. Continue only after "
+                "an authorized identity or an independently observed public resource "
+                "state source becomes available; do not synthesize identifiers."
+            ),
+        ))
+    return tuple(plans)
+
+
 def _merge_capability_gaps(*gap_sets: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     """Preserve capability failures from every stage of the planning pipeline."""
     return tuple(dict.fromkeys(gap for gaps in gap_sets for gap in gaps))
