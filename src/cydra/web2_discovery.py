@@ -407,6 +407,34 @@ def _detect_service_origin_resolution_gaps(
     if not has_request_construction:
         return ()
 
+    # A large cluster of concrete API routes recovered from application bundles
+    # is stronger evidence than an isolated unresolved URL expression. When the
+    # target origin returns generic negatives for several of those routes, and
+    # no application-declared authorized service origin explains the requests,
+    # the discovery model has reached a service-origin boundary. This remains a
+    # capability gap, never security evidence: CYDRA must resolve the runtime
+    # service before it can materialize identifiers or form authorization
+    # experiments. The thresholds deliberately require corroboration across
+    # bundles/routes so framework/vendor URL parsing does not recreate the old
+    # false-positive path.
+    application_endpoint_candidates = {
+        candidate
+        for analysis in application_analyses
+        for candidate in analysis.endpoint_candidates
+        if _looks_like_api_surface(candidate)
+    }
+    application_endpoint_bundles = {
+        analysis.path
+        for analysis in application_analyses
+        if any(_looks_like_api_surface(candidate) for candidate in analysis.endpoint_candidates)
+    }
+    if (
+        len(api_negative_paths) < 5
+        or len(application_endpoint_candidates) < 5
+        or len(application_endpoint_bundles) < 2
+    ):
+        return ()
+
     # Distinguish an explicitly declared target service from a relative request
     # that merely defaults to the current web origin. Relative request primitives
     # are useful provenance, but they must not mask an external service-origin
