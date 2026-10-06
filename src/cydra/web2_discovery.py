@@ -61,6 +61,16 @@ class Web2ServiceOriginRelation:
 
 
 @dataclass(frozen=True)
+class Web2CapabilityState:
+    """Lifecycle state for a capability boundary."""
+    capability: str
+    status: str
+    attempted_strategies: tuple[str, ...] = ()
+    remaining_strategies: tuple[str, ...] = ()
+    reason: str = ""
+
+
+@dataclass(frozen=True)
 class Web2DiscoveryResult:
     model: Web2TargetModel
     observations: tuple[AdapterObservation, ...]
@@ -71,6 +81,7 @@ class Web2DiscoveryResult:
     service_origin_relations: tuple[Web2ServiceOriginRelation, ...] = ()
     response_fingerprints: tuple[tuple[str, Web2ResponseFingerprint], ...] = ()
     capability_gaps: tuple[str, ...] = ()
+    capability_states: tuple[Web2CapabilityState, ...] = ()
 
 
 class _LinkParser(HTMLParser):
@@ -102,7 +113,7 @@ def discover_web2_surface(
     identity_id: str | None = None,
     identity_authenticated: bool = False,
     max_paths: int = 50,
-    max_js_bundles: int = 16,
+    max_js_bundles: int = 50,
 ) -> Web2DiscoveryResult:
     """Collect a bounded, read-only surface from explicit seed paths.
 
@@ -142,6 +153,7 @@ def discover_web2_surface(
     bundle_analyses: list[Web2BundleAnalysis] = []
     resource_provenance: list[Web2ResourceProvenance] = []
     analyzed_bundles: set[str] = set()
+    known_js_paths: set[str] = set()
     response_fingerprints: dict[str, Web2ResponseFingerprint] = {}
     generic_negative_origins: set[str] = set()
 
@@ -288,6 +300,8 @@ def discover_web2_surface(
 
         for candidate, priority in sorted(links.items()):
             normalized = _same_host_path(candidate, target)
+            if normalized and _looks_like_javascript(normalized, ""):
+                known_js_paths.add(normalized)
             if not normalized or normalized in seen or normalized in queued:
                 continue
             priority = max(priority, _path_priority(normalized))
@@ -353,10 +367,21 @@ def discover_web2_surface(
         response_fingerprints=response_fingerprints,
         model=model,
     )
-    capability_gaps = tuple(dict.fromkeys((*capability_gaps, *_detect_resource_state_acquisition_gaps(
+    resource_state_gap = _detect_resource_state_acquisition_gaps(
         response_fingerprints=response_fingerprints,
         model=model,
-    ))))
+    )
+    capability_gaps = tuple(dict.fromkeys((*capability_gaps, *resource_state_gap)))
+    capability_states = _build_capability_states(
+        target=target,
+        model=model,
+        bundle_analyses=bundle_analyses,
+        response_fingerprints=response_fingerprints,
+        analyzed_bundles=analyzed_bundles,
+        known_js_paths=known_js_paths,
+        max_js_bundles=max_js_bundles,
+        capability_gaps=capability_gaps,
+    )
     return Web2DiscoveryResult(
         model=model,
         observations=tuple(observations),
@@ -372,7 +397,65 @@ def discover_web2_surface(
             )
         ),
         capability_gaps=capability_gaps,
+        capability_states=capability_states,
     )
+
+
+def _build_capability_states(
+    *,
+    target: str,
+    model: Web2TargetModel,
+    bundle_analyses: list[Web2BundleAnalysis],
+    response_fingerprints: dict[str, Web2ResponseFingerprint],
+    analyzed_bundles: set[str],
+    known_js_paths: set[str],
+    max_js_bundles: int,
+    capability_gaps: tuple[str, ...],
+) -> tuple[Web2CapabilityState, ...]:
+    """Classify the resource-state boundary before proposing repair work."""
+    states: list[Web2CapabilityState] = []
+    js_frontier_open = bool(known_js_paths - analyzed_bundles)
+    js_budget_exhausted = len(analyzed_bundles) >= max_js_bundles and js_frontier_open
+    if model.resources:
+        states.append(Web2CapabilityState(
+            "RESOURCE_STATE_ACQUISITION", "RESOLVED",
+            ("response_state", "resource_identifier_extraction", "dependent_materialization"),
+            (), "Concrete resource identifiers were observed with provenance.",
+        ))
+    elif js_budget_exhausted:
+        states.append(Web2CapabilityState(
+            "RESOURCE_STATE_ACQUISITION", "INCOMPLETE_FRONTIER",
+            ("response_state", "resource_identifier_extraction", "service_origin_analysis"),
+            ("javascript_frontier",),
+            "Additional target-declared JavaScript surfaces remain unanalysed because the configured bundle frontier was exhausted.",
+        ))
+    else:
+        api_negatives = [
+            path for path, fingerprint in response_fingerprints.items()
+            if fingerprint.generic_negative and _looks_like_api_surface(path)
+        ]
+        authenticated = any(identity.authenticated for identity in model.identities.values())
+        if api_negatives and not authenticated:
+            states.append(Web2CapabilityState(
+                "RESOURCE_STATE_ACQUISITION", "BLOCKED_CONTEXT",
+                ("response_state", "resource_identifier_extraction", "service_origin_analysis"),
+                ("authorized_resource_context",),
+                "The current anonymous context produced no concrete resource identifier.",
+            ))
+        elif "RESOURCE_STATE_ACQUISITION" in capability_gaps:
+            states.append(Web2CapabilityState(
+                "RESOURCE_STATE_ACQUISITION", "EXHAUSTED",
+                ("response_state", "resource_identifier_extraction", "service_origin_analysis"),
+                (),
+                "Configured target-independent acquisition strategies produced no concrete resource identifier.",
+            ))
+        else:
+            states.append(Web2CapabilityState(
+                "RESOURCE_STATE_ACQUISITION", "NOT_REACHED", (),
+                ("resource_state_observation",),
+                "Evidence is insufficient to classify the resource-state boundary.",
+            ))
+    return tuple(states)
 
 
 def _detect_resource_state_acquisition_gaps(
