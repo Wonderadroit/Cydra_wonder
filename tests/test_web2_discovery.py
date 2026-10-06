@@ -209,3 +209,27 @@ def test_bundle_analysis_does_not_authorize_external_hosts():
     result = discover_web2_surface(adapter, target="https://app.example", max_paths=2, max_js_bundles=1)
     assert "/private" not in result.discovered_paths
     assert any(item == "https://api.example.net" for item in result.bundle_analyses[0].base_urls)
+
+def test_bundle_analysis_materializes_root_relative_new_url_with_unresolved_base():
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'new URL("/v1/inventories", apiBase);'
+                'new URL("/v1/items/{id}".replace("{id}", encodeURIComponent(String(id))), apiBase);'
+            ),
+        },
+    })
+
+    result = discover_web2_surface(
+        adapter,
+        target="https://app.example",
+        seeds=("/app.js",),
+        max_paths=3,
+        max_js_bundles=1,
+    )
+    analysis = result.bundle_analyses[0]
+    assert "/v1/inventories" in analysis.endpoint_candidates
+    assert any("/v1/items/{id}" in item for item in analysis.unresolved_request_templates)
+\n
