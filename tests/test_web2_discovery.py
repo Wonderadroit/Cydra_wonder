@@ -308,3 +308,27 @@ def test_bundle_analysis_normalizes_replace_built_endpoint_templates():
     assert "/v1/wallets/{wallet}/tokens" in result.discovered_paths
     assert not any('.replace(' in path for path in result.discovered_paths)
     assert not any('.replace(' in endpoint for endpoint in result.model.endpoints)
+
+def test_discovery_prioritizes_parameterized_resource_and_workflow_routes():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": (
+                '<a href="/v1/items/{id}">item</a>'
+                '<a href="/v1/items">items</a>'
+                '<a href="/static/app.js">bundle</a>'
+                '<a href="/assets/logo.png">logo</a>'
+            ),
+        },
+        "/v1/items/{id}": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+        "/v1/items": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+        "/static/app.js": {"status_code": 200, "headers": {"Content-Type": "application/javascript"}, "body": "{}"},
+        "/assets/logo.png": {"status_code": 200, "headers": {"Content-Type": "image/png"}, "body": ""},
+    })
+
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=4)
+
+    assert result.discovered_paths[:3] == ("/", "/v1/items/{id}", "/v1/items")
+    assert "/assets/logo.png" not in result.discovered_paths
+
