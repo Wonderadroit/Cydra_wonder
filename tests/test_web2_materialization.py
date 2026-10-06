@@ -46,3 +46,37 @@ def test_ambiguous_identifiers_do_not_create_executable_request():
     endpoint = Web2EndpointModel("GET /v1/items/{id}", "GET", "/v1/items/{id}")
     plan = materialize_endpoint(endpoint, [item[0] for item in pairs], [item[1] for item in pairs])
     assert not plan.executable
+
+
+def test_unresolved_templates_do_not_consume_discovery_budget():
+    from cydra.execution_adapter import AdapterObservation, AdapterStatus
+    from cydra.web2_discovery import discover_web2_surface
+
+    class FakeAdapter:
+        def __init__(self):
+            self.paths = []
+
+        def execute(self, request):
+            path = request.inputs["path"]
+            self.paths.append(path)
+            if path == "/":
+                body = '<a href="/v1/items">items</a><a href="/v1/items/{id}">item</a>'
+            elif path == "/v1/items":
+                body = '{"items":[{"id":"item-42"}]}'
+            elif path == "/v1/items/item-42":
+                body = '{"id":"item-42","name":"observed"}'
+            else:
+                body = "{}"
+            return AdapterObservation(
+                AdapterStatus.EXECUTED,
+                request.action_id,
+                {"status_code": 200, "body": body, "headers": {"Content-Type": "application/json"}},
+            )
+
+    adapter = FakeAdapter()
+    result = discover_web2_surface(
+        adapter, target="https://authorized.example", seeds=("/",), max_paths=2
+    )
+    assert adapter.paths == ["/v1/items", "/v1/items/item-42"]
+    assert all("{id}" not in path for path in adapter.paths)
+    assert any(plan.materialized_path == "/v1/items/item-42" for plan in result.materialization_plans)
