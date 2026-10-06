@@ -390,6 +390,8 @@ def _detect_resource_state_acquisition_gaps(
     """
     if model.resources:
         return ()
+    if not model.identities or any(identity.authenticated for identity in model.identities.values()):
+        return ()
     api_paths = tuple(
         path for path, fingerprint in response_fingerprints.items()
         if fingerprint.generic_negative and _looks_like_api_surface(path)
