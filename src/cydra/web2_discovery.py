@@ -8,6 +8,7 @@ output as a security finding.
 """
 
 from dataclasses import dataclass
+import heapq
 import json
 import re
 from typing import Any, Iterable
@@ -59,18 +60,30 @@ def discover_web2_surface(
     Only GET requests are generated. Paths must resolve to the same target host
     as the adapter's configured target. Discovery metadata is planning input,
     never security evidence.
+
+    The queue is priority-based: explicit application/API references are
+    preferred over code bundles, and code bundles over static assets. This
+    makes the bounded budget useful without guessing or brute-forcing paths.
     """
     if max_paths < 1:
         raise ValueError("max_paths must be positive")
 
     model = Web2TargetModel(target=target)
-    queue = _normalize_seeds(seeds)
+    queue: list[tuple[int, int, str]] = []
+    queued: set[str] = set()
     seen: set[str] = set()
+    sequence = 0
+
+    for seed in _normalize_seeds(seeds):
+        heapq.heappush(queue, (-_path_priority(seed), sequence, seed))
+        queued.add(seed)
+        sequence += 1
+
     observations: list[AdapterObservation] = []
     discovered: list[str] = []
 
     while queue and len(seen) < max_paths:
-        path = queue.pop(0)
+        _, _, path = heapq.heappop(queue)
         if path in seen:
             continue
         seen.add(path)
@@ -107,8 +120,13 @@ def discover_web2_surface(
 
         for candidate in sorted(links):
             normalized = _same_host_path(candidate, target)
-            if normalized and normalized not in seen and len(seen) + len(queue) < max_paths:
-                queue.append(normalized)
+            if not normalized or normalized in seen or normalized in queued:
+                continue
+            if len(seen) + len(queue) >= max_paths:
+                continue
+            heapq.heappush(queue, (-_path_priority(normalized), sequence, normalized))
+            queued.add(normalized)
+            sequence += 1
 
     return Web2DiscoveryResult(
         model=model,
@@ -141,10 +159,29 @@ def _same_host_path(value: str, target: str) -> str | None:
     return path + (f"?{parsed.query}" if parsed.query else "")
 
 
+def _path_priority(path: str) -> int:
+    """Rank known application surfaces without guessing new paths."""
+    lowered = path.lower().split("?", 1)[0]
+    if re.search(r"/(?:api|graphql|rpc|v[0-9]+)(?:/|$)", lowered):
+        return 100
+    if re.search(
+        r"/(?:auth|account|accounts|user|users|profile|profiles|inventory|shop|shops|player|players|resource|resources)(?:/|$)",
+        lowered,
+    ):
+        return 95
+    if lowered.endswith((".js", ".mjs")) or ".js/" in lowered or ".js?" in lowered:
+        return 80
+    if lowered.endswith((".json", ".yaml", ".yml")):
+        return 70
+    if lowered.endswith((".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".css", ".woff", ".woff2")):
+        return 10
+    return 50
+
+
 def _html_paths(body: str) -> set[str]:
     parser = _LinkParser()
     parser.feed(body)
-    return {link for link in parser.links if link.startswith(("/", "?"))}
+    return {link for link in parser.links if link.startswith(("/", "?", "http://", "https://"))}
 
 
 def _openapi_paths(body: str) -> set[str]:
@@ -170,22 +207,20 @@ def _looks_like_javascript(path: str, content_type: str) -> bool:
 
 
 def _javascript_paths(body: str) -> set[str]:
-    """Extract only explicit URL-like path literals from downloaded JS.
+    """Extract explicit URL-like path literals from downloaded JS.
 
     This is intentionally lexical rather than a JS interpreter: no execution,
-    no guessing, and no path enumeration. Relative API/resource references
-    are retained; absolute URLs are later constrained by _same_host_path().
+    no guessing, and no path enumeration. Same-host absolute URLs are retained
+    and later constrained by _same_host_path().
     """
     candidates: set[str] = set()
-    patterns = (
-        r"""["'](/(?:api|graphql|rpc|v[0-9]+|auth|account|accounts|user|users|profile|profiles|inventory|shop|shops|player|players|resource|resources)(?:/[^"'\\s]*)?)["']""",
-        r"""["'](/[A-Za-z0-9._~-]+/[A-Za-z0-9._~{}-]+(?:/[A-Za-z0-9._~{}-]+)*)["']""",
-    )
-    for pattern in patterns:
-        for match in re.finditer(pattern, body):
-            value = match.group(1)
-            if value.startswith("/") and not value.startswith("//"):
-                candidates.add(value)
+    pattern = r"""["'\x60]((?:/|https?://)[^"'\x60\\\s]+)["'\x60]"""
+    for match in re.finditer(pattern, body):
+        value = match.group(1)
+        if value.startswith("/") and not value.startswith("//"):
+            candidates.add(value)
+        elif value.startswith(("http://", "https://")):
+            candidates.add(value)
     return candidates
 
 
