@@ -4,7 +4,7 @@ from .hypotheses import Hypothesis, HypothesisState
 from .web2_causal import Web2CausalVerification
 from .web2_authorization import Web2AuthorizationPlanningResult, generate_executable_ownership_differential_plans
 from .web2_model import Web2TargetModel
-from .web2_discovery import Web2DiscoveryResult
+from .web2_discovery import Web2CapabilityState, Web2DiscoveryResult
 
 @dataclass(frozen=True)
 class NextWeb2Experiment:
@@ -41,6 +41,7 @@ class Web2CapabilityRepairPlan:
     required_capabilities: tuple[str, ...]
     executable: bool
     reason: str
+    state: str = "EXHAUSTED"
 
 
 def generate_web2_capability_repair_plans(
@@ -52,21 +53,43 @@ def generate_web2_capability_repair_plans(
     They separate capability repair from the executable security-experiment budget.
     """
     plans: list[Web2CapabilityRepairPlan] = []
+    state_by_capability = {state.capability: state for state in discovery.capability_states}
     if "RESOURCE_STATE_ACQUISITION" in discovery.capability_gaps:
-        plans.append(Web2CapabilityRepairPlan(
-            capability="RESOURCE_STATE_ACQUISITION",
-            required_capabilities=(
-                "authorized_identity_or_public_resource_state_source",
+        state = state_by_capability.get(
+            "RESOURCE_STATE_ACQUISITION",
+            Web2CapabilityState("RESOURCE_STATE_ACQUISITION", "EXHAUSTED"),
+        )
+        if state.status == "INCOMPLETE_FRONTIER":
+            required = state.remaining_strategies or ("continue_frontier_exploration",)
+            reason = (
+                "Do not patch resource extraction yet. The evidence frontier is "
+                "incomplete; continue the generic discovery frontier before proposing "
+                "a capability implementation."
+            )
+        elif state.status == "BLOCKED_CONTEXT":
+            required = state.remaining_strategies or ("authorized_resource_context",)
+            reason = (
+                "The current target context does not expose concrete resource state. "
+                "Acquire an authorized resource context or an independently observed "
+                "public state source; never synthesize an identifier."
+            )
+        else:
+            required = (
                 "resource_identifier_observation",
                 "resource_provenance",
                 "dependent_endpoint_materialization",
-            ),
+            )
+            reason = (
+                "Configured target-independent acquisition strategies produced no "
+                "concrete resource identifier; implement the missing generic capability "
+                "only after the acquisition strategies are exhausted."
+            )
+        plans.append(Web2CapabilityRepairPlan(
+            capability="RESOURCE_STATE_ACQUISITION",
+            required_capabilities=required,
             executable=False,
-            reason=(
-                "No concrete resource identifier was observed. Continue only after "
-                "an authorized identity or an independently observed public resource "
-                "state source becomes available; do not synthesize identifiers."
-            ),
+            reason=reason,
+            state=state.status,
         ))
     return tuple(plans)
 
