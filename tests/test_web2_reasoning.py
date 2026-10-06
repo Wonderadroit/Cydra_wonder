@@ -85,3 +85,28 @@ def test_resource_state_gap_creates_non_executable_repair_plan():
     assert plans[0].capability=="RESOURCE_STATE_ACQUISITION"
     assert not plans[0].executable
     assert "resource_identifier_observation" in plans[0].required_capabilities
+
+
+def test_resource_state_repair_waits_for_frontier_when_incomplete():
+    from cydra.web2_discovery import Web2CapabilityState, Web2DiscoveryResult
+    from cydra.web2_reasoning import generate_web2_capability_repair_plans
+    from cydra.web2_model import Web2TargetModel
+    discovery = Web2DiscoveryResult(
+        model=Web2TargetModel("https://authorized.example"),
+        observations=(),
+        discovered_paths=(),
+        capability_gaps=("RESOURCE_STATE_ACQUISITION",),
+        capability_states=(
+            Web2CapabilityState(
+                "RESOURCE_STATE_ACQUISITION",
+                "INCOMPLETE_FRONTIER",
+                attempted_strategies=("response_state",),
+                remaining_strategies=("javascript_frontier",),
+                reason="more target-declared code remains",
+            ),
+        ),
+    )
+    plan = generate_web2_capability_repair_plans(discovery)[0]
+    assert plan.state == "INCOMPLETE_FRONTIER"
+    assert plan.required_capabilities == ("javascript_frontier",)
+    assert "Do not patch resource extraction" in plan.reason
