@@ -141,3 +141,71 @@ def test_discovery_does_not_turn_html_bootstrap_markup_into_paths():
     assert "/$" not in result.discovered_paths
     assert "/&" not in result.discovered_paths
     assert all(">" not in path and "<" not in path for path in result.discovered_paths)
+
+
+def test_bundle_analysis_resolves_base_url_and_request_construction():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script src="/static/app.js"></script>',
+        },
+        "/static/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": (
+                'const API_BASE = "/api";'
+                'const users = API_BASE + "/users";'
+                'fetch(users);'
+                'axios.post(API_BASE + "/session");'
+                'const xhr = new XMLHttpRequest(); xhr.open("GET", API_BASE + "/profile");'
+            ),
+        },
+        "/api/users": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+        "/api/session": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+        "/api/profile": {"status_code": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"},
+    })
+
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=6, max_js_bundles=2)
+    analysis = result.bundle_analyses[0]
+    assert analysis.classification == "application"
+    assert analysis.base_urls == ("/api",)
+    assert "GET" in analysis.request_methods
+    assert "POST" in analysis.request_methods
+    assert "/api/users" in analysis.endpoint_candidates
+    assert "/api/session" in analysis.endpoint_candidates
+    assert "/api/profile" in analysis.endpoint_candidates
+
+
+def test_bundle_analysis_keeps_dynamic_requests_unresolved():
+    dynamic = 'fetch(' + chr(96) + '/api/player/$' + '{playerId}' + chr(96) + '); fetch(API_BASE + path);'
+    adapter = FakeAdapter({
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": dynamic,
+        },
+    })
+    result = discover_web2_surface(adapter, target="https://app.example", seeds=("/app.js",), max_paths=1, max_js_bundles=1)
+    analysis = result.bundle_analyses[0]
+    assert analysis.classification == "application"
+    assert analysis.endpoint_candidates == ()
+    assert analysis.unresolved_request_templates
+
+
+def test_bundle_analysis_does_not_authorize_external_hosts():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<script src="/app.js"></script>',
+        },
+        "/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": 'const API_BASE = "https://api.example.net"; fetch(API_BASE + "/private");',
+        },
+    })
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=2, max_js_bundles=1)
+    assert "/private" not in result.discovered_paths
+    assert any(item == "https://api.example.net" for item in result.bundle_analyses[0].base_urls)
