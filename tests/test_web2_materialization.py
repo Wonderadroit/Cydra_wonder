@@ -75,8 +75,8 @@ def test_unresolved_templates_do_not_consume_discovery_budget():
 
     adapter = FakeAdapter()
     result = discover_web2_surface(
-        adapter, target="https://authorized.example", seeds=("/",), max_paths=2
+        adapter, target="https://authorized.example", seeds=("/",), max_paths=3
     )
-    assert adapter.paths == ["/v1/items", "/v1/items/item-42"]
+    assert adapter.paths == ["/", "/v1/items", "/v1/items/item-42"]
     assert all("{id}" not in path for path in adapter.paths)
     assert any(plan.materialized_path == "/v1/items/item-42" for plan in result.materialization_plans)
