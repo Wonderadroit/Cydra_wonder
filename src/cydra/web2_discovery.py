@@ -680,6 +680,14 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
             if value is None:
                 unresolved.add(expression.strip()[:200])
             else:
+                # A concrete absolute URL used directly by a request primitive
+                # is service-origin evidence even when the bundle does not label
+                # it with API_BASE/baseURL/etc. Keep the origin as evidence, but
+                # let the authorization filter below decide whether the concrete
+                # request may enter the executable frontier.
+                parsed_value = urlparse(value)
+                if parsed_value.scheme in {"http", "https"} and parsed_value.hostname:
+                    service_origins.add(f"{parsed_value.scheme}://{parsed_value.netloc}")
                 candidates.add(value)
 
     for match in re.finditer(
