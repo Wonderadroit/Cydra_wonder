@@ -12,7 +12,7 @@ class ServiceOriginAdapter:
         if path == "/":
             body = """<html>
 <script>
-const API_BASE_URL = "https://api.aurory.example";
+const API_BASE_URL = "https://api.testcorp.local";
 fetch(API_BASE_URL + "/v1/items");
 </script>
 <a href="/v1/items">items</a>
@@ -44,7 +44,7 @@ def test_external_service_origin_is_modeled_without_being_executed():
     adapter = ServiceOriginAdapter()
     result = discover_web2_surface(
         adapter,
-        target="https://app.aurory.example",
+        target="https://app.testcorp.local",
         seeds=("/",),
         identity_id="bugcrowd-authorized",
         identity_authenticated=True,
@@ -54,12 +54,12 @@ def test_external_service_origin_is_modeled_without_being_executed():
 
     relations = result.service_origin_relations
     assert any(
-        relation.origin == "https://api.aurory.example"
+        relation.origin == "https://api.testcorp.local"
         and relation.authorized_for_execution is False
         for relation in relations
     )
-    assert "https://api.aurory.example/v1/items" not in adapter.requests
-    assert "https://api.aurory.example/v1/items" not in result.discovered_paths
+    assert "https://api.testcorp.local/v1/items" not in adapter.requests
+    assert "https://api.testcorp.local/v1/items" not in result.discovered_paths
     assert all(path.startswith("/") for path in adapter.requests)
 
 
@@ -67,7 +67,7 @@ def test_external_service_origin_gap_requires_concrete_request_provenance():
     adapter = ServiceOriginAdapter()
     result = discover_web2_surface(
         adapter,
-        target="https://app.aurory.example",
+        target="https://app.testcorp.local",
         seeds=("/",),
         identity_id=None,
         identity_authenticated=False,
