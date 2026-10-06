@@ -112,6 +112,7 @@ def main() -> int:
         "resource_provenance": [{"resource_id": item.resource_id, "identifier": item.identifier, "source_endpoint_id": item.source_endpoint_id, "source_observation_id": item.source_observation_id, "field_path": item.field_path} for item in result.resource_provenance],
         "materialization_plans": [{"endpoint_id": plan.endpoint_id, "template": plan.template, "requirements": [{"parameter": req.parameter, "resource_id": req.resource_id} for req in plan.requirements], "materialized_path": plan.materialized_path, "executable": plan.executable} for plan in result.materialization_plans],
         "service_origin_relations": [{"source": rel.source, "origin": rel.origin, "relation": rel.relation, "authorized_for_execution": rel.authorized_for_execution} for rel in result.service_origin_relations],
+        "capability_gaps": list(result.capability_gaps),
         "hypothesis_planning": {
             "plan_count": len(hypothesis_planning.plans),
             "plans": [{"hypothesis_id": plan.hypothesis.hypothesis_id, "statement": plan.hypothesis.statement, "target_function": plan.hypothesis.target_function, "expected_impact": plan.hypothesis.expected_impact} for plan in hypothesis_planning.plans],
