@@ -863,7 +863,7 @@ def _inline_javascript_paths(body: str) -> set[str]:
 
 def _runtime_configuration_origins(body: str) -> tuple[str, ...]:
     """Recover explicit service origins from HTML bootstrap/runtime config."""
-    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL)"
+    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL|apiEndpoint|apiEndpointUrl|apiHost|apiDomain|baseApiUrl|BASE_API_URL|PUBLIC_API_URL|NEXT_PUBLIC_API_URL|VITE_API_URL)"
     origins: set[str] = set()
     pattern = re.compile(r"[\"'`]?" + origin_key + r"[\"'`]?\s*[:=]\s*[\"'`](https?://[^\"'`\s]+)", re.IGNORECASE)
     for match in pattern.finditer(body):
@@ -910,7 +910,7 @@ def _decode_js_string(token: str) -> str | None:
 def _javascript_runtime_config_aliases(body: str) -> dict[str, str]:
     """Resolve explicit URL values exposed through common runtime config objects."""
     aliases: dict[str, str] = {}
-    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL)"
+    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL|apiEndpoint|apiEndpointUrl|apiHost|apiDomain|baseApiUrl|BASE_API_URL|PUBLIC_API_URL|NEXT_PUBLIC_API_URL|VITE_API_URL)"
     object_assignment = re.compile(
         rf"(?P<prefix>(?:window|globalThis|self)(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\s*=\s*\{{(?P<body>[^{{}}]*)\}}",
         re.DOTALL,
@@ -1023,6 +1023,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
         "baseurl", "apibase", "apibaseurl", "api_base_url", "api_base",
         "apiurl", "backendurl", "backend_url", "serviceurl", "service_url",
         "graphqlurl", "graphql_url", "endpointurl", "endpoint_url",
+        "apiendpoint", "apiendpointurl", "apihost", "apidomain", "baseapiurl", "base_api_url", "public_api_url", "next_public_api_url", "vite_api_url",
     }
     # Service declarations are provenance-bearing evidence. Recover them with
     # a dedicated lexical parser so complex bundle expressions cannot hide the
@@ -1050,7 +1051,7 @@ def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleA
     # Resolve service origins only from application/config evidence. A URL is
     # not trusted merely because a route looks API-like: the surrounding config
     # key/property must establish that it is a service origin.
-    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL)"
+    origin_key = r"(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL|apiEndpoint|apiEndpointUrl|apiHost|apiDomain|baseApiUrl|BASE_API_URL|PUBLIC_API_URL|NEXT_PUBLIC_API_URL|VITE_API_URL)"
     # Preserve resolved constant values directly. This is deliberately separate
     # from the lexical property matcher below so minified declarations such as
     # const API_BASE = "https://api.example" cannot be lost merely because
