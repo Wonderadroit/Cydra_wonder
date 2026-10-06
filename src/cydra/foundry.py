@@ -234,6 +234,9 @@ def _initializer_argument(
 ) -> tuple[str, str | None]:
     runtime_arguments = runtime_arguments or {}
     if parameter.name in runtime_arguments:
+        base_type = parameter.type.strip().split()[0].rstrip("[]")
+        if contract_model is not None and base_type in {interface.name for interface in contract_model.inherited_resolved_interfaces}:
+            return runtime_arguments[parameter.name], f"{base_type} parameter{index};"
         return runtime_arguments[parameter.name], None
     parameter_type = parameter.type.strip()
     if contract_model is not None:
