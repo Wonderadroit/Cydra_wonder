@@ -118,7 +118,7 @@ def discover_web2_surface(
             # Modern SPA/Next.js pages often embed route/API literals in inline
             # bootstrap JavaScript. Extract those before spending the bounded
             # request budget on static bundles.
-            links.update(_javascript_paths(body))
+            links.update(_inline_javascript_paths(body))
         if _looks_like_javascript(path, content_type):
             links.update(_javascript_paths(body))
 
@@ -210,6 +210,14 @@ def _looks_like_javascript(path: str, content_type: str) -> bool:
     )
 
 
+def _inline_javascript_paths(body: str) -> set[str]:
+    """Extract URL-like literals only from inline ``<script>`` contents."""
+    candidates: set[str] = set()
+    for match in re.finditer(r"<script\\b[^>]*>(.*?)</script\\s*>", body, re.IGNORECASE | re.DOTALL):
+        candidates.update(_javascript_paths(match.group(1)))
+    return candidates
+
+
 def _javascript_paths(body: str) -> set[str]:
     """Extract explicit URL-like path literals from downloaded JS.
 
@@ -221,7 +229,7 @@ def _javascript_paths(body: str) -> set[str]:
     pattern = r"""["'\x60]((?:/|https?://)[^"'\x60\\\s]+)["'\x60]"""
     for match in re.finditer(pattern, body):
         value = match.group(1)
-        if value.startswith("/") and not value.startswith("//"):
+        if value.startswith("/") and not value.startswith("//") and not any(char in value for char in "<>\\x00"):
             candidates.add(value)
         elif value.startswith(("http://", "https://")):
             candidates.add(value)
