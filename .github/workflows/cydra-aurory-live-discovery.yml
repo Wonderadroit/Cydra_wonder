@@ -39,8 +39,8 @@ jobs:
           AURORY_BUG_BOUNTY_USERNAME: cyberwonder
         run: |
           python scripts/aurory_live_discovery.py \
-            --seed "${{ inputs.seed }}" \
-            --max-paths "${{ inputs.max_paths }}" \
+            --seed "${{ inputs.seed || '/' }}" \
+            --max-paths "${{ inputs.max_paths || '20' }}" \
 
       - name: Publish sanitized discovery artifact
         uses: actions/upload-artifact@v4
