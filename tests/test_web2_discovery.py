@@ -120,3 +120,24 @@ def test_discovery_extracts_inline_javascript_before_bundle_budget():
     )
 
     assert result.discovered_paths == ("/", "/api/session")
+
+
+def test_discovery_does_not_turn_html_bootstrap_markup_into_paths():
+    adapter = FakeAdapter({
+        "/": {
+            "status_code": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": '<div><!--$--></div><script>$RC("b","c");</script><script src="/_next/static/chunks/app.js"></script>',
+        },
+        "/_next/static/chunks/app.js": {
+            "status_code": 200,
+            "headers": {"Content-Type": "application/javascript"},
+            "body": "fetch('/api/session');",
+        },
+    })
+
+    result = discover_web2_surface(adapter, target="https://app.example", max_paths=3)
+
+    assert "/$" not in result.discovered_paths
+    assert "/&" not in result.discovered_paths
+    assert all(">" not in path and "<" not in path for path in result.discovered_paths)
