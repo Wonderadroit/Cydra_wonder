@@ -239,7 +239,7 @@ def _initializer_argument(
     if contract_model is not None:
         base_type = parameter_type.split()[0].rstrip("[]")
         if base_type in {interface.name for interface in contract_model.inherited_resolved_interfaces}:
-            return f"{base_type}(address(0xA11CE))", None
+            return f"address(0xA11CE)", f"{base_type} {f'parameter{index}'};"
     if parameter_type.endswith("[]"):
         base = parameter_type[:-2].strip()
         # Preserve the conservative empty boundary for primitive arrays.
