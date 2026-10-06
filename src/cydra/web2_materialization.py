@@ -174,6 +174,12 @@ def materialize_endpoint(
                 candidates = related
 
         if parameter.lower() == "id" and not candidates:
+            candidates = [
+                resource
+                for resource in materializable_resources
+                if re.search(r"(?:_id|Id|ID)$", resource.label)
+            ]
+        if parameter.lower() == "id" and not candidates:
             previous = segments[segments.index("{" + parameter + "}") - 1] if "{" + parameter + "}" in segments and segments.index("{" + parameter + "}") > 0 else None
             if previous:
                 candidates = resources_by_field.get(previous.rstrip("s").lower() + "_id", [])
