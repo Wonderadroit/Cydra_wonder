@@ -428,22 +428,29 @@ def _detect_service_origin_resolution_gaps(
             or analysis.path.endswith("#runtime-config")
         )
     }
-    unauthorized_origins = {
-        origin for analysis in application_analyses
-        for origin in analysis.unauthorized_origins
+    # An external origin is relevant to this capability only when it is
+    # connected to actual request construction in the same bundle. Static
+    # literals from vendor/dependency code (for example documentation URLs or
+    # test fixtures) must not turn repeated same-origin API 404s into a false
+    # execution-readiness gap.
+    request_linked_origins = {
+        origin
+        for analysis in application_analyses
+        for _, origin in analysis.request_origins
+        if urlparse(origin).hostname != urlparse(target).hostname
     }
     unresolved_templates = any(
         analysis.unresolved_request_templates for analysis in application_analyses
     )
 
     # A same-origin service declaration explains the negative responses, so it
-    # is not an origin-resolution gap. Otherwise the combination of repeated
-    # API negatives and unresolved/external origin evidence means the current
-    # execution target cannot yet be causally connected to the recovered API
-    # surface.
+    # is not an origin-resolution gap. Otherwise repeated API negatives plus
+    # either a request-linked external origin or an unresolved request
+    # construction boundary means the current execution target cannot yet be
+    # causally connected to the recovered API surface.
     if authorized_origins:
         return ()
-    if not unauthorized_origins and not unresolved_templates:
+    if not request_linked_origins and not unresolved_templates:
         return ()
 
     return (
