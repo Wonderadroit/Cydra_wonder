@@ -386,10 +386,24 @@ def _looks_like_javascript(path: str, content_type: str) -> bool:
 
 
 def _inline_javascript_bodies(body: str) -> tuple[str, ...]:
-    return tuple(
-        match.group(1)
-        for match in re.finditer(r"<script\b[^>]*>(.*?)</script\s*>", body, re.IGNORECASE | re.DOTALL)
-    )
+    """Return only inline script bodies, never external ``src`` scripts.
+
+    External script tags are bundle references and are analyzed after the
+    corresponding resource is fetched. Treating their empty markup body as an
+    inline bundle creates a false first analysis and can hide the real bundle
+    analysis behind the bounded frontier.
+    """
+    bodies: list[str] = []
+    for match in re.finditer(
+        r"<script\b([^>]*)>(.*?)</script\s*>",
+        body,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        attributes, script_body = match.group(1), match.group(2)
+        if re.search(r"\bsrc\s*=", attributes, re.IGNORECASE):
+            continue
+        bodies.append(script_body)
+    return tuple(bodies)
 
 
 def _inline_javascript_paths(body: str) -> set[str]:
