@@ -118,11 +118,39 @@ def materialize_endpoint(
             endpoint.endpoint_id, endpoint.path, (), endpoint.path, (), True
         )
 
-    resources_by_field: dict[str, list[Web2ResourceModel]] = {}
-    for resource in resources:
-        resources_by_field.setdefault(resource.label.lower(), []).append(resource)
+    # Discovery may model the resource before its concrete identifier is
+    # attached. When explicit provenance later supplies exactly one identifier
+    # for that resource, use it for materialization without mutating the target
+    # model. Conflicting provenance remains ambiguous and therefore unresolved.
+    provenance_by_resource: dict[str, list[Web2ResourceProvenance]] = {}
+    for item in provenance:
+        provenance_by_resource.setdefault(item.resource_id, []).append(item)
 
-    provenance_by_resource = {item.resource_id: item for item in provenance}
+    materializable_resources: list[Web2ResourceModel] = []
+    for resource in resources:
+        if resource.identifier is not None:
+            materializable_resources.append(resource)
+            continue
+        candidates = {
+            item.identifier
+            for item in provenance_by_resource.get(resource.resource_id, ())
+            if item.identifier
+        }
+        if len(candidates) == 1:
+            materializable_resources.append(
+                Web2ResourceModel(
+                    resource.resource_id,
+                    resource.label,
+                    resource.owner_identity_id,
+                    next(iter(candidates)),
+                )
+            )
+        else:
+            materializable_resources.append(resource)
+
+    resources_by_field: dict[str, list[Web2ResourceModel]] = {}
+    for resource in materializable_resources:
+        resources_by_field.setdefault(resource.label.lower(), []).append(resource)
     values: dict[str, str] = {}
     requirements: list[Web2ParameterRequirement] = []
     selected_provenance: list[Web2ResourceProvenance] = []
@@ -138,7 +166,7 @@ def materialize_endpoint(
         if not candidates and parameter.lower() == "id":
             related = [
                 resource
-                for resource in resources
+                for resource in materializable_resources
                 if resource.resource_id in endpoint.resource_ids
                 and resource.identifier is not None
             ]
