@@ -407,10 +407,26 @@ def _detect_service_origin_resolution_gaps(
     if not has_request_construction:
         return ()
 
+    # Distinguish an explicitly declared target service from a relative request
+    # that merely defaults to the current web origin. Relative request primitives
+    # are useful provenance, but they must not mask an external service-origin
+    # declaration when the observed same-origin API candidates are all negative.
     authorized_origins = {
-        origin for analysis in application_analyses
+        origin
+        for analysis in application_analyses
         for origin in analysis.service_origins
         if urlparse(origin).hostname == urlparse(target).hostname
+        and (
+            origin in {
+                declared
+                for value in analysis.base_urls
+                for declared in (
+                    f"{urlparse(value).scheme}://{urlparse(value).netloc}",
+                )
+                if urlparse(value).scheme in {"http", "https"} and urlparse(value).hostname
+            }
+            or analysis.path.endswith("#runtime-config")
+        )
     }
     unauthorized_origins = {
         origin for analysis in application_analyses
