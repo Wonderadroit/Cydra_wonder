@@ -200,7 +200,7 @@ def discover_web2_surface(
             links.update(_inline_javascript_paths(body))
         if _looks_like_javascript(path, content_type):
             if path not in analyzed_bundles and len(analyzed_bundles) < max_js_bundles:
-                analysis = _analyze_javascript_bundle(path, body)
+                analysis = _analyze_javascript_bundle(path, body, target)
                 bundle_analyses.append(analysis)
                 analyzed_bundles.add(path)
                 links.update(analysis.endpoint_candidates)
@@ -468,7 +468,7 @@ def _request_method_from_context(context: str, default: str = "GET") -> str:
     return match.group(1).upper() if match else default
 
 
-def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
+def _analyze_javascript_bundle(path: str, body: str, target: str) -> Web2BundleAnalysis:
     """Recover statically-resolvable request construction without JS execution."""
     constants = _javascript_constants(body)
     base_urls: set[str] = set()
@@ -513,7 +513,6 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
             if parsed.scheme in {"http", "https"} and parsed.hostname:
                 service_origins.add(f"{parsed.scheme}://{parsed.netloc}")
 
-    target_host = urlparse(path).hostname  # path is relative; retained for type symmetry
     patterns = (
         (rf"\bfetch\s*\(\s*([^,\)]+)([^\)]*)\)", "fetch"),
         (rf"\baxios\.(get|post|put|patch|delete|head|options)\s*\(\s*([^,\)]+)([^\)]*)\)", "axios"),
@@ -564,12 +563,14 @@ def _analyze_javascript_bundle(path: str, body: str) -> Web2BundleAnalysis:
     if "$" + "{" in body and re.search(r"\b(?:fetch|Request|axios\.[A-Za-z]+)|\.open", body):
         unresolved.add("<dynamic-request-template>")
     candidates = {_canonicalize_discovery_candidate(candidate) for candidate in candidates if candidate}
-    target_host = None
-    # Authorization is deliberately checked later by _same_host_path(). Here we
-    # expose concrete service origins so the planner can distinguish "resolved"
-    # from "authorized for active execution".
-    # No external origin is promoted into the executable frontier.
-    unauthorized_origins = set(service_origins)
+    authorized_host = urlparse(target).hostname
+    # Concrete service origins are evidence, not authorization. Only an origin
+    # whose host is already the target host may enter the executable frontier;
+    # external origins remain planned and explicitly unauthorized.
+    unauthorized_origins = {
+        origin for origin in service_origins
+        if urlparse(origin).hostname != authorized_host
+    }
     classification = "application" if candidates or base_urls or service_origins or unresolved else "static_or_vendor"
     return Web2BundleAnalysis(
         path=path,
