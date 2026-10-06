@@ -66,10 +66,10 @@ def _observed_json_documents(body: str) -> tuple[Any, ...]:
         pass
 
     script_pattern = re.compile(
-        r'<script\\b([^>]*)>(.*?)</script\\s*>',
+        r'<script\b([^>]*)>(.*?)</script\s*>',
         re.IGNORECASE | re.DOTALL,
     )
-    type_pattern = re.compile(r'\\btype\\s*=\\s*["\\\']([^"\\\']+)["\\\']', re.IGNORECASE)
+    type_pattern = re.compile(r'\btype\s*=\s*["\\\']([^"\\\']+)["\\\']', re.IGNORECASE)
     for match in script_pattern.finditer(body):
         attributes, source = match.group(1), match.group(2).strip()
         type_match = type_pattern.search(attributes)
