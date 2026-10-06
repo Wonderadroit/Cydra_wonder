@@ -54,3 +54,17 @@ def test_discovery_result_flows_into_security_hypothesis_planning():
     assert len(result.plans)==1
     assert result.plans[0].experiment.actions[0].inputs["path"]=="/records/1"
     assert result.capability_gaps==()
+
+def test_discovery_capability_gaps_are_published_into_hypothesis_planning():
+    from cydra.web2_discovery import Web2DiscoveryResult
+    from cydra.web2_reasoning import generate_web2_hypotheses_from_discovery
+    from cydra.web2_model import Web2TargetModel
+    discovery=Web2DiscoveryResult(
+        model=Web2TargetModel("https://authorized.example"),
+        observations=(),
+        discovered_paths=(),
+        capability_gaps=("SERVICE_ORIGIN_RESOLUTION",),
+    )
+    result=generate_web2_hypotheses_from_discovery(discovery)
+    assert result.plans==()
+    assert result.capability_gaps==("SERVICE_ORIGIN_RESOLUTION",)
