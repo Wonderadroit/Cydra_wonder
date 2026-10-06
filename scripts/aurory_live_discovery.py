@@ -7,7 +7,10 @@ from pathlib import Path
 
 from cydra.web2_adapter import Web2Adapter, Web2Identity, Web2Target
 from cydra.web2_discovery import discover_web2_surface
-from cydra.web2_reasoning import generate_web2_hypotheses_from_discovery
+from cydra.web2_reasoning import (
+    generate_web2_capability_repair_plans,
+    generate_web2_hypotheses_from_discovery,
+)
 
 
 TARGET = "https://app.aurory.io"
@@ -99,6 +102,7 @@ def main() -> int:
     )
 
     hypothesis_planning = generate_web2_hypotheses_from_discovery(result)
+    capability_repair_plans = generate_web2_capability_repair_plans(result)
     report = {
         "target": TARGET,
         "authorized_execution": True,
@@ -118,6 +122,18 @@ def main() -> int:
             "plan_count": len(hypothesis_planning.plans),
             "plans": [{"hypothesis_id": plan.hypothesis.hypothesis_id, "statement": plan.hypothesis.statement, "target_function": plan.hypothesis.target_function, "expected_impact": plan.hypothesis.expected_impact} for plan in hypothesis_planning.plans],
             "capability_gaps": list(hypothesis_planning.capability_gaps),
+        },
+        "capability_repair_planning": {
+            "plan_count": len(capability_repair_plans),
+            "plans": [
+                {
+                    "capability": plan.capability,
+                    "required_capabilities": list(plan.required_capabilities),
+                    "executable": plan.executable,
+                    "reason": plan.reason,
+                }
+                for plan in capability_repair_plans
+            ],
         },
         "discovered_paths": list(result.discovered_paths),        "bundle_analyses": [
             {
