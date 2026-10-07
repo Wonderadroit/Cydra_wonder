@@ -11,6 +11,11 @@ on:
         description: "Maximum read-only discovery paths (1-150)"
         required: true
         default: "150"
+      require_authenticated:
+        description: "Require the supplied browser-authenticated session"
+        required: true
+        default: "false"
+        type: boolean
 
 permissions:
   contents: read
@@ -29,13 +34,27 @@ jobs:
           python-version: "3.12"
 
       - name: Install CYDRA
+        uses: actions/checkout@v4
+        with:
+          path: _unused_checkout
+
+      - name: Install CYDRA package
         run: python -m pip install -e .
 
       - name: Run bounded authorized discovery
         env:
           AURORY_BUG_BOUNTY_USERNAME: cyberwonder
+          CYDRA_WEB2_SESSION_B64: ${{ secrets.CYDRA_WEB2_SESSION_B64 }}
         run: |
-          python scripts/aurory_live_discovery.py             --seed "${{ inputs.seed || '/' }}"             --max-paths "${{ inputs.max_paths || '150' }}"
+          if [ "${{ inputs.require_authenticated }}" = "true" ]; then
+            AUTH_FLAG="--require-authenticated"
+          else
+            AUTH_FLAG=""
+          fi
+          python scripts/aurory_live_discovery.py \
+            --seed "${{ inputs.seed || '/' }}" \
+            --max-paths "${{ inputs.max_paths || '150' }}" \
+            $AUTH_FLAG
 
       - name: Publish sanitized discovery artifact
         uses: actions/upload-artifact@v4
