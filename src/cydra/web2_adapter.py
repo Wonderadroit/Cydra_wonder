@@ -13,6 +13,7 @@ import urllib.request
 from typing import Any, Mapping
 
 from .execution_adapter import AdapterCapability, AdapterObservation, AdapterRequest, AdapterStatus
+from .web2_session import Web2Cookie
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,8 @@ class Web2Target:
 class Web2Identity:
     identity_id: str
     headers: dict[str, str] = field(default_factory=dict)
+    cookies: tuple[Web2Cookie, ...] = ()
+    authenticated: bool = False
 
 
 class Web2Adapter:
@@ -46,11 +49,15 @@ class Web2Adapter:
         self.target = target
         self._identities = dict(identities or {})
         self._jars: dict[str, http.cookiejar.CookieJar] = {}
+        for identity_id, identity in self._identities.items():
+            jar = self._jars.setdefault(identity_id, http.cookiejar.CookieJar())
+            self._install_identity_cookies(jar, identity.cookies)
 
     def capabilities(self) -> tuple[AdapterCapability, ...]:
         return (
             AdapterCapability("HTTP_REQUEST", True, "GET/POST/PUT/PATCH/DELETE"),
             AdapterCapability("IDENTITY_SWITCH", True, "isolated cookie jars and headers"),
+            AdapterCapability("AUTHENTICATED_SESSION", True, "explicitly supplied browser session cookies/headers"),
             AdapterCapability("RESPONSE_OBSERVATION", True, "status, headers, body digest and body"),
             AdapterCapability("STATE_REPLAY", True, "repeat an identical request under an identity"),
         )
@@ -90,6 +97,8 @@ class Web2Adapter:
 
         identity = self._identities.get(identity_id) if identity_id else None
         jar = self._jars.setdefault(identity_id or "__anonymous__", http.cookiejar.CookieJar())
+        if identity and identity.cookies and not any(True for _ in jar):
+            self._install_identity_cookies(jar, identity.cookies)
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
         merged_headers = {"User-Agent": "CYDRA-Web2-Adapter/1.0"}
@@ -142,6 +151,35 @@ class Web2Adapter:
             "body": body_text,
             "body_sha256": hashlib.sha256(raw_body).hexdigest(),
         }
+
+    def _install_identity_cookies(self, jar: http.cookiejar.CookieJar, cookies: tuple[Web2Cookie, ...]) -> None:
+        target_host = urllib.parse.urlparse(self.target.base_url).hostname or ""
+        for item in cookies:
+            if not item.name or not item.domain:
+                raise ValueError("session cookie must have a name and domain")
+            domain = item.domain.lstrip(".")
+            if target_host != domain and not target_host.endswith("." + domain):
+                raise PermissionError("session cookie domain is outside the Web2 target host")
+            cookie = http.cookiejar.Cookie(
+                version=0,
+                name=item.name,
+                value=item.value,
+                port=None,
+                port_specified=False,
+                domain=item.domain,
+                domain_specified=item.domain.startswith("."),
+                domain_initial_dot=item.domain.startswith("."),
+                path=item.path or "/",
+                path_specified=True,
+                secure=item.secure,
+                expires=None,
+                discard=True,
+                comment=None,
+                comment_url=None,
+                rest={"HttpOnly": None} if item.http_only else {},
+                rfc2109=False,
+            )
+            jar.set_cookie(cookie)
 
     def _validate_final_host(self, final_url: str) -> None:
         parsed = urllib.parse.urlparse(final_url)
