@@ -33,11 +33,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install CYDRA
-        uses: actions/checkout@v4
-        with:
-          path: _unused_checkout
-
       - name: Install CYDRA package
         run: python -m pip install -e .
 
