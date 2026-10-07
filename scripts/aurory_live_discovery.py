@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ from cydra.web2_reasoning import (
     generate_web2_capability_repair_plans,
     generate_web2_hypotheses_from_discovery,
 )
+from cydra.web2_session import Web2Session
 
 
 TARGET = "https://app.aurory.io"
@@ -18,14 +20,8 @@ ALLOWED_HOSTS = ("app.aurory.io",)
 DEFAULT_BUG_BOUNTY_USERNAME = "cyberwonder"
 
 
-
 def _safe_observation_record(observation) -> dict[str, object]:
-    """Serialize non-secret HTTP observation metadata for downstream modeling.
-
-    The adapter already computes response metadata; preserve only fields that
-    are useful for planning/differential reasoning without copying response
-    bodies, cookies, credentials, or headers into the artifact.
-    """
+    """Serialize non-secret HTTP observation metadata for downstream modeling."""
     record: dict[str, object] = {
         "action_id": observation.action_id,
         "status": observation.status.value,
@@ -50,6 +46,32 @@ def _safe_observation_record(observation) -> dict[str, object]:
     return record
 
 
+def _load_authenticated_session(args) -> Web2Session | None:
+    if args.session_file:
+        return Web2Session.from_file(args.session_file, default_target_origin=TARGET)
+
+    encoded = os.environ.get("CYDRA_WEB2_SESSION_B64", "").strip()
+    if encoded:
+        return Web2Session.from_base64(encoded, default_target_origin=TARGET)
+
+    # Backward-compatible single-header handoff. New integrations should use
+    # the generic session boundary so browser cookies can be transferred too.
+    token = os.environ.get("AURORY_OWNER_AUTHORIZATION", "").strip()
+    if token:
+        return Web2Session.from_mapping(
+            {
+                "version": 1,
+                "session_id": "owner",
+                "target_origin": TARGET,
+                "headers": {"Authorization": token},
+                "cookies": [],
+                "source": "legacy-header",
+            },
+            default_target_origin=TARGET,
+        )
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Bounded, read-only CYDRA live discovery for the authorized Aurory target."
@@ -60,7 +82,11 @@ def main() -> int:
     parser.add_argument(
         "--require-authenticated",
         action="store_true",
-        help="Require an optional authenticated session credential; omit for Bugcrowd-header authorization.",
+        help="Require an authenticated Web2 session supplied by --session-file or CYDRA_WEB2_SESSION_B64.",
+    )
+    parser.add_argument(
+        "--session-file",
+        help="Local normalized Web2 session JSON. Never place this file in artifacts or source control.",
     )
     parser.add_argument("--output", default="artifacts/aurory-discovery.json")
     args = parser.parse_args()
@@ -74,22 +100,29 @@ def main() -> int:
     if not username or any(char.isspace() for char in username):
         raise SystemExit("AURORY_BUG_BOUNTY_USERNAME must be a non-empty single username")
 
-    # The Bugcrowd identifier is a public testing header, not an authentication
-    # credential. Keep it separate from the optional authenticated session.
     identity_headers = {"X-Bug-Bounty": f"Bugcrowd-{username}"}
-    token = os.environ.get("AURORY_OWNER_AUTHORIZATION", "").strip()
-    if args.require_authenticated and not token:
+    session = _load_authenticated_session(args)
+    if args.require_authenticated and session is None:
         raise SystemExit(
-            "Authenticated discovery was requested, but no authenticated session credential "
-            "was supplied. Bugcrowd header authorization is available without this flag."
+            "Authenticated discovery was requested, but no Web2 session was supplied. "
+            "Provide --session-file locally or CYDRA_WEB2_SESSION_B64 in the workflow."
         )
-    if token:
-        identity_headers["Authorization"] = token
 
-    identity_id = "owner"
-    identities = {
-        identity_id: Web2Identity(identity_id, identity_headers),
-    }
+    if session is not None:
+        session.validate_for(TARGET, ALLOWED_HOSTS)
+        identity_headers.update(dict(session.headers))
+        identity_id = session.session_id
+        identity = Web2Identity(
+            identity_id=identity_id,
+            headers=identity_headers,
+            cookies=session.cookies,
+            authenticated=session.authenticated,
+        )
+    else:
+        identity_id = "owner"
+        identity = Web2Identity(identity_id, identity_headers, authenticated=False)
+
+    identities = {identity_id: identity}
 
     adapter = Web2Adapter(
         Web2Target(
@@ -106,7 +139,7 @@ def main() -> int:
         target=TARGET,
         seeds=args.seed,
         identity_id=identity_id,
-        identity_authenticated=bool(token),
+        identity_authenticated=session.authenticated if session is not None else False,
         max_paths=args.max_paths,
         max_js_bundles=args.max_js_bundles,
     )
@@ -116,7 +149,7 @@ def main() -> int:
     report = {
         "target": TARGET,
         "authorized_execution": True,
-        "mode": "authenticated" if token else "anonymous_with_bugcrowd_header",
+        "mode": "authenticated" if session is not None else "anonymous_with_bugcrowd_header",
         "bug_bounty_username": username,
         "max_paths": args.max_paths,
         "max_js_bundles": args.max_js_bundles,
@@ -145,7 +178,8 @@ def main() -> int:
                 for plan in capability_repair_plans
             ],
         },
-        "discovered_paths": list(result.discovered_paths),        "bundle_analyses": [
+        "discovered_paths": list(result.discovered_paths),
+        "bundle_analyses": [
             {
                 "path": bundle.path,
                 "classification": bundle.classification,
@@ -168,15 +202,11 @@ def main() -> int:
             }
             for endpoint_id, endpoint in sorted(result.model.endpoints.items())
         ],
-        "observations": [
-            _safe_observation_record(observation)
-            for observation in result.observations
-        ],
+        "observations": [_safe_observation_record(observation) for observation in result.observations],
         "note": (
             "Response bodies, cookies, authorization values, and response headers are intentionally "
-            "excluded from the artifact. Safe observation metadata includes request/final URL, "
-            "HTTP method/status, body length, and body SHA-256 so downstream reasoning can compare "
-            "responses without retaining response content. The Bugcrowd username is non-secret."
+            "excluded from the artifact. The authenticated session is an external execution input "
+            "and is never copied into the sanitized discovery artifact."
         ),
     }
 
@@ -189,9 +219,7 @@ def main() -> int:
                 "target": TARGET,
                 "mode": report["mode"],
                 "discovered_count": len(result.discovered_paths),
-                "executed_count": sum(
-                    o.status.value == "executed" for o in result.observations
-                ),
+                "executed_count": sum(o.status.value == "executed" for o in result.observations),
                 "artifact": str(destination),
             }
         )
