@@ -1,5 +1,6 @@
 from cydra.execution_adapter import AdapterRequest, AdapterStatus
 from cydra.web2_adapter import Web2Adapter, Web2Identity, Web2Target
+from cydra.web2_session import Web2Cookie
 
 
 def test_active_execution_requires_explicit_authorization():
@@ -21,10 +22,32 @@ def test_web2_adapter_keeps_identities_isolated():
     assert [x.name for x in adapter.capabilities()] == [
         "HTTP_REQUEST",
         "IDENTITY_SWITCH",
+        "AUTHENTICATED_SESSION",
         "RESPONSE_OBSERVATION",
         "STATE_REPLAY",
     ]
     assert adapter._identities["alice"].headers["Authorization"] != adapter._identities["bob"].headers["Authorization"]
+
+
+def test_authenticated_cookie_session_is_loaded_into_isolated_cookie_jar():
+    adapter = Web2Adapter(
+        Web2Target("https://app.example", ("app.example",), authorized=True),
+        identities={
+            "owner": Web2Identity(
+                "owner",
+                authenticated=True,
+                cookies=(
+                    Web2Cookie(
+                        name="session",
+                        value="secret",
+                        domain="app.example",
+                    ),
+                ),
+            ),
+        },
+    )
+    jar = adapter._jars["owner"]
+    assert [(cookie.name, cookie.value) for cookie in jar] == [("session", "secret")]
 
 
 def test_unsupported_operation_is_not_security_evidence():
