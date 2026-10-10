@@ -1,7 +1,7 @@
 name: CYDRA Web3 Authorization Specialist
 
-# Focused campaign: authorization reasoning, executable positive control,
-# unfamiliar pinned Solidity target, and a negative control.
+# Focused campaign: authorization regressions, controlled positives/negatives,
+# and a historical external positive control. This is not novelty evidence.
 
 on:
   push:
@@ -48,9 +48,10 @@ jobs:
             --target-repo https://github.com/Wonderadroit/Cydra_wonder.git \
             --target-ref main \
             --target-path benchmarks/alchemix_missing_access_control/foundry/src/Target.sol \
-            --target-project benchmarks/alchemix_missing_access_control/foundry
+            --target-project benchmarks/alchemix_missing_access_control/foundry \
+            --output "$RUNNER_TEMP/cydra-positive-control.json"
 
-      - name: Blind unfamiliar Solidity target
+      - name: Historical external positive control (not novelty evidence)
         env:
           PYTHONPATH: src
         run: |
@@ -58,9 +59,21 @@ jobs:
             --target-repo https://github.com/decentxyz/decent-bridge.git \
             --target-ref 7f90fd4489551b69c20d11eeecb17a3f564afb18 \
             --target-path src/DcntEth.sol \
-            --target-project .
+            --target-project . \
+            --output "$RUNNER_TEMP/cydra-historical-decent-control.json"
 
       - name: Authorization negative control
         env:
           PYTHONPATH: src
         run: python scripts/run_benchmark_006_blind_auth_negative.py
+
+      - name: Preserve authorization evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-web3-authorization-evidence
+          path: |
+            ${{ runner.temp }}/cydra-positive-control.json
+            ${{ runner.temp }}/cydra-historical-decent-control.json
+          if-no-files-found: warn
+          retention-days: 14
