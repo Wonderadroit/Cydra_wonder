@@ -86,3 +86,30 @@ def test_ast_semantics_ignore_source_comment_or_string_text():
                          "kind": "string", "value": "value = 999;"}}
     ])])
     assert not _relations(ast)
+
+
+
+def test_internal_helper_write_is_attributed_to_public_caller():
+    helper = _function(20, "setFeeRecipient", [
+        {"nodeType": "Assignment", "id": 30, "operator": "=",
+         "leftHandSide": _identifier(31, 10, "value"),
+         "rightHandSide": {"nodeType": "Literal", "id": 32, "value": "7"}}
+    ])
+    caller = _function(50, "changeFeeRecipient", [
+        {"nodeType": "ExpressionStatement", "id": 60,
+         "expression": {"nodeType": "FunctionCall", "id": 61,
+                        "expression": _identifier(62, 20, "setFeeRecipient"),
+                        "arguments": []}}
+    ])
+
+    evidence = extract_ast_relationships(_ast([helper, caller]), "Fixture.sol")
+    direct = {(item.function, item.relation, item.target) for item in evidence}
+
+    assert ("setFeeRecipient", "writes", "value") in direct
+    assert ("changeFeeRecipient", "writes", "value") in direct
+    propagated = next(
+        item for item in evidence
+        if item.function == "changeFeeRecipient" and item.relation == "writes"
+    )
+    assert propagated.source.startswith("solc-json-ast-internal-call:")
+    assert propagated.metadata["propagated_from_internal_call"] == "setFeeRecipient"

@@ -162,6 +162,56 @@ def _json(v):
     if isinstance(v,dict): return {str(k):_json(x) for k,x in v.items()}
     return v
 
+
+def _no_hypothesis_payload(target, compiler, result):
+    """Preserve an explicit, non-finding disposition when blind discovery yields no auth hypothesis."""
+    return {
+        "target": target,
+        "compiler": {
+            "executed": compiler.executed,
+            "status": compiler.status,
+            "versions": list(compiler.compiler_versions),
+        },
+        "contracts": [
+            {
+                "name": contract.name,
+                "source": contract.source,
+                "function_count": len(contract.functions),
+                "functions": [
+                    {
+                        "name": function.name,
+                        "visibility": function.visibility,
+                        "modifiers": list(function.modifiers),
+                        "writes": list(function.writes),
+                    }
+                    for function in contract.functions
+                ],
+            }
+            for contract in result.contracts
+        ],
+        "semantic_state_effects": [
+            {
+                "contract": item.contract,
+                "function": item.function,
+                "relation": item.relation,
+                "target": item.target,
+                "source": item.source,
+                "source_location": item.source_location,
+                "metadata": item.metadata,
+            }
+            for item in compiler.evidence
+            if item.relation != "reference"
+        ],
+        "invariants": _json(result.invariants),
+        "hypotheses": [],
+        "classification": "NO_AUTH_HYPOTHESIS",
+        "disposition": "BLOCKED",
+        "finding_gate": "NOT_READY",
+        "blocker": "NO_SUPPORTED_HYPOTHESIS",
+        "note": "Absence of an authorization hypothesis is not evidence that the target is secure and is not a vulnerability finding.",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Blind one-sided authorization backtest.")
     parser.add_argument("--target-repo", required=True)
@@ -170,6 +220,7 @@ def main() -> int:
     parser.add_argument("--target-project", required=True)
     parser.add_argument("--expected-status", choices=("confirmed", "not_confirmed"), default="confirmed")
     parser.add_argument("--require-ready", action="store_true")
+    parser.add_argument("--allow-no-hypothesis", action="store_true", help="Record a no-hypothesis disposition as a completed measurement rather than failing the runner.")
     parser.add_argument("--output", type=Path)
     parser.add_argument(
         "--supplemental-file",
@@ -223,6 +274,17 @@ def main() -> int:
                 for function in contract.functions:
                     print("FUNCTION", function.name, "visibility=", function.visibility, "modifiers=", function.modifiers, "writes=", function.writes)
             print("INVARIANTS", [item.__dict__ for item in result.invariants])
+            payload = _no_hypothesis_payload(
+                f"{args.target_repo}@{args.target_ref}:{args.target_path}",
+                compiler,
+                result,
+            )
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(_json(payload), indent=2) + "\n", encoding="utf-8")
+            print("DISPOSITION", payload["disposition"], "finding_gate=", payload["finding_gate"])
+            if args.allow_no_hypothesis:
+                return 0
             raise SystemExit("blind authorization backtest produced no authorization hypothesis")
 
         for dependency in args.target_npm_dependency:
