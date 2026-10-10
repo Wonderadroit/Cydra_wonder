@@ -1,6 +1,6 @@
 # Web3 Authorization Specialist — bounded completion plan
 
-Status: proposed specialization; not yet validated as a real-world bug finder.
+Status: specialization is defined and the first controlled campaign passes. Real-world novelty and bounty readiness are **not yet established**.
 
 ## Decision
 
@@ -13,7 +13,7 @@ The initial scope is deliberately narrower than "all access-control bugs":
 - identify mismatches that have a plausible security boundary;
 - construct a deterministic unauthorized-caller experiment;
 - observe the actual state/asset/privileged-action effect;
-- compare the result against a patched or otherwise correctly protected control;
+- compare the result against a correctly protected control;
 - preserve provenance, uncertainty, and a reproducible test.
 
 A missing modifier, suspicious function name, static-analysis warning, or revert is not itself a finding.
@@ -54,12 +54,16 @@ Run the specialist without revealing the vulnerable function or expected answer.
 
 For a candidate to reach the finding gate, the experiment must demonstrate a security-relevant unauthorized effect, not merely a reachable function or an expected revert. Competing explanations and external guards must be checked.
 
-### Gate C — unfamiliar authorized target
+### Gate C — genuinely unfamiliar, authorized target
 
-Use a pinned, in-scope Solidity target with a documented authorization policy. Do not infer permission to test from public availability alone. Run the specialist on the target without feeding it a known finding or vulnerable location.
+The first campaign's external target was decentxyz/decent-bridge at commit 7f90fd4489551b69c20d11eeecb17a3f564afb18, contract src/DcntEth.sol. CYDRA selected setRouter and classified the unauthorized state mutation as confirmed. However, this is **not a novel finding**: the same issue was publicly reported in the January 2024 Code4rena Decent findings, including [issue #465](https://github.com/code-423n4/2024-01-decent-findings/issues/465) and [issue #704](https://github.com/code-423n4/2024-01-decent-findings/issues/704). Treat this run as a historical external positive control, not evidence of bounty discovery or novelty.
 
-Record separately:
-- target/model coverage;
+The target's public source code alone does not establish current bounty scope or authorization for live testing. Gate C remains open until a genuinely unfamiliar target is selected from an authorized, in-scope program and tested within its rules.
+
+For that target, record separately:
+
+- target and scope provenance;
+- model/source coverage;
 - candidate hypotheses;
 - experiments generated and actually executed;
 - blockers and their evidence;
@@ -74,10 +78,22 @@ The first specialist milestone is complete only when:
 
 1. all focused positive and negative controls pass;
 2. the blind runner's candidate selection and experiment path are exercised;
-3. at least one unfamiliar, authorized target has been tested end to end;
+3. at least one genuinely unfamiliar, authorized target has been tested end to end;
 4. any claimed real finding has a minimal reproducible PoC, demonstrated impact, provenance, and an independently checked result.
 
 If no real finding emerges, report the exact failed stage and whether it is a target property, missing prerequisite, modeling gap, hypothesis-selection failure, or causal-verification gap. Do not reopen unrelated vulnerability classes.
+
+## Current measurements
+
+- Focused authorization regressions: 16 tests passed.
+- Known-vulnerable local positive control: classified confirmed as expected.
+- Historical external positive control: setRouter classified confirmed; historical duplicate is publicly documented.
+- Protected negative control: classified not confirmed.
+- Unfamiliar authorized targets tested: 0.
+- Novel, independently reproduced bounty findings: 0.
+- The first campaign's runner did not preserve JSON artifacts; the workflow now writes both positive-control evidence files and uploads them for inspection on the next run.
+
+Keep CI health separate from security effectiveness.
 
 ## Required measurements
 
@@ -89,8 +105,6 @@ Report, at minimum:
 - execution blockers by category;
 - confirmed findings / independently reproduced findings;
 - time and tool cost per executed hypothesis.
-
-Keep CI health separate from security effectiveness.
 
 ## Operating rule
 
