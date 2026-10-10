@@ -205,7 +205,7 @@ def _no_hypothesis_payload(target, compiler, result):
         "invariants": _json(result.invariants),
         "hypotheses": [],
         "classification": "NO_AUTH_HYPOTHESIS",
-        "disposition": "NO_SUPPORTED_HYPOTHESIS",
+        "disposition": "BLOCKED",
         "finding_gate": "NOT_READY",
         "blocker": "NO_SUPPORTED_HYPOTHESIS",
         "note": "Absence of an authorization hypothesis is not evidence that the target is secure and is not a vulnerability finding.",
