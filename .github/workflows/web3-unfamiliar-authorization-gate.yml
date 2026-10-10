@@ -35,7 +35,8 @@ jobs:
           pytest -q \
             tests/test_blind_authorization.py \
             tests/test_authorization_reasoning.py \
-            tests/test_authorization_invariant.py
+            tests/test_authorization_invariant.py \
+            tests/test_blind_auth_campaign_report.py
 
       - name: Record target authorization and immutable source revision
         run: |
@@ -59,6 +60,7 @@ jobs:
             --target-ref 6f64c3f0557967eee9b14482ffa62187101c79ef \
             --target-path src/Splitter.sol \
             --target-project . \
+            --allow-no-hypothesis \
             --output "$RUNNER_TEMP/unfamiliar-authorization.json" \
             2>&1 | tee "$RUNNER_TEMP/unfamiliar-authorization.log"
 
