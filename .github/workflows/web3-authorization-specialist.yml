@@ -1,5 +1,8 @@
 name: CYDRA Web3 Authorization Specialist
 
+# Focused campaign: authorization reasoning, executable positive control,
+# unfamiliar pinned Solidity target, and a negative control.
+
 on:
   push:
     branches:
