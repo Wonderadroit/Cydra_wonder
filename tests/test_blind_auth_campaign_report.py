@@ -38,7 +38,7 @@ def test_no_hypothesis_payload_is_explicitly_not_a_finding():
         result,
     )
 
-    assert payload["disposition"] == "NO_SUPPORTED_HYPOTHESIS"
+    assert payload["disposition"] == "BLOCKED"
     assert payload["finding_gate"] == "NOT_READY"
     assert payload["hypotheses"] == []
     assert payload["semantic_state_effects"][0]["target"] == "feeRecipient"
