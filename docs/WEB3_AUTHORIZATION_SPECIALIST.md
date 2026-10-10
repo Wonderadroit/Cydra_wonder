@@ -91,7 +91,7 @@ If no real finding emerges, report the exact failed stage and whether it is a ta
 - Protected negative control: classified not confirmed.
 - Unfamiliar authorized targets tested: 0.
 - Novel, independently reproduced bounty findings: 0.
-- The first campaign's runner did not preserve JSON artifacts; the workflow now writes both positive-control evidence files and uploads them for inspection on the next run.
+- Run #38072265226 uploaded both JSON evidence files as artifact 11676679221. The payloads classify both cases as CONFIRMED_ONLY, not READY; a causal differential is now required for the controlled local positive before it can pass.
 
 Keep CI health separate from security effectiveness.
 
