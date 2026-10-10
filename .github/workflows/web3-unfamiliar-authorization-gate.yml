@@ -64,6 +64,27 @@ jobs:
             --output "$RUNNER_TEMP/unfamiliar-authorization.json" \
             2>&1 | tee "$RUNNER_TEMP/unfamiliar-authorization.log"
 
+      - name: Blind second unfamiliar in-scope authorization target
+        env:
+          PYTHONPATH: src
+        run: |
+          set -o pipefail
+          {
+            echo "Program: https://immunefi.com/bug-bounty/openzeppelin/scope/"
+            echo "Target repository: https://github.com/OpenZeppelin/openzeppelin-community-contracts"
+            echo "Target commit: 0361935dc5edd233adbb9fbae5871ccbb8c739d8"
+            echo "Target path: contracts/crosschain/axelar/AxelarGatewayAdapter.sol"
+            echo "Scope note: this exact commit is explicitly listed by the program as in scope; local-only source/model/harness test."
+          } | tee "$RUNNER_TEMP/second-target-intake.txt"
+          python scripts/run_benchmark_006_blind_auth.py \
+            --target-repo https://github.com/OpenZeppelin/openzeppelin-community-contracts.git \
+            --target-ref 0361935dc5edd233adbb9fbae5871ccbb8c739d8 \
+            --target-path contracts/crosschain/axelar/AxelarGatewayAdapter.sol \
+            --target-project . \
+            --allow-no-hypothesis \
+            --output "$RUNNER_TEMP/second-unfamiliar-authorization.json" \
+            2>&1 | tee "$RUNNER_TEMP/second-unfamiliar-authorization.log"
+
       - name: Preserve campaign evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,5 +94,8 @@ jobs:
             ${{ runner.temp }}/target-intake.txt
             ${{ runner.temp }}/unfamiliar-authorization.json
             ${{ runner.temp }}/unfamiliar-authorization.log
+            ${{ runner.temp }}/second-target-intake.txt
+            ${{ runner.temp }}/second-unfamiliar-authorization.json
+            ${{ runner.temp }}/second-unfamiliar-authorization.log
           if-no-files-found: warn
           retention-days: 14
