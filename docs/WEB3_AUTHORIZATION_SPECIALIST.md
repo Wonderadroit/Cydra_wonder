@@ -91,7 +91,7 @@ If no real finding emerges, report the exact failed stage and whether it is a ta
 - Protected negative control: classified not confirmed.
 - Unfamiliar authorized targets tested: 0.
 - Novel, independently reproduced bounty findings: 0.
-- Run #38072265226 uploaded both JSON evidence files as artifact 11676679221. The payloads classify both cases as CONFIRMED_ONLY, not READY; a causal differential is now required for the controlled local positive before it can pass.
+- Run #38072378460 passed all focused steps and uploaded artifact 11676794101. The local vulnerable positive reached READY with causal and reproduction differentials verified (original FAIL, patched PASS, reproduction FAIL, reproduction-patched PASS). The historical Decent target remains CONFIRMED_ONLY because its causal control was not run.
 
 Keep CI health separate from security effectiveness.
 
