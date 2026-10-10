@@ -40,7 +40,7 @@ jobs:
             tests/test_authorization_reasoning.py \
             tests/test_authorization_invariant.py
 
-      - name: Blind vulnerable positive control
+      - name: Blind vulnerable positive control with causal differential
         env:
           PYTHONPATH: src
         run: |
@@ -49,6 +49,7 @@ jobs:
             --target-ref main \
             --target-path benchmarks/alchemix_missing_access_control/foundry/src/Target.sol \
             --target-project benchmarks/alchemix_missing_access_control/foundry \
+            --require-ready \
             --output "$RUNNER_TEMP/cydra-positive-control.json"
 
       - name: Historical external positive control (not novelty evidence)
