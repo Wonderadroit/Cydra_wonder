@@ -1,0 +1,63 @@
+name: CYDRA Web3 Authorization Specialist
+
+on:
+  push:
+    branches:
+      - specialize/web3-authorization-first-20261010
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-authorization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out CYDRA
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install CYDRA and test dependencies
+        run: python -m pip install -e . pytest
+
+      - name: Focused authorization regressions
+        env:
+          PYTHONPATH: src
+        run: |
+          pytest -q \
+            tests/test_blind_authorization.py \
+            tests/test_authorization_reasoning.py \
+            tests/test_authorization_invariant.py
+
+      - name: Blind vulnerable positive control
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_benchmark_006_blind_auth.py \
+            --target-repo https://github.com/Wonderadroit/Cydra_wonder.git \
+            --target-ref main \
+            --target-path benchmarks/alchemix_missing_access_control/foundry/src/Target.sol \
+            --target-project benchmarks/alchemix_missing_access_control/foundry
+
+      - name: Blind unfamiliar Solidity target
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/run_benchmark_006_blind_auth.py \
+            --target-repo https://github.com/decentxyz/decent-bridge.git \
+            --target-ref 7f90fd4489551b69c20d11eeecb17a3f564afb18 \
+            --target-path src/DcntEth.sol \
+            --target-project .
+
+      - name: Authorization negative control
+        env:
+          PYTHONPATH: src
+        run: python scripts/run_benchmark_006_blind_auth_negative.py
