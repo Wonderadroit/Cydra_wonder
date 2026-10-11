@@ -481,7 +481,7 @@ def main() -> int:
                 payload.update({"authorization_control":modifier,"patched_execution":_json(patched),"causal_verification":{"state":"verified" if causal else "not_verified","chain_id":"causal:authorization-modifier-differential"},"reproduction_execution":_json(reproduction),"reproduction_patched_execution":_json(repro_patched),"reproduction_verification":{"state":"verified" if repro else "not_verified","chain_id":"reproduction:authorization-modifier-differential"},"finding_gate":"READY" if causal and repro else "NOT_READY"})
                 if args.output:
                     args.output.parent.mkdir(parents=True,exist_ok=True)
-                    args.output.write_text(json.dumps(_json(payload),indent=2)+"\\n",encoding="utf-8")
+                    args.output.write_text(json.dumps(_json(payload),indent=2)+"\n",encoding="utf-8")
                 if not (causal and repro): return 4
             if args.output:
                 args.output.parent.mkdir(parents=True,exist_ok=True); args.output.write_text(json.dumps(_json(payload),indent=2)+"\n",encoding="utf-8")
