@@ -43,3 +43,31 @@ def test_causal_auth_control_fails_closed_without_owner_or_admin_guard():
     }
     """
     assert _auth_modifier(source) is None
+
+
+
+def test_causal_auth_control_recognizes_delegated_owner_check():
+    source = """
+    contract Fixture {
+        address public owner;
+        address public router;
+
+        modifier onlyRouter() {
+            require(msg.sender == router);
+            _;
+        }
+
+        modifier onlyOwner {
+            _checkOwner();
+            _;
+        }
+
+        function _checkOwner() internal view {
+            require(msg.sender == owner);
+        }
+
+        function mint(address to) public onlyRouter {}
+        function setRouter(address next) public { router = next; }
+    }
+    """
+    assert _auth_modifier(source) == "onlyOwner"
