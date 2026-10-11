@@ -8,9 +8,6 @@ on:
       - src/cydra/**
       - tests/test_web2_*.py
       - .github/workflows/cydra-web2-regression.yml
-  push:
-    branches:
-      - feature/web2-adapter
   workflow_dispatch:
 
 jobs:
