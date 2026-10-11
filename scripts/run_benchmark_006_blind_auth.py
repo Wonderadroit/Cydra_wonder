@@ -207,6 +207,29 @@ def _no_hypothesis_payload(target, compiler, result, related_intent_parity_hypot
     """Preserve no-auth and unsupported-related-hypothesis outcomes without calling either a finding."""
     related = _json(related_intent_parity_hypotheses)
     has_related = bool(related_intent_parity_hypotheses)
+    surface_coverage = []
+    for contract in result.contracts:
+        for function in contract.functions:
+            if function.visibility not in {"public", "external"}:
+                continue
+            modifiers = list(function.modifiers)
+            writes = list(function.writes)
+            if modifiers:
+                disposition = "MODIFIER_PRESENT_REQUIRES_SEMANTIC_VALIDATION"
+            elif function.name.startswith(("set", "add", "remove", "update", "accept")) and writes:
+                disposition = "ADMIN_NAMED_UNGUARDED_CANDIDATE"
+            else:
+                disposition = "NOT_SELECTED_BY_ADMIN_NAME_WRITE_HEURISTIC"
+            surface_coverage.append({
+                "contract": contract.name,
+                "source": contract.source,
+                "function": function.name,
+                "visibility": function.visibility,
+                "modifiers": modifiers,
+                "model_writes": writes,
+                "heuristic_disposition": disposition,
+                "is_finding": False,
+            })
     return {
         "target": target,
         "compiler": {
@@ -231,6 +254,7 @@ def _no_hypothesis_payload(target, compiler, result, related_intent_parity_hypot
             }
             for contract in result.contracts
         ],
+        "surface_coverage": surface_coverage,
         "semantic_state_effects": [
             {
                 "contract": item.contract,
