@@ -94,7 +94,9 @@ def _state_writes(
 ) -> tuple[str, ...]:
     if semantic_effects is not None:
         semantic = state_writes_for_function(semantic_effects, function.name)
-        if semantic is not None:
+        # A read-only compiler record does not prove the effect set is complete
+        # for lexical reasoning; retain the independent source-model witness.
+        if semantic:
             return semantic
     return function.writes
 
