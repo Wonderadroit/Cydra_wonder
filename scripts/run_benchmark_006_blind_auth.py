@@ -132,11 +132,16 @@ def _auth_modifier(source):
     for match in re.finditer(r"\bfunction\s+\w+\s*\([^)]*\)([^{};]*)\{", source):
         for token in re.findall(r"\b[A-Za-z_]\w*\b", match.group(1)):
             body = defs.get(token)
-            if (
+            delegated_guard = bool(
+                body
+                and re.search(r"\b(?:_checkOwner|_checkRole|_checkAdmin|_checkGovernance|_authorize|_checkAccess)\s*\(", body)
+            )
+            direct_guard = bool(
                 body
                 and re.search(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b", body)
                 and re.search(r"\b(?:require|revert|assert)\b", body)
-            ):
+            )
+            if direct_guard or delegated_guard:
                 guarded[token] = body
 
     # A popular role-specific guard such as onlyRouter is not an acceptable
