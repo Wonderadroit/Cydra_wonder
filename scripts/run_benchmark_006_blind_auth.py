@@ -112,7 +112,7 @@ def _git(cwd: Path, *args: str) -> str:
 def _auth_modifier(source):
     """Choose an owner/admin guard for the causal patch, never a merely frequent role guard."""
     defs = {}
-    for match in re.finditer(r"\bmodifier\s+(\w+)\s*\(([^)]*)\)\s*\{", source):
+    for match in re.finditer(r"\bmodifier\s+(\w+)\s*(?:\(([^)]*)\))?\s*\{", source):
         # The current patcher inserts a modifier without arguments. Parameterized
         # modifiers are therefore not safe controls and must be excluded.
         if match.group(2).strip():
