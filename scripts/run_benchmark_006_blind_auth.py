@@ -461,6 +461,7 @@ def main() -> int:
                     for path in sorted((execution_project / "src").rglob("*.sol"))
                 )
                 modifier = _auth_modifier(auth_context)
+                print("AUTHORIZATION_CONTROL", modifier)
                 if modifier is None: print("AUTHORIZATION_CAUSAL_CONTROL_UNAVAILABLE"); return 3
                 original=_apply_auth_control(isolated_source,hypothesis.target_function,modifier)
                 try:
@@ -475,7 +476,12 @@ def main() -> int:
                     repro_patched=run_foundry_test(execution_project,repro_test,hypothesis.hypothesis_id+":reproduction-patched","reproduction-patched")
                 finally: isolated_source.write_text(original,encoding="utf-8")
                 repro= reproduction.status=="FAIL" and repro_patched.status=="PASS"
+                print("PATCHED_EXECUTION_STATUS", patched.status, "CAUSAL_VERIFICATION", causal)
+                print("REPRODUCTION_EXECUTION_STATUS", reproduction.status, "REPRODUCTION_PATCHED_EXECUTION_STATUS", repro_patched.status, "REPRODUCTION_VERIFICATION", repro)
                 payload.update({"authorization_control":modifier,"patched_execution":_json(patched),"causal_verification":{"state":"verified" if causal else "not_verified","chain_id":"causal:authorization-modifier-differential"},"reproduction_execution":_json(reproduction),"reproduction_patched_execution":_json(repro_patched),"reproduction_verification":{"state":"verified" if repro else "not_verified","chain_id":"reproduction:authorization-modifier-differential"},"finding_gate":"READY" if causal and repro else "NOT_READY"})
+                if args.output:
+                    args.output.parent.mkdir(parents=True,exist_ok=True)
+                    args.output.write_text(json.dumps(_json(payload),indent=2)+"\\n",encoding="utf-8")
                 if not (causal and repro): return 4
             if args.output:
                 args.output.parent.mkdir(parents=True,exist_ok=True); args.output.write_text(json.dumps(_json(payload),indent=2)+"\n",encoding="utf-8")
