@@ -94,7 +94,7 @@ def _externally_callable_functions(contract: ContractModel) -> tuple[FunctionMod
 
 
 def _admin_named_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    return tuple(f for f in _state_changing_functions(contract) if f.name.startswith(_ADMIN_NAME_PREFIXES))
+    return tuple(f for f in _state_changing_functions(contract) if f.name.lower().startswith(_ADMIN_NAME_PREFIXES))
 
 
 def access_control_invariant(contract: ContractModel, privileged_modifier: str | None = None) -> Invariant:
