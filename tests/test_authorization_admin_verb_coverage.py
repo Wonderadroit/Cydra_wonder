@@ -64,3 +64,36 @@ contract Target {
     )
 
     assert generate_access_control_hypotheses(contract) == ()
+
+
+def test_compiler_backed_internal_helper_write_keeps_admin_candidate_visible(tmp_path):
+    from cydra.ast_dataflow import SemanticRelationshipEvidence
+
+    contract = _parse(
+        tmp_path,
+        """pragma solidity ^0.8.20;
+contract Target {
+    bool policyEnabled;
+    address feeRecipient;
+    function setPolicy(bool enabled) external onlyOwner { policyEnabled = enabled; }
+    function changeFeeRecipient(address next) external { _changeFeeRecipient(next); }
+    function _changeFeeRecipient(address next) internal { feeRecipient = next; }
+}
+""",
+    )
+    semantic = (
+        SemanticRelationshipEvidence(
+            contract="Target",
+            function="changeFeeRecipient",
+            relation="writes",
+            target="feeRecipient",
+            confidence=1.0,
+            source="test:internal-call-write",
+        ),
+    )
+
+    # The source-only model does not propagate the internal helper's write.
+    assert generate_access_control_hypotheses(contract) == ()
+    # Compiler-backed effect evidence restores the candidate without weakening the finding gate.
+    hypotheses = generate_access_control_hypotheses(contract, semantic)
+    assert [item.target_function for item in hypotheses] == ["changeFeeRecipient"]
