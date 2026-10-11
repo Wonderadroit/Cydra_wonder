@@ -45,7 +45,7 @@ def test_no_hypothesis_payload_is_explicitly_not_a_finding():
     assert "not evidence that the target is secure" in payload["note"]
 
 
-def test_no_auth_hypothesis_preserves_related_role_parity_candidate():
+def test_no_auth_hypothesis_classifies_role_parity_as_outside_specialist():
     candidate = SimpleNamespace(
         hypothesis_id="H-INTENT-PARITY-registerChainEquivalence",
         claim="registerChainEquivalence may enforce a narrower caller boundary than documented role intent",
@@ -67,11 +67,11 @@ def test_no_auth_hypothesis_preserves_related_role_parity_candidate():
         "https://example.invalid/repo@deadbeef:contracts/Adapter.sol",
         compiler,
         result,
-        related_authorization_hypotheses=(candidate,),
+        related_intent_parity_hypotheses=(candidate,),
     )
 
-    assert payload["classification"] == "UNSUPPORTED_AUTH_RELATED_HYPOTHESIS"
-    assert payload["blocker"] == "AUTH_HYPOTHESIS_CLASS_NOT_EXECUTABLE"
+    assert payload["classification"] == "UNSUPPORTED_INTENT_PARITY_HYPOTHESIS"
+    assert payload["blocker"] == "INTENT_PARITY_OUTSIDE_AUTH_SPECIALIST"
     assert payload["finding_gate"] == "NOT_READY"
-    assert payload["related_authorization_hypotheses"][0]["hypothesis_id"] == candidate.hypothesis_id
+    assert payload["related_intent_parity_hypotheses"][0]["hypothesis_id"] == candidate.hypothesis_id
     assert "not a vulnerability finding" in payload["note"]
