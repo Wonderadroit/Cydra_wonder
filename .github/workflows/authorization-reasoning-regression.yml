@@ -1,9 +1,16 @@
 name: CYDRA authorization reasoning regression
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/self-scoped-authorization-rule-2026-09-13
+      - main
+    paths:
+      - "src/cydra/reasoning.py"
+      - "src/cydra/solidity_model.py"
+      - "tests/test_authorization_reasoning.py"
+      - "tests/test_authorization_invariant.py"
+      - "tests/test_initialization_topology.py"
+      - ".github/workflows/authorization-reasoning-regression.yml"
   workflow_dispatch:
 
 jobs:
