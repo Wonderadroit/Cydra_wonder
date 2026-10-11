@@ -5,9 +5,6 @@ on:
     paths:
       - "src/cydra/ast_dataflow.py"
       - "tests/test_ast_dataflow_semantics.py"
-      - "src/cydra/**"
-      - "tests/**"
-      - "pyproject.toml"
 
 jobs:
   ast-dataflow:
