@@ -7,9 +7,6 @@ on:
       - "src/cydra/system_model.py"
       - "tests/test_ast_dataflow_semantics.py"
       - "tests/test_system_model_ast_projection.py"
-      - "src/cydra/**"
-      - "tests/**"
-      - "pyproject.toml"
 
 jobs:
   semantic-projection:
