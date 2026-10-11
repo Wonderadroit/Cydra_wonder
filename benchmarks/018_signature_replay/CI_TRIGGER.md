@@ -1,1 +1,0 @@
-The signature-replay workflow is intentionally executed from main after the reasoning-surface regression was corrected. This file is a CI trigger marker only.
