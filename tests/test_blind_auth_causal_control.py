@@ -67,6 +67,7 @@ def test_causal_auth_control_recognizes_delegated_owner_check():
         }
 
         function mint(address to) public onlyRouter {}
+        function burnByOwner(address from) public onlyOwner {}
         function setRouter(address next) public { router = next; }
     }
     """
