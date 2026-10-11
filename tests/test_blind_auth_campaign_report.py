@@ -43,3 +43,35 @@ def test_no_hypothesis_payload_is_explicitly_not_a_finding():
     assert payload["hypotheses"] == []
     assert payload["semantic_state_effects"][0]["target"] == "feeRecipient"
     assert "not evidence that the target is secure" in payload["note"]
+
+
+def test_no_auth_hypothesis_preserves_related_role_parity_candidate():
+    candidate = SimpleNamespace(
+        hypothesis_id="H-INTENT-PARITY-registerChainEquivalence",
+        claim="registerChainEquivalence may enforce a narrower caller boundary than documented role intent",
+        invariant_id="INV-INTENT-PARITY-registerChainEquivalence",
+        target_function="registerChainEquivalence",
+        attacker_capability="a documented-but-excluded caller role",
+        expected_impact="a caller permitted by the documented role boundary is rejected",
+        evidence_ids=("E-MODEL-registerChainEquivalence",),
+    )
+    compiler = SimpleNamespace(
+        executed=True,
+        status="success",
+        compiler_versions=("0.8.20",),
+        evidence=(),
+    )
+    result = SimpleNamespace(contracts=(), invariants=(), hypotheses=(candidate,))
+
+    payload = _no_hypothesis_payload(
+        "https://example.invalid/repo@deadbeef:contracts/Adapter.sol",
+        compiler,
+        result,
+        related_authorization_hypotheses=(candidate,),
+    )
+
+    assert payload["classification"] == "UNSUPPORTED_AUTH_RELATED_HYPOTHESIS"
+    assert payload["blocker"] == "AUTH_HYPOTHESIS_CLASS_NOT_EXECUTABLE"
+    assert payload["finding_gate"] == "NOT_READY"
+    assert payload["related_authorization_hypotheses"][0]["hypothesis_id"] == candidate.hypothesis_id
+    assert "not a vulnerability finding" in payload["note"]
