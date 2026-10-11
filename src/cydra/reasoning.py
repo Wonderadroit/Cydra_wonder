@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+from typing import Iterable
 
 from .experiment_planning import plan_experiment as _plan_experiment
 from .models import Evidence, Experiment, Hypothesis, Invariant, ContractModel, FunctionModel
+from .ast_dataflow import SemanticRelationshipEvidence
+from .semantic_state_effects import build_state_effect_index, state_writes_for_function
 
 
 _FUNCTION_SIGNATURE_RE = re.compile(r"\bfunction\s+(?P<name>\w+)\s*\((?P<parameters>[^)]*)\)\s*(?P<tail>[^\{;]*)\{", re.MULTILINE)
@@ -85,16 +88,39 @@ def _has_caller_authorization_predicate(function: FunctionModel) -> bool:
     return False
 
 
-def _state_changing_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    return tuple(f for f in contract.functions if f.visibility in _STATE_CHANGING_VISIBILITIES and f.writes)
+def _state_writes(
+    function: FunctionModel,
+    semantic_effects: dict[str, tuple] | None,
+) -> tuple[str, ...]:
+    if semantic_effects is not None:
+        semantic = state_writes_for_function(semantic_effects, function.name)
+        if semantic is not None:
+            return semantic
+    return function.writes
+
+
+def _state_changing_functions(
+    contract: ContractModel,
+    semantic_effects: dict[str, tuple] | None = None,
+) -> tuple[FunctionModel, ...]:
+    return tuple(
+        f for f in contract.functions
+        if f.visibility in _STATE_CHANGING_VISIBILITIES and _state_writes(f, semantic_effects)
+    )
 
 
 def _externally_callable_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
     return tuple(f for f in contract.functions if f.visibility in _STATE_CHANGING_VISIBILITIES)
 
 
-def _admin_named_functions(contract: ContractModel) -> tuple[FunctionModel, ...]:
-    return tuple(f for f in _state_changing_functions(contract) if f.name.lower().startswith(_ADMIN_NAME_PREFIXES))
+def _admin_named_functions(
+    contract: ContractModel,
+    semantic_effects: dict[str, tuple] | None = None,
+) -> tuple[FunctionModel, ...]:
+    return tuple(
+        f for f in _state_changing_functions(contract, semantic_effects)
+        if f.name.lower().startswith(_ADMIN_NAME_PREFIXES)
+    )
 
 
 def access_control_invariant(contract: ContractModel, privileged_modifier: str | None = None) -> Invariant:
@@ -104,8 +130,12 @@ def access_control_invariant(contract: ContractModel, privileged_modifier: str |
     return Invariant("INV-AUTH-001", f"Administrative state-changing operations must enforce {privileged_modifier} authorization.", "structural sibling-function rule; modifier-bearing externally callable functions", 0.90)
 
 
-def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothesis, ...]:
-    admin_functions = _admin_named_functions(contract)
+def generate_access_control_hypotheses(
+    contract: ContractModel,
+    semantic_evidence: Iterable[SemanticRelationshipEvidence] | None = None,
+) -> tuple[Hypothesis, ...]:
+    semantic_effects = build_state_effect_index(semantic_evidence) if semantic_evidence is not None else None
+    admin_functions = _admin_named_functions(contract, semantic_effects)
     declared = tuple((f, _declared_modifiers(contract, f)) for f in admin_functions)
     protected_functions = [f for f in _externally_callable_functions(contract) if _declared_modifiers(contract, f)]
     if not protected_functions and not admin_functions:
