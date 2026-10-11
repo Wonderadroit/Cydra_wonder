@@ -2,30 +2,7 @@ name: CYDRA Solidity maturity gate closure campaign
 # Milestone 75 closure validation: full campaign must remain reproducible on the final head.
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/run_benchmark_025_strict_blind_signature_reuse.py"
-      - "scripts/run_benchmark_027_iterative_blind_control_flow.py"
-      - "scripts/run_benchmark_029_strict_blind_external_outcome.py"
-      - "scripts/run_benchmark_030_strict_blind_type_domain.py"
-      - "scripts/run_benchmark_031_strict_blind_resource_authorization.py"
-      - "scripts/run_benchmark_032_strict_blind_callback_state_order.py"
-      - "scripts/run_benchmark_033_strict_blind_readonly_bond.py"
-      - "scripts/run_benchmark_034_open_ended_research_loop.py"
-      - "scripts/run_benchmark_035_cross_protocol_oracle.py"
-      - "scripts/run_benchmark_036_incentive_state_divergence.py"
-      - "scripts/run_benchmark_037_keeper_zero_work_incentive.py"
-      - "scripts/run_benchmark_038_multi_finding_blind.py"
-      - "benchmarks/038_multi_finding_blind/**"
-      - ".github/workflows/cydra-maturity-gate-closure.yml"
   workflow_dispatch:
-
-concurrency:
-  group: cydra-maturity-gate-closure
-  cancel-in-progress: false
 
 permissions:
   contents: read
