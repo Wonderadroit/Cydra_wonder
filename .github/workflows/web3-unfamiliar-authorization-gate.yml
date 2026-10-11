@@ -1,9 +1,6 @@
 name: CYDRA Unfamiliar Web3 Authorization Gate
 
 on:
-  push:
-    branches:
-      - feat/unfamiliar-auth-target-gate-20261010
   workflow_dispatch:
 
 permissions:
