@@ -2,6 +2,9 @@ name: CYDRA Unfamiliar Web3 Authorization Gate
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - "campaign/web3-auth-positive-control-*"
 
 permissions:
   contents: read
@@ -33,7 +36,8 @@ jobs:
             tests/test_blind_authorization.py \
             tests/test_authorization_reasoning.py \
             tests/test_authorization_invariant.py \
-            tests/test_blind_auth_campaign_report.py
+            tests/test_blind_auth_campaign_report.py \
+            tests/test_blind_auth_causal_control.py
 
       - name: Record target authorization and immutable source revision
         run: |
@@ -82,6 +86,29 @@ jobs:
             --output "$RUNNER_TEMP/second-unfamiliar-authorization.json" \
             2>&1 | tee "$RUNNER_TEMP/second-unfamiliar-authorization.log"
 
+      - name: Run historical missing-authorization positive control (local only)
+        env:
+          PYTHONPATH: src
+        run: |
+          set -o pipefail
+          {
+            echo "Benchmark type: historical public positive control; not a novel finding or current bounty target"
+            echo "Public report: https://github.com/code-423n4/2024-01-decent-findings/issues/465"
+            echo "Target repository: https://github.com/decentxyz/decent-bridge"
+            echo "Target commit: 7f90fd4489551b69c20d11eeecb17a3f564afb18"
+            echo "Target path: src/DcntEth.sol"
+            echo "Expected behavior: detect unguarded setRouter and verify attacker-vs-onlyOwner causal differential locally"
+            echo "Test mode: local source/model/harness only; no production or public-testnet transactions"
+          } | tee "$RUNNER_TEMP/positive-control-intake.txt"
+          python scripts/run_benchmark_006_blind_auth.py \
+            --target-repo https://github.com/decentxyz/decent-bridge.git \
+            --target-ref 7f90fd4489551b69c20d11eeecb17a3f564afb18 \
+            --target-path src/DcntEth.sol \
+            --target-project . \
+            --require-ready \
+            --output "$RUNNER_TEMP/positive-control-authorization.json" \
+            2>&1 | tee "$RUNNER_TEMP/positive-control-authorization.log"
+
       - name: Preserve campaign evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,5 +121,8 @@ jobs:
             ${{ runner.temp }}/second-target-intake.txt
             ${{ runner.temp }}/second-unfamiliar-authorization.json
             ${{ runner.temp }}/second-unfamiliar-authorization.log
+            ${{ runner.temp }}/positive-control-intake.txt
+            ${{ runner.temp }}/positive-control-authorization.json
+            ${{ runner.temp }}/positive-control-authorization.log
           if-no-files-found: warn
           retention-days: 14

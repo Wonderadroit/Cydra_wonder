@@ -195,6 +195,9 @@ contract DcntEth {
     rendered = output.read_text(encoding="utf-8")
     assert "target.router()" in rendered
     assert "beforeState" in rendered
+    assert "contract CydraUnauthorizedCaller" in rendered
+    assert "attacker.execute(" in rendered
+    assert "address(target).call(" not in rendered
     assert "unauthorized caller mutated modeled administrative state" in rendered
 
 

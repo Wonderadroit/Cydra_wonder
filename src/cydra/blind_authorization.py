@@ -150,8 +150,15 @@ pragma solidity {pragma};
 // One-sided invariant test: no patched target or benchmark answer is imported.
 import {{ {target_type} }} from "{target_import}";
 
+contract CydraUnauthorizedCaller {{
+    function execute(address target, bytes calldata payload) external returns (bool, bytes memory) {{
+        return target.call(payload);
+    }}
+}}
+
 contract CydraBlindAuthorizationTest {{
     {target_declaration}
+    CydraUnauthorizedCaller internal attacker;
 
     function _targetCreationCode() internal pure returns (bytes memory) {{
         return type({target_type}).creationCode;
@@ -168,11 +175,13 @@ contract CydraBlindAuthorizationTest {{
         }}
         require(deployed != address(0), "CYDRA: constructor deployment failed");
         target = {target_type}(payable(deployed));
+        attacker = new CydraUnauthorizedCaller();
     }}
 
     function testUnauthorizedCallerCannotMutateModeledAdministrativeState() public {{
 {state_snapshot}
-        (bool ok,) = address(target).call(
+        (bool ok,) = attacker.execute(
+            address(target),
             abi.encodeWithSignature(
                 "{function.name}({','.join(parameter.type.split()[0] for parameter in function.parameters)})",
                 {arguments}
