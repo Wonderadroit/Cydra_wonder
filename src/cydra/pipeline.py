@@ -255,7 +255,7 @@ def investigate(
             # Compiler coverage is evidence, not an instruction to disable another
             # reasoning path. Structural and lexical detectors are independent
             # witnesses and are merged/deduplicated by hypothesis identity.
-            lexical_auth = generate_access_control_hypotheses(contract)
+            lexical_auth = generate_access_control_hypotheses(contract, contract_semantic)
             auth = _merge_hypotheses(structural_auth, lexical_auth)
         else:
             auth = _merge_hypotheses(
