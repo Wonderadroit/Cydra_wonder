@@ -56,7 +56,7 @@ jobs:
 
               loan = parse_solidity(root / "contracts" / "LoanProtocol.sol")[0]
               invariant = access_control_invariant(loan)
-              assert invariant.statement.endswith("onlyOwner authorization."), invariant.statement
+              assert invariant.statement.endswith("observed privileged modifier authorization."), invariant.statement
               print("LoanProtocol authorization invariant:", invariant.statement)
           PY
 
