@@ -4,9 +4,6 @@ name: CYDRA Web3 Authorization Specialist
 # and a historical external positive control. This is not novelty evidence.
 
 on:
-  push:
-    branches:
-      - feat/web3-authorization-specialist-main-20261010
   workflow_dispatch:
 
 permissions:

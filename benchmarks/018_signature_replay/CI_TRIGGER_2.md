@@ -1,1 +1,0 @@
-Trigger marker for the digest-helper regression fix.
