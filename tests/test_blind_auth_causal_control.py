@@ -12,7 +12,7 @@ def test_causal_auth_control_prefers_owner_guard_over_frequent_role_guard():
             _;
         }
 
-        modifier onlyOwner() {
+        modifier onlyOwner {
             require(msg.sender == owner);
             _;
         }
