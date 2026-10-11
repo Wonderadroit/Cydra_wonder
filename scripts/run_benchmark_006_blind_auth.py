@@ -163,8 +163,10 @@ def _json(v):
     return v
 
 
-def _no_hypothesis_payload(target, compiler, result):
-    """Preserve an explicit, non-finding disposition when blind discovery yields no auth hypothesis."""
+def _no_hypothesis_payload(target, compiler, result, related_authorization_hypotheses=()):
+    """Preserve no-auth and unsupported-related-hypothesis outcomes without calling either a finding."""
+    related = _json(related_authorization_hypotheses)
+    has_related = bool(related_authorization_hypotheses)
     return {
         "target": target,
         "compiler": {
@@ -204,11 +206,16 @@ def _no_hypothesis_payload(target, compiler, result):
         ],
         "invariants": _json(result.invariants),
         "hypotheses": [],
-        "classification": "NO_AUTH_HYPOTHESIS",
+        "related_authorization_hypotheses": related,
+        "classification": "UNSUPPORTED_AUTH_RELATED_HYPOTHESIS" if has_related else "NO_AUTH_HYPOTHESIS",
         "disposition": "BLOCKED",
         "finding_gate": "NOT_READY",
-        "blocker": "NO_SUPPORTED_HYPOTHESIS",
-        "note": "Absence of an authorization hypothesis is not evidence that the target is secure and is not a vulnerability finding.",
+        "blocker": "AUTH_HYPOTHESIS_CLASS_NOT_EXECUTABLE" if has_related else "NO_SUPPORTED_HYPOTHESIS",
+        "note": (
+            "Authorization-related hypotheses were generated, but this runner only executes INV-AUTH-001 missing-guard hypotheses; preserve and route these candidates to a compatible experiment rather than silently discarding them. This is not a vulnerability finding."
+            if has_related
+            else "Absence of an authorization hypothesis is not evidence that the target is secure and is not a vulnerability finding."
+        ),
     }
 
 
@@ -267,6 +274,10 @@ def main() -> int:
             experiment_planner=plan_access_control_experiment,
         )
         hypotheses = [h for h in result.hypotheses if h.invariant_id == "INV-AUTH-001"]
+        related_authorization_hypotheses = [
+            h for h in result.hypotheses
+            if h.invariant_id.startswith("INV-INTENT-PARITY-")
+        ]
         if not hypotheses:
             print("NO_AUTH_HYPOTHESIS")
             for contract in result.contracts:
@@ -278,6 +289,7 @@ def main() -> int:
                 f"{args.target_repo}@{args.target_ref}:{args.target_path}",
                 compiler,
                 result,
+                related_authorization_hypotheses=related_authorization_hypotheses,
             )
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
