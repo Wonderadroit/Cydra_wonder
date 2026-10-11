@@ -5,7 +5,9 @@ on:
     branches:
       - main
     paths:
-      - src/cydra/**
+      - src/cydra/web2_*.py
+      - src/cydra/target_adapter.py
+      - src/cydra/adapter_experiment.py
       - tests/test_web2_*.py
       - .github/workflows/cydra-web2-regression.yml
   workflow_dispatch:
@@ -31,4 +33,4 @@ jobs:
       - name: Run Web2 regressions
         env:
           PYTHONPATH: src
-        run: python -m pytest -q tests/test_web2_adapter.py tests/test_adapter_experiment.py tests/test_web2_model.py tests/test_web2_authorization.py tests/test_web2_evidence.py tests/test_web2_cycle.py tests/test_web2_causal.py tests/test_web2_reasoning.py tests/test_web2_replay.py tests/test_web2_security_frontier.py
+        run: python -m pytest -q tests/test_web2_adapter.py tests/test_adapter_experiment.py tests/test_web2_model.py tests/test_web2_authorization.py tests/test_web2_evidence.py tests/test_web2_cycle.py tests/test_web2_causal.py tests/test_web2_reasoning.py tests/test_web2_replay.py tests/test_web2_security_frontier.py tests/test_web2_materialization.py tests/test_web2_resource_state_acquisition.py tests/test_web2_service_origin_readiness.py tests/test_web2_service_origin_resolution.py tests/test_target_adapter.py
