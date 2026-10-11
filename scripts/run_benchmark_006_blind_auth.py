@@ -115,7 +115,7 @@ def _auth_modifier(source):
     for match in re.finditer(r"\bmodifier\s+(\w+)\s*(?:\(([^)]*)\))?\s*\{", source):
         # The current patcher inserts a modifier without arguments. Parameterized
         # modifiers are therefore not safe controls and must be excluded.
-        if match.group(2).strip():
+        if (match.group(2) or "").strip():
             continue
         body = source[match.end():]
         depth = 1
