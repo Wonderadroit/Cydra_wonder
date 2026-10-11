@@ -112,3 +112,17 @@ def test_multiline_signature_comment_does_not_become_modifier(tmp_path):
     assert invariant.statement.endswith("onlyGov authorization.")
     hypotheses = generate_access_control_hypotheses(contract)
     assert [item.hypothesis_id for item in hypotheses] == ["H-AUTH-setGlobalApproval"]
+
+
+def test_multiple_protected_modifiers_produce_clear_generic_invariant(tmp_path):
+    contract = _parse(
+        tmp_path,
+        "function setSecond(bool value) external onlyOwner { config = value; }",
+    )
+
+    invariant = access_control_invariant(contract)
+
+    assert invariant.statement == (
+        "Administrative state-changing operations must enforce "
+        "observed privileged modifier authorization."
+    )
