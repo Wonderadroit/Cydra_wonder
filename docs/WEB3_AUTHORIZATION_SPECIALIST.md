@@ -102,6 +102,18 @@ If no real finding emerges, report the exact failed stage and whether it is a ta
 - New unfamiliar-target evidence: [run #38074638999](https://github.com/Wonderadroit/Cydra_wonder/actions/runs/38074638999), artifact `cydra-unfamiliar-web3-authorization`.
 - Main full Python regression after merge: [run #38074782743](https://github.com/Wonderadroit/Cydra_wonder/actions/runs/38074782743), passed.
 
+### Post-semantic-write replay — 2026-10-11
+
+After the candidate-verb and compiler-backed write-evidence changes, the local-only unfamiliar-target gate was replayed on main commit `b6e94ff4c659a4e45c1c396c335caa827bfcd5f1`.
+
+- Replay: [run #38122711582](https://github.com/Wonderadroit/Cydra_wonder/actions/runs/38122711582), workflow completed successfully; artifact `cydra-unfamiliar-web3-authorization`.
+- Immunefi Splitter: compiler succeeded; `changeFeeRecipient` calls internal helper `_changeFeeRecipient`, and compiler evidence records the helper-propagated `feeRecipient` write. The public wrapper is guarded by `onlyOwner`, so no missing-authorization hypothesis was selected.
+- OpenZeppelin Axelar Gateway Adapter: compiler succeeded; both `registerChainEquivalence` and `registerRemoteGateway` write state and are guarded by `onlyOwner`. The separate intent-parity candidate remains outside this missing-authorization specialist and was not treated as a finding.
+- Historical Decent Bridge `setRouter` positive control: unauthorized mutation reproduced, the `onlyOwner` control passed, and causal/reproduction differentials were verified. This is a public 2024 issue, not novelty evidence.
+- Unfamiliar-target hypotheses selected: 0; unfamiliar-target experiments executed: 0; novel independently reproduced bounty findings: 0.
+
+The replay confirms the compiler-backed write evidence is available to candidate selection, but it does **not** close Gate C: neither unfamiliar target provided an authorization hypothesis that could be executed. The next proof boundary is a blind, in-scope target whose source contains a plausible missing authorization boundary, not a relaxed finding gate.
+
 Keep CI health separate from security effectiveness.
 
 ## Required measurements
