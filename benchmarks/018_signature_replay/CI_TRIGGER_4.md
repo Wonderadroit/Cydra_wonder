@@ -1,1 +1,0 @@
-Trigger marker for source-snapshot execution.
