@@ -110,22 +110,57 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 def _auth_modifier(source):
+    """Choose an owner/admin guard for the causal patch, never a merely frequent role guard."""
     defs = {}
-    for m in re.finditer(r"\bmodifier\s+(\w+)\s*\([^)]*\)\s*\{", source):
-        body=source[m.end():]; depth=1
-        for i,ch in enumerate(body):
-            if ch=="{": depth+=1
-            elif ch=="}":
-                depth-=1
-                if depth==0:
-                    defs[m.group(1)]=body[:i]; break
-    counts={}
-    for m in re.finditer(r"\bfunction\s+\w+\s*\([^)]*\)([^{};]*)\{", source):
-        for tok in re.findall(r"\b[A-Za-z_]\w*\b",m.group(1)):
-            b=defs.get(tok)
-            if b and re.search(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b",b) and re.search(r"\b(?:require|revert|assert)\b",b):
-                counts[tok]=counts.get(tok,0)+1
-    return max(counts,key=counts.get) if counts else None
+    for match in re.finditer(r"\bmodifier\s+(\w+)\s*\(([^)]*)\)\s*\{", source):
+        # The current patcher inserts a modifier without arguments. Parameterized
+        # modifiers are therefore not safe controls and must be excluded.
+        if match.group(2).strip():
+            continue
+        body = source[match.end():]
+        depth = 1
+        for index, char in enumerate(body):
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    defs[match.group(1)] = body[:index]
+                    break
+
+    guarded = {}
+    for match in re.finditer(r"\bfunction\s+\w+\s*\([^)]*\)([^{};]*)\{", source):
+        for token in re.findall(r"\b[A-Za-z_]\w*\b", match.group(1)):
+            body = defs.get(token)
+            if (
+                body
+                and re.search(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b", body)
+                and re.search(r"\b(?:require|revert|assert)\b", body)
+            ):
+                guarded[token] = body
+
+    # A popular role-specific guard such as onlyRouter is not an acceptable
+    # patch for an administrative setter: it can permanently brick configuration.
+    preferred = []
+    for name, body in guarded.items():
+        lowered = name.lower()
+        owner_named = "owner" in lowered
+        admin_named = any(part in lowered for part in ("admin", "governance", "governor", "onlygov"))
+        owner_predicate = bool(re.search(r"\bowner\s*\(\)", body))
+        admin_predicate = bool(re.search(r"\b(?:DEFAULT_ADMIN_ROLE|ADMIN_ROLE|GOVERNANCE_ROLE)\b", body))
+        if owner_named or admin_named or owner_predicate or admin_predicate:
+            rank = (
+                100 if owner_named or owner_predicate
+                else 90 if "admin" in lowered or admin_predicate
+                else 80
+            )
+            preferred.append((rank, name))
+
+    if not preferred:
+        return None
+    highest = max(rank for rank, _ in preferred)
+    winners = sorted(name for rank, name in preferred if rank == highest)
+    return winners[0] if len(winners) == 1 else None
 
 def _apply_auth_control(source, function_name, modifier):
     original=source.read_text(encoding="utf-8")
@@ -416,7 +451,11 @@ def main() -> int:
             payload={"target":f"{args.target_repo}@{args.target_ref}:{args.target_path}","hypothesis":_json(hypothesis),"experiment":_json(experiment),"blind_execution":_json(execution),"classification":outcome.benchmark_status,"finding_gate":"CONFIRMED_ONLY"}
             if args.require_ready and outcome.benchmark_status=="confirmed":
                 isolated_source = execution_project / "src" / source_relative
-                modifier=_auth_modifier(isolated_source.read_text(encoding="utf-8"))
+                auth_context = "\n".join(
+                    path.read_text(encoding="utf-8")
+                    for path in sorted((execution_project / "src").rglob("*.sol"))
+                )
+                modifier = _auth_modifier(auth_context)
                 if modifier is None: print("AUTHORIZATION_CAUSAL_CONTROL_UNAVAILABLE"); return 3
                 original=_apply_auth_control(isolated_source,hypothesis.target_function,modifier)
                 try:
