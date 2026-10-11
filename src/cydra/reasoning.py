@@ -12,7 +12,11 @@ _DECLARED_MODIFIER_EXCLUSIONS = {"public", "external", "internal", "private", "v
 _CALLER_SCOPED_WRITE_RE = re.compile(r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\](?:\s*\[[^\]]*\])*\s*(?:\+?=|-=|\*=|/=|%=|\+\+|--)")
 _CALLER_TOKEN_RE = re.compile(r"\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b")
 _CALLER_KEYED_READ_RE = re.compile(r"\b[A-Za-z_]\w*\s*\[[^\]]*\b(?:msg\.sender|_msgSender\(\)|tx\.origin)\b[^\]]*\](?:\s*\[[^\]]*\])*")
-_ADMIN_NAME_PREFIXES = ("set", "add", "remove", "update", "accept")
+_ADMIN_NAME_PREFIXES = (
+    "set", "add", "remove", "update", "accept",
+    "change", "configure", "register", "grant", "revoke", "upgrade", "pause", "unpause",
+    "transferownership",
+)
 _STATE_CHANGING_VISIBILITIES = {"public", "external"}
 
 
