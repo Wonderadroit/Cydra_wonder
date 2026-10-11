@@ -96,7 +96,7 @@ def _admin_named_functions(contract: ContractModel) -> tuple[FunctionModel, ...]
 def access_control_invariant(contract: ContractModel, privileged_modifier: str | None = None) -> Invariant:
     if privileged_modifier is None:
         observed = sorted({m for f in _externally_callable_functions(contract) for m in _declared_modifiers(contract, f)})
-        privileged_modifier = observed[0] if len(observed) == 1 else ("observed privileged authorization" if observed else "onlyGov")
+        privileged_modifier = observed[0] if len(observed) == 1 else ("observed privileged modifier" if observed else "onlyGov")
     return Invariant("INV-AUTH-001", f"Administrative state-changing operations must enforce {privileged_modifier} authorization.", "structural sibling-function rule; modifier-bearing externally callable functions", 0.90)
 
 
@@ -108,7 +108,7 @@ def generate_access_control_hypotheses(contract: ContractModel) -> tuple[Hypothe
         return ()
     if protected_functions:
         observed = sorted({m for f in protected_functions for m in _declared_modifiers(contract, f)})
-        invariant = access_control_invariant(contract, observed[0] if len(observed) == 1 else "observed privileged authorization")
+        invariant = access_control_invariant(contract, observed[0] if len(observed) == 1 else "observed privileged modifier")
     else:
         invariant = access_control_invariant(contract)
     return tuple(
